@@ -1,138 +1,159 @@
 <!doctype html>
-<html lang="ko">
+<html lang="ko" data-theme="dark">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>AOI Capacity</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Outfit:wght@500;600;700&family=DM+Sans:wght@400;500;600&display=swap">
 <style>
-/* ---------- tokens ---------- */
+/* ---------- tokens (dark-first) ---------- */
 :root{
-  color-scheme:light;
-  --bg:#f3f5f8; --surface:#ffffff; --surface-2:#f8fafc; --raise:#eef2f7;
-  --ink:#0f1720; --ink-2:#4b5865; --ink-3:#7a8794; --line:#dde3ea; --line-2:#c9d2dc;
-  --accent:#2a78d6; --accent-ink:#ffffff; --accent-soft:#e3eefb;
-  --run:#2a78d6; --idle:#b9c3cd; --setup:#eda100; --ustop:#4a3aa7; --down:#e34948; --unk:#8a97a5;
-  --good:#0ca30c; --good-ink:#006300; --good-soft:#e2f5e2;
-  --warn:#fab219; --warn-ink:#7a5200; --warn-soft:#fff2d1;
-  --crit:#d03b3b; --crit-ink:#a02525; --crit-soft:#fbe3e3;
-  --mono:"Cascadia Mono","Consolas","D2Coding",ui-monospace,monospace;
-  --sans:"Segoe UI","Malgun Gothic","Apple SD Gothic Neo","Noto Sans KR",system-ui,sans-serif;
-  --shadow:0 1px 2px rgba(15,23,32,.06),0 4px 16px rgba(15,23,32,.06);
-  --r:8px;
-}
-@media (prefers-color-scheme:dark){
-  :root:not([data-theme="light"]){
-    color-scheme:dark;
-    --bg:#0e1319; --surface:#161c24; --surface-2:#1b222b; --raise:#222b36;
-    --ink:#eef2f6; --ink-2:#aab6c2; --ink-3:#7d8b99; --line:#273140; --line-2:#344253;
-    --accent:#3987e5; --accent-soft:#1a2a40;
-    --run:#3987e5; --idle:#3c4856; --setup:#c98500; --ustop:#9085e9; --down:#e66767; --unk:#5f6d7b;
-    --good-ink:#4fcf4f; --good-soft:#12301a; --warn-ink:#f2c24d; --warn-soft:#3a2c08; --crit-ink:#ff8080; --crit-soft:#3d1616;
-    --shadow:0 1px 2px rgba(0,0,0,.4),0 4px 16px rgba(0,0,0,.35);
-  }
-}
-:root[data-theme="dark"]{
   color-scheme:dark;
-  --bg:#0e1319; --surface:#161c24; --surface-2:#1b222b; --raise:#222b36;
-  --ink:#eef2f6; --ink-2:#aab6c2; --ink-3:#7d8b99; --line:#273140; --line-2:#344253;
-  --accent:#3987e5; --accent-soft:#1a2a40;
-  --run:#3987e5; --idle:#3c4856; --setup:#c98500; --ustop:#9085e9; --down:#e66767; --unk:#5f6d7b;
-  --good-ink:#4fcf4f; --good-soft:#12301a; --warn-ink:#f2c24d; --warn-soft:#3a2c08; --crit-ink:#ff8080; --crit-soft:#3d1616;
-  --shadow:0 1px 2px rgba(0,0,0,.4),0 4px 16px rgba(0,0,0,.35);
+  --bg:#0F1319; --surface:#141920; --surface-2:#1A2130; --raise:#1E2838; --raise-2:#243248;
+  --ink:#E4EEF8; --ink-2:#8AAEC8; --ink-3:#5C7086; --line:#1E3050; --line-2:#2A4060;
+  --accent:#4A9EE8; --accent-2:#7EC8F0; --accent-ink:#0F1319; --accent-soft:#0D2A44;
+  --run:#4A9EE8; --idle:#2A4060; --setup:#E0A82E; --ustop:#A08CF0; --down:#E85A5A; --unk:#4A5A6C; --nodata:#182030;
+  --s1:#4A9EE8; --s2:#EB6834; --s3:#1BAF7A; --s4:#EDA100; --s5:#E87BA4; --s6:#3DCC8E; --s7:#A08CF0; --s8:#E85A5A;
+  --good:#3DCC8E; --good-ink:#3DCC8E; --good-soft:#0F2E24;
+  --warn:#E0A82E; --warn-ink:#F0C25A; --warn-soft:#332608;
+  --crit:#E85A5A; --crit-ink:#F08080; --crit-soft:#3A1818;
+  --display:"Outfit","Segoe UI","Malgun Gothic",system-ui,sans-serif;
+  --sans:"DM Sans","Segoe UI","Malgun Gothic","Apple SD Gothic Neo",system-ui,sans-serif;
+  --mono:"Cascadia Mono","Consolas","D2Coding",ui-monospace,monospace;
+  --shadow:0 2px 6px rgba(0,0,0,.35),0 12px 32px rgba(0,0,0,.35);
+  --glow:0 0 0 1px var(--line-2),0 8px 30px rgba(74,158,232,.14);
+  --silk:cubic-bezier(.16,1,.3,1);
+  --r:12px;
+}
+:root[data-theme="light"]{
+  color-scheme:light;
+  --bg:#f2f5f9; --surface:#ffffff; --surface-2:#f7f9fc; --raise:#e9eef5; --raise-2:#dce4ee;
+  --ink:#0f1720; --ink-2:#4b5865; --ink-3:#7a8794; --line:#dde3ea; --line-2:#c6d0dc;
+  --accent:#2A6AAA; --accent-2:#4A9EE8; --accent-ink:#ffffff; --accent-soft:#e1eefb;
+  --run:#2A6AAA; --idle:#c3ccd6; --setup:#d99a12; --ustop:#5b47c9; --down:#d64545; --unk:#8a97a5; --nodata:#eef2f7;
+  --s1:#2A78D6; --s2:#EB6834; --s3:#1BAF7A; --s4:#EDA100; --s5:#E87BA4; --s6:#008300; --s7:#4A3AA7; --s8:#E34948;
+  --good:#1f9e6a; --good-ink:#106b46; --good-soft:#dff4ea;
+  --warn:#d99a12; --warn-ink:#7a5200; --warn-soft:#fff1cf;
+  --crit:#d64545; --crit-ink:#a02525; --crit-soft:#fbe3e3;
+  --shadow:0 1px 2px rgba(15,23,32,.06),0 8px 24px rgba(15,23,32,.08);
+  --glow:0 0 0 1px var(--line),0 8px 24px rgba(42,106,170,.10);
 }
 
 /* ---------- base ---------- */
 *{box-sizing:border-box}
 html,body{height:100%}
 body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.5 var(--sans);-webkit-font-smoothing:antialiased}
-h1,h2,h3{margin:0;text-wrap:balance}
-h2{font-size:18px;font-weight:600;letter-spacing:-.01em}
-h3{font-size:14px;font-weight:600}
+h1,h2,h3{margin:0;text-wrap:balance;font-family:var(--display)}
+h2{font-size:22px;font-weight:700;letter-spacing:-.03em}
+h3{font-size:14.5px;font-weight:600;letter-spacing:-.01em}
 p{margin:0}
-a{color:var(--accent)}
 button{font:inherit;color:inherit}
 code,.mono{font-family:var(--mono);font-size:.92em}
 .num{font-variant-numeric:tabular-nums}
 .eyebrow{font-size:11px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-3)}
 .muted{color:var(--ink-2)}
 .faint{color:var(--ink-3)}
-:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+:focus-visible{outline:2px solid var(--accent-2);outline-offset:2px}
 @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+::-webkit-scrollbar{width:10px;height:10px}::-webkit-scrollbar-thumb{background:var(--line-2);border-radius:5px;border:2px solid var(--bg)}::-webkit-scrollbar-track{background:transparent}
+.btn,.panel,.nav,.input,.chipbtn{transition:background .35s var(--silk),border-color .35s var(--silk),transform .5s var(--silk),box-shadow .5s var(--silk),color .35s var(--silk),opacity .35s var(--silk)}
 
 /* ---------- shell ---------- */
-.app{display:grid;grid-template-columns:232px 1fr;grid-template-rows:56px 1fr;height:100vh}
-.top{grid-column:1/-1;display:flex;align-items:center;gap:14px;padding:0 20px;background:var(--surface);border-bottom:1px solid var(--line)}
-.brand{display:flex;align-items:center;gap:10px;font-weight:700;letter-spacing:-.01em;font-size:15px}
-.brand .logo{width:26px;height:26px;border-radius:6px;background:var(--accent);display:grid;place-items:center}
+.app{display:grid;grid-template-columns:228px 1fr;grid-template-rows:58px 1fr;height:100vh}
+.top{grid-column:1/-1;display:flex;align-items:center;gap:14px;padding:0 20px;background:rgba(20,25,32,.85);backdrop-filter:blur(16px);border-bottom:1px solid var(--line);z-index:5}
+:root[data-theme="light"] .top{background:rgba(255,255,255,.85)}
+.brand{display:flex;align-items:center;gap:10px;font-family:var(--display);font-weight:700;letter-spacing:-.02em;font-size:17px}
+.brand .logo{width:28px;height:28px;border-radius:8px;background:var(--accent);display:grid;place-items:center;box-shadow:0 0 18px rgba(74,158,232,.35)}
 .brand .logo svg{width:16px;height:16px}
 .top .grow{flex:1}
-.pill{display:inline-flex;align-items:center;gap:6px;padding:3px 10px;border-radius:999px;font-size:12px;font-weight:600;background:var(--accent-soft);color:var(--accent)}
+.pill{display:inline-flex;align-items:center;gap:6px;padding:3px 10px;border-radius:999px;font-size:12px;font-weight:600;background:var(--accent-soft);color:var(--accent-2)}
 .pill.live{background:var(--good-soft);color:var(--good-ink)}
 .pill .dot{width:7px;height:7px;border-radius:50%;background:currentColor}
 .side{background:var(--surface);border-right:1px solid var(--line);padding:14px 10px;display:flex;flex-direction:column;gap:2px;overflow:auto}
 .side .eyebrow{padding:8px 12px 4px}
-.nav{display:flex;align-items:center;gap:10px;padding:8px 12px;border-radius:6px;border:0;background:none;text-align:left;width:100%;cursor:pointer;color:var(--ink-2)}
-.nav:hover{background:var(--raise);color:var(--ink)}
-.nav[aria-current="page"]{background:var(--accent-soft);color:var(--accent);font-weight:600}
+.nav{display:flex;align-items:center;gap:10px;padding:9px 12px;border-radius:8px;border:0;background:none;text-align:left;width:100%;cursor:pointer;color:var(--ink-2)}
+.nav:hover{background:var(--raise);color:var(--ink);transform:translateX(2px)}
+.nav[aria-current="page"]{background:var(--accent-soft);color:var(--accent-2);font-weight:600;box-shadow:inset 2px 0 0 var(--accent)}
+:root[data-theme="light"] .nav[aria-current="page"]{color:var(--accent)}
 .nav svg{width:16px;height:16px;flex:none}
 .nav .cnt{margin-left:auto;font-size:11px;color:var(--ink-3);font-variant-numeric:tabular-nums}
 .side .foot{margin-top:auto;padding:10px 12px;font-size:11.5px;color:var(--ink-3);line-height:1.5}
-.main{overflow:auto;padding:22px 26px 60px}
+.main{overflow:auto;padding:20px 26px 60px}
 .view{display:none;max-width:1500px;margin:0 auto}
-.view.on{display:block}
-.vhead{display:flex;align-items:flex-end;justify-content:space-between;gap:16px;margin-bottom:16px;flex-wrap:wrap}
-.vhead p{color:var(--ink-2);max-width:68ch}
+.view.on{display:block;animation:silk-in .7s var(--silk)}
+@keyframes silk-in{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:none}}
+.vhead{display:flex;align-items:flex-end;justify-content:space-between;gap:16px;margin-bottom:14px;flex-wrap:wrap}
+.vhead p{color:var(--ink-2);max-width:70ch}
 
 /* ---------- controls ---------- */
-.btn{display:inline-flex;align-items:center;gap:7px;padding:7px 12px;border-radius:6px;border:1px solid var(--line-2);background:var(--surface);cursor:pointer;font-weight:500;font-size:13px;white-space:nowrap}
-.btn:hover{background:var(--raise)}
-.btn.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
-.btn.primary:hover{filter:brightness(1.08)}
+.btn{display:inline-flex;align-items:center;gap:7px;padding:7px 12px;border-radius:8px;border:1px solid var(--line-2);background:var(--surface);cursor:pointer;font-weight:500;font-size:13px;white-space:nowrap}
+.btn:hover{background:var(--raise);transform:translateY(-1px)}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-ink);font-weight:600}
+.btn.primary:hover{box-shadow:0 6px 20px rgba(74,158,232,.35)}
 .btn.ghost{border-color:transparent;background:none}
-.btn:disabled{opacity:.45;cursor:not-allowed;filter:none}
+.btn:disabled{opacity:.45;cursor:not-allowed;transform:none;box-shadow:none}
 .btn svg{width:15px;height:15px}
 .btn.icon{padding:7px}
-.input,select.input{padding:7px 10px;border:1px solid var(--line-2);border-radius:6px;background:var(--surface);color:var(--ink);font:inherit;font-size:13px;min-width:0}
+.input,select.input{padding:7px 10px;border:1px solid var(--line-2);border-radius:8px;background:var(--surface);color:var(--ink);font:inherit;font-size:13px;min-width:0}
 .input:focus{border-color:var(--accent);outline:none;box-shadow:0 0 0 3px var(--accent-soft)}
+input[type=date].input{font-family:var(--mono);font-size:12.5px}
 .search{position:relative}
 .search svg{position:absolute;left:9px;top:50%;transform:translateY(-50%);width:14px;height:14px;color:var(--ink-3)}
 .search .input{padding-left:30px;width:300px;max-width:100%}
 .toolbar{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:12px}
 .toolbar .sp{flex:1}
 .check{display:inline-flex;align-items:center;gap:6px;font-size:13px;color:var(--ink-2);cursor:pointer}
-.seg{display:inline-flex;border:1px solid var(--line-2);border-radius:6px;overflow:hidden}
+.seg{display:inline-flex;border:1px solid var(--line-2);border-radius:8px;overflow:hidden}
 .seg button{border:0;background:var(--surface);padding:6px 11px;font-size:12.5px;cursor:pointer;color:var(--ink-2)}
 .seg button+button{border-left:1px solid var(--line-2)}
-.seg button[aria-pressed="true"]{background:var(--accent-soft);color:var(--accent);font-weight:600}
+.seg button:hover{background:var(--raise);color:var(--ink)}
+.seg button[aria-pressed="true"]{background:var(--accent-soft);color:var(--accent-2);font-weight:600}
+:root[data-theme="light"] .seg button[aria-pressed="true"]{color:var(--accent)}
+.chipbtn{display:inline-flex;align-items:center;gap:6px;padding:4px 11px;border-radius:999px;border:1px solid var(--line-2);background:var(--surface);font-size:12.5px;font-weight:500;cursor:pointer;color:var(--ink-2)}
+.chipbtn:hover{background:var(--raise);color:var(--ink);transform:translateY(-1px)}
+.chipbtn[aria-pressed="true"]{background:var(--accent-soft);border-color:var(--accent);color:var(--ink);font-weight:600}
+.chipbtn .sw{margin:0}
+
+/* global filter bar */
+.filters{display:flex;flex-wrap:wrap;gap:10px 18px;align-items:center;padding:12px 16px;margin-bottom:16px;position:sticky;top:-20px;z-index:4;background:var(--surface);border:1px solid var(--line);border-radius:var(--r);box-shadow:var(--shadow)}
+.filters .grp{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.filters .lbl{font-size:11.5px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-3);margin-right:2px}
+.filters .sum{margin-left:auto;font-size:12.5px;color:var(--ink-2)}
 
 /* ---------- panels ---------- */
-.panel{background:var(--surface);border:1px solid var(--line);border-radius:var(--r)}
-.panel>.ph{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 16px;border-bottom:1px solid var(--line)}
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);position:relative}
+.panel>.ph{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 16px;border-bottom:1px solid var(--line);flex-wrap:wrap}
 .panel>.pb{padding:16px}
 .grid{display:grid;gap:16px}
-.g-hero{grid-template-columns:minmax(280px,1.25fr) repeat(4,minmax(150px,1fr))}
+.g-hero{grid-template-columns:minmax(300px,1.3fr) repeat(4,minmax(150px,1fr))}
 .g-dev{grid-template-columns:repeat(auto-fill,minmax(300px,1fr))}
 .g-2{grid-template-columns:1.4fr 1fr}
 @media (max-width:1100px){.g-hero{grid-template-columns:1fr 1fr 1fr}.g-2{grid-template-columns:1fr}}
-@media (max-width:760px){.app{grid-template-columns:1fr}.side{display:none}.g-hero{grid-template-columns:1fr 1fr}.main{padding:16px}}
+@media (max-width:760px){.app{grid-template-columns:1fr}.side{display:none}.g-hero{grid-template-columns:1fr 1fr}.main{padding:16px}.filters{position:static}}
 
 /* stat tiles */
 .stat{padding:14px 16px;display:flex;flex-direction:column;gap:4px}
-.stat .v{font-size:28px;font-weight:600;letter-spacing:-.02em;line-height:1.1}
+.stat .v{font-family:var(--display);font-size:30px;font-weight:700;letter-spacing:-.03em;line-height:1.1}
 .stat .s{font-size:12px;color:var(--ink-3)}
-.hero{padding:18px 20px;background:linear-gradient(135deg,var(--surface),var(--surface-2));display:flex;flex-direction:column;gap:6px}
-.hero .v{font-size:44px;font-weight:600;letter-spacing:-.03em;line-height:1}
-.hero .v small{font-size:20px;color:var(--ink-3);font-weight:500;margin-left:2px}
-.hero .conc{font-size:13px;color:var(--ink-2);margin-top:6px;max-width:52ch}
+.spark{display:block;width:100%;height:36px;margin-top:6px}
+.spark .a{fill:var(--accent);opacity:.14}.spark .l{fill:none;stroke:var(--accent);stroke-width:1.6;stroke-linejoin:round}.spark .e{fill:var(--accent-2);stroke:var(--surface);stroke-width:2}
+.hero{padding:20px 22px;display:flex;flex-direction:column;gap:6px;overflow:hidden;background:var(--surface)}
+.hero::before{content:"";position:absolute;inset:0;background-image:linear-gradient(rgba(74,158,232,.14) 1px,transparent 1px),linear-gradient(90deg,rgba(74,158,232,.14) 1px,transparent 1px);background-size:40px 40px;transform:skewY(-8deg) translateY(-30%);-webkit-mask-image:radial-gradient(ellipse at 100% 0%,#000 0%,transparent 65%);mask-image:radial-gradient(ellipse at 100% 0%,#000 0%,transparent 65%);pointer-events:none}
+.hero>*{position:relative}
+.hero .v{font-family:var(--display);font-size:52px;font-weight:700;letter-spacing:-.04em;line-height:1;background:linear-gradient(135deg,var(--ink) 30%,var(--accent-2));-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent}
+.hero .v small{font-size:20px;font-weight:500;margin-left:2px;-webkit-text-fill-color:var(--ink-3)}
+.hero .conc{font-size:13px;color:var(--ink-2);margin-top:6px;max-width:54ch}
 
 /* device cards */
-.dev{padding:14px 16px;display:flex;flex-direction:column;gap:10px;cursor:pointer;transition:box-shadow .15s}
-.dev:hover{box-shadow:var(--shadow)}
+.dev{padding:14px 16px;display:flex;flex-direction:column;gap:10px;cursor:pointer}
+.dev:hover{transform:translateY(-3px);box-shadow:var(--glow);border-color:var(--line-2)}
+.dev.sel{border-color:var(--accent);box-shadow:var(--glow)}
 .dev .hd{display:flex;align-items:baseline;justify-content:space-between;gap:8px}
-.dev .name{font-size:15px;font-weight:600}
+.dev .name{font-family:var(--display);font-size:16px;font-weight:600;display:flex;align-items:center;gap:8px}
 .dev .machine{font-family:var(--mono);font-size:11.5px;color:var(--ink-3)}
 .dev .util{display:flex;align-items:baseline;gap:6px}
-.dev .util b{font-size:26px;font-weight:600;letter-spacing:-.02em}
+.dev .util b{font-family:var(--display);font-size:30px;font-weight:700;letter-spacing:-.03em}
 .dev .util span{font-size:12px;color:var(--ink-3)}
 .meter{display:flex;height:8px;border-radius:2px;overflow:hidden;background:var(--raise);gap:2px}
 .meter i{display:block;height:100%}
@@ -148,76 +169,85 @@ code,.mono{font-family:var(--mono);font-size:.92em}
 .chip.warn{background:var(--warn-soft);color:var(--warn-ink)}
 .chip.crit{background:var(--crit-soft);color:var(--crit-ink)}
 .chip.mute{background:var(--raise);color:var(--ink-2)}
-.chip.acc{background:var(--accent-soft);color:var(--accent)}
-.chip svg{width:11px;height:11px}
+.chip.acc{background:var(--accent-soft);color:var(--accent-2)}
 .sw{display:inline-block;width:10px;height:10px;border-radius:2px;vertical-align:-1px;margin-right:5px}
-
-/* legend */
 .legend{display:flex;flex-wrap:wrap;gap:6px 16px;font-size:12px;color:var(--ink-2)}
 
 /* tables */
 .tbl{width:100%;border-collapse:collapse;font-size:13px}
 .tbl th,.tbl td{padding:8px 10px;border-bottom:1px solid var(--line);text-align:left;white-space:nowrap;vertical-align:middle}
 .tbl th{font-size:11.5px;font-weight:600;color:var(--ink-3);letter-spacing:.02em;background:var(--surface);position:sticky;top:0;z-index:1;cursor:pointer;user-select:none}
+.tbl th:hover{color:var(--ink)}
 .tbl th.ns{cursor:default}
 .tbl th .arr{opacity:.35;font-size:10px;margin-left:3px}
-.tbl th[data-dir] .arr{opacity:1;color:var(--accent)}
+.tbl th[data-dir] .arr{opacity:1;color:var(--accent-2)}
 .tbl td.r,.tbl th.r{text-align:right;font-variant-numeric:tabular-nums}
+.tbl tbody tr{transition:background .2s}
 .tbl tbody tr:hover{background:var(--surface-2)}
 .tbl tbody tr.sel{background:var(--accent-soft)}
 .tbl tbody tr.click{cursor:pointer}
 .tscroll{overflow:auto;max-height:calc(100vh - 260px)}
-.tscroll.short{max-height:none}
 .bar{display:inline-block;height:6px;background:var(--run);border-radius:2px;vertical-align:middle;margin-right:6px}
 
-/* timeline */
-.tl-wrap{position:relative}
-.tl{width:100%;display:block;overflow:visible}
-.tl text{font-family:var(--sans);fill:var(--ink-3);font-size:11px}
-.tl .lane-label{fill:var(--ink);font-weight:600;font-size:12px}
-.tl .grid{stroke:var(--line);stroke-width:1}
-.tl .axis{stroke:var(--line-2);stroke-width:1}
-.tl rect.seg{cursor:pointer}
-.tl rect.seg:hover{stroke:var(--ink);stroke-width:1.5}
-.tip{position:fixed;z-index:50;pointer-events:none;background:var(--ink);color:var(--bg);padding:8px 10px;border-radius:6px;font-size:12px;line-height:1.45;box-shadow:var(--shadow);max-width:320px;display:none}
+/* charts */
+.chart{width:100%;display:block;overflow:visible}
+.chart text{font-family:var(--sans);fill:var(--ink-3);font-size:11px}
+.chart .grid{stroke:var(--line);stroke-width:1}
+.chart .axis{stroke:var(--line-2);stroke-width:1}
+.chart .lane-label{fill:var(--ink);font-weight:600;font-size:12px;cursor:pointer}
+.chart .lane-label:hover{fill:var(--accent-2)}
+.chart rect.dbar{cursor:pointer;transition:opacity .25s var(--silk)}
+.chart rect.dbar:hover,.chart rect.dbar:focus{opacity:1;stroke:var(--ink);stroke-width:1;outline:none}
+.chart .dayband{fill:var(--accent);opacity:.08}
+.chart .daylbl{fill:var(--ink-2);cursor:pointer}
+.chart .daylbl.sel{fill:var(--accent-2);font-weight:600}
+.chart .daylbl:hover{fill:var(--ink)}
+.chart .vl{fill:var(--ink);font-size:11px;font-weight:600}
+.chart rect.seg{cursor:pointer}
+.chart rect.seg:hover{stroke:var(--ink);stroke-width:1.5}
+.chart rect.gapseg{cursor:help}
+.chart rect.gapseg:hover{stroke:var(--ink);stroke-width:1}
+.chart .now{stroke:var(--accent-2);stroke-width:1;stroke-dasharray:3 3}
+.tip{position:fixed;z-index:50;pointer-events:none;background:var(--raise);color:var(--ink);border:1px solid var(--line-2);padding:8px 10px;border-radius:8px;font-size:12px;line-height:1.45;box-shadow:var(--shadow);max-width:340px;display:none}
 .tip b{font-weight:600}
-.tip .k{opacity:.7}
+.tip .k{color:var(--ink-2)}
+.daynav{display:flex;align-items:center;gap:8px}
+.daynav .d{font-family:var(--display);font-size:16px;font-weight:600;min-width:130px;text-align:center}
+.empty{padding:30px;text-align:center;color:var(--ink-3);font-size:13px}
 
-/* slot strip (FOUP 25 slots) */
+/* slot strip (carrier 25 slots) */
 .slots{display:grid;grid-template-columns:repeat(25,8px);gap:2px}
 .slots i{display:block;height:14px;border-radius:1px;background:var(--raise)}
 .slots i.p{background:var(--run)}.slots i.s{background:var(--warn)}.slots i.e{background:var(--crit)}.slots i.n{background:var(--line-2)}
 
 /* quality list */
 .q{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:10px}
-.qi{display:flex;gap:12px;align-items:flex-start;padding:12px 14px;border:1px solid var(--line);border-radius:6px;background:var(--surface)}
+.qi{display:flex;gap:12px;align-items:flex-start;padding:12px 14px;border:1px solid var(--line);border-radius:10px;background:var(--surface);cursor:pointer}
+.qi:hover{transform:translateY(-2px);box-shadow:var(--glow)}
 .qi .sev{width:4px;align-self:stretch;border-radius:2px;background:var(--idle);flex:none}
 .qi.ok .sev{background:var(--good)}.qi.warn .sev{background:var(--warn)}.qi.crit .sev{background:var(--crit)}
-.qi .v{font-size:22px;font-weight:600;letter-spacing:-.02em;line-height:1.1}
+.qi .v{font-family:var(--display);font-size:22px;font-weight:700;letter-spacing:-.02em;line-height:1.1}
 .qi .l{font-size:13px;font-weight:600}
 .qi .d{font-size:12px;color:var(--ink-3)}
 
 /* settings */
 .devcfg{display:grid;grid-template-columns:1fr;gap:10px}
-.dc{display:grid;grid-template-columns:150px 1.5fr 110px 110px auto auto;gap:8px;align-items:center;padding:10px 12px;border:1px solid var(--line);border-radius:6px;background:var(--surface-2)}
+.dc{display:grid;grid-template-columns:150px 1.5fr 110px 110px auto auto;gap:8px;align-items:center;padding:10px 12px;border:1px solid var(--line);border-radius:10px;background:var(--surface-2)}
 .dc .input{width:100%}
 .dc .st{font-size:12px;display:flex;align-items:center;gap:6px;white-space:nowrap}
 @media (max-width:1000px){.dc{grid-template-columns:1fr 1fr}}
 .prog{height:4px;background:var(--raise);border-radius:2px;overflow:hidden;margin-top:12px}
-.prog i{display:block;height:100%;background:var(--accent);width:0;transition:width .2s}
-.console{font-family:var(--mono);font-size:12px;line-height:1.55;background:#0b1118;color:#c8d3de;border-radius:6px;padding:12px 14px;max-height:280px;overflow:auto;white-space:pre-wrap}
-:root[data-theme="dark"] .console{background:#0a0e13}
-.callout{display:flex;gap:10px;padding:10px 12px;border-radius:6px;background:var(--warn-soft);color:var(--warn-ink);font-size:13px;line-height:1.5}
-.callout.info{background:var(--accent-soft);color:var(--accent)}
+.prog i{display:block;height:100%;background:var(--accent);width:0;transition:width .3s var(--silk)}
+.console{font-family:var(--mono);font-size:12px;line-height:1.55;background:#0A0E14;color:#c8d3de;border:1px solid var(--line);border-radius:8px;padding:12px 14px;max-height:280px;overflow:auto;white-space:pre-wrap}
+.callout{display:flex;gap:10px;padding:10px 12px;border-radius:8px;background:var(--warn-soft);color:var(--warn-ink);font-size:13px;line-height:1.5}
 .callout svg{width:16px;height:16px;flex:none;margin-top:2px}
-.steps{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;counter-reset:s}
-.steps div{padding:12px 14px;border:1px solid var(--line);border-radius:6px;font-size:13px;color:var(--ink-2);background:var(--surface)}
+.steps{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
+.steps div{padding:12px 14px;border:1px solid var(--line);border-radius:10px;font-size:13px;color:var(--ink-2);background:var(--surface)}
 .steps div b{display:block;color:var(--ink);margin-bottom:4px;font-size:13.5px}
-.steps div b::before{counter-increment:s;content:counter(s) " · ";color:var(--accent)}
 @media (max-width:760px){.steps{grid-template-columns:1fr}}
 
 /* drawer */
-.drawer{position:fixed;top:0;right:0;height:100vh;width:min(520px,100vw);background:var(--surface);border-left:1px solid var(--line);box-shadow:var(--shadow);transform:translateX(100%);transition:transform .2s;z-index:40;display:flex;flex-direction:column}
+.drawer{position:fixed;top:0;right:0;height:100vh;width:min(520px,100vw);background:var(--surface);border-left:1px solid var(--line);box-shadow:var(--shadow);transform:translateX(100%);transition:transform .5s var(--silk);z-index:40;display:flex;flex-direction:column}
 .drawer.open{transform:none}
 .drawer .dh{display:flex;align-items:center;justify-content:space-between;padding:14px 18px;border-bottom:1px solid var(--line)}
 .drawer .db{overflow:auto;padding:14px 18px}
@@ -225,8 +255,10 @@ code,.mono{font-family:var(--mono);font-size:.92em}
 .kvl dt{color:var(--ink-3);font-family:var(--mono);font-size:11.5px;padding-top:2px}
 .kvl dd{margin:0;word-break:break-all}
 .kvl .sec{grid-column:1/-1;margin-top:10px;padding-top:8px;border-top:1px solid var(--line)}
+.toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%) translateY(20px);opacity:0;background:var(--raise);border:1px solid var(--line-2);color:var(--ink);padding:9px 14px;border-radius:10px;font-size:13px;box-shadow:var(--shadow);transition:all .5s var(--silk);z-index:60;pointer-events:none}
+.toast.on{opacity:1;transform:translateX(-50%)}
 
-@media print{.side,.top,.toolbar,.drawer,.tip{display:none!important}.app{display:block;height:auto}.main{overflow:visible;padding:0}.view{display:block!important;page-break-after:always}.tscroll{max-height:none;overflow:visible}.tbl th{position:static}body{background:#fff}}
+@media print{.side,.top,.toolbar,.drawer,.tip,.filters,.toast{display:none!important}.app{display:block;height:auto}.main{overflow:visible;padding:0}.view{display:block!important;page-break-after:always}.tscroll{max-height:none;overflow:visible}.tbl th{position:static}body{background:#fff}}
 </style>
 </head>
 <body>
@@ -236,15 +268,15 @@ code,.mono{font-family:var(--mono);font-size:.92em}
     <span id="modePill" class="pill"><span class="dot"></span><span id="modeTxt">데모 데이터</span></span>
     <span id="genTxt" class="faint" style="font-size:12px"></span>
     <div class="grow"></div>
-    <button class="btn" id="btnCsv" onclick="saveCsv()">CSV 저장</button>
-    <button class="btn" id="btnHtml" onclick="saveHtml()">HTML 저장</button>
+    <button class="btn" id="btnCsv" onclick="saveCsv()" title="원천 데이터 전체를 CSV로 저장">CSV 저장</button>
+    <button class="btn" id="btnHtml" onclick="saveHtml()" title="현재 데이터를 담은 HTML 파일로 저장">HTML 저장</button>
     <button class="btn primary" id="btnRunTop" onclick="go('collect');collectAll()">수집 실행</button>
-    <button class="btn icon ghost" id="btnTheme" title="테마 전환" onclick="toggleTheme()"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M8 1.5v1.5M8 13v1.5M1.5 8H3M13 8h1.5M3.4 3.4l1 1M11.6 11.6l1 1M3.4 12.6l1-1M11.6 4.4l1-1"/><circle cx="8" cy="8" r="3"/></svg></button>
+    <button class="btn icon ghost" id="btnTheme" title="밝은/어두운 테마 전환" onclick="toggleTheme()"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M8 1.5v1.5M8 13v1.5M1.5 8H3M13 8h1.5M3.4 3.4l1 1M11.6 11.6l1 1M3.4 12.6l1-1M11.6 4.4l1-1"/><circle cx="8" cy="8" r="3"/></svg></button>
   </header>
 
   <nav class="side">
     <div class="eyebrow">분석</div>
-    <button class="nav" data-v="overview" aria-current="page"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="2" width="5" height="5"/><rect x="9" y="2" width="5" height="5"/><rect x="2" y="9" width="5" height="5"/><rect x="9" y="9" width="5" height="5"/></svg>개요</button>
+    <button class="nav" data-v="overview" aria-current="page"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="2" width="5" height="5"/><rect x="9" y="2" width="5" height="5"/><rect x="2" y="9" width="5" height="5"/><rect x="9" y="9" width="5" height="5"/></svg>가동률</button>
     <button class="nav" data-v="gaps"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2 4h5M9 4h5M2 8h9M13 8h1M2 12h3M7 12h7"/></svg>가동 상태·공백<span class="cnt" id="nGaps"></span></button>
     <button class="nav" data-v="lots"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="3" width="12" height="10" rx="1"/><path d="M5 3v10M8 3v10M11 3v10"/></svg>Lot · Batch<span class="cnt" id="nLots"></span></button>
     <button class="nav" data-v="rows"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2 3h12M2 6.5h12M2 10h12M2 13.5h12"/></svg>상세 데이터<span class="cnt" id="nRows"></span></button>
@@ -255,24 +287,45 @@ code,.mono{font-family:var(--mono);font-size:.92em}
   </nav>
 
   <main class="main">
+    <!-- global filter bar (shared by all analysis views) -->
+    <div class="filters" id="filters">
+      <div class="grp"><span class="lbl">기간</span>
+        <div class="seg" id="presets"><button data-p="all" aria-pressed="true">전체</button><button data-p="1">최근 1일</button><button data-p="7">7일</button><button data-p="30">30일</button></div>
+        <input class="input" type="date" id="fromD" title="시작일"> <span class="faint">~</span> <input class="input" type="date" id="toD" title="종료일">
+      </div>
+      <div class="grp"><span class="lbl">장비</span><div id="devChips" style="display:flex;gap:6px;flex-wrap:wrap"></div></div>
+      <div class="grp"><span class="lbl">가동률 기준</span><div class="seg" id="basisSeg"><button data-b="24h" aria-pressed="true" title="검사시간 ÷ 24시간">24시간</button><button data-b="obs" title="검사시간 ÷ (그날 첫 Wafer 시작 ~ 마지막 Wafer 종료)">관측 구간</button></div></div>
+      <span class="sum" id="scopeSum"></span>
+    </div>
+
     <!-- ================= OVERVIEW ================= -->
     <section class="view on" id="v-overview">
-      <div class="vhead"><div><div class="eyebrow">Overview</div><h2>장비별 추정 가동률</h2></div><div class="legend" id="ovLegend"></div></div>
       <div class="grid g-hero" style="margin-bottom:16px">
-        <div class="panel hero"><div class="eyebrow">평균 추정 가동률 · 관측 구간 기준</div><div class="v" id="hUtil">–</div><p class="conc" id="hConc"></p></div>
-        <div class="panel stat"><div class="eyebrow">장비</div><div class="v num" id="hDev">0</div><div class="s" id="hDevS"></div></div>
-        <div class="panel stat"><div class="eyebrow">Report</div><div class="v num" id="hRep">0</div><div class="s" id="hRepS"></div></div>
-        <div class="panel stat"><div class="eyebrow">Wafer 행</div><div class="v num" id="hWaf">0</div><div class="s" id="hWafS"></div></div>
-        <div class="panel stat"><div class="eyebrow">확인 필요</div><div class="v num" id="hIss">0</div><div class="s" id="hIssS"></div></div>
+        <div class="panel hero"><div class="eyebrow" id="hLbl">기간 평균 가동률</div><div class="v" id="hUtil">–</div><p class="conc" id="hConc"></p><div id="sUtil"></div></div>
+        <div class="panel stat"><div class="eyebrow">장비</div><div class="v num" id="hDev">0</div><div class="s" id="hDevS"></div><div id="sDev"></div></div>
+        <div class="panel stat"><div class="eyebrow">검사 시간 합</div><div class="v num" id="hRun">–</div><div class="s" id="hRunS"></div><div id="sRun"></div></div>
+        <div class="panel stat"><div class="eyebrow">Wafer</div><div class="v num" id="hWaf">0</div><div class="s" id="hWafS"></div><div id="sWaf"></div></div>
+        <div class="panel stat"><div class="eyebrow">Error / Abort</div><div class="v num" id="hErr">0</div><div class="s" id="hErrS"></div><div id="sErr"></div></div>
       </div>
-      <div class="grid g-dev" id="devCards" style="margin-bottom:16px"></div>
+
       <div class="panel" style="margin-bottom:16px">
-        <div class="ph"><div><h3>시간축 · 장비별 검사 구간</h3><p class="faint" style="font-size:12px">INI의 WaferStartTime~WaferEndTime. 구간 위에 마우스를 올리면 Wafer 정보가 보입니다.</p></div><div class="legend"><span><i class="sw" style="background:var(--run)"></i>검사</span><span><i class="sw" style="background:var(--down)"></i>Error/Abort Wafer</span><span><i class="sw" style="background:var(--raise);border:1px solid var(--line-2)"></i>관측 구간</span></div></div>
-        <div class="pb tl-wrap" id="tlBox"></div>
+        <div class="ph"><div><h3>일별 가동률</h3><p class="faint" style="font-size:12px">막대를 클릭하면 아래에 그 날의 타임라인이 열립니다. 장비를 고르면 그 장비의 일별 추이만 보입니다.</p></div><div class="legend" id="dayLegend"></div></div>
+        <div class="pb" id="dayChart"></div>
       </div>
+
+      <div class="panel" style="margin-bottom:16px">
+        <div class="ph">
+          <div class="daynav"><button class="btn icon" id="dPrev" title="이전 날짜 (←)" onclick="stepDay(-1)"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M10 3L5 8l5 5"/></svg></button><span class="d" id="dayTxt">–</span><button class="btn icon" id="dNext" title="다음 날짜 (→)" onclick="stepDay(1)"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M6 3l5 5-5 5"/></svg></button><input class="input" type="date" id="dayPick" title="날짜 선택" style="margin-left:4px"></div>
+          <div class="legend"><span><i class="sw" style="background:var(--run)"></i>검사</span><span><i class="sw" style="background:var(--down)"></i>Error/Abort Wafer</span><span><i class="sw" style="background:var(--idle)"></i>IDLE</span><span><i class="sw" style="background:var(--setup)"></i>SETUP</span><span><i class="sw" style="background:var(--ustop)"></i>USER_STOP</span><span><i class="sw" style="background:var(--down);opacity:.45"></i>DOWN 후보</span><span><i class="sw" style="background:var(--unk)"></i>UNKNOWN</span><span><i class="sw" style="background:var(--nodata);border:1px solid var(--line-2)"></i>데이터 없음</span></div>
+        </div>
+        <div class="pb" id="dayTl"></div>
+        <div style="padding:0 16px 16px"><table class="tbl" id="dayTbl"><thead><tr><th class="ns">장비</th><th class="ns r">가동률</th><th class="ns r">검사 시간</th><th class="ns r">Wafer</th><th class="ns r">Error/Abort</th><th class="ns r">IDLE</th><th class="ns r">SETUP</th><th class="ns r">USER_STOP</th><th class="ns r">DOWN 후보</th><th class="ns r">UNKNOWN</th><th class="ns">첫 Wafer → 마지막 Wafer</th></tr></thead><tbody></tbody></table></div>
+      </div>
+
+      <div class="grid g-dev" id="devCards" style="margin-bottom:16px"></div>
       <div class="grid g-2">
-        <div class="panel"><div class="ph"><h3>가동 상태 구성 · 장비별</h3><span class="faint" style="font-size:12px">공백 분류 규칙은 "가동 상태·공백"에서 조정</span></div><div class="pb" id="stateBars"></div></div>
-        <div class="panel"><div class="ph"><h3>Wafer 결과 상태</h3></div><div class="pb" id="statusBars"></div></div>
+        <div class="panel"><div class="ph"><h3>가동 상태 구성 · 기간 합계</h3><span class="faint" style="font-size:12px">공백 분류 규칙은 "가동 상태·공백"에서 조정</span></div><div class="pb" id="stateBars"></div></div>
+        <div class="panel"><div class="ph"><h3>Wafer 결과 상태</h3><span class="faint" style="font-size:12px">클릭하면 해당 행만 봅니다</span></div><div class="pb" id="statusBars"></div></div>
       </div>
     </section>
 
@@ -282,7 +335,6 @@ code,.mono{font-family:var(--mono);font-size:.92em}
       <div class="toolbar">
         <label class="check">IDLE 상한 <input class="input num" id="idleSec" type="number" value="300" min="0" step="30" style="width:80px" onchange="renderAll()"> 초</label>
         <label class="check">SETUP 상한 <input class="input num" id="setupSec" type="number" value="1800" min="0" step="60" style="width:80px" onchange="renderAll()"> 초</label>
-        <select class="input" id="gapDev" onchange="renderGaps()"><option value="">모든 장비</option></select>
         <select class="input" id="gapKind" onchange="renderGaps()"><option value="!IDLE" selected>IDLE 제외</option><option value="">모든 분류</option><option>IDLE</option><option>SETUP</option><option>USER_STOP</option><option>DOWN</option><option>UNKNOWN</option></select>
         <div class="sp"></div>
         <span class="faint" style="font-size:12px" id="gapCnt"></span>
@@ -298,7 +350,7 @@ code,.mono{font-family:var(--mono);font-size:.92em}
     <!-- ================= LOTS ================= -->
     <section class="view" id="v-lots">
       <div class="vhead"><div><div class="eyebrow">Batch reports</div><h2>Lot · Batch 단위 결과</h2><p>BatchReport 1개가 1행입니다. 슬롯 스트립은 Carrier의 25개 슬롯을 INI의 ActiveSlot 기준으로 그린 것입니다.</p></div><div class="legend"><span><i class="sw" style="background:var(--run)"></i>Pass</span><span><i class="sw" style="background:var(--warn)"></i>Skipped</span><span><i class="sw" style="background:var(--crit)"></i>Error/Abort</span><span><i class="sw" style="background:var(--line-2)"></i>슬롯 미상</span></div></div>
-      <div class="toolbar"><div class="search"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="7" cy="7" r="4.5"/><path d="M10.5 10.5L14 14"/></svg><input class="input" id="lotQ" placeholder="Lot, Recipe, 장비 검색" oninput="renderLots()"></div></div>
+      <div class="toolbar"><div class="search"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="7" cy="7" r="4.5"/><path d="M10.5 10.5L14 14"/></svg><input class="input" id="lotQ" placeholder="Lot, Recipe, 장비 검색" oninput="renderLots()"></div><div class="sp"></div><span class="faint" style="font-size:12px" id="lotCnt"></span></div>
       <div class="panel"><div class="tscroll"><table class="tbl" id="lotTbl"><thead><tr><th>장비</th><th>Lot</th><th>Recipe</th><th>공정</th><th>Batch 시작</th><th class="r">Batch 시간</th><th class="r">Wafer</th><th class="r">Pass</th><th class="r">Skip</th><th class="r">Err</th><th class="r">INI</th><th class="r">평균 검사</th><th class="ns">슬롯 (1→25)</th></tr></thead><tbody></tbody></table></div></div>
     </section>
 
@@ -307,11 +359,11 @@ code,.mono{font-family:var(--mono);font-size:.92em}
       <div class="vhead"><div><div class="eyebrow">Raw data</div><h2>상세 데이터</h2><p>Report의 Wafer 결과 1행과 해당 Wafer의 WaferInfo.ini를 결합한 원천 데이터입니다. 행을 클릭하면 전체 필드가 보입니다.</p></div></div>
       <div class="toolbar">
         <div class="search"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="7" cy="7" r="4.5"/><path d="M10.5 10.5L14 14"/></svg><input class="input" id="q" placeholder="Lot, Wafer ID, 상태, 경로 검색" oninput="renderRows()"></div>
-        <select class="input" id="fDev" onchange="renderRows()"><option value="">모든 장비</option></select>
         <select class="input" id="fMatch" onchange="renderRows()"><option value="">모든 INI 상태</option><option>EXACT</option><option>NOT_FOUND</option><option>NO_WAFER_ID</option><option>READ_ERROR</option></select>
         <select class="input" id="fStatus" onchange="renderRows()"><option value="">모든 결과</option><option>PASS</option><option>SKIPPED</option><option>USER_ABORT</option><option>ABORTED</option><option>SCAN_ERROR</option><option>ID_READ_ERROR</option><option>OTHER</option></select>
         <label class="check"><input type="checkbox" id="fIssue" onchange="renderRows()"> 확인 필요만</label>
         <div class="seg" id="colMode"><button aria-pressed="true" onclick="setCols('core',this)">핵심 열</button><button aria-pressed="false" onclick="setCols('all',this)">전체 열</button></div>
+        <button class="btn ghost" onclick="resetRowFilters()">필터 초기화</button>
         <div class="sp"></div><span class="faint" style="font-size:12px" id="rowCnt"></span>
       </div>
       <div class="panel"><div class="tscroll"><table class="tbl" id="rowTbl"><thead></thead><tbody></tbody></table></div></div>
@@ -319,7 +371,7 @@ code,.mono{font-family:var(--mono);font-size:.92em}
 
     <!-- ================= QUALITY ================= -->
     <section class="view" id="v-quality">
-      <div class="vhead"><div><div class="eyebrow">Data quality</div><h2>원천 데이터 품질</h2><p>Report와 INI가 얼마나 정확히 연결되는지, 시간 계산이 가능한지 확인하는 지표입니다. 가동률 공식을 확정하기 전에 이 값들이 안정되어야 합니다.</p></div></div>
+      <div class="vhead"><div><div class="eyebrow">Data quality</div><h2>원천 데이터 품질</h2><p>Report와 INI가 얼마나 정확히 연결되는지, 시간 계산이 가능한지 확인하는 지표입니다. 카드를 클릭하면 해당 행을 상세 데이터에서 봅니다.</p></div></div>
       <div class="q" id="qList" style="margin-bottom:16px"></div>
       <div class="panel"><div class="ph"><h3>수집 메타데이터</h3></div><div class="pb" id="metaBox"></div></div>
     </section>
@@ -345,6 +397,7 @@ code,.mono{font-family:var(--mono);font-size:.92em}
 </div>
 
 <div class="tip" id="tip"></div>
+<div class="toast" id="toast"></div>
 <aside class="drawer" id="drawer" aria-hidden="true">
   <div class="dh"><div><div class="eyebrow">Wafer</div><h3 id="dTitle" class="mono"></h3></div><button class="btn icon ghost" onclick="closeDrawer()" aria-label="닫기"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M4 4l8 8M12 4l-8 8"/></svg></button></div>
   <div class="db"><dl class="kvl" id="dBody"></dl></div>
@@ -360,16 +413,22 @@ const CORE=["device","lot","wafer_id","norm_status","recipe","wafer_start_time",
 const INI_KEYS={Recipe:["Name"],AutoCycleInfo:["Machine","Operator","WaferStartTime","WaferEndTime","BatchStartTime","OCRID","ActiveStation","ActiveSlot","FillID","CarrierID","UseLot","UseWaferID"],BatchInfo:["GlobalLotId","OperatorId"]};
 const MON={jan:0,feb:1,mar:2,apr:3,may:4,jun:5,jul:6,aug:7,sep:8,oct:9,nov:10,dec:11};
 const FS=!!window.showDirectoryPicker;
+const DAY=86400000;
 const STATE_COLOR={RUN:"var(--run)",IDLE:"var(--idle)",SETUP:"var(--setup)",USER_STOP:"var(--ustop)",DOWN:"var(--down)",UNKNOWN:"var(--unk)"};
 const STATE_LABEL={RUN:"검사",IDLE:"IDLE",SETUP:"SETUP",USER_STOP:"USER_STOP",DOWN:"DOWN 후보",UNKNOWN:"UNKNOWN"};
+const SERIES=["var(--s1)","var(--s2)","var(--s3)","var(--s4)","var(--s5)","var(--s6)","var(--s7)","var(--s8)"];
 
-let rows=[],meta={},devices=[],analysis=null,colMode="core",sort={rows:{k:"",asc:true},gaps:{k:"",asc:true},lots:{k:"",asc:true}};
+let rows=[],meta={},devices=[],A=null,colMode="core";
+let scope={from:null,to:null,device:"",basis:"24h",day:null,preset:"all"};
+let sort={rows:{k:"",asc:true},gaps:{k:"",asc:true},lots:{k:"",asc:true}};
+let allDevNames=[];
 
 /* ---------- utils ---------- */
 const $=s=>document.querySelector(s);
 const esc=s=>String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
 const p2=n=>String(n).padStart(2,"0");
 function log(m){const l=$("#log");l.textContent+=`[${new Date().toLocaleTimeString("ko-KR",{hour12:false})}] ${m}\n`;l.scrollTop=l.scrollHeight;}
+let toastT;function toast(m){const t=$("#toast");t.textContent=m;t.classList.add("on");clearTimeout(toastT);toastT=setTimeout(()=>t.classList.remove("on"),2200);}
 function stamp(d=new Date()){return `${d.getFullYear()}-${p2(d.getMonth()+1)}-${p2(d.getDate())}_${p2(d.getHours())}${p2(d.getMinutes())}${p2(d.getSeconds())}`;}
 function parseDt(s){
   if(!s)return null;s=String(s).trim();
@@ -384,21 +443,28 @@ const isErr=n=>["ID_READ_ERROR","SCAN_ERROR","USER_ABORT","ABORTED","OTHER"].inc
 function fmtSec(s){if(s==null||isNaN(s))return"–";s=Math.round(s);const h=Math.floor(s/3600),m=Math.floor(s%3600/60),x=s%60;if(h)return`${h}h ${p2(m)}m`;if(m)return`${m}m ${p2(x)}s`;return`${x}s`;}
 function fmtDt(d,withDate=true){if(!d)return"";return(withDate?`${p2(d.getMonth()+1)}/${p2(d.getDate())} `:"")+`${p2(d.getHours())}:${p2(d.getMinutes())}`;}
 function fmtDts(d){return d?`${fmtDt(d)}:${p2(d.getSeconds())}`:"";}
+const dayKey=d=>`${d.getFullYear()}-${p2(d.getMonth()+1)}-${p2(d.getDate())}`;
+const keyDay=k=>{const [y,m,d]=k.split("-").map(Number);return new Date(y,m-1,d);};
+const WD=["일","월","화","수","목","금","토"];
+const fmtDay=k=>{const d=keyDay(k);return`${d.getMonth()+1}/${d.getDate()} (${WD[d.getDay()]})`;};
 const pct=v=>v==null||isNaN(v)?"–":v.toFixed(1)+"%";
 function chipStatus(n){const c=n==="PASS"?"ok":n==="SKIPPED"?"warn":isErr(n)?"crit":"mute";return`<span class="chip ${c}">${esc(n||"–")}</span>`;}
 function chipMatch(m){const c=m==="EXACT"?"ok":m==="NO_WAFER_ID"?"mute":"crit";return`<span class="chip ${c}">${esc(m||"–")}</span>`;}
+const rowDate=r=>parseDt(r.wafer_start_time)||parseDt(r.batch_start);
+const devColor=n=>SERIES[Math.max(0,allDevNames.indexOf(n))%8];
 
 /* ---------- navigation / theme ---------- */
-function go(v){document.querySelectorAll(".nav").forEach(b=>b.setAttribute("aria-current",b.dataset.v===v?"page":"false"));document.querySelectorAll(".view").forEach(s=>s.classList.toggle("on",s.id==="v-"+v));$(".main").scrollTop=0;}
+function go(v){document.querySelectorAll(".nav").forEach(b=>b.setAttribute("aria-current",b.dataset.v===v?"page":"false"));document.querySelectorAll(".view").forEach(s=>s.classList.toggle("on",s.id==="v-"+v));$("#filters").style.display=v==="collect"?"none":"";$(".main").scrollTop=0;}
 document.querySelectorAll(".nav").forEach(b=>b.addEventListener("click",()=>go(b.dataset.v)));
-function toggleTheme(){const r=document.documentElement;const cur=r.dataset.theme||(matchMedia("(prefers-color-scheme:dark)").matches?"dark":"light");r.dataset.theme=cur==="dark"?"light":"dark";try{localStorage.setItem("aoi.theme",r.dataset.theme);}catch(e){}}
-try{const t=localStorage.getItem("aoi.theme");if(t)document.documentElement.dataset.theme=t;}catch(e){}
+function toggleTheme(){const r=document.documentElement;r.dataset.theme=r.dataset.theme==="light"?"dark":"light";try{localStorage.setItem("aoi.theme",r.dataset.theme);}catch(e){}}
+(function(){let t="dark";try{t=localStorage.getItem("aoi.theme")||"dark";}catch(e){}document.documentElement.dataset.theme=t;})();
 
 /* ---------- tooltip ---------- */
 const tip=$("#tip");
 function showTip(html,ev){tip.innerHTML=html;tip.style.display="block";moveTip(ev);}
 function moveTip(ev){const w=tip.offsetWidth,h=tip.offsetHeight;let x=ev.clientX+14,y=ev.clientY+14;if(x+w>innerWidth-8)x=ev.clientX-w-14;if(y+h>innerHeight-8)y=ev.clientY-h-14;tip.style.left=x+"px";tip.style.top=y+"px";}
 function hideTip(){tip.style.display="none";}
+function bindTips(root,sel,fn){root.querySelectorAll(sel).forEach(el=>{el.addEventListener("mouseenter",ev=>showTip(fn(el),ev));el.addEventListener("mousemove",moveTip);el.addEventListener("mouseleave",hideTip);el.addEventListener("focus",()=>{const b=el.getBoundingClientRect();showTip(fn(el),{clientX:b.left+b.width/2,clientY:b.top});});el.addEventListener("blur",hideTip);});}
 
 /* ---------- device config ---------- */
 const DEFAULT_DEVS=[{name:"AOI-9",note:"M:\\AOI-9",report:"Report",scan:"Scanresult"},{name:"AOI-10",note:"\\\\10.20.30.11\\AOI-10",report:"Report",scan:"Scanresult"},{name:"AOI-11",note:"\\\\10.20.30.12\\AOI-11",report:"Report",scan:"Scanresult"}];
@@ -414,7 +480,7 @@ function renderDevs(){
     <button class="btn ghost" title="삭제" onclick="devices.splice(${i},1);saveDevs();renderDevs()">삭제</button></div>`).join("")||`<p class="faint">장비가 없습니다. "장비 추가"를 누르세요.</p>`;
 }
 function addDev(){devices.push({name:"AOI-"+(devices.length+9),note:"",report:"Report",scan:"Scanresult",handle:null});saveDevs();renderDevs();}
-async function pickDir(i){try{devices[i].handle=await showDirectoryPicker({mode:"read",id:"aoi-"+i});await idbPut(devices[i].name,devices[i].handle);log(`[${devices[i].name}] 폴더 선택: ${devices[i].handle.name}`);}catch(e){if(e.name!=="AbortError")log(`[${devices[i].name}] 폴더 선택 실패: ${e.message}`);}renderDevs();}
+async function pickDir(i){try{devices[i].handle=await showDirectoryPicker({mode:"read",id:"aoi-"+i});await idbPut(devices[i].name,devices[i].handle);log(`[${devices[i].name}] 폴더 선택: ${devices[i].handle.name}`);toast(`${devices[i].name} 폴더 연결됨`);}catch(e){if(e.name!=="AbortError")log(`[${devices[i].name}] 폴더 선택 실패: ${e.message}`);}renderDevs();}
 function idb(){return new Promise((res,rej)=>{const r=indexedDB.open("aoi-handles",1);r.onupgradeneeded=()=>r.result.createObjectStore("h");r.onsuccess=()=>res(r.result);r.onerror=()=>rej(r.error);});}
 async function idbPut(k,v){try{const db=await idb();db.transaction("h","readwrite").objectStore("h").put(v,k);}catch(e){}}
 async function idbGet(k){try{const db=await idb();return await new Promise(res=>{const r=db.transaction("h").objectStore("h").get(k);r.onsuccess=()=>res(r.result||null);r.onerror=()=>res(null);});}catch(e){return null;}}
@@ -425,12 +491,12 @@ async function ensurePerm(h){if(await h.queryPermission({mode:"read"})==="grante
 async function getDirPath(root,parts){let h=root;for(const p of parts)h=await h.getDirectoryHandle(p);return h;}
 function setProg(f,txt){$("#progBar").style.width=Math.round(f*100)+"%";$("#progTxt").textContent=txt||"";}
 async function collectAll(){
-  if(!FS){log("이 브라우저에서는 실제 수집이 불가능합니다. Edge 또는 Chrome에서 여세요.");return;}
+  if(!FS){log("이 브라우저에서는 실제 수집이 불가능합니다. Edge 또는 Chrome에서 여세요.");toast("Edge/Chrome에서만 실제 수집이 가능합니다");return;}
   const targets=devices.filter(d=>d.handle);
-  if(!targets.length){log("먼저 장비 폴더를 하나 이상 선택하세요.");go("collect");return;}
+  if(!targets.length){log("먼저 장비 폴더를 하나 이상 선택하세요.");toast("먼저 장비 폴더를 선택하세요");go("collect");return;}
   $("#btnRun").disabled=$("#btnRunTop").disabled=true;
   const limit=Math.max(1,+$("#limit").value||50);
-  const out=[],errs=[],devMeta=[];const t0=performance.now();let done=0,total=0;
+  const out=[],errs=[],devMeta=[];const t0=performance.now();
   for(const [di,d] of targets.entries()){
     const dm={name:d.name,note:d.note,root:d.handle.name,reports:0,found:0,error:""};
     try{
@@ -457,7 +523,7 @@ async function collectAll(){
   setProg(1,`완료 · ${rows.length}행 · ${meta.elapsed}ms`);
   log(`완료: Wafer ${rows.length}행, Report 읽기 오류 ${errs.length}건, ${meta.elapsed}ms`);
   $("#btnRun").disabled=$("#btnRunTop").disabled=false;
-  renderAll();go("overview");
+  initScope();renderAll();go("overview");toast(`수집 완료 · Wafer ${rows.length}행`);
 }
 function parseReport(name,html){
   const m=name.match(/^(.+?)_(\d{4})_(.+)_(\d{1,2}-[A-Za-z]{3}-\d{2})_\((\d{2}\.\d{2}\.\d{2})\)_BatchReport\.html?$/i);
@@ -501,128 +567,203 @@ function loadDemo(){
   meta=emb.meta||{generated:"2026-09-13 18:36:36",mode:"demo",devices:DEFAULT_DEVS.map(d=>({name:d.name,note:d.note,root:d.note.split("\\").pop(),reports:0,found:0,error:""})),reportErrors:[],limit:50};
   if(meta.mode==="demo"){const cnt={};rows.forEach(r=>{(cnt[r.device]=cnt[r.device]||new Set()).add(r.report_path);});meta.devices.forEach(d=>{d.reports=d.found=(cnt[d.name]||new Set()).size;});}
   log(meta.mode==="demo"?"데모 데이터: 실제 수집 CSV 459행을 장비 3대로 나눠 재구성한 예시입니다.":"저장된 수집 결과를 불러왔습니다.");
-  renderAll();
+  initScope();renderAll();
 }
 
+/* ---------- scope (period / device / basis) ---------- */
+function dataDays(){const s=new Set();for(const r of rows){const d=rowDate(r);if(d)s.add(dayKey(d));}return[...s].sort();}
+function initScope(){
+  allDevNames=[...new Set(rows.map(r=>r.device))];
+  const days=dataDays();
+  scope.from=days[0]||null;scope.to=days[days.length-1]||null;scope.day=scope.to;scope.device="";scope.preset="all";
+  $("#fromD").value=scope.from||"";$("#toD").value=scope.to||"";$("#dayPick").value=scope.day||"";
+  $("#fromD").min=$("#toD").min=$("#dayPick").min=days[0]||"";$("#fromD").max=$("#toD").max=$("#dayPick").max=days[days.length-1]||"";
+  renderChips();
+}
+function renderChips(){
+  $("#devChips").innerHTML=[`<button class="chipbtn" data-d="" aria-pressed="${scope.device===""}">전체</button>`,...allDevNames.map(n=>`<button class="chipbtn" data-d="${esc(n)}" aria-pressed="${scope.device===n}"><i class="sw" style="background:${devColor(n)}"></i>${esc(n)}</button>`)].join("");
+  $("#devChips").querySelectorAll(".chipbtn").forEach(b=>b.onclick=()=>{scope.device=b.dataset.d;renderChips();renderAll();toast(scope.device?`${scope.device}만 표시`:"모든 장비 표시");});
+  document.querySelectorAll("#presets button").forEach(b=>b.setAttribute("aria-pressed",b.dataset.p===scope.preset));
+  document.querySelectorAll("#basisSeg button").forEach(b=>b.setAttribute("aria-pressed",b.dataset.b===scope.basis));
+}
+document.querySelectorAll("#presets button").forEach(b=>b.onclick=()=>{const days=dataDays();if(!days.length)return;scope.preset=b.dataset.p;const last=keyDay(days[days.length-1]);
+  if(b.dataset.p==="all"){scope.from=days[0];scope.to=days[days.length-1];}else{const n=+b.dataset.p;scope.to=days[days.length-1];scope.from=dayKey(new Date(last.getTime()-(n-1)*DAY));if(scope.from<days[0])scope.from=days[0];}
+  $("#fromD").value=scope.from;$("#toD").value=scope.to;if(scope.day<scope.from||scope.day>scope.to)scope.day=scope.to;$("#dayPick").value=scope.day;renderChips();renderAll();});
+document.querySelectorAll("#basisSeg button").forEach(b=>b.onclick=()=>{scope.basis=b.dataset.b;renderChips();renderAll();});
+$("#fromD").onchange=$("#toD").onchange=()=>{let f=$("#fromD").value,t=$("#toD").value;if(f&&t&&f>t){[f,t]=[t,f];$("#fromD").value=f;$("#toD").value=t;}scope.from=f||null;scope.to=t||null;scope.preset="custom";if(scope.day&&(scope.day<f||scope.day>t)){scope.day=t;$("#dayPick").value=t;}renderChips();renderAll();};
+$("#dayPick").onchange=()=>{if($("#dayPick").value){setDay($("#dayPick").value);}};
+function inScope(r){if(scope.device&&r.device!==scope.device)return false;const d=rowDate(r);if(!d)return!scope.from;const k=dayKey(d);return(!scope.from||k>=scope.from)&&(!scope.to||k<=scope.to);}
+function scopeDays(){const out=[];if(!scope.from||!scope.to)return out;for(let t=keyDay(scope.from).getTime();t<=keyDay(scope.to).getTime();t+=DAY)out.push(dayKey(new Date(t)));return out;}
+function setDay(k){scope.day=k;$("#dayPick").value=k;renderDayChart();renderDay();}
+function stepDay(n){const days=scopeDays();const i=days.indexOf(scope.day);const j=Math.min(days.length-1,Math.max(0,i+n));if(days[j])setDay(days[j]);}
+
 /* ---------- analysis ---------- */
+function classifyGap(a,b,idleMax,setupMax){const gap=(b.s-a.e)/1000;const changed=[];if(a.r.lot!==b.r.lot)changed.push("Lot");if(a.r.recipe!==b.r.recipe)changed.push("Recipe");if(a.r.carrier_id!==b.r.carrier_id)changed.push("Carrier");
+  let kind;if(a.r.norm_status==="USER_ABORT")kind="USER_STOP";else if(a.err)kind="DOWN";else if(gap<=idleMax)kind="IDLE";else if(changed.length&&gap<=setupMax)kind="SETUP";else kind="UNKNOWN";return{kind,gap,changed};}
+function clip(s,e,a,b){const x=Math.max(s,a),y=Math.min(e,b);return y>x?(y-x)/1000:0;}
 function analyze(){
   const idleMax=+$("#idleSec").value||0,setupMax=+$("#setupSec").value||0;
-  const byDev={};
-  for(const r of rows){
-    const d=byDev[r.device]=byDev[r.device]||{name:r.device,machines:new Set(),reports:new Set(),n:0,EXACT:0,NOT_FOUND:0,NO_WAFER_ID:0,READ_ERROR:0,err:0,skip:0,pass:0,mismatch:0,timeIssue:0,segs:[]};
+  const sr=rows.filter(inScope);
+  const byDev={};const names=scope.device?[scope.device]:allDevNames;
+  names.forEach(n=>byDev[n]={name:n,machines:new Set(),reports:new Set(),n:0,EXACT:0,NOT_FOUND:0,NO_WAFER_ID:0,READ_ERROR:0,err:0,skip:0,pass:0,segs:[],gaps:[],days:{}});
+  for(const r of sr){const d=byDev[r.device];if(!d)continue;
     d.n++;d.reports.add(r.report_path);if(r.machine)d.machines.add(r.machine);d[r.ini_match]=(d[r.ini_match]||0)+1;
     if(isErr(r.norm_status))d.err++;if(r.norm_status==="SKIPPED")d.skip++;if(r.norm_status==="PASS")d.pass++;
-    if(/불일치/.test(r.data_issue))d.mismatch++;if(/역전|누락/.test(r.data_issue))d.timeIssue++;
     const st=parseDt(r.wafer_start_time),en=parseDt(r.wafer_end_time);
     if(st&&en&&en>=st)d.segs.push({s:st,e:en,err:isErr(r.norm_status),r});
+    const dd=rowDate(r);if(dd){const k=dayKey(dd);const day=d.days[k]=d.days[k]||{n:0,err:0};day.n++;if(isErr(r.norm_status))day.err++;}
   }
-  let gT0=null,gT1=null;const gaps=[];
+  const days=scopeDays();const gaps=[];
   for(const d of Object.values(byDev)){
     d.segs.sort((a,b)=>a.s-b.s);
     d.run=d.segs.reduce((a,s)=>a+(s.e-s.s)/1000,0);
-    d.state={RUN:d.run,IDLE:0,SETUP:0,USER_STOP:0,DOWN:0,UNKNOWN:0};d.gaps=[];
-    if(d.segs.length){d.t0=d.segs[0].s;d.t1=d.segs[d.segs.length-1].e;d.window=(d.t1-d.t0)/1000;d.util=d.window>0?d.run/d.window*100:null;
-      if(!gT0||d.t0<gT0)gT0=d.t0;if(!gT1||d.t1>gT1)gT1=d.t1;}
-    for(let i=0;i+1<d.segs.length;i++){
-      const a=d.segs[i],b=d.segs[i+1];const gap=(b.s-a.e)/1000;if(gap<=0)continue;
-      const changed=[];if(a.r.lot!==b.r.lot)changed.push("Lot");if(a.r.recipe!==b.r.recipe)changed.push("Recipe");if(a.r.carrier_id!==b.r.carrier_id)changed.push("Carrier");
-      let kind;
-      if(a.r.norm_status==="USER_ABORT")kind="USER_STOP";else if(a.err)kind="DOWN";else if(gap<=idleMax)kind="IDLE";else if(changed.length&&gap<=setupMax)kind="SETUP";else kind="UNKNOWN";
-      d.state[kind]+=gap;const g={device:d.name,kind,s:a.e,e:b.s,gap,prev:a.r,next:b.r,changed};d.gaps.push(g);gaps.push(g);
-    }
-    d.avgScan=d.segs.length?d.run/d.segs.length:null;
+    d.state={RUN:d.run,IDLE:0,SETUP:0,USER_STOP:0,DOWN:0,UNKNOWN:0};
+    if(d.segs.length){d.t0=d.segs[0].s;d.t1=d.segs[d.segs.length-1].e;}
+    for(let i=0;i+1<d.segs.length;i++){const a=d.segs[i],b=d.segs[i+1];if(b.s<=a.e)continue;const c=classifyGap(a,b,idleMax,setupMax);d.state[c.kind]+=c.gap;const g={device:d.name,...c,s:a.e,e:b.s,prev:a.r,next:b.r};d.gaps.push(g);gaps.push(g);}
+    /* per-day metrics: clip segments and gaps to each calendar day */
+    d.daily={};
+    for(const k of days){const a=keyDay(k).getTime(),b=a+DAY;const m={key:k,run:0,state:{RUN:0,IDLE:0,SETUP:0,USER_STOP:0,DOWN:0,UNKNOWN:0},segs:[],gaps:[],n:(d.days[k]||{}).n||0,err:(d.days[k]||{}).err||0,first:null,last:null};
+      for(const s of d.segs){const c=clip(s.s,s.e,a,b);if(c>0){m.run+=c;m.segs.push(s);const cs=Math.max(s.s,a),ce=Math.min(s.e,b);if(!m.first||cs<m.first)m.first=cs;if(!m.last||ce>m.last)m.last=ce;}}
+      for(const g of d.gaps){const c=clip(g.s,g.e,a,b);if(c>0){m.state[g.kind]+=c;m.gaps.push(g);}}
+      m.state.RUN=m.run;m.obs=m.first?(m.last-m.first)/1000:0;
+      m.util=scope.basis==="24h"?m.run/86400*100:(m.obs>0?m.run/m.obs*100:null);
+      m.hasData=m.segs.length>0||m.n>0;d.daily[k]=m;}
+    const dd=Object.values(d.daily).filter(m=>m.hasData);
+    d.util=scope.basis==="24h"?(days.length?d.run/(days.length*86400)*100:null):(dd.reduce((a,m)=>a+m.obs,0)>0?d.run/dd.reduce((a,m)=>a+m.obs,0)*100:null);
+    d.utilActive=dd.length?dd.reduce((a,m)=>a+(m.util||0),0)/dd.length:null;
+    d.avgScan=d.segs.length?d.run/d.segs.length:null;d.activeDays=dd.length;
   }
-  const devs=Object.values(byDev);
-  const utils=devs.filter(d=>d.util!=null);
-  return{byDev,devs,gaps,gT0,gT1,avgUtil:utils.length?utils.reduce((a,d)=>a+d.util,0)/utils.length:null,
-    nR:new Set(rows.map(r=>r.report_path)).size,nI:rows.filter(r=>r.ini_match==="EXACT").length,nX:rows.filter(r=>r.ini_match!=="EXACT"||r.data_issue).length};
+  const devs=Object.values(byDev);const withU=devs.filter(d=>d.util!=null);
+  return{rows:sr,byDev,devs,gaps,days,avgUtil:withU.length?withU.reduce((a,d)=>a+d.util,0)/withU.length:null,
+    nR:new Set(sr.map(r=>r.report_path)).size,nI:sr.filter(r=>r.ini_match==="EXACT").length,nX:sr.filter(r=>r.ini_match!=="EXACT"||r.data_issue).length,nErr:sr.filter(r=>isErr(r.norm_status)).length,run:devs.reduce((a,d)=>a+d.run,0)};
 }
+
+/* ---------- sparkline ---------- */
+function spark(vals,w=200,h=36){if(!vals||vals.length<2)return"";const max=Math.max(...vals,1e-9),n=vals.length;const pts=vals.map((v,i)=>[(i/(n-1)*(w-6)+3),h-3-(v/max)*(h-8)]);const line=pts.map((p,i)=>(i?"L":"M")+p[0].toFixed(1)+" "+p[1].toFixed(1)).join(" ");const last=pts[n-1];return`<svg class="spark" viewBox="0 0 ${w} ${h}" preserveAspectRatio="none" aria-hidden="true"><path class="a" d="${line} L${last[0].toFixed(1)} ${h} L3 ${h} Z"/><path class="l" d="${line}"/><circle class="e" cx="${last[0].toFixed(1)}" cy="${last[1].toFixed(1)}" r="3"/></svg>`;}
+const dailySeries=f=>A.days.map(k=>A.devs.reduce((a,d)=>a+f(d.daily[k]),0));
 
 /* ---------- render: all ---------- */
 function renderAll(){
-  analysis=analyze();const A=analysis;
+  A=analyze();
   $("#modeTxt").textContent=meta.mode==="live"?"실제 수집":meta.mode==="saved"?"저장된 결과":"데모 데이터";
   $("#modePill").classList.toggle("live",meta.mode==="live");
   $("#genTxt").textContent=meta.generated?`생성 ${meta.generated}`:"";
-  $("#nRows").textContent=rows.length;$("#nGaps").textContent=A.gaps.filter(g=>g.kind!=="IDLE").length;$("#nLots").textContent=A.nR;$("#nIssues").textContent=A.nX;
+  $("#nRows").textContent=A.rows.length;$("#nGaps").textContent=A.gaps.filter(g=>g.kind!=="IDLE").length;$("#nLots").textContent=A.nR;$("#nIssues").textContent=A.nX;
+  $("#scopeSum").textContent=`${scope.from?fmtDay(scope.from):"–"} ~ ${scope.to?fmtDay(scope.to):"–"} · ${A.days.length}일 · ${scope.device||"전체 장비"} · Wafer ${A.rows.length}행`;
+  if(!scope.day||!A.days.includes(scope.day)){scope.day=A.days[A.days.length-1]||null;$("#dayPick").value=scope.day||"";}
   /* hero */
+  $("#hLbl").textContent=(scope.device?scope.device+" · ":"")+"기간 평균 가동률 · "+(scope.basis==="24h"?"24시간 기준":"관측 구간 기준");
   $("#hUtil").innerHTML=A.avgUtil==null?"–":`${A.avgUtil.toFixed(1)}<small>%</small>`;
-  const worst=[...A.devs].filter(d=>d.util!=null).sort((a,b)=>a.util-b.util)[0];
-  $("#hConc").textContent=rows.length?`장비 ${A.devs.length}대의 Report ${A.nR}개에서 Wafer ${rows.length}행을 수집했고 INI ${A.nI}건을 연결했습니다.${worst?` 가장 낮은 장비는 ${worst.name}(${worst.util.toFixed(1)}%)입니다.`:""}`:"아직 데이터가 없습니다.";
-  $("#hDev").textContent=A.devs.length;$("#hDevS").textContent=A.devs.map(d=>d.name).join(" · ");
-  $("#hRep").textContent=A.nR;$("#hRepS").textContent=`장비당 최신 ${meta.limit||"–"}개`;
-  $("#hWaf").textContent=rows.length;$("#hWafS").textContent=`INI 연결 ${A.nI} · ${rows.length?(A.nI/rows.length*100).toFixed(0):0}%`;
-  $("#hIss").textContent=A.nX;$("#hIssS").textContent=`NOT_FOUND ${rows.filter(r=>r.ini_match==="NOT_FOUND").length} · LoadPort ${rows.filter(r=>r.ini_match==="NO_WAFER_ID").length}`;
-  $("#ovLegend").innerHTML=Object.keys(STATE_COLOR).map(k=>`<span><i class="sw" style="background:${STATE_COLOR[k]}"></i>${STATE_LABEL[k]}</span>`).join("");
-  /* device cards */
+  const sorted=[...A.devs].filter(d=>d.util!=null).sort((a,b)=>a.util-b.util);
+  $("#hConc").textContent=A.rows.length?(scope.device?`${scope.device}: ${A.days.length}일 동안 검사 ${fmtSec(A.run)}, 데이터가 있는 날 ${A.devs[0].activeDays}일 · 활동일 평균 ${pct(A.devs[0].utilActive)}.`:`장비 ${A.devs.length}대 · ${A.days.length}일. 가장 낮은 장비 ${sorted[0]?.name} ${pct(sorted[0]?.util)}, 가장 높은 장비 ${sorted[sorted.length-1]?.name} ${pct(sorted[sorted.length-1]?.util)}.`):"선택한 기간에 데이터가 없습니다.";
+  $("#sUtil").innerHTML=spark(A.days.map(k=>{const v=A.devs.map(d=>d.daily[k].util).filter(x=>x!=null);return v.length?v.reduce((a,b)=>a+b,0)/v.length:0;}),300,40);
+  $("#hDev").textContent=A.devs.length;$("#hDevS").textContent=A.devs.map(d=>d.name).join(" · ");$("#sDev").innerHTML="";
+  $("#hRun").textContent=fmtSec(A.run);$("#hRunS").textContent="일별 추이";$("#sRun").innerHTML=spark(dailySeries(m=>m.run));
+  $("#hWaf").textContent=A.rows.length;$("#hWafS").textContent=`INI 연결 ${A.nI} · Report ${A.nR}개`;$("#sWaf").innerHTML=spark(dailySeries(m=>m.n));
+  $("#hErr").textContent=A.nErr;$("#hErrS").textContent=`DOWN 후보 합 ${fmtSec(A.devs.reduce((a,d)=>a+d.state.DOWN,0))}`;$("#sErr").innerHTML=spark(dailySeries(m=>m.err));
+  renderDayChart();renderDay();renderCards();renderStateBars();renderStatusBars();
+  renderGaps();renderLots();renderRows();renderQuality();
+}
+
+/* ---------- daily utilization bar chart ---------- */
+function renderDayChart(){
+  const box=$("#dayChart");const days=A.days,devs=A.devs;
+  if(!days.length||!devs.length){box.innerHTML='<div class="empty">선택한 기간에 데이터가 없습니다.</div>';$("#dayLegend").innerHTML="";return;}
+  const W=1200,L=44,R=12,T=14,B=30,H=230;const ph=H-T-B;
+  const gw=(W-L-R)/days.length;const nb=devs.length;const inner=Math.min(gw*0.72,nb*40);const bw=(inner-(nb-1)*2)/nb;
+  const y=v=>T+ph-(v/100)*ph;
+  let s=`<svg class="chart" viewBox="0 0 ${W} ${H}" style="height:${H}px" role="img" aria-label="일별 가동률">`;
+  [0,25,50,75,100].forEach(v=>{s+=`<line class="grid" x1="${L}" x2="${W-R}" y1="${y(v)}" y2="${y(v)}"/><text x="${L-6}" y="${y(v)+4}" text-anchor="end">${v}%</text>`;});
+  days.forEach((k,i)=>{const gx=L+i*gw;
+    if(k===scope.day)s+=`<rect class="dayband" x="${gx}" y="${T-6}" width="${gw}" height="${ph+6}" rx="4"/>`;
+    devs.forEach((d,j)=>{const m=d.daily[k];const v=m.util||0;const x=gx+(gw-inner)/2+j*(bw+2);const hh=Math.max(m.hasData?2:0,(v/100)*ph);
+      s+=`<rect class="dbar" tabindex="0" data-k="${k}" data-d="${j}" x="${x.toFixed(1)}" y="${(T+ph-hh).toFixed(1)}" width="${bw.toFixed(1)}" height="${hh.toFixed(1)}" rx="2" fill="${m.hasData?devColor(d.name):"var(--nodata)"}" opacity="${k===scope.day||!scope.day?1:.75}"/>`;
+      if(nb===1&&m.hasData)s+=`<text class="vl" x="${(x+bw/2).toFixed(1)}" y="${(T+ph-hh-5).toFixed(1)}" text-anchor="middle">${v.toFixed(0)}%</text>`;});
+    s+=`<text class="daylbl ${k===scope.day?"sel":""}" data-k="${k}" x="${gx+gw/2}" y="${H-10}" text-anchor="middle">${days.length>20?k.slice(5).replace("-","/"):fmtDay(k)}</text>`;});
+  s+=`<line class="axis" x1="${L}" x2="${W-R}" y1="${T+ph}" y2="${T+ph}"/></svg>`;
+  box.innerHTML=s;
+  $("#dayLegend").innerHTML=devs.length>1?devs.map(d=>`<span><i class="sw" style="background:${devColor(d.name)}"></i>${esc(d.name)}</span>`).join(""):`<span class="faint">${esc(devs[0].name)} · 막대 위 숫자는 그 날 가동률</span>`;
+  const sel=el=>{setDay(el.dataset.k);};
+  box.querySelectorAll("rect.dbar").forEach(el=>{el.onclick=()=>sel(el);el.onkeydown=e=>{if(e.key==="Enter"||e.key===" "){e.preventDefault();sel(el);}};});
+  box.querySelectorAll(".daylbl").forEach(el=>el.onclick=()=>sel(el));
+  bindTips(box,"rect.dbar",el=>{const d=devs[+el.dataset.d],m=d.daily[el.dataset.k];return`<b>${esc(d.name)} · ${fmtDay(el.dataset.k)}</b><br>가동률 <b>${m.hasData?pct(m.util):"데이터 없음"}</b> <span class="k">(${scope.basis==="24h"?"24h":"관측 "+fmtSec(m.obs)})</span><br>검사 ${fmtSec(m.run)} · Wafer ${m.n} · Error ${m.err}<br><span class="k">클릭하면 이 날의 타임라인을 봅니다</span>`;});
+}
+
+/* ---------- selected day: 00-24h lanes with run / error / gap states ---------- */
+function renderDay(){
+  const box=$("#dayTl"),k=scope.day;const days=A.days;
+  $("#dPrev").disabled=!k||days.indexOf(k)<=0;$("#dNext").disabled=!k||days.indexOf(k)>=days.length-1;
+  $("#dayTxt").textContent=k?fmtDay(k):"–";
+  if(!k){box.innerHTML='<div class="empty">날짜를 선택하세요.</div>';$("#dayTbl tbody").innerHTML="";return;}
+  const devs=A.devs;const a=keyDay(k).getTime(),b=a+DAY;
+  const W=1200,L=90,R=16,laneH=38,top=20,H=top+devs.length*laneH+26;
+  const x=t=>L+(t-a)/DAY*(W-L-R);
+  let s=`<svg class="chart" viewBox="0 0 ${W} ${H}" style="height:${H}px" role="img" aria-label="${fmtDay(k)} 타임라인">`;
+  for(let h=0;h<=24;h+=2){const xx=x(a+h*3.6e6);s+=`<line class="grid" x1="${xx.toFixed(1)}" x2="${xx.toFixed(1)}" y1="${top-4}" y2="${H-24}"/><text x="${xx.toFixed(1)}" y="${H-8}" text-anchor="middle">${p2(h)}:00</text>`;}
+  s+=`<line class="axis" x1="${L}" x2="${W-R}" y1="${H-24}" y2="${H-24}"/>`;
+  const now=Date.now();if(now>a&&now<b)s+=`<line class="now" x1="${x(now).toFixed(1)}" x2="${x(now).toFixed(1)}" y1="${top-4}" y2="${H-24}"/>`;
+  devs.forEach((d,i)=>{const y=top+i*laneH;const m=d.daily[k];
+    s+=`<text class="lane-label" data-d="${esc(d.name)}" x="${L-10}" y="${y+laneH/2+4}" text-anchor="end">${esc(d.name)}</text>`;
+    s+=`<rect x="${L}" y="${y+7}" width="${W-L-R}" height="${laneH-14}" fill="var(--nodata)" rx="2"/>`;
+    if(m.first)s+=`<rect x="${x(m.first).toFixed(1)}" y="${y+7}" width="${Math.max(1,x(m.last)-x(m.first)).toFixed(1)}" height="${laneH-14}" fill="var(--raise)" rx="2"/>`;
+    m.gaps.forEach((g,j)=>{const gs=Math.max(g.s,a),ge=Math.min(g.e,b);const w=Math.max(1,x(ge)-x(gs));s+=`<rect class="gapseg" data-d="${i}" data-g="${d.gaps.indexOf(g)}" x="${x(gs).toFixed(1)}" y="${y+9}" width="${w.toFixed(1)}" height="${laneH-18}" fill="${STATE_COLOR[g.kind]}" opacity="${g.kind==="DOWN"?.45:g.kind==="IDLE"?.9:.85}" rx="1"/>`;});
+    m.segs.forEach((g,j)=>{const gs=Math.max(g.s,a),ge=Math.min(g.e,b);const w=Math.max(1.5,x(ge)-x(gs));s+=`<rect class="seg" tabindex="0" data-d="${i}" data-i="${d.segs.indexOf(g)}" x="${x(gs).toFixed(1)}" y="${y+7}" width="${w.toFixed(1)}" height="${laneH-14}" fill="${g.err?"var(--down)":"var(--run)"}" rx="1"/>`;});
+  });
+  s+="</svg>";box.innerHTML=s;
+  bindTips(box,"rect.seg",el=>{const g=devs[+el.dataset.d].segs[+el.dataset.i],r=g.r;return`<b>${esc(r.lot)} / ${esc(r.wafer_id)}</b><br><span class="k">${esc(r.device)} · Slot ${esc(r.active_slot)} · ${esc(r.recipe)}</span><br>${fmtDts(g.s)} → ${fmtDts(g.e)} <b>(${fmtSec((g.e-g.s)/1000)})</b><br>${esc(r.norm_status)}${r.status&&r.norm_status!=="PASS"?" · "+esc(r.status):""}<br><span class="k">클릭하면 전체 필드를 봅니다</span>`;});
+  bindTips(box,"rect.gapseg",el=>{const g=devs[+el.dataset.d].gaps[+el.dataset.g];return`<b>${STATE_LABEL[g.kind]}</b> · ${fmtSec(g.gap)}<br>${fmtDts(g.s)} → ${fmtDts(g.e)}<br><span class="k">직전</span> ${esc(g.prev.lot)} / ${esc(g.prev.wafer_id)} (${esc(g.prev.norm_status)})<br><span class="k">다음</span> ${esc(g.next.lot)} / ${esc(g.next.wafer_id)}${g.changed.length?`<br><span class="k">변경</span> ${g.changed.join(", ")}`:""}`;});
+  box.querySelectorAll("rect.seg").forEach(el=>{const open=()=>openDrawer(devs[+el.dataset.d].segs[+el.dataset.i].r);el.onclick=open;el.onkeydown=e=>{if(e.key==="Enter"){open();}};});
+  box.querySelectorAll(".lane-label").forEach(el=>el.onclick=()=>{scope.device=scope.device===el.dataset.d?"":el.dataset.d;renderChips();renderAll();});
+  $("#dayTbl tbody").innerHTML=devs.map(d=>{const m=d.daily[k];return`<tr><td><b><i class="sw" style="background:${devColor(d.name)}"></i>${esc(d.name)}</b></td><td class="r"><b>${m.hasData?pct(m.util):'<span class="faint">데이터 없음</span>'}</b></td><td class="r">${fmtSec(m.run)}</td><td class="r">${m.n}</td><td class="r">${m.err?`<span class="chip crit">${m.err}</span>`:0}</td>${["IDLE","SETUP","USER_STOP","DOWN","UNKNOWN"].map(s=>`<td class="r">${m.state[s]?fmtSec(m.state[s]):'<span class="faint">–</span>'}</td>`).join("")}<td class="num">${m.first?fmtDt(new Date(m.first),false)+" → "+fmtDt(new Date(m.last),false):"–"}</td></tr>`;}).join("");
+}
+
+/* ---------- device cards ---------- */
+function renderCards(){
   $("#devCards").innerHTML=A.devs.map(d=>{const dm=(meta.devices||[]).find(x=>x.name===d.name)||{};const tot=Object.values(d.state).reduce((a,b)=>a+b,0)||1;
-    return`<div class="panel dev" onclick="filterDev('${esc(d.name)}')">
-      <div class="hd"><span class="name">${esc(d.name)}</span><span class="machine">${esc([...d.machines].join(", "))||"machine –"}</span></div>
-      <div class="util"><b>${d.util!=null?d.util.toFixed(1)+"%":"–"}</b><span>추정 가동률 · ${d.t0?fmtDt(d.t0)+" → "+fmtDt(d.t1):"관측 구간 없음"}</span></div>
+    return`<div class="panel dev ${scope.device===d.name?"sel":""}" tabindex="0" role="button" title="클릭하면 이 장비만 봅니다" onclick="toggleDev('${esc(d.name)}')" onkeydown="if(event.key==='Enter')toggleDev('${esc(d.name)}')">
+      <div class="hd"><span class="name"><i class="sw" style="background:${devColor(d.name)}"></i>${esc(d.name)}</span><span class="machine">${esc([...d.machines].join(", "))||"machine –"}</span></div>
+      <div class="util"><b>${pct(d.util)}</b><span>기간 평균 · 활동일 ${d.activeDays}/${A.days.length}일 · 활동일 평균 ${pct(d.utilActive)}</span></div>
+      ${spark(A.days.map(k=>d.daily[k].util||0),300,40)}
       <div class="meter" title="가동 상태 구성">${Object.keys(STATE_COLOR).filter(k=>d.state[k]>0).map(k=>`<i style="width:${(d.state[k]/tot*100).toFixed(2)}%;background:${STATE_COLOR[k]}"></i>`).join("")}</div>
       <div class="kv"><div><b class="num">${d.reports.size}</b><span>Report</span></div><div><b class="num">${d.n}</b><span>Wafer</span></div><div><b class="num">${d.n?(d.EXACT/d.n*100).toFixed(0):0}%</b><span>INI 연결</span></div><div><b class="num">${fmtSec(d.avgScan)}</b><span>평균 검사</span></div></div>
       <div style="display:flex;gap:6px;flex-wrap:wrap">${d.err?`<span class="chip crit">Error/Abort ${d.err}</span>`:`<span class="chip ok">Error 없음</span>`}${d.skip?`<span class="chip warn">Skipped ${d.skip}</span>`:""}${d.NOT_FOUND?`<span class="chip crit">INI 없음 ${d.NOT_FOUND}</span>`:""}${d.state.DOWN?`<span class="chip mute">DOWN 후보 ${fmtSec(d.state.DOWN)}</span>`:""}</div>
-      ${dm.error?`<div class="err">${esc(dm.error)}</div>`:""}</div>`;}).join("")||`<div class="panel stat"><span class="faint">장비 데이터 없음</span></div>`;
-  renderTimeline();renderStateBars();renderStatusBars();
-  /* selects */
-  for(const id of["#fDev","#gapDev"]){const s=$(id),cur=s.value;s.innerHTML='<option value="">모든 장비</option>'+A.devs.map(d=>`<option ${d.name===cur?"selected":""}>${esc(d.name)}</option>`).join("");}
-  renderGaps();renderLots();renderRows();renderQuality();
+      ${dm.error?`<div class="err">${esc(dm.error)}</div>`:""}</div>`;}).join("")||`<div class="panel empty">장비 데이터 없음</div>`;
 }
-function filterDev(n){$("#fDev").value=n;go("rows");renderRows();}
+function toggleDev(n){scope.device=scope.device===n?"":n;renderChips();renderAll();toast(scope.device?`${n}만 표시`:"모든 장비 표시");}
 
-/* ---------- timeline (shared time axis, one lane per device) ---------- */
-function renderTimeline(){
-  const A=analysis,box=$("#tlBox");
-  const devs=A.devs.filter(d=>d.segs.length);
-  if(!devs.length){box.innerHTML='<p class="faint">시간 정보가 있는 Wafer가 없습니다.</p>';return;}
-  const W=1200,L=90,R=16,laneH=34,top=22,H=top+devs.length*laneH+24;
-  const t0=A.gT0.getTime(),t1=A.gT1.getTime(),span=Math.max(1,t1-t0);
-  const x=t=>L+(t-t0)/span*(W-L-R);
-  /* ticks: pick hour step so ~8-14 ticks */
-  const hours=span/3.6e6;const step=[1,2,3,6,12,24].find(s=>hours/s<=14)||24;
-  const ticks=[];const first=new Date(t0);first.setMinutes(0,0,0);first.setHours(Math.ceil(first.getHours()/step)*step);
-  for(let t=first.getTime();t<=t1;t+=step*3.6e6)ticks.push(t);
-  let s=`<svg class="tl" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" style="height:${H}px">`;
-  ticks.forEach(t=>{const d=new Date(t);s+=`<line class="grid" x1="${x(t).toFixed(1)}" x2="${x(t).toFixed(1)}" y1="${top-4}" y2="${H-22}"/><text x="${x(t).toFixed(1)}" y="${H-8}" text-anchor="middle">${d.getHours()===0||t===ticks[0]?fmtDt(d):p2(d.getHours())+":00"}</text>`;});
-  s+=`<line class="axis" x1="${L}" x2="${W-R}" y1="${H-22}" y2="${H-22}"/>`;
-  devs.forEach((d,i)=>{const y=top+i*laneH;
-    s+=`<text class="lane-label" x="${L-10}" y="${y+laneH/2+4}" text-anchor="end">${esc(d.name)}</text>`;
-    s+=`<rect x="${x(d.t0).toFixed(1)}" y="${y+6}" width="${Math.max(1,x(d.t1)-x(d.t0)).toFixed(1)}" height="${laneH-12}" fill="var(--raise)" rx="2"/>`;
-    d.segs.forEach((g,j)=>{const w=Math.max(1.2,x(g.e)-x(g.s));s+=`<rect class="seg" data-d="${i}" data-i="${j}" x="${x(g.s).toFixed(1)}" y="${y+6}" width="${w.toFixed(1)}" height="${laneH-12}" fill="${g.err?"var(--down)":"var(--run)"}" rx="1"/>`;});
-  });
-  s+="</svg>";box.innerHTML=s;
-  box.querySelectorAll("rect.seg").forEach(el=>{el.addEventListener("mouseenter",ev=>{const g=devs[+el.dataset.d].segs[+el.dataset.i];const r=g.r;showTip(`<b>${esc(r.lot)} / ${esc(r.wafer_id)}</b><br><span class="k">${esc(r.device)} · Slot ${esc(r.active_slot)} · ${esc(r.recipe)}</span><br>${fmtDts(g.s)} → ${fmtDts(g.e)} <b>(${fmtSec((g.e-g.s)/1000)})</b><br>${esc(r.norm_status)}${r.status&&r.norm_status!=="PASS"?" · "+esc(r.status):""}`,ev);});el.addEventListener("mousemove",moveTip);el.addEventListener("mouseleave",hideTip);el.addEventListener("click",()=>openDrawer(devs[+el.dataset.d].segs[+el.dataset.i].r));});
-}
-/* ---------- state composition bars ---------- */
+/* ---------- state composition & status ---------- */
 function renderStateBars(){
-  const devs=analysis.devs.filter(d=>d.window);
-  if(!devs.length){$("#stateBars").innerHTML='<p class="faint">–</p>';return;}
-  const max=Math.max(...devs.map(d=>d.window));
+  const devs=A.devs.filter(d=>d.run>0);
+  if(!devs.length){$("#stateBars").innerHTML='<div class="empty">–</div>';return;}
+  const max=Math.max(...devs.map(d=>Object.values(d.state).reduce((a,b)=>a+b,0)));
   $("#stateBars").innerHTML=`<div style="display:grid;grid-template-columns:70px 1fr 90px;gap:10px 12px;align-items:center;font-size:12.5px">`+devs.map(d=>{const tot=Object.values(d.state).reduce((a,b)=>a+b,0)||1;
-    return`<b>${esc(d.name)}</b><div class="meter" style="height:14px;width:${(d.window/max*100).toFixed(1)}%">${Object.keys(STATE_COLOR).filter(k=>d.state[k]>0).map(k=>`<i style="width:${(d.state[k]/tot*100).toFixed(2)}%;background:${STATE_COLOR[k]}" data-t="${k}|${d.name}"></i>`).join("")}</div><span class="num muted" style="text-align:right">${fmtSec(d.window)}</span>`;}).join("")+`</div>
-    <table class="tbl" style="margin-top:14px;font-size:12px"><thead><tr><th class="ns">장비</th>${Object.keys(STATE_COLOR).map(k=>`<th class="ns r"><i class="sw" style="background:${STATE_COLOR[k]}"></i>${STATE_LABEL[k]}</th>`).join("")}</tr></thead><tbody>${devs.map(d=>`<tr><td><b>${esc(d.name)}</b></td>${Object.keys(STATE_COLOR).map(k=>`<td class="r">${d.state[k]?fmtSec(d.state[k])+` <span class="faint">${(d.state[k]/d.window*100).toFixed(0)}%</span>`:'<span class="faint">–</span>'}</td>`).join("")}</tr>`).join("")}</tbody></table>`;
-  $("#stateBars").querySelectorAll(".meter i").forEach(el=>{el.addEventListener("mouseenter",ev=>{const[k,n]=el.dataset.t.split("|");const d=analysis.byDev[n];showTip(`<b>${n} · ${STATE_LABEL[k]}</b><br>${fmtSec(d.state[k])} · ${(d.state[k]/d.window*100).toFixed(1)}%`,ev);});el.addEventListener("mousemove",moveTip);el.addEventListener("mouseleave",hideTip);});
+    return`<b>${esc(d.name)}</b><div class="meter" style="height:14px;width:${(tot/max*100).toFixed(1)}%">${Object.keys(STATE_COLOR).filter(k=>d.state[k]>0).map(k=>`<i style="width:${(d.state[k]/tot*100).toFixed(2)}%;background:${STATE_COLOR[k]}" data-t="${k}|${d.name}" tabindex="0"></i>`).join("")}</div><span class="num muted" style="text-align:right">${fmtSec(tot)}</span>`;}).join("")+`</div>
+    <div class="legend" style="margin-top:12px">${Object.keys(STATE_COLOR).map(k=>`<span><i class="sw" style="background:${STATE_COLOR[k]}"></i>${STATE_LABEL[k]}</span>`).join("")}</div>
+    <table class="tbl" style="margin-top:12px;font-size:12px"><thead><tr><th class="ns">장비</th>${Object.keys(STATE_COLOR).map(k=>`<th class="ns r">${STATE_LABEL[k]}</th>`).join("")}</tr></thead><tbody>${devs.map(d=>{const tot=Object.values(d.state).reduce((a,b)=>a+b,0)||1;return`<tr><td><b>${esc(d.name)}</b></td>${Object.keys(STATE_COLOR).map(k=>`<td class="r">${d.state[k]?fmtSec(d.state[k])+` <span class="faint">${(d.state[k]/tot*100).toFixed(0)}%</span>`:'<span class="faint">–</span>'}</td>`).join("")}</tr>`;}).join("")}</tbody></table>`;
+  bindTips($("#stateBars"),".meter i",el=>{const[k,n]=el.dataset.t.split("|");const d=A.byDev[n];const tot=Object.values(d.state).reduce((a,b)=>a+b,0)||1;return`<b>${n} · ${STATE_LABEL[k]}</b><br>${fmtSec(d.state[k])} · ${(d.state[k]/tot*100).toFixed(1)}%`;});
 }
 function renderStatusBars(){
-  const sc={};rows.forEach(r=>{const k=r.norm_status||"(없음)";sc[k]=(sc[k]||0)+1;});
+  const sc={};A.rows.forEach(r=>{const k=r.norm_status||"(없음)";sc[k]=(sc[k]||0)+1;});
   const list=Object.entries(sc).sort((a,b)=>b[1]-a[1]);const max=list[0]?.[1]||1;
-  $("#statusBars").innerHTML=list.length?`<div style="display:grid;grid-template-columns:auto 1fr 50px;gap:8px 12px;align-items:center;font-size:12.5px">`+list.map(([k,v])=>`${chipStatus(k)}<div><span class="bar" style="width:${(v/max*100).toFixed(1)}%;background:${k==="PASS"?"var(--run)":k==="SKIPPED"?"var(--setup)":isErr(k)?"var(--down)":"var(--idle)"}"></span></div><b class="num" style="text-align:right">${v}</b>`).join("")+`</div><p class="faint" style="font-size:12px;margin-top:12px">Skipped는 공정상 의미가 확정되지 않아 Error나 DOWN에 포함하지 않습니다.</p>`:'<p class="faint">–</p>';
+  $("#statusBars").innerHTML=list.length?`<div style="display:grid;grid-template-columns:auto 1fr 50px;gap:8px 12px;align-items:center;font-size:12.5px">`+list.map(([k,v])=>`<button class="btn ghost" style="padding:2px 0;justify-content:flex-start" onclick="filterStatus('${k}')">${chipStatus(k)}</button><div><span class="bar" style="width:${(v/max*100).toFixed(1)}%;background:${k==="PASS"?"var(--run)":k==="SKIPPED"?"var(--setup)":isErr(k)?"var(--down)":"var(--idle)"}"></span></div><b class="num" style="text-align:right">${v}</b>`).join("")+`</div><p class="faint" style="font-size:12px;margin-top:12px">Skipped는 공정상 의미가 확정되지 않아 Error나 DOWN에 포함하지 않습니다.</p>`:'<div class="empty">–</div>';
 }
+function filterStatus(k){resetRowFilters();$("#fStatus").value=k;go("rows");renderRows();}
 
 /* ---------- gaps view ---------- */
 function renderGaps(){
-  const fd=$("#gapDev").value,fk=$("#gapKind").value;
-  let list=analysis.gaps.filter(g=>(!fd||g.device===fd)&&(!fk||(fk==="!IDLE"?g.kind!=="IDLE":g.kind===fk)));
+  const fk=$("#gapKind").value;
+  let list=A.gaps.filter(g=>(!fk||(fk==="!IDLE"?g.kind!=="IDLE":g.kind===fk)));
   const k=sort.gaps.k||"gap",asc=sort.gaps.k?sort.gaps.asc:false;list=[...list].sort((a,b)=>{let x=a[k],y=b[k];if(x instanceof Date){x=+x;y=+y;}return(x<y?-1:x>y?1:0)*(asc?1:-1);});
   $("#gapCnt").textContent=`${list.length}건 · 합계 ${fmtSec(list.reduce((a,g)=>a+g.gap,0))}`;
-  $("#gapTbl tbody").innerHTML=list.slice(0,1500).map(g=>`<tr><td><b>${esc(g.device)}</b></td><td><i class="sw" style="background:${STATE_COLOR[g.kind]}"></i>${STATE_LABEL[g.kind]}</td><td class="num">${fmtDts(g.s)}</td><td class="num">${fmtDts(g.e)}</td><td class="r"><b>${fmtSec(g.gap)}</b></td><td class="mono">${esc(g.prev.lot)} / ${esc(g.prev.wafer_id)}</td><td>${chipStatus(g.prev.norm_status)}</td><td class="mono">${esc(g.next.lot)} / ${esc(g.next.wafer_id)}</td><td class="muted">${g.changed.join(", ")||"–"}</td></tr>`).join("")||'<tr><td colspan="9" class="faint">해당 공백이 없습니다.</td></tr>';
+  $("#gapTbl tbody").innerHTML=list.slice(0,1500).map(g=>`<tr class="click" title="클릭하면 그 날 타임라인으로 이동" onclick="jumpDay('${dayKey(g.s)}')"><td><b><i class="sw" style="background:${devColor(g.device)}"></i>${esc(g.device)}</b></td><td><i class="sw" style="background:${STATE_COLOR[g.kind]}"></i>${STATE_LABEL[g.kind]}</td><td class="num">${fmtDts(g.s)}</td><td class="num">${fmtDts(g.e)}</td><td class="r"><b>${fmtSec(g.gap)}</b></td><td class="mono">${esc(g.prev.lot)} / ${esc(g.prev.wafer_id)}</td><td>${chipStatus(g.prev.norm_status)}</td><td class="mono">${esc(g.next.lot)} / ${esc(g.next.wafer_id)}</td><td class="muted">${g.changed.join(", ")||"–"}</td></tr>`).join("")||'<tr><td colspan="9" class="empty">해당 공백이 없습니다.</td></tr>';
   bindSort("#gapTbl",["device","kind","s","e","gap","prev","prev","next","changed"],"gaps",renderGaps);
 }
+function jumpDay(k){go("overview");if(A.days.includes(k))setDay(k);setTimeout(()=>$("#dayTl").scrollIntoView({behavior:"smooth",block:"center"}),50);}
 
 /* ---------- lots view ---------- */
 function lotSummary(){
   const by={};
-  for(const r of rows){const k=r.report_path;const L=by[k]=by[k]||{device:r.device,lot:r.report_lot||r.lot,recipe:r.recipe,process:r.process_code,batch_start:r.batch_start,batch_time:r.batch_time,n:0,pass:0,skip:0,err:0,ini:0,dur:[],slots:{},rank:r.report_rank};
+  for(const r of A.rows){const k=r.report_path;const L=by[k]=by[k]||{device:r.device,lot:r.report_lot||r.lot,recipe:r.recipe,process:r.process_code,batch_start:r.batch_start,batch_time:r.batch_time,n:0,pass:0,skip:0,err:0,ini:0,dur:[],slots:{}};
     L.n++;if(r.norm_status==="PASS")L.pass++;else if(r.norm_status==="SKIPPED")L.skip++;else if(isErr(r.norm_status))L.err++;if(r.ini_match==="EXACT")L.ini++;
     if(r.wafer_duration_seconds!=="")L.dur.push(+r.wafer_duration_seconds);
     let slot=+r.active_slot;if(!slot){const m=String(r.wafer_id).match(/^slot\s*(\d+)/i);if(m)slot=+m[1];}
@@ -632,27 +773,28 @@ function lotSummary(){
 function renderLots(){
   const q=$("#lotQ").value.trim().toLowerCase();
   let list=lotSummary().filter(L=>!q||[L.device,L.lot,L.recipe,L.process].some(v=>String(v).toLowerCase().includes(q)));
-  const k=sort.lots.k||"bs";list.sort((a,b)=>{let x=a[k],y=b[k];if(x instanceof Date){x=+x;y=+y;}if(x==null)x=-Infinity;if(y==null)y=-Infinity;return(x<y?-1:x>y?1:0)*(sort.lots.asc?1:(sort.lots.k?-1:-1));});
-  if(!sort.lots.k)list.sort((a,b)=>(+b.bs||0)-(+a.bs||0));
-  $("#lotTbl tbody").innerHTML=list.map(L=>`<tr><td><b>${esc(L.device)}</b></td><td class="mono">${esc(L.lot)}</td><td>${esc(L.recipe)}</td><td class="mono">${esc(L.process)}</td><td class="num">${fmtDts(L.bs)||esc(L.batch_start)}</td><td class="r">${L.bt!=null?fmtSec(L.bt):esc(L.batch_time)}</td><td class="r">${L.n}</td><td class="r">${L.pass}</td><td class="r">${L.skip?`<span class="chip warn">${L.skip}</span>`:0}</td><td class="r">${L.err?`<span class="chip crit">${L.err}</span>`:0}</td><td class="r">${L.ini}/${L.n}</td><td class="r">${fmtSec(L.avg)}</td><td><div class="slots" title="${L.unslotted?L.unslotted+"행은 슬롯 정보 없음":""}">${Array.from({length:25},(_,i)=>`<i class="${L.slots[i+1]||""}" title="Slot ${i+1}"></i>`).join("")}</div></td></tr>`).join("")||'<tr><td colspan="13" class="faint">해당 Batch가 없습니다.</td></tr>';
+  const k=sort.lots.k||"bs",asc=sort.lots.k?sort.lots.asc:false;list.sort((a,b)=>{let x=a[k],y=b[k];if(x instanceof Date){x=+x;y=+y;}if(x==null)x=-Infinity;if(y==null)y=-Infinity;return(x<y?-1:x>y?1:0)*(asc?1:-1);});
+  $("#lotCnt").textContent=`${list.length}개 Batch`;
+  $("#lotTbl tbody").innerHTML=list.map(L=>`<tr class="click" title="클릭하면 상세 데이터에서 이 Lot을 봅니다" onclick="resetRowFilters();document.getElementById('q').value='${esc(L.lot)}';go('rows');renderRows()"><td><b><i class="sw" style="background:${devColor(L.device)}"></i>${esc(L.device)}</b></td><td class="mono">${esc(L.lot)}</td><td>${esc(L.recipe)}</td><td class="mono">${esc(L.process)}</td><td class="num">${fmtDts(L.bs)||esc(L.batch_start)}</td><td class="r">${L.bt!=null?fmtSec(L.bt):esc(L.batch_time)}</td><td class="r">${L.n}</td><td class="r">${L.pass}</td><td class="r">${L.skip?`<span class="chip warn">${L.skip}</span>`:0}</td><td class="r">${L.err?`<span class="chip crit">${L.err}</span>`:0}</td><td class="r">${L.ini}/${L.n}</td><td class="r">${fmtSec(L.avg)}</td><td><div class="slots" title="${L.unslotted?L.unslotted+"행은 슬롯 정보 없음":""}">${Array.from({length:25},(_,i)=>`<i class="${L.slots[i+1]||""}" title="Slot ${i+1}"></i>`).join("")}</div></td></tr>`).join("")||'<tr><td colspan="13" class="empty">해당 Batch가 없습니다.</td></tr>';
   bindSort("#lotTbl",["device","lot","recipe","process","bs","bt","n","pass","skip","err","ini","avg",null],"lots",renderLots);
 }
 
 /* ---------- rows view ---------- */
 function setCols(m,btn){colMode=m;document.querySelectorAll("#colMode button").forEach(b=>b.setAttribute("aria-pressed",b===btn));renderRows();}
+function resetRowFilters(){$("#q").value="";$("#fMatch").value="";$("#fStatus").value="";$("#fIssue").checked=false;renderRows();}
 function filteredRows(){
-  const q=$("#q").value.trim().toLowerCase(),fd=$("#fDev").value,fm=$("#fMatch").value,fs=$("#fStatus").value,fi=$("#fIssue").checked;
-  let out=rows.filter(r=>(!fd||r.device===fd)&&(!fm||r.ini_match===fm)&&(!fs||r.norm_status===fs)&&(!fi||r.ini_match!=="EXACT"||r.data_issue)&&(!q||COLS.some(c=>String(r[c]??"").toLowerCase().includes(q))));
+  const q=$("#q").value.trim().toLowerCase(),fm=$("#fMatch").value,fs=$("#fStatus").value,fi=$("#fIssue").checked;
+  let out=A.rows.filter(r=>(!fm||r.ini_match===fm)&&(!fs||r.norm_status===fs)&&(!fi||r.ini_match!=="EXACT"||r.data_issue)&&(!q||COLS.some(c=>String(r[c]??"").toLowerCase().includes(q))));
   const k=sort.rows.k;if(k){out=[...out].sort((a,b)=>{let x=a[k],y=b[k];const nx=parseFloat(x),ny=parseFloat(y);if(x!==""&&y!==""&&!isNaN(nx)&&!isNaN(ny)){x=nx;y=ny;}else if(/_time$|^batch_(start|end)$/.test(k)){x=+parseDt(x)||0;y=+parseDt(y)||0;}else{x=String(x??"");y=String(y??"");}return(x<y?-1:x>y?1:0)*(sort.rows.asc?1:-1);});}
   return out;
 }
 function renderRows(){
   const cols=colMode==="core"?CORE:COLS;const out=filteredRows();
-  $("#rowCnt").textContent=`${out.length} / ${rows.length}행${out.length>1000?" · 상위 1000행 표시":""}`;
+  $("#rowCnt").textContent=`${out.length} / ${A.rows.length}행${out.length>1000?" · 상위 1000행 표시":""}`;
   $("#rowTbl thead").innerHTML="<tr>"+cols.map(c=>`<th data-k="${c}" class="${/seconds|dice|faults|rank|slot|station/.test(c)?"r":""}">${c}<span class="arr">${sort.rows.k===c?(sort.rows.asc?"▲":"▼"):"⇅"}</span></th>`).join("")+"</tr>";
-  $("#rowTbl tbody").innerHTML=out.slice(0,1000).map((r,i)=>`<tr class="click" data-i="${rows.indexOf(r)}">`+cols.map(c=>{let v=esc(r[c]);
-    if(c==="ini_match")v=chipMatch(r[c]);else if(c==="norm_status")v=chipStatus(r[c]);else if(c==="data_issue"&&v)v=`<span style="color:var(--crit-ink);font-weight:600">${v}</span>`;else if(c==="wafer_duration_seconds"&&r[c]!=="")v=`<span class="bar" style="width:${Math.min(60,+r[c]/6)}px"></span>${v}`;else if(/wafer_id|lot|path|carrier|machine|equipment/.test(c))v=`<span class="mono">${v}</span>`;
-    return`<td class="${/seconds|dice|faults|rank|slot|station/.test(c)?"r":""}">${v}</td>`;}).join("")+"</tr>").join("")||`<tr><td colspan="${cols.length}" class="faint">조건에 맞는 행이 없습니다.</td></tr>`;
+  $("#rowTbl tbody").innerHTML=out.slice(0,1000).map(r=>`<tr class="click" data-i="${rows.indexOf(r)}">`+cols.map(c=>{let v=esc(r[c]);
+    if(c==="ini_match")v=chipMatch(r[c]);else if(c==="norm_status")v=chipStatus(r[c]);else if(c==="device")v=`<i class="sw" style="background:${devColor(r[c])}"></i>${v}`;else if(c==="data_issue"&&v)v=`<span style="color:var(--crit-ink);font-weight:600">${v}</span>`;else if(c==="wafer_duration_seconds"&&r[c]!=="")v=`<span class="bar" style="width:${Math.min(60,+r[c]/6)}px"></span>${v}`;else if(/wafer_id|lot|path|carrier|machine|equipment/.test(c))v=`<span class="mono">${v}</span>`;
+    return`<td class="${/seconds|dice|faults|rank|slot|station/.test(c)?"r":""}">${v}</td>`;}).join("")+"</tr>").join("")||`<tr><td colspan="${cols.length}" class="empty">조건에 맞는 행이 없습니다.</td></tr>`;
   $("#rowTbl thead").querySelectorAll("th").forEach(th=>{th.onclick=()=>{const k=th.dataset.k;if(sort.rows.k===k)sort.rows.asc=!sort.rows.asc;else{sort.rows.k=k;sort.rows.asc=true;}renderRows();};if(sort.rows.k===th.dataset.k)th.dataset.dir=sort.rows.asc?"asc":"desc";});
   $("#rowTbl tbody").querySelectorAll("tr.click").forEach(tr=>tr.onclick=()=>{openDrawer(rows[+tr.dataset.i]);$("#rowTbl tbody").querySelectorAll("tr.sel").forEach(x=>x.classList.remove("sel"));tr.classList.add("sel");});
 }
@@ -668,49 +810,51 @@ function openDrawer(r){
   $("#drawer").classList.add("open");$("#drawer").setAttribute("aria-hidden","false");
 }
 function closeDrawer(){$("#drawer").classList.remove("open");$("#drawer").setAttribute("aria-hidden","true");}
-document.addEventListener("keydown",e=>{if(e.key==="Escape")closeDrawer();});
+document.addEventListener("keydown",e=>{if(e.key==="Escape")closeDrawer();if(e.target.tagName==="INPUT"||e.target.tagName==="SELECT")return;if(e.key==="ArrowLeft"&&$("#v-overview").classList.contains("on"))stepDay(-1);if(e.key==="ArrowRight"&&$("#v-overview").classList.contains("on"))stepDay(1);});
+document.addEventListener("click",e=>{if($("#drawer").classList.contains("open")&&!e.target.closest("#drawer")&&!e.target.closest("tr.click")&&!e.target.closest("rect.seg"))closeDrawer();});
 
 /* ---------- quality view ---------- */
 function renderQuality(){
-  const A=analysis;const n=rows.length||1;
-  const c=(f)=>rows.filter(f).length;
+  const R=A.rows;const n=R.length||1;const c=f=>R.filter(f).length;
   const items=[
-    {l:"INI 정확 경로 연결",v:`${A.nI} / ${rows.length}`,d:`${(A.nI/n*100).toFixed(1)}% · EXACT`,s:A.nI/n>=.9?"ok":A.nI/n>=.7?"warn":"crit"},
-    {l:"WaferInfo.ini 없음",v:c(r=>r.ini_match==="NOT_FOUND"),d:"NOT_FOUND · 계산된 경로에 파일 없음",s:c(r=>r.ini_match==="NOT_FOUND")?"warn":"ok"},
-    {l:"LoadPort/Slot 행",v:c(r=>r.ini_match==="NO_WAFER_ID"),d:"NO_WAFER_ID · Wafer ID가 없어 경로 생성 불가",s:"mute"},
-    {l:"INI 읽기 실패",v:c(r=>r.ini_match==="READ_ERROR"),d:"READ_ERROR · 파일은 있으나 파싱 실패",s:c(r=>r.ini_match==="READ_ERROR")?"crit":"ok"},
-    {l:"Lot / Wafer ID 불일치",v:c(r=>/불일치/.test(r.data_issue)),d:"Report와 INI의 UseLot, UseWaferID 비교",s:c(r=>/불일치/.test(r.data_issue))?"crit":"ok"},
-    {l:"시간 누락·역전",v:c(r=>/역전|누락/.test(r.data_issue)),d:"WaferEndTime < WaferStartTime 또는 값 없음",s:c(r=>/역전|누락/.test(r.data_issue))?"crit":"ok"},
-    {l:"Error/Abort Wafer",v:c(r=>isErr(r.norm_status)),d:"USER_ABORT, ABORTED, SCAN_ERROR, ID_READ_ERROR",s:c(r=>isErr(r.norm_status))?"warn":"ok"},
-    {l:"Error인데 INI 있음",v:c(r=>isErr(r.norm_status)&&r.ini_match==="EXACT"),d:"Error 시 WaferEndTime 기록 일관성 확인용",s:"mute"},
-    {l:"동일 Wafer 재검사",v:(()=>{const m={};rows.forEach(r=>{if(r.ini_match==="EXACT"){const k=r.device+"|"+r.lot+"|"+r.wafer_id;m[k]=(m[k]||0)+1;}});return Object.values(m).filter(x=>x>1).length;})(),d:"장비+Lot+Wafer ID가 2회 이상 · 재검사 이력",s:"mute"},
-    {l:"Report 읽기 오류",v:(meta.reportErrors||[]).length,d:"파일은 있으나 파싱 실패한 Report",s:(meta.reportErrors||[]).length?"crit":"ok"},
-    {l:"OCRID 비어 있음",v:c(r=>r.ini_match==="EXACT"&&!r.ocr_id),d:"FillID로 대체됨 · 단독으로는 Error 아님",s:"mute"},
-    {l:"Skipped",v:c(r=>r.norm_status==="SKIPPED"),d:"의미 미확정 · Error/DOWN에 포함하지 않음",s:"warn"},
+    {l:"INI 정확 경로 연결",v:`${A.nI} / ${R.length}`,d:`${(A.nI/n*100).toFixed(1)}% · EXACT`,s:A.nI/n>=.9?"ok":A.nI/n>=.7?"warn":"crit",f:{m:"EXACT"}},
+    {l:"WaferInfo.ini 없음",v:c(r=>r.ini_match==="NOT_FOUND"),d:"NOT_FOUND · 계산된 경로에 파일 없음",s:c(r=>r.ini_match==="NOT_FOUND")?"warn":"ok",f:{m:"NOT_FOUND"}},
+    {l:"LoadPort/Slot 행",v:c(r=>r.ini_match==="NO_WAFER_ID"),d:"NO_WAFER_ID · Wafer ID가 없어 경로 생성 불가",s:"mute",f:{m:"NO_WAFER_ID"}},
+    {l:"INI 읽기 실패",v:c(r=>r.ini_match==="READ_ERROR"),d:"READ_ERROR · 파일은 있으나 파싱 실패",s:c(r=>r.ini_match==="READ_ERROR")?"crit":"ok",f:{m:"READ_ERROR"}},
+    {l:"Lot / Wafer ID 불일치",v:c(r=>/불일치/.test(r.data_issue)),d:"Report와 INI의 UseLot, UseWaferID 비교",s:c(r=>/불일치/.test(r.data_issue))?"crit":"ok",f:{q:"불일치"}},
+    {l:"시간 누락·역전",v:c(r=>/역전|누락/.test(r.data_issue)),d:"WaferEndTime < WaferStartTime 또는 값 없음",s:c(r=>/역전|누락/.test(r.data_issue))?"crit":"ok",f:{q:"역전"}},
+    {l:"Error/Abort Wafer",v:c(r=>isErr(r.norm_status)),d:"USER_ABORT, ABORTED, SCAN_ERROR, ID_READ_ERROR",s:c(r=>isErr(r.norm_status))?"warn":"ok",f:{q:"abort"}},
+    {l:"Error인데 INI 있음",v:c(r=>isErr(r.norm_status)&&r.ini_match==="EXACT"),d:"Error 시 WaferEndTime 기록 일관성 확인용",s:"mute",f:{m:"EXACT",q:"abort"}},
+    {l:"동일 Wafer 재검사",v:(()=>{const m={};R.forEach(r=>{if(r.ini_match==="EXACT"){const k=r.device+"|"+r.lot+"|"+r.wafer_id;m[k]=(m[k]||0)+1;}});return Object.values(m).filter(x=>x>1).length;})(),d:"장비+Lot+Wafer ID가 2회 이상 · 재검사 이력",s:"mute",f:{}},
+    {l:"Report 읽기 오류",v:(meta.reportErrors||[]).length,d:"파일은 있으나 파싱 실패한 Report",s:(meta.reportErrors||[]).length?"crit":"ok",f:null},
+    {l:"OCRID 비어 있음",v:c(r=>r.ini_match==="EXACT"&&!r.ocr_id),d:"FillID로 대체됨 · 단독으로는 Error 아님",s:"mute",f:{m:"EXACT"}},
+    {l:"Skipped",v:c(r=>r.norm_status==="SKIPPED"),d:"의미 미확정 · Error/DOWN에 포함하지 않음",s:"warn",f:{s:"SKIPPED"}},
   ];
-  $("#qList").innerHTML=items.map(i=>`<div class="qi ${i.s}"><div class="sev"></div><div><div class="v num">${i.v}</div><div class="l">${i.l}</div><div class="d">${i.d}</div></div></div>`).join("");
+  $("#qList").innerHTML=items.map((i,idx)=>`<div class="qi ${i.s}" tabindex="0" role="button" onclick="qJump(${idx})" onkeydown="if(event.key==='Enter')qJump(${idx})"><div class="sev"></div><div><div class="v num">${i.v}</div><div class="l">${i.l}</div><div class="d">${i.d}</div></div></div>`).join("");
+  window._qItems=items;
   $("#metaBox").innerHTML=`<div class="kvl" style="grid-template-columns:120px 1fr;max-width:900px"><dt>generated</dt><dd>${esc(meta.generated)}</dd><dt>mode</dt><dd>${esc(meta.mode)}</dd><dt>limit</dt><dd>장비당 Report 최신 ${meta.limit||"–"}개</dd><dt>elapsed</dt><dd>${meta.elapsed?meta.elapsed+" ms":"–"}</dd><dt>method</dt><dd>Report에서 계산한 정확 경로만 확인 · Scanresult 재귀 검색 없음 · 원본 파일 수정 없음</dd></div>
-    <table class="tbl" style="margin-top:14px"><thead><tr><th class="ns">장비</th><th class="ns">경로</th><th class="ns">선택 폴더</th><th class="ns r">Report 발견</th><th class="ns r">처리</th><th class="ns">오류</th></tr></thead><tbody>${(meta.devices||[]).map(d=>`<tr><td><b>${esc(d.name)}</b></td><td class="mono">${esc(d.note)}</td><td class="mono">${esc(d.root)}</td><td class="r">${d.found??"–"}</td><td class="r">${d.reports}</td><td>${d.error?`<span class="chip crit">${esc(d.error)}</span>`:'<span class="chip ok">정상</span>'}</td></tr>`).join("")||'<tr><td colspan="6" class="faint">–</td></tr>'}</tbody></table>
+    <table class="tbl" style="margin-top:14px"><thead><tr><th class="ns">장비</th><th class="ns">경로</th><th class="ns">선택 폴더</th><th class="ns r">Report 발견</th><th class="ns r">처리</th><th class="ns">오류</th></tr></thead><tbody>${(meta.devices||[]).map(d=>`<tr><td><b>${esc(d.name)}</b></td><td class="mono">${esc(d.note)}</td><td class="mono">${esc(d.root)}</td><td class="r">${d.found??"–"}</td><td class="r">${d.reports}</td><td>${d.error?`<span class="chip crit">${esc(d.error)}</span>`:'<span class="chip ok">정상</span>'}</td></tr>`).join("")||'<tr><td colspan="6" class="empty">–</td></tr>'}</tbody></table>
     ${(meta.reportErrors||[]).length?`<h3 style="margin:14px 0 6px">Report 읽기 오류</h3><ul style="margin:0;padding-left:18px;font-size:12.5px">${meta.reportErrors.map(e=>`<li>[${esc(e.device)}] <span class="mono">${esc(e.path)}</span> — ${esc(e.error)}</li>`).join("")}</ul>`:""}`;
 }
+function qJump(i){const f=window._qItems[i].f;if(!f)return;resetRowFilters();if(f.m)$("#fMatch").value=f.m;if(f.s)$("#fStatus").value=f.s;if(f.q)$("#q").value=f.q;go("rows");renderRows();}
 
 /* ---------- save ---------- */
 async function writeOut(name,blob,accept){
-  if(window.showSaveFilePicker){try{const h=await showSaveFilePicker({suggestedName:name,types:[accept]});const w=await h.createWritable();await w.write(blob);await w.close();log("저장 완료: "+h.name);return;}catch(e){if(e.name==="AbortError")return;log("저장 대화상자 실패, 다운로드로 대체: "+e.message);}}
-  const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download=name;document.body.appendChild(a);a.click();a.remove();log("다운로드: "+name);
+  if(window.showSaveFilePicker){try{const h=await showSaveFilePicker({suggestedName:name,types:[accept]});const w=await h.createWritable();await w.write(blob);await w.close();log("저장 완료: "+h.name);toast("저장 완료 · "+h.name);return;}catch(e){if(e.name==="AbortError")return;log("저장 대화상자 실패, 다운로드로 대체: "+e.message);}}
+  const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download=name;document.body.appendChild(a);a.click();a.remove();log("다운로드: "+name);toast("다운로드 · "+name);
 }
 function saveCsv(){
-  if(!rows.length){log("저장할 데이터가 없습니다.");return;}
+  if(!rows.length){toast("저장할 데이터가 없습니다");return;}
   const cell=v=>{v=String(v??"");return/[",\r\n]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v;};
   const csv="\ufeff"+[COLS.join(","),...rows.map(r=>COLS.map(c=>cell(r[c])).join(","))].join("\r\n");
   writeOut("AOI_raw_data_"+stamp()+".csv",new Blob([csv],{type:"text/csv;charset=utf-8"}),{description:"CSV",accept:{"text/csv":[".csv"]}});
 }
 function saveHtml(){
-  if(!rows.length){log("저장할 데이터가 없습니다.");return;}
+  if(!rows.length){toast("저장할 데이터가 없습니다");return;}
   const emb={cols:COLS,rows:rows.map(r=>COLS.map(c=>r[c])),meta:{...meta,mode:meta.mode==="demo"?"demo":"saved"}};
   const clone=document.documentElement.cloneNode(true);
   clone.querySelector("#embedded").textContent=JSON.stringify(emb).replace(/<\//g,"<\\/");
-  clone.querySelector("#log").textContent="";clone.querySelector("#drawer").classList.remove("open");clone.querySelector("#tip").style.display="none";
+  clone.querySelector("#log").textContent="";clone.querySelector("#drawer").classList.remove("open");clone.querySelector("#tip").style.display="none";clone.querySelector("#toast").classList.remove("on");
   writeOut("AOI_raw_data_"+stamp()+".html",new Blob(["<!doctype html>\n"+clone.outerHTML],{type:"text/html;charset=utf-8"}),{description:"HTML",accept:{"text/html":[".html"]}});
 }
 
