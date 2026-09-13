@@ -36,6 +36,7 @@ DEFAULT_CONFIG = {
     "report_dir": "Report",
     "scan_dir": "Scanresult",
     "reports_per_device": 50,
+    "backfill_days": 30,
     "retention_days": 90,
     "output_dir": HERE,
     "output_name": "AOI_capacity.html",
@@ -280,7 +281,7 @@ def discover_devices(cfg):
 
 
 # ----------------------------------------------------------------------------- collect
-def collect(cfg, full=False):
+def collect(cfg, full=False, backfill=False):
     cache = {"reports": {}}
     if not full and os.path.isfile(cfg["cache_file"]):
         try:
@@ -293,13 +294,16 @@ def collect(cfg, full=False):
         log(f"devices.csv 가 없어 nas_roots 를 자동 탐색합니다 ({cfg.get('devices_csv')})")
         devs = discover_devices(cfg); log(f"장비 {len(devs)}대 발견: {', '.join(d['name'] for d in devs)}")
     reports, dev_meta, errors, n_new = cache["reports"], [], [], 0
+    backfill = backfill or not reports  # first run (empty cache): read every report within backfill_days
+    since = time.time() - cfg["backfill_days"] * 86400
+    if backfill: log(f"초기 수집: 최근 {cfg['backfill_days']}일 안의 Report를 개수 제한 없이 읽습니다")
     for d in devs:
         dm = {"name": d["name"], "note": d["path"], "reports": 0, "found": 0, "error": ""}
         rep_dir, scan_root = os.path.join(d["path"], cfg["report_dir"]), os.path.join(d["path"], cfg["scan_dir"])
         try:
             files = [e for e in os.scandir(rep_dir) if e.is_file() and e.name.lower().endswith((".htm", ".html"))]
             files.sort(key=lambda e: e.stat().st_mtime, reverse=True)
-            pick = files[: cfg["reports_per_device"]]
+            pick = [e for e in files if e.stat().st_mtime >= since] if backfill else files[: cfg["reports_per_device"]]
             dm["found"], dm["reports"] = len(files), len(pick)
             for e in pick:
                 key, mtime = e.path, e.stat().st_mtime
@@ -518,13 +522,14 @@ def main():
     ap.add_argument("--config", default=os.path.join(HERE, "config.json"))
     ap.add_argument("--full", action="store_true", help="캐시를 무시하고 최신 N개 Report를 다시 읽음")
     ap.add_argument("--no-update", action="store_true", help="GitHub 자동 업데이트 확인 생략")
+    ap.add_argument("--backfill", action="store_true", help="최근 backfill_days 안의 Report를 전부 읽어 과거 이력을 채움")
     args = ap.parse_args()
     started = time.time()
     cfg = load_config(args.config)
     if not args.no_update and self_update(cfg):
         log("스크립트가 갱신되어 다시 실행합니다.")
         os.execv(sys.executable, [sys.executable, os.path.abspath(__file__)] + sys.argv[1:] + ["--no-update"])
-    rows, dev_meta, errors = collect(cfg, full=args.full)
+    rows, dev_meta, errors = collect(cfg, full=args.full, backfill=args.backfill)
     write_html(cfg, rows, dev_meta, errors, started)
     log(f"완료 · {time.time() - started:.1f}초")
 

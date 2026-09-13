@@ -5,6 +5,7 @@
   "report_dir": "Report",
   "scan_dir": "Scanresult",
   "reports_per_device": 50,
+  "backfill_days": 30,
   "retention_days": 90,
   "output_dir": "\\\\10.142.80.90\\share\\AOI_capacity",
   "output_name": "AOI_capacity.html",
