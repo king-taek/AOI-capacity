@@ -213,6 +213,9 @@ textarea.input{width:100%;min-height:110px;font-family:var(--mono);font-size:12.
 .row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
 details.adv{margin-top:10px}
 details.adv summary{cursor:pointer;color:var(--accent-2);font-size:13px}
+/* GUI 모드(PyQt 앱 안): 사이드바·수집 버튼·테마 버튼은 앱이 맡는다 */
+:root[data-gui="1"] .side,:root[data-gui="1"] #btnRunTop,:root[data-gui="1"] #btnTheme{display:none}
+:root[data-gui="1"] .app{grid-template-columns:1fr}
 @media print{.top,.side,.toast,.tip{display:none!important}.app{display:block;height:auto}.main{overflow:visible}body{background:#fff}}
 </style>
 </head>
@@ -231,7 +234,7 @@ details.adv summary{cursor:pointer;color:var(--accent-2);font-size:13px}
   </div>
   <div class="grow"></div>
   <button class="btn primary" id="btnRunTop" onclick="collectAll()">수집 실행</button>
-  <button class="btn icon ghost" title="밝은/어두운 테마" onclick="toggleTheme()"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M13 9.5A5.5 5.5 0 016.5 3a5.5 5.5 0 100 10 5.5 5.5 0 006.5-3.5z"/></svg></button>
+  <button class="btn icon ghost" id="btnTheme" title="밝은/어두운 테마" onclick="toggleTheme()"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M13 9.5A5.5 5.5 0 016.5 3a5.5 5.5 0 100 10 5.5 5.5 0 006.5-3.5z"/></svg></button>
 </header>
 
 <nav class="side">
@@ -334,7 +337,10 @@ const COLS=["device","report_rank","equipment","process_code","report_lot","lot"
 const INI_KEYS={Recipe:["Name"],AutoCycleInfo:["Machine","Operator","WaferStartTime","WaferEndTime","BatchStartTime","OCRID","ActiveStation","ActiveSlot","FillID","CarrierID","UseLot","UseWaferID"],BatchInfo:["GlobalLotId","OperatorId"]};
 const MON={jan:0,feb:1,mar:2,apr:3,may:4,jun:5,jul:6,aug:7,sep:8,oct:9,nov:10,dec:11};
 const FS=!!window.showDirectoryPicker;
-const APP_VERSION="2026.09.13.1";const UPDATE_BASE="https://raw.githubusercontent.com/king-taek/AOI-capacity/main/";
+const APP_VERSION="";
+/* GUI 모드: PyQt 앱이 ?gui=1&theme=&view=&th_util=&th_err= 로 연다. 브라우저 전용 기능(폴더 API·사이드바·업데이트 확인)은 숨긴다 */
+const Q=new URLSearchParams(location.search),GUI=Q.get("gui")==="1";
+if(GUI){document.documentElement.dataset.gui="1";}
 const DAY=86400000;
 const ERR_KO={ID_READ_ERROR:"Wafer ID 인식 실패",SCAN_ERROR:"스캔 오류",USER_ABORT:"사용자 중단",ABORTED:"중단됨",OTHER:"기타 오류"};
 const ERR_TXT={USER_ABORT:"Aborted. Wafer aborted by user.",ABORTED:"Aborted.",SCAN_ERROR:"Scan Error: Scan2d optic is not valid on machine.",ID_READ_ERROR:"Failed to read wafer id. Reading error = . Aborted."};
@@ -374,8 +380,10 @@ function deltaHtml(cur,prev,suffix="p"){if(cur==null||prev==null)return'<span cl
 /* ---------- navigation ---------- */
 function go(v){document.querySelectorAll(".nav").forEach(b=>b.setAttribute("aria-current",b.dataset.v===v?"page":"false"));document.querySelectorAll(".view").forEach(s=>s.classList.toggle("on",s.id==="v-"+v));$("#daynav").style.visibility=v==="set"||v==="trend"?"hidden":"";$(".main").scrollTop=0;if(v==="trend")renderTrend();if(v==="compare")renderCompare();}
 document.querySelectorAll(".nav").forEach(b=>b.addEventListener("click",()=>go(b.dataset.v)));
-function toggleTheme(){const r=document.documentElement;r.dataset.theme=r.dataset.theme==="light"?"dark":"light";try{localStorage.setItem("aoi.theme",r.dataset.theme);}catch(e){}}
-(function(){let t="dark";try{t=localStorage.getItem("aoi.theme")||"dark";const s=localStorage.getItem("aoi.th");if(s)th=JSON.parse(s);}catch(e){}document.documentElement.dataset.theme=t;})();
+function setTheme(m){const r=document.documentElement;r.dataset.theme=m==="light"?"light":"dark";if(!GUI){try{localStorage.setItem("aoi.theme",r.dataset.theme);}catch(e){}}}
+function toggleTheme(){setTheme(document.documentElement.dataset.theme==="light"?"dark":"light");}
+function setThresholds(u,e){th={util:+u||0,err:+e||0};if($("#thUtil")){$("#thUtil").value=th.util;$("#thErr").value=th.err;}if(A)renderAll();}
+(function(){let t="dark";if(GUI){t=Q.get("theme")==="light"?"light":"dark";if(Q.get("th_util"))th.util=+Q.get("th_util");if(Q.get("th_err"))th.err=+Q.get("th_err");}else{try{t=localStorage.getItem("aoi.theme")||"dark";const s=localStorage.getItem("aoi.th");if(s)th=JSON.parse(s);}catch(e){}}document.documentElement.dataset.theme=t;})();
 function saveTh(){th={util:+$("#thUtil").value||0,err:+$("#thErr").value||0};try{localStorage.setItem("aoi.th",JSON.stringify(th));}catch(e){}}
 const tip=$("#tip");
 function showTip(html,ev){tip.innerHTML=html;tip.style.display="block";moveTip(ev);}
@@ -530,11 +538,11 @@ const periodName={day:"일",week:"주",month:"월"};
 /* ---------- init / day nav ---------- */
 function init(){D=build();const days=dataDays();day=days[days.length-1]||todayKey();selDev=null;ui.cmpAnchor=null;
   $("#dayPick").min=days[0]||"";$("#dayPick").max=todayKey()>day?todayKey():day;
-  let modeTxt=meta.mode==="live"?"실제 수집 · "+meta.generated:meta.mode==="saved"?"저장된 결과 · "+meta.generated:meta.mode==="auto"?"자동 수집 · "+meta.generated:"데모 데이터 · 장비 "+devNames.length+"대";
-  if(meta.mode==="auto"&&meta.generated_iso){const age=(Date.now()-new Date(meta.generated_iso))/60000;modeTxt+=age<60?` (${Math.round(age)}분 전)`:` (${(age/60).toFixed(1)}시간 전)`;$("#modePill").classList.toggle("stale",age>120);}
+  let modeTxt=meta.mode==="live"?"실제 수집 · "+meta.generated:meta.mode==="saved"?"저장된 결과 · "+meta.generated:meta.mode==="auto"?"자동 수집 · "+meta.generated:meta.mode==="gui"?(rows.length?"마지막 수집 · "+meta.generated:"아직 수집한 적 없음"):"데모 데이터 · 장비 "+devNames.length+"대";
+  if((meta.mode==="auto"||(meta.mode==="gui"&&rows.length))&&meta.generated_iso){const age=(Date.now()-new Date(meta.generated_iso))/60000;modeTxt+=age<60?` (${Math.round(age)}분 전)`:` (${(age/60).toFixed(1)}시간 전)`;$("#modePill").classList.toggle("stale",age>120);}
   $("#modeTxt").textContent=modeTxt;$("#modePill").title=meta.mode==="auto"?"Python 수집기가 마지막으로 이 파일을 만든 시각. 2시간 이상 지나면 수집기 상태를 확인하세요.":"";
-  $("#modePill").classList.toggle("live",meta.mode==="live"||meta.mode==="auto");
-  $("#footTxt").innerHTML=`정확 경로만 확인 · 재귀 검색 없음<br>원본 Report / INI 수정 없음${meta.version?`<br>v${esc(meta.version)}`:APP_VERSION?`<br>v${APP_VERSION}`:""}`;checkUpdate();
+  $("#modePill").classList.toggle("live",meta.mode==="live"||meta.mode==="auto"||(meta.mode==="gui"&&rows.length>0));
+  $("#footTxt").innerHTML=`정확 경로만 확인 · 재귀 검색 없음<br>원본 Report / INI 수정 없음${meta.version?`<br>v${esc(meta.version)}`:APP_VERSION?`<br>v${APP_VERSION}`:""}`;if(!GUI)checkUpdate();
   $("#trendDev").innerHTML='<option value="">전체 평균</option>'+devNames.map(n=>`<option value="${esc(n)}">${esc(n)}</option>`).join("");
   $("#thUtil").value=th.util;$("#thErr").value=th.err;renderAll();}
 function setDay(k){day=k;renderAll();}
@@ -579,7 +587,7 @@ function renderHome(){
         <div class="hd"><span class="name">${esc(n)}</span>${st}</div>
         <div class="row1"><div class="big ${m.hasData?"":"none"}">${m.hasData?`${m.util.toFixed(1)}<small>%</small>`:"–"}</div>${deltaHtml(m.hasData?m.util:null,p.hasData?p.util:null)}</div>
         <div class="strip">${m.hasData?`<i style="width:${(m.run/m.denom*100).toFixed(2)}%;background:var(--run)"></i><i style="width:${((m.err+m.stop)/m.denom*100).toFixed(2)}%;background:var(--err)"></i>`:""}</div>
-        <div class="kv"><span>검사 <b>${fmtSecS(m.run)}</b></span><span>정지 <b class="${m.stop?"err":""}">${fmtSecS(m.err+m.stop)}</b></span><span>Wafer <b>${m.nWafer}</b></span></div></div>`;}).join("")||'<div class="card empty">장비 데이터가 없습니다. 설정에서 장비 폴더를 등록하세요.</div>';}
+        <div class="kv"><span>검사 <b>${fmtSecS(m.run)}</b></span><span>정지 <b class="${m.stop?"err":""}">${fmtSecS(m.err+m.stop)}</b></span><span>Wafer <b>${m.nWafer}</b></span></div></div>`;}).join("")||`<div class="card empty">${GUI?"아직 수집한 데이터가 없습니다. '수집' 메뉴에서 '지금 수집'을 누르세요.":"장비 데이터가 없습니다. 설정에서 장비 폴더를 등록하세요."}</div>`;}
   else{
     $("#homeTbody").innerHTML=list.map(({n,m,p})=>`<tr class="click ${selDev===n?"sel":""}" onclick="selectDev('${esc(n)}')"><td><b>${esc(n)}</b>${isAlert(m)?' <span class="chip crit">주의</span>':""}${!m.hasData?' <span class="chip mute">데이터 없음</span>':""}</td><td style="width:32%"><span class="hbar" style="width:${m.hasData?m.util.toFixed(1):0}%"></span></td><td class="r"><b>${m.hasData?pct(m.util):"–"}</b></td><td class="r">${deltaHtml(m.hasData?m.util:null,p.hasData?p.util:null)}</td><td class="r">${fmtSecS(m.run)}</td><td class="r">${m.nErr?`<span class="chip crit">${m.nErr}</span>`:0}</td><td class="r">${fmtSecS(m.err+m.stop)}</td><td class="r">${m.nWafer}</td></tr>`).join("");}
 }
@@ -675,8 +683,9 @@ function saveHtml(){if(!rows.length){toast("저장할 데이터가 없습니다"
   writeOut("AOI_capacity_"+stamp()+".html",new Blob(["<!doctype html>\n"+clone.outerHTML],{type:"text/html;charset=utf-8"}),{description:"HTML",accept:{"text/html":[".html"]}});}
 
 /* ---------- boot ---------- */
-if(!FS)$("#fsWarn").hidden=false;
-loadNas();renderDevs();restoreHandles();loadDemo();
+if(!GUI){if(!FS)$("#fsWarn").hidden=false;loadNas();renderDevs();restoreHandles();}else{nasList=[];}
+loadDemo();
+if(GUI&&Q.get("view"))go(Q.get("view"));
 </script>
 </body>
 </html>
