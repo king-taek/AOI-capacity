@@ -10,7 +10,7 @@ Standard library only. Windows / Python 3.8+.
 
     python aoi_collect.py                 # incremental run using config.json next to this file
     python aoi_collect.py --config X.json
-    python aoi_collect.py --full          # ignore cache, re-read the latest N reports per device
+    python aoi_collect.py --full          # ignore cache and re-read the backfill window
     python aoi_collect.py --no-update     # skip the GitHub self-update check
 
 Device list: devices.csv next to this file (columns 장비명, NAS경로, 폴더, 사용, 메모).
@@ -35,7 +35,6 @@ DEFAULT_CONFIG = {
     "nas_roots": [],
     "report_dir": "Report",
     "scan_dir": "Scanresult",
-    "reports_per_device": 50,
     "backfill_days": 30,
     "retention_days": 90,
     "output_dir": HERE,
@@ -294,21 +293,25 @@ def collect(cfg, full=False, backfill=False):
         log(f"devices.csv 가 없어 nas_roots 를 자동 탐색합니다 ({cfg.get('devices_csv')})")
         devs = discover_devices(cfg); log(f"장비 {len(devs)}대 발견: {', '.join(d['name'] for d in devs)}")
     reports, dev_meta, errors, n_new = cache["reports"], [], [], 0
-    backfill = backfill or not reports  # first run (empty cache): read every report within backfill_days
-    since = time.time() - cfg["backfill_days"] * 86400
-    if backfill: log(f"초기 수집: 최근 {cfg['backfill_days']}일 안의 Report를 개수 제한 없이 읽습니다")
+    last = cache.setdefault("last_mtime", {})  # per device: newest report mtime already collected
+    backfill_since = time.time() - cfg["backfill_days"] * 86400
+    if backfill: log(f"초기 수집: 최근 {cfg['backfill_days']}일 안의 Report를 전부 읽습니다")
     for d in devs:
         dm = {"name": d["name"], "note": d["path"], "reports": 0, "found": 0, "error": ""}
         rep_dir, scan_root = os.path.join(d["path"], cfg["report_dir"]), os.path.join(d["path"], cfg["scan_dir"])
         try:
             files = [e for e in os.scandir(rep_dir) if e.is_file() and e.name.lower().endswith((".htm", ".html"))]
             files.sort(key=lambda e: e.stat().st_mtime, reverse=True)
-            pick = [e for e in files if e.stat().st_mtime >= since] if backfill else files[: cfg["reports_per_device"]]
+            # everything newer than the last collected report of this device (60 s margin for clock skew);
+            # a device never seen before, or --backfill, gets the backfill window instead
+            since = backfill_since if (backfill or d["name"] not in last) else last[d["name"]] - 60
+            pick = [e for e in files if e.stat().st_mtime >= since
+                    and not (e.path in reports and abs(reports[e.path]["mtime"] - e.stat().st_mtime) < 1 and reports[e.path].get("device") == d["name"])]
+            if files: last[d["name"]] = max(last.get(d["name"], 0), max(e.stat().st_mtime for e in files))
             dm["found"], dm["reports"] = len(files), len(pick)
+            if pick: log(f"[{d['name']}] Report {len(files)}개 중 새 파일 {len(pick)}개")
             for e in pick:
                 key, mtime = e.path, e.stat().st_mtime
-                if key in reports and abs(reports[key]["mtime"] - mtime) < 1 and reports[key].get("device") == d["name"]:
-                    continue
                 try:
                     with open(e.path, "r", encoding="utf-8", errors="replace") as f: text = f.read()
                     rep = parse_report(e.name, text)
@@ -341,7 +344,7 @@ def write_html(cfg, rows, dev_meta, errors, started):
     with open(tpl_path, "r", encoding="utf-8") as f: tpl = f.read()
     ver = read_version(); u = cfg.get("update") or {}
     meta = {"generated": dt.datetime.now().strftime("%Y-%m-%d %H:%M"), "generated_iso": dt.datetime.now().isoformat(timespec="seconds"),
-            "mode": "auto", "devices": dev_meta, "reportErrors": errors, "limit": cfg["reports_per_device"],
+            "mode": "auto", "devices": dev_meta, "reportErrors": errors, "limit": "",
             "elapsed": int((time.time() - started) * 1000), "retention_days": cfg["retention_days"],
             "sha": ver.get("sha", ""), "branch": ver.get("branch", ""), "repo": ver.get("repo") or u.get("repo") or "king-taek/AOI-capacity",
             "version": (ver.get("sha", "")[:7] + (" · " + ver["applied"][:10] if ver.get("applied") else "")) if ver.get("sha") else ""}
