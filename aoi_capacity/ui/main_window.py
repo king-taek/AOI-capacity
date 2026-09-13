@@ -58,12 +58,20 @@ class _UpdateWorker(QThread):
         tok = self.token
         try:
             if self.mode == "check":
-                self.signals.checked.emit(tok, self.manual, updater.manual_check())
+                if self.manual:
+                    result = updater.manual_check()
+                else:
+                    info = updater.check_for_update()
+                    result = ("update", info) if info else ("latest", {})
+                self.signals.checked.emit(tok, self.manual, result)
                 return
-            res = updater.download_and_apply(
+            ok = updater.download_and_apply(
                 self.info.get("repo", ""), self.info.get("branch", ""), self.info.get("sha", ""),
                 progress=lambda d, t, p: self.signals.progress.emit(tok, int(d), int(t), str(p)))
-            self.signals.applied.emit(tok, res)
+            if not ok:
+                self.signals.failed.emit(tok, updater.last_error())
+                return
+            self.signals.applied.emit(tok, {"staged": updater.update_pending(), "deps_changed": updater.deps_changed()})
         except Exception as exc:  # noqa: BLE001
             self.signals.failed.emit(tok, f"{type(exc).__name__}: {exc}")
 
@@ -379,7 +387,10 @@ class MainWindow(QMainWindow):
         self.overlay.hide_overlay()
         log.error("update failed: %s", message)
         if self._update_worker is not None and self._update_worker.mode == "apply":
-            sheets.error(self, i18n.KO.UPDATE_CHECK_TITLE, f"{i18n.KO.UPDATE_FAILED}\n\n{message}")
+            upd = self._updater()
+            blocked = bool(upd is not None and getattr(upd, "deps_blocked", lambda: False)())
+            head = i18n.KO.UPDATE_NEEDS_NEW_BUNDLE if blocked else i18n.KO.UPDATE_FAILED
+            sheets.error(self, i18n.KO.UPDATE_CHECK_TITLE, f"{head}\n\n{message}")
         elif self._update_worker is not None and self._update_worker.manual:
             sheets.info(self, i18n.KO.UPDATE_CHECK_TITLE, f"{i18n.KO.UPDATE_UNKNOWN}\n\n{message}")
 
