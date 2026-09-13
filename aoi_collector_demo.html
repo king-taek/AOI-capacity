@@ -244,7 +244,6 @@ details.adv summary{cursor:pointer;color:var(--accent-2);font-size:13px}
   <section class="view on" id="v-home">
     <div class="strip-sum" id="homeSum"></div>
     <div class="toolbar">
-      <span class="lbl">NAS</span><div class="seg" id="groupSeg"></div>
       <span class="lbl">정렬</span>
       <div class="seg" id="sortSeg"><button data-s="low" aria-pressed="true">가동률 낮은 순</button><button data-s="err">오류 먼저</button><button data-s="name">이름순</button></div>
       <span class="lbl">보기</span>
@@ -528,7 +527,7 @@ function init(){D=build();const days=dataDays();day=days[days.length-1]||todayKe
   $("#dayPick").min=days[0]||"";$("#dayPick").max=todayKey()>day?todayKey():day;
   $("#modeTxt").textContent=meta.mode==="live"?"실제 수집 · "+meta.generated:meta.mode==="saved"?"저장된 결과 · "+meta.generated:"데모 데이터 · 장비 "+devNames.length+"대";
   $("#modePill").classList.toggle("live",meta.mode==="live");
-  $("#trendDev").innerHTML='<option value="">전체 평균</option>'+devNames.map(n=>`<option value="${esc(n)}">${esc(n)}${devGroup[n]?" · "+esc(devGroup[n]):""}</option>`).join("");
+  $("#trendDev").innerHTML='<option value="">전체 평균</option>'+devNames.map(n=>`<option value="${esc(n)}">${esc(n)}</option>`).join("");
   $("#thUtil").value=th.util;$("#thErr").value=th.err;renderAll();}
 function setDay(k){day=k;renderAll();}
 function stepDay(n){const k=addDays(day,n);const days=dataDays();const maxK=todayKey()>days[days.length-1]?todayKey():days[days.length-1];if(k>maxK||k<days[0])return;setDay(k);}
@@ -554,13 +553,12 @@ const groups=()=>[...new Set(devNames.map(n=>devGroup[n]).filter(Boolean))];
 const visDevs=()=>ui.group?devNames.filter(n=>devGroup[n]===ui.group):devNames;
 function homeList(){const prevK=addDays(day,-1);return visDevs().map(n=>({n,m:dayMetrics(D[n],day),p:dayMetrics(D[n],prevK)}));}
 function renderHome(){
-  const gs=groups();$("#groupSeg").innerHTML=`<button data-g="" aria-pressed="${!ui.group}">전체</button>`+gs.map(g=>`<button data-g="${esc(g)}" aria-pressed="${ui.group===g}">${esc(g)}</button>`).join("");$("#groupSeg").style.display=gs.length>1?"":"none";segBind("groupSeg","g",v=>{ui.group=v;renderHome();});
   const list=homeList();const prevK=addDays(day,-1);const vd=visDevs();
   const cur=fleetAvg([day],vd),prev=fleetAvg([prevK],vd);
   const alerts=list.filter(x=>isAlert(x.m)),nod=list.filter(x=>!x.m.hasData),errs=list.filter(x=>x.m.nErr>0);
   const worst=[...list].filter(x=>x.m.hasData).sort((a,b)=>a.m.util-b.m.util)[0];
   $("#homeSum").innerHTML=`<div class="card ss hero"><div class="k">평균 가동률 · ${isToday(day)?"현재까지":"하루"}</div><div class="v">${cur.util==null?"–":cur.util.toFixed(1)+"<small>%</small>"}</div><div class="s">전일 ${pct(prev.util)} · ${deltaHtml(cur.util,prev.util)}</div></div>
-    <div class="card ss"><div class="k">장비${ui.group?" · "+esc(ui.group):""}</div><div class="v num">${vd.length}<small>대</small></div><div class="s">데이터 있음 ${cur.n}대</div></div>
+    <div class="card ss"><div class="k">장비</div><div class="v num">${vd.length}<small>대</small></div><div class="s">데이터 있음 ${cur.n}대</div></div>
     <div class="card ss"><div class="k">주의 장비</div><div class="v num" style="color:${alerts.length?"var(--crit-ink)":"inherit"}">${alerts.length}<small>대</small></div><div class="s">가동률 ${th.util}% 미만 또는 오류 ${th.err}건↑</div></div>
     <div class="card ss"><div class="k">오류 발생</div><div class="v num">${errs.length}<small>대</small></div><div class="s">총 ${errs.reduce((a,x)=>a+x.m.nErr,0)}건 · 정지 ${fmtSecS(list.reduce((a,x)=>a+x.m.stop+x.m.err,0))}</div></div>
     <div class="card ss"><div class="k">최저 장비</div><div class="v" style="font-size:20px">${worst?esc(worst.n):"–"}</div><div class="s">${worst?pct(worst.m.util)+" · "+deltaHtml(worst.m.util,worst.p.hasData?worst.p.util:null):"–"}${nod.length?` · 데이터 없음 ${nod.length}대`:""}</div></div>`;
@@ -642,7 +640,7 @@ function renderCompare(){
   list.sort((a,b)=>ui.cmpSort==="high"?key(b)-key(a):ui.cmpSort==="low"?((a.c.util==null?999:a.c.util)-(b.c.util==null?999:b.c.util)):(((a.c.util==null||a.p.util==null)?99:a.c.util-a.p.util)-((b.c.util==null||b.p.util==null)?99:b.c.util-b.p.util)));
   const f=fleetAvg(curKeys),fp=fleetAvg(prevKeys);
   $("#cmpNote").textContent=`${n===1?fmtDay(day):curKeys[0].slice(5).replace("-","/")+" ~ "+fmtDay(day)} · 전체 평균 ${pct(f.util)} (이전 ${pct(fp.util)}) · 이전 기간: ${n===1?"전일":"직전 "+n+"일"}`;
-  $("#cmpBody").innerHTML=list.map((x,i)=>`<tr class="click" onclick="selDev='${esc(x.name)}';go('home');renderAll();" title="클릭하면 홈에서 이 장비의 타임라인을 봅니다"><td class="r faint">${i+1}</td><td><b>${esc(x.name)}</b>${devGroup[x.name]?` <span class="faint" style="font-size:11px">${esc(devGroup[x.name])}</span>`:""}${x.c.hasData&&(x.c.util<th.util||x.c.nErr>=th.err*n)?' <span class="chip crit">주의</span>':""}</td><td><div style="display:flex;flex-direction:column;gap:2px"><span class="hbar" style="width:${x.c.util==null?0:x.c.util.toFixed(1)}%"></span><span class="hbar prev" style="width:${x.p.util==null?0:x.p.util.toFixed(1)}%"></span></div></td><td class="r"><b>${x.c.util==null?'<span class="faint">데이터 없음</span>':pct(x.c.util)}</b></td><td class="r muted">${pct(x.p.util)}</td><td class="r">${deltaHtml(x.c.util,x.p.util)}</td><td class="r">${x.c.nErr?`<span class="chip crit">${x.c.nErr}</span>`:0}</td><td class="r">${fmtSecS(x.c.stop+x.c.err)}</td></tr>`).join("")||'<tr><td colspan="8" class="empty">데이터 없음</td></tr>';
+  $("#cmpBody").innerHTML=list.map((x,i)=>`<tr class="click" onclick="selDev='${esc(x.name)}';go('home');renderAll();" title="클릭하면 홈에서 이 장비의 타임라인을 봅니다"><td class="r faint">${i+1}</td><td><b>${esc(x.name)}</b>${x.c.hasData&&(x.c.util<th.util||x.c.nErr>=th.err*n)?' <span class="chip crit">주의</span>':""}</td><td><div style="display:flex;flex-direction:column;gap:2px"><span class="hbar" style="width:${x.c.util==null?0:x.c.util.toFixed(1)}%"></span><span class="hbar prev" style="width:${x.p.util==null?0:x.p.util.toFixed(1)}%"></span></div></td><td class="r"><b>${x.c.util==null?'<span class="faint">데이터 없음</span>':pct(x.c.util)}</b></td><td class="r muted">${pct(x.p.util)}</td><td class="r">${deltaHtml(x.c.util,x.p.util)}</td><td class="r">${x.c.nErr?`<span class="chip crit">${x.c.nErr}</span>`:0}</td><td class="r">${fmtSecS(x.c.stop+x.c.err)}</td></tr>`).join("")||'<tr><td colspan="8" class="empty">데이터 없음</td></tr>';
 }
 
 /* ---------- save ---------- */
