@@ -1,7 +1,26 @@
+# 로컬 실행 산출물 — 데이터 폴더(%LOCALAPPDATA%\AOI_Capacity)에 생기지만, 개발 실행 시 저장소에 떨어질 수 있는 것들
 VERSION
 aoi_cache.json
 config.json
+devices.csv
 collect.log
+app.log
+AOI_capacity.html
+AOI_capacity.csv
 *.bak
 .update.part/
-AOI_capacity.html
+app.new/
+app.new.part/
+app.old/
+
+# 빌드
+dist/
+build/
+.venv/
+*.spec.bak
+
+# 파이썬/도구
+__pycache__/
+*.pyc
+.pytest_cache/
+.coverage
