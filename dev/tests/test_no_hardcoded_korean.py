@@ -11,8 +11,9 @@ from aoi_capacity.utils import paths
 ROOT = paths._project_root()
 TARGETS = [
     "aoi_capacity/ui", "aoi_capacity/workers", "aoi_capacity/utils/updater.py",
-    "aoi_capacity/utils/bootstrap.py", "scripts/exe_launcher.py", "main.py",
+    "aoi_capacity/utils/bootstrap.py", "main.py",
 ]
+# scripts/exe_launcher.py 는 표준 라이브러리만 쓰는 계약이라 i18n 을 import 할 수 없다 — 유일한 예외.
 HANGUL = re.compile(r"[가-힣]")
 
 

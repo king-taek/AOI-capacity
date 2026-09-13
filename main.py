@@ -49,14 +49,15 @@ def _ensure_deps_installed(logger: logging.Logger) -> bool:
         return True
     try:
         from aoi_capacity.utils import bootstrap
-    except Exception as exc:  # noqa: BLE001 - M3 이전 트리
+    except Exception as exc:  # noqa: BLE001 - 손상된 트리
         logger.info("bootstrap unavailable: %s", exc)
         return True
-    if bootstrap.deps_installed():
-        return True
-    print(i18n.KO.BOOT_DEPS_INSTALLING, flush=True)
-    ok = bootstrap.ensure_deps(log=logger.info)
-    print(i18n.KO.BOOT_DEPS_DONE if ok else i18n.KO.BOOT_DEPS_FAILED, flush=True)
+
+    def say(msg: str) -> None:
+        logger.info(msg)
+        print(msg, flush=True)
+
+    ok = bootstrap.ensure_deps(log=say)
     if not ok:
         try:
             input(i18n.KO.BOOT_PRESS_ENTER)
