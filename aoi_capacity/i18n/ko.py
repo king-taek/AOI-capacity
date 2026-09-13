@@ -1,0 +1,195 @@
+"""사용자에게 보이는 한국어 문구 — 이 파일에만 둔다.
+
+규칙
+- 이름은 `기능_역할` (BTN_, NAV_, COLLECT_, UPDATE_, NAS_ …). `_FMT` 로 끝나면 `str.format` 자리표시자가 있다.
+- 로그 메시지는 여기 두지 않는다(로거 인자에 그대로 쓴다).
+- 순수 상수 모듈: 표준 라이브러리 외 import 금지(첫 실행 부트스트랩 전에도 로드된다).
+"""
+
+# ── 앱 ──────────────────────────────────────────────────────────────────
+APP_TITLE = "AOI Capacity"
+APP_SUBTITLE = "AOI 장비 가동률"
+CREDIT = "정확 경로만 확인 · 재귀 검색 없음 · NAS 원본은 읽기만"
+
+# ── 내비게이션 ─────────────────────────────────────────────────────────
+NAV_HOME = "홈"
+NAV_HOME_SUB = "선택한 날 모든 장비 가동률"
+NAV_TREND = "추이"
+NAV_TREND_SUB = "일 · 주 · 월 · 기간 비교"
+NAV_COMPARE = "장비 비교"
+NAV_COMPARE_SUB = "기간별 순위와 변화"
+NAV_DEVICES = "장비 목록"
+NAV_DEVICES_SUB = "NAS 경로 · 폴더"
+NAV_COLLECT = "수집"
+NAV_COLLECT_SUB = "지금 수집 · 기간"
+NAV_SETTINGS = "설정 · 정보"
+NAV_SETTINGS_SUB = "표시 · 업데이트"
+NAV_LAST_COLLECT_FMT = "마지막 수집 {when}"
+NAV_LAST_COLLECT_NEVER = "아직 수집한 적 없음"
+
+# ── 공통 버튼 ──────────────────────────────────────────────────────────
+BTN_OK = "확인"
+BTN_CANCEL = "취소"
+BTN_YES = "예"
+BTN_NO = "아니오"
+BTN_CLOSE = "닫기"
+BTN_STOP = "중지"
+BTN_BROWSE = "찾아보기…"
+BTN_SAVE = "저장"
+BTN_REVERT = "되돌리기"
+BTN_ADD_ROW = "행 추가"
+BTN_REMOVE_ROW = "행 삭제"
+BTN_IMPORT_CSV = "CSV 가져오기…"
+BTN_EXPORT_CSV = "CSV 내보내기…"
+BTN_CHECK_CONN = "연결 확인"
+BTN_AUTO_FOLDER = "* 자동"
+BTN_COLLECT_NOW = "지금 수집"
+BTN_OPEN_FOLDER = "폴더 열기"
+BTN_OPEN_LOG = "로그 열기"
+BTN_OPEN_BROWSER = "브라우저로 열기"
+BTN_CHECK_UPDATE = "업데이트 확인"
+BTN_LOAD_DEFAULT_DEVICES = "예시 목록 불러오기"
+
+# ── 대시보드 ───────────────────────────────────────────────────────────
+DASH_NO_WEBENGINE_TITLE = "대시보드를 앱 안에 표시할 수 없습니다"
+DASH_NO_WEBENGINE_BODY = ("이 PC 에서 화면 엔진(QtWebEngine)을 불러오지 못했습니다. "
+                          "아래 버튼으로 브라우저에서 같은 화면을 열 수 있습니다.")
+DASH_NO_DATA_HINT = "아직 수집한 데이터가 없습니다. '수집' 메뉴에서 '지금 수집'을 누르세요."
+
+# ── 장비 목록 ──────────────────────────────────────────────────────────
+DEV_PAGE_TITLE = "장비 목록"
+DEV_PAGE_HELP = ("한 줄이 장비 하나입니다. NAS경로는 드라이브 문자(X:\\)나 주소(\\\\10.142.80.90\\공유) 어느 쪽이든 되고, "
+                 "폴더는 NAS경로 아래 장비 폴더 이름입니다. 폴더를 비우면 NAS경로 자체가 장비 폴더이고, "
+                 "* 이면 그 안의 장비 폴더(Report 폴더가 있는 폴더)를 모두 자동 등록합니다. "
+                 "이 목록은 이 PC 에만 저장되며 NAS 에는 아무것도 쓰지 않습니다.")
+DEV_COL_NAME = "장비명"
+DEV_COL_ROOT = "NAS경로"
+DEV_COL_SUB = "폴더"
+DEV_COL_ON = "사용"
+DEV_COL_MEMO = "메모"
+DEV_COL_STATUS = "상태"
+DEV_STATUS_OK = "정상"
+DEV_STATUS_AUTO_FMT = "자동 · {n}대"
+DEV_STATUS_NO_REPORT = "Report 폴더 없음"
+DEV_STATUS_UNREACHABLE = "접근 불가"
+DEV_STATUS_CHECKING = "확인 중…"
+DEV_SAVED_TOAST = "장비 목록을 저장했습니다"
+DEV_REVERTED_TOAST = "저장된 목록으로 되돌렸습니다"
+DEV_IMPORTED_FMT = "{n}행을 가져왔습니다"
+DEV_UNSAVED_TITLE = "저장하지 않은 변경"
+DEV_UNSAVED_BODY = "장비 목록에 저장하지 않은 변경이 있습니다. 저장할까요?"
+DEV_BROWSE_TITLE = "장비 폴더 또는 NAS 공유 선택"
+DEV_CSV_FILTER = "CSV 파일 (*.csv)"
+DEV_EMPTY_HINT = "장비가 없습니다. '행 추가' 또는 '예시 목록 불러오기'를 누르세요."
+
+# ── 수집 ───────────────────────────────────────────────────────────────
+COLLECT_PAGE_TITLE = "수집"
+COLLECT_PLAN_FIRST_FMT = "처음 수집: 모든 장비의 최근 {days}일 Report 를 전부 읽습니다. 장비 수에 따라 몇 분 걸릴 수 있습니다."
+COLLECT_PLAN_INCR_FMT = "증분 수집: 마지막으로 가져온 이후 새로 생긴 Report 만 읽습니다 (알고 있는 장비 {n}대)."
+COLLECT_PLAN_BACKFILL_FMT = "과거 이력 다시 채우기: 최근 {days}일 Report 를 전부 다시 읽습니다."
+COLLECT_PLAN_FULL_FMT = "캐시를 버리고 최근 {days}일 Report 를 처음부터 다시 읽습니다."
+COLLECT_OPT_BACKFILL = "과거 이력 다시 채우기 (backfill)"
+COLLECT_OPT_FULL = "캐시 무시하고 전부 다시 읽기"
+COLLECT_BACKFILL_DAYS = "처음 수집 기간"
+COLLECT_RETENTION_DAYS = "이력 보관 기간"
+COLLECT_DAYS_SUFFIX = " 일"
+COLLECT_OUTPUT_DIR = "결과 폴더"
+COLLECT_OUTPUT_DEFAULT_HINT = "비우면 이 PC 의 데이터 폴더에 저장합니다. NAS 폴더는 지정할 수 없습니다."
+COLLECT_WRITE_CSV = "CSV 도 함께 저장"
+COLLECT_LOG_TITLE = "로그"
+COLLECT_RUNNING = "수집 중…"
+COLLECT_IDLE = "대기"
+COLLECT_DONE_TOAST_FMT = "수집 완료 · 장비 {devices}대 · Wafer {rows}행 · {elapsed}"
+COLLECT_DONE_WITH_ERRORS_TITLE = "수집은 끝났지만 일부 문제가 있습니다"
+COLLECT_DONE_WITH_ERRORS_FMT = "접근하지 못한 장비 {bad_devices}대, 읽지 못한 Report {bad_reports}개. 자세한 내용은 로그를 보세요."
+COLLECT_CANCELLED_TOAST = "수집을 중지했습니다. 이전 결과가 그대로 남아 있습니다."
+COLLECT_FAILED_TITLE = "수집 실패"
+COLLECT_FAILED_FMT = "수집 중 오류가 났습니다.\n\n{detail}"
+COLLECT_NO_DEVICES_TITLE = "장비가 없습니다"
+COLLECT_NO_DEVICES_BODY = "'장비 목록' 에서 장비를 먼저 등록하세요."
+COLLECT_BUSY_TITLE = "수집이 진행 중입니다"
+COLLECT_BUSY_BODY = "수집이 끝난 뒤 다시 시도하세요."
+COLLECT_OUTPUT_ON_NAS_TITLE = "결과 폴더로 쓸 수 없는 위치"
+COLLECT_OUTPUT_ON_NAS_BODY = "NAS 원본 폴더 안에는 결과를 저장할 수 없습니다. 이 PC 의 폴더를 고르세요."
+
+# 수집 단계 문구 — collect.progress(done, total, phase) 의 phase 로 전달되어 로딩창에 그대로 표시된다.
+COLLECT_PHASE_DEVICES = "장비 목록 확인"
+COLLECT_PHASE_LIST_FMT = "{device} · 새 Report 찾는 중 ({i}/{n}대)"
+COLLECT_PHASE_PARSE_FMT = "{device} · {name}"
+COLLECT_PHASE_RETENTION = "오래된 이력 정리"
+COLLECT_PHASE_WRITE = "화면 만드는 중"
+COLLECT_PHASE_DONE = "완료"
+
+# 로딩창
+LOADING_COLLECT_TITLE = "데이터 수집"
+LOADING_ELAPSED_FMT = "경과 {elapsed}"
+LOADING_COUNT_FMT = "{done} / {total}"
+LOADING_DEVICES_FMT = "장비 {done}/{total}"
+LOADING_STOPPING = "중지하는 중…"
+LOADING_LEGEND_WAIT = "대기"
+LOADING_LEGEND_READ = "읽는 중"
+LOADING_LEGEND_DONE = "완료"
+LOADING_LEGEND_ERR = "접근 불가"
+
+# ── 설정 · 정보 ────────────────────────────────────────────────────────
+SET_PAGE_TITLE = "설정 · 정보"
+SET_DARK_MODE = "어두운 화면"
+SET_THRESHOLDS = "주의 장비 기준"
+SET_TH_UTIL = "가동률"
+SET_TH_UTIL_SUFFIX = " % 미만"
+SET_TH_ERR = "또는 오류"
+SET_TH_ERR_SUFFIX = " 건 이상"
+SET_SOFTWARE_RENDER = "화면이 흰색으로 나오면 켜기 (GPU 사용 안 함, 다시 실행 후 적용)"
+SET_DATA_DIR = "데이터 폴더"
+SET_VERSION = "버전"
+SET_VERSION_UNKNOWN = "미상 (개발 실행)"
+SET_NAS_NOTICE = "이 프로그램은 NAS 의 Report 와 WaferInfo.ini 를 읽기만 하며, NAS 에는 어떤 파일도 만들거나 바꾸지 않습니다."
+SET_UTIL_DEFINITION = ("가동률 = 검사시간(WaferStartTime~WaferEndTime 합) ÷ 24시간. 오늘은 00:00 부터 현재 시각까지로 나눕니다. "
+                       "오류 Wafer 종료부터 다음 Wafer 시작까지의 공백을 '정지(추정)' 로 봅니다.")
+
+# ── NAS 안전장치 ───────────────────────────────────────────────────────
+NAS_WRITE_REFUSED_FMT = "NAS 원본 폴더 안에는 파일을 쓸 수 없습니다: {path}  (NAS: {root})"
+
+# ── 자동 업데이트 ──────────────────────────────────────────────────────
+UPDATE_CHECK_TITLE = "업데이트 확인"
+UPDATE_CHECKING = "업데이트를 확인하는 중…"
+UPDATE_AVAILABLE_TITLE = "새 버전이 있습니다"
+UPDATE_AVAILABLE_BODY_FMT = "새 버전이 있습니다 ({sha}{message}). 지금 받을까요?\n\n받은 뒤 프로그램을 다시 실행하면 적용됩니다."
+UPDATE_UNKNOWN_CURRENT_FMT = "현재 버전을 알 수 없어 최신 버전({sha})을 받습니다. 지금 받을까요?"
+UPDATE_LATEST = "이미 최신 버전입니다."
+UPDATE_UNKNOWN = "업데이트를 확인할 수 없습니다 (네트워크 또는 GitHub 접근 문제)."
+UPDATE_GIT_HINT = "개발용 git 폴더에서 실행 중이라 자동 업데이트를 적용하지 않습니다. git pull 을 사용하세요."
+UPDATE_DOWNLOADING = "새 버전을 받는 중…"
+UPDATE_PHASE_DOWNLOAD = UPDATE_DOWNLOADING
+UPDATE_PHASE_EXTRACT = "압축을 푸는 중…"
+UPDATE_PHASE_PREPARE = "새 파일을 준비하는 중…"
+UPDATE_PHASE_DEPS = "필요한 패키지를 확인하는 중…"
+UPDATE_PHASE_APPLY = "적용하는 중…"
+UPDATE_PHASE_DONE = "완료"
+UPDATE_DONE_RESTART = "업데이트를 받았습니다. 프로그램을 다시 실행하면 새 버전이 적용됩니다."
+UPDATE_DONE_RESTART_STAGED = UPDATE_DONE_RESTART
+UPDATE_DEPS_CHANGED = "\n\n필요한 패키지 목록이 바뀌었습니다. 다음 실행 때 설치가 진행될 수 있습니다."
+UPDATE_NEEDS_NEW_BUNDLE = ("새 버전에 필요한 패키지를 이 PC 에 설치하지 못해 업데이트를 적용하지 않았습니다. "
+                           "인터넷 연결을 확인하거나 새 배포본 zip 을 받아 설치하세요.")
+UPDATE_FAILED = "업데이트에 실패했습니다. 기존 버전을 그대로 사용합니다."
+UPDATE_BUSY_BODY = "수집이 진행 중일 때는 업데이트를 적용할 수 없습니다. 수집이 끝난 뒤 다시 시도하세요."
+CAUSE_PREFIX = "\n\n원인: "
+UPDATE_ERR_HTTP_FMT = "HTTP {code} ({host})"
+UPDATE_ERR_SSL_FMT = "SSL 인증서 오류 — {host} ({reason})"
+UPDATE_ERR_TIMEOUT_FMT = "응답 시간 초과 ({host})"
+UPDATE_ERR_CONNECT_FMT = "연결 실패 — {host} ({reason})"
+UPDATE_ERR_OTHER_FMT = "{kind} — {host} ({detail})"
+UPDATE_ERR_NO_SHA_API = "GitHub API 응답에 커밋 정보가 없습니다"
+UPDATE_ERR_NO_SHA_ATOM = "GitHub 피드에서 커밋을 찾지 못했습니다"
+UPDATE_ERR_GITHUB = "GitHub 에 연결할 수 없습니다"
+UPDATE_ERR_BAD_ZIP = "받은 파일이 올바른 배포 zip 이 아닙니다"
+UPDATE_ERR_VERIFY_FMT = "새 파일 검증 실패: {detail}"
+
+# ── 첫 실행 부트스트랩(콘솔) ───────────────────────────────────────────
+BOOT_DEPS_INSTALLING = "[AOI] 처음 실행입니다. 필요한 패키지를 설치합니다 (몇 분 걸릴 수 있습니다, 창을 닫지 마세요)…"
+BOOT_DEPS_FAILED = "[AOI] 패키지 설치에 실패했습니다. 인터넷 연결 또는 회사 프록시를 확인한 뒤 다시 실행하세요."
+BOOT_DEPS_DONE = "[AOI] 설치가 끝났습니다. 프로그램을 시작합니다."
+BOOT_PRESS_ENTER = "계속하려면 Enter 를 누르세요..."
+
+# ── 런처(exe) ──────────────────────────────────────────────────────────
+LAUNCHER_BROKEN_FMT = "설치가 손상되었습니다. 받은 zip 을 다시 압축 해제해 주세요.\n위치: {root}"

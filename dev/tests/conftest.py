@@ -86,3 +86,76 @@ def pytest_collection_modifyitems(config, items):
     for item in items:
         if {"qapp", "styled_qapp"} & set(getattr(item, "fixturenames", ())):
             item.add_marker(pytest.mark.ui)
+
+
+# ── 가짜 NAS 트리 ───────────────────────────────────────────────────────
+REPORT_NAME = "2D@R2-GA285AAB_0859840PD-0A_6321_KLK-3D_26-Sep-13_(05.32.23)_BatchReport.htm"
+REPORT_HTML = """<html><body>
+<table><tr><td>Batch Start:</td><td>13-Sep-26 05:25:14 PM</td></tr><tr><td>Batch End:</td><td>13-Sep-26 05:32:21 PM</td></tr>
+<tr><td>Batch Time:</td><td>00:07:07</td></tr><tr><td>Recipe:</td><td>Default</td></tr></table>
+<table><tr><th>Lot</th><th>Wafer ID</th><th>Faults</th><th>Scanned Dice</th><th>Bad Dice</th><th>Good Dice</th><th>Yield</th><th>Pass/Fail</th></tr>
+<tr><td>KLK-3D</td><td>K625407-01B0</td><td>0</td><td>45</td><td>0</td><td>45</td><td>100%</td><td>Pass</td></tr>
+<tr><td>KLK-3D</td><td>K625407-99Z9</td><td>0</td><td>0</td><td>0</td><td>0</td><td>0%</td><td>Failed to read wafer id. Reading error = . Aborted.</td></tr>
+<tr><td>LoadPort A</td><td>Slot 3</td><td></td><td></td><td></td><td></td><td></td><td>Skipped.</td></tr></table></body></html>"""
+WAFER_INI = """[Robot]
+Rotation=0
+[Recipe]
+Name=Default
+[AutoCycleInfo]
+Machine=EAGLETP_106783
+Operator=MAINT
+WaferStartTime=13-Sep-26 05:31:04 PM
+BatchStartTime=09/13/2026 17:25:14
+OCRID=
+FillID=K625407-01B0
+CarrierID=125342033
+UseLot=KLK-3D
+UseWaferID=K625407-01B0
+WaferEndTime=13-Sep-26 05:32:02 PM
+[BatchInfo]
+GlobalLotId=KLK-3D
+"""
+
+
+def make_device(root: Path, name: str, report_name: str = REPORT_NAME, mtime: float | None = None) -> Path:
+    """root/name 아래에 Report/<report> 와 정확 경로의 WaferInfo.ini 를 만든다."""
+    dev = root / name
+    (dev / "Report").mkdir(parents=True, exist_ok=True)
+    rep = dev / "Report" / report_name
+    rep.write_text(REPORT_HTML, encoding="utf-8")
+    if mtime is not None:
+        os.utime(rep, (mtime, mtime))
+    ini_dir = dev / "Scanresult" / "2D@R2-GA285AAB_0859840PD-0A" / "6321" / "KLK-3D" / "K625407-01B0"
+    ini_dir.mkdir(parents=True, exist_ok=True)
+    (ini_dir / "WaferInfo.ini").write_text(WAFER_INI, encoding="utf-8")
+    return dev
+
+
+@pytest.fixture
+def fake_nas(tmp_path):
+    """tmp/nas/X 아래 AOI-9, AOI-10 과 tmp/nas/M-AOI-8(루트가 장비)을 만든다. 반환: (nas_root, devices.csv 경로)."""
+    nas = tmp_path / "nas"
+    make_device(nas / "X", "AOI-9")
+    make_device(nas / "X", "AOI-10")
+    make_device(nas, "M-AOI-8")
+    csv_path = tmp_path / "devices.csv"
+    csv_path.write_text(
+        "장비명,NAS경로,폴더,사용,메모\n"
+        f"9호기,{nas / 'X'},AOI-9,Y,\n"
+        f"엑스전체,{nas / 'X'},*,Y,\n"
+        f"8호기,{nas / 'M-AOI-8'},,Y,루트가 장비\n"
+        f"꺼둠,{nas / 'X'},AOI-10,N,\n"
+        f"없음,{nas / 'none'},AOI-1,Y,접근불가\n",
+        encoding="utf-8-sig")
+    return nas, csv_path
+
+
+def make_cfg(tmp_path, csv_path, **over):
+    from aoi_capacity import collect
+    import copy
+    cfg = copy.deepcopy(collect.DEFAULT_CONFIG)
+    out = tmp_path / "out"
+    cfg.update({"devices_csv": str(csv_path), "cache_file": str(out / "aoi_cache.json"),
+                "output_dir": str(out), "backfill_days": 3650, "retention_days": 3650})
+    cfg.update(over)
+    return cfg
