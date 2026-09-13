@@ -658,9 +658,10 @@ function renderCompare(){
   $("#cmpBody").innerHTML=list.map((x,i)=>`<tr class="click" onclick="selDev='${esc(x.name)}';go('home');renderAll();" title="클릭하면 홈에서 이 장비의 타임라인을 봅니다"><td class="r faint">${i+1}</td><td><b>${esc(x.name)}</b>${x.c.hasData&&(x.c.util<th.util||x.c.nErr>=th.err*n)?' <span class="chip crit">주의</span>':""}</td><td><div style="display:flex;flex-direction:column;gap:2px"><span class="hbar" style="width:${x.c.util==null?0:x.c.util.toFixed(1)}%"></span><span class="hbar prev" style="width:${x.p.util==null?0:x.p.util.toFixed(1)}%"></span></div></td><td class="r"><b>${x.c.util==null?'<span class="faint">데이터 없음</span>':pct(x.c.util)}</b></td><td class="r muted">${pct(x.p.util)}</td><td class="r">${deltaHtml(x.c.util,x.p.util)}</td><td class="r">${x.c.nErr?`<span class="chip crit">${x.c.nErr}</span>`:0}</td><td class="r">${fmtSecS(x.c.stop+x.c.err)}</td></tr>`).join("")||'<tr><td colspan="8" class="empty">데이터 없음</td></tr>';
 }
 
-/* ---------- GitHub version check (silent when offline) ---------- */
+/* ---------- GitHub update notice (silent when offline; only for collector-generated files) ---------- */
 let _updChecked=false;
-async function checkUpdate(){if(_updChecked)return;_updChecked=true;try{const r=await fetch(UPDATE_BASE+"version.json",{cache:"no-store"});if(!r.ok)return;const v=await r.json();const cur=meta.version||APP_VERSION;if(String(v.version)!==String(cur)){const el=$("#upd");el.hidden=false;el.innerHTML=`새 버전 v${esc(v.version)}이 있습니다 (현재 v${esc(cur)}). ${meta.mode==="auto"?"수집기가 다음 실행 때 자동으로 갱신합니다.":`<a href="${UPDATE_BASE}aoi_collector_demo.html" download="aoi_collector_demo.html">최신 파일 내려받기</a>`}${v.note?` · ${esc(v.note)}`:""}`;}}catch(e){}}
+async function checkUpdate(){if(_updChecked||!meta.sha)return;_updChecked=true;try{const repo=meta.repo||"king-taek/AOI-capacity";let branch=meta.branch;if(!branch){const r0=await fetch(`https://api.github.com/repos/${repo}`,{cache:"no-store"});branch=(await r0.json()).default_branch||"main";}
+  const r=await fetch(`https://api.github.com/repos/${repo}/commits/${branch}`,{cache:"no-store"});if(!r.ok)return;const d=await r.json();if(d.sha&&d.sha!==meta.sha){const msg=((d.commit||{}).message||"").split("\n")[0];const el=$("#upd");el.hidden=false;el.innerHTML=`GitHub에 새 버전이 있습니다 (${esc(d.sha.slice(0,7))}${msg?" · "+esc(msg):""}). 수집기가 다음 실행 때 자동으로 갱신합니다.`;}}catch(e){}}
 
 /* ---------- save ---------- */
 async function writeOut(name,blob,accept){

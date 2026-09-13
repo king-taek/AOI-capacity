@@ -18,12 +18,14 @@ Design rules (from the hand-over document):
         {scan_root}/{equipment}/{process_code}/{lot}/{wafer_id}/WaferInfo.ini
   * Only the needed INI keys are read. Source files are never modified.
   * A report that fails to parse is logged and skipped; the run continues.
+  * Self-update: compares the GitHub branch head SHA with the local VERSION file,
+    downloads the branch zip, verifies, swaps files (with .bak rollback), re-executes.
 """
 import argparse, csv, datetime as dt, hashlib, json, os, re, shutil, sys, time, urllib.request
 from html.parser import HTMLParser
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-VERSION_FILE = os.path.join(HERE, "version.json")
+VERSION_FILE = os.path.join(HERE, "VERSION")
 DEFAULT_CONFIG = {
     "nas_roots": ["X:\\", "M:\\", "V:\\", "P:\\", "Y:\\", "I:\\"],
     "report_dir": "Report",
@@ -34,11 +36,7 @@ DEFAULT_CONFIG = {
     "output_name": "AOI_capacity.html",
     "write_csv": False,
     "cache_file": os.path.join(HERE, "aoi_cache.json"),
-    "update": {
-        "enabled": True,
-        "base_url": "https://raw.githubusercontent.com/king-taek/AOI-capacity/main/",
-        "files": ["template.html", "aoi_collect.py", "version.json"]
-    }
+    "update": {"enabled": True, "repo": "king-taek/AOI-capacity", "branch": ""}
 }
 INI_KEYS = {
     "Recipe": ["Name"],
@@ -247,10 +245,12 @@ def collect(cfg, full=False):
 def write_html(cfg, rows, dev_meta, errors, started):
     tpl_path = os.path.join(HERE, "template.html")
     with open(tpl_path, "r", encoding="utf-8") as f: tpl = f.read()
-    ver = read_version()
+    ver = read_version(); u = cfg.get("update") or {}
     meta = {"generated": dt.datetime.now().strftime("%Y-%m-%d %H:%M"), "generated_iso": dt.datetime.now().isoformat(timespec="seconds"),
             "mode": "auto", "devices": dev_meta, "reportErrors": errors, "limit": cfg["reports_per_device"],
-            "elapsed": int((time.time() - started) * 1000), "version": ver.get("version", ""), "retention_days": cfg["retention_days"]}
+            "elapsed": int((time.time() - started) * 1000), "retention_days": cfg["retention_days"],
+            "sha": ver.get("sha", ""), "branch": ver.get("branch", ""), "repo": ver.get("repo") or u.get("repo") or "king-taek/AOI-capacity",
+            "version": (ver.get("sha", "")[:7] + (" · " + ver["applied"][:10] if ver.get("applied") else "")) if ver.get("sha") else ""}
     emb = {"cols": OUT_COLS, "rows": [[r.get(c, "") for c in OUT_COLS] for r in rows], "meta": meta}
     data = json.dumps(emb, ensure_ascii=False, separators=(",", ":")).replace("</", "<\\/")
     out = tpl.replace("__DATA__", data, 1)
@@ -268,43 +268,144 @@ def write_html(cfg, rows, dev_meta, errors, started):
 
 
 # ----------------------------------------------------------------------------- self update
+# Pattern borrowed from king-taek/coding (app/utils/updater.py):
+#  * the reference is the latest commit SHA of the repo branch (no manual version bump);
+#  * api.github.com first, github.com Atom feed as fallback when the API host is blocked;
+#  * HTTPS goes through the system proxy; on certificate failure (corporate SSL inspection)
+#    retry once without verification;
+#  * download the branch zip, stage a verified tree, then swap files with .bak rollback;
+#  * a git checkout (developer run) never self-updates.
+UPDATE_FILES = ["aoi_collect.py", "template.html", "run_collect.bat", "config.example.json", "README.md"]
+_last_error = ""
+
+
+def _ssl_ctx(insecure=False):
+    import ssl
+    if insecure:
+        c = ssl.create_default_context(); c.check_hostname = False; c.verify_mode = ssl.CERT_NONE; return c
+    try:
+        import truststore  # optional: use the Windows trust store like a browser
+        return truststore.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+    except Exception:  # noqa
+        c = ssl.create_default_context()
+        try: c.load_default_certs()
+        except Exception: pass  # noqa
+        return c
+
+
+def fetch(url, timeout=20):
+    """GET bytes via system proxy; retry without certificate verification on SSL errors."""
+    import ssl
+    headers = {"User-Agent": "aoi-capacity-updater", "Accept": "application/vnd.github+json", "Cache-Control": "no-cache"}
+    for insecure in (False, True):
+        try:
+            handlers = [urllib.request.ProxyHandler(urllib.request.getproxies()), urllib.request.HTTPSHandler(context=_ssl_ctx(insecure))]
+            opener = urllib.request.build_opener(*handlers)
+            with opener.open(urllib.request.Request(url, headers=headers), timeout=timeout) as r:
+                return r.read()
+        except Exception as e:  # noqa
+            reason = getattr(e, "reason", e)
+            if not insecure and (isinstance(e, ssl.SSLError) or isinstance(reason, ssl.SSLError)):
+                log("  인증서 검증 실패 → 검증 없이 재시도 (회사 SSL 검사 프록시)"); continue
+            raise
+
+
 def read_version():
     try:
         with open(VERSION_FILE, "r", encoding="utf-8") as f: return json.load(f)
     except Exception:  # noqa
-        return {"version": "0"}
+        return {}
 
 
-def fetch(url, timeout=15):
-    req = urllib.request.Request(url, headers={"User-Agent": "aoi-capacity", "Cache-Control": "no-cache"})
-    with urllib.request.urlopen(req, timeout=timeout) as r: return r.read()
+def write_version(sha, branch, repo, message=""):
+    with open(VERSION_FILE, "w", encoding="utf-8") as f:
+        json.dump({"sha": sha, "branch": branch, "repo": repo, "message": message, "applied": dt.datetime.now().isoformat(timespec="seconds")}, f, ensure_ascii=False)
+
+
+def default_branch(repo):
+    try:
+        return json.loads(fetch(f"https://api.github.com/repos/{repo}").decode("utf-8")).get("default_branch") or "main"
+    except Exception:  # noqa
+        return "main"
+
+
+def latest_commit(repo, branch):
+    """{'sha','message','date'} of the branch head; API first, Atom feed fallback."""
+    global _last_error
+    try:
+        d = json.loads(fetch(f"https://api.github.com/repos/{repo}/commits/{branch}").decode("utf-8"))
+        msg = ((d.get("commit") or {}).get("message") or "").splitlines()
+        return {"sha": d["sha"], "message": msg[0] if msg else "", "date": ((d.get("commit") or {}).get("committer") or {}).get("date", "")}
+    except Exception as e:  # noqa
+        _last_error = f"api.github.com: {e}"
+    try:
+        txt = fetch(f"https://github.com/{repo}/commits/{branch}.atom").decode("utf-8", "replace")
+        m = re.search(r"commit/([0-9a-fA-F]{40})", txt)
+        if m: return {"sha": m.group(1).lower(), "message": "", "date": ""}
+        _last_error = "github.com atom: SHA 없음"
+    except Exception as e:  # noqa
+        _last_error = f"github.com: {e}"
+    return None
 
 
 def self_update(cfg):
-    """Download newer template/script from GitHub. Returns True if aoi_collect.py itself changed (caller re-executes)."""
+    """Returns True when aoi_collect.py itself was replaced (caller re-executes)."""
     u = cfg.get("update") or {}
     if not u.get("enabled"): return False
+    if os.path.isdir(os.path.join(HERE, ".git")):
+        log("git 작업 폴더에서 실행 중 · 자동 업데이트 생략 (git pull 사용)"); return False
+    repo = u.get("repo") or "king-taek/AOI-capacity"
+    cur = read_version()
+    branch = (u.get("branch") or cur.get("branch") or "").strip() or default_branch(repo)
+    latest = latest_commit(repo, branch)
+    if not latest:  # tracked branch deleted/renamed (e.g. a merged claude/* branch) -> follow the repo default branch
+        db = default_branch(repo)
+        if db != branch:
+            log(f"브랜치 {branch} 조회 실패 → 기본 브랜치 {db}로 전환"); branch = db; latest = latest_commit(repo, branch)
+    if not latest:
+        log(f"업데이트 확인 실패(오프라인/차단?): {_last_error}"); return False
+    if cur.get("sha") == latest["sha"]:
+        log(f"최신 버전 ({branch} @ {latest['sha'][:7]})"); return False
+    log(f"새 버전 {branch} @ {latest['sha'][:7]} {latest.get('message','')!r} (현재 {str(cur.get('sha',''))[:7] or '미상'}) · 다운로드")
+    import zipfile, io as _io, py_compile
     try:
-        remote = json.loads(fetch(u["base_url"] + "version.json").decode("utf-8"))
+        blob = fetch(f"https://github.com/{repo}/archive/{latest['sha']}.zip", timeout=60)
+        zf = zipfile.ZipFile(_io.BytesIO(blob))
     except Exception as e:  # noqa
-        log(f"업데이트 확인 실패(오프라인?): {e}"); return False
-    local = read_version()
-    if str(remote.get("version")) == str(local.get("version")):
-        log(f"최신 버전입니다 (v{local.get('version')})"); return False
-    log(f"새 버전 v{remote.get('version')} (현재 v{local.get('version')}) · 다운로드")
-    changed_self = False
-    for name in u.get("files", []):
-        try:
-            data = fetch(u["base_url"] + name)
-            dest = os.path.join(HERE, name)
-            if os.path.isfile(dest) and hashlib.sha256(open(dest, "rb").read()).hexdigest() == hashlib.sha256(data).hexdigest():
-                continue
+        log(f"  zip 다운로드 실패: {e}"); return False
+    staging = os.path.join(HERE, ".update.part")
+    shutil.rmtree(staging, ignore_errors=True); os.makedirs(staging)
+    got = {}
+    for name in zf.namelist():
+        rel = name.split("/", 1)[1] if "/" in name else name
+        if rel in UPDATE_FILES:
+            data = zf.read(name)
+            with open(os.path.join(staging, rel), "wb") as f: f.write(data)
+            got[rel] = data
+    # verify the staged tree before touching anything
+    try:
+        if "template.html" in got and b"__DATA__" not in got["template.html"]: raise ValueError("template.html에 __DATA__ 자리가 없음")
+        if "aoi_collect.py" in got: py_compile.compile(os.path.join(staging, "aoi_collect.py"), doraise=True)
+        if "aoi_collect.py" not in got or "template.html" not in got: raise ValueError("필수 파일 누락")
+    except Exception as e:  # noqa
+        log(f"  검증 실패, 적용하지 않음: {e}"); shutil.rmtree(staging, ignore_errors=True); return False
+    changed_self, swapped = False, []
+    try:
+        for rel, data in got.items():
+            dest = os.path.join(HERE, rel)
+            if os.path.isfile(dest) and hashlib.sha256(open(dest, "rb").read()).digest() == hashlib.sha256(data).digest(): continue
             if os.path.isfile(dest): shutil.copy2(dest, dest + ".bak")
-            with open(dest, "wb") as f: f.write(data)
-            log(f"  갱신: {name}")
-            if name == os.path.basename(__file__): changed_self = True
-        except Exception as e:  # noqa
-            log(f"  {name} 다운로드 실패: {e}")
+            os.replace(os.path.join(staging, rel), dest); swapped.append(rel)
+            log(f"  갱신: {rel}")
+            if rel == os.path.basename(__file__): changed_self = True
+    except Exception as e:  # noqa
+        log(f"  적용 실패, 롤백: {e}")
+        for rel in swapped:
+            bak = os.path.join(HERE, rel) + ".bak"
+            if os.path.isfile(bak): os.replace(bak, os.path.join(HERE, rel))
+        shutil.rmtree(staging, ignore_errors=True); return False
+    shutil.rmtree(staging, ignore_errors=True)
+    write_version(latest["sha"], branch, repo, latest.get("message", ""))
     return changed_self
 
 

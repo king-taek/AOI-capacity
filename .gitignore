@@ -1,0 +1,7 @@
+VERSION
+aoi_cache.json
+config.json
+collect.log
+*.bak
+.update.part/
+AOI_capacity.html

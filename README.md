@@ -18,12 +18,11 @@ NAS (Report / Scanresult)  ──►  aoi_collect.py (작업 스케줄러, 10분
 | `template.html` | 화면 템플릿. `__DATA__` 자리에 데이터가 들어갑니다. |
 | `config.example.json` | 설정 예시. `config.json`으로 복사해 수정합니다. |
 | `run_collect.bat` | 작업 스케줄러에 등록할 실행 파일. |
-| `version.json` | 버전. 수집기와 화면이 이 값으로 새 버전을 확인합니다. |
 | `aoi_collector_demo.html` | 브라우저만으로 동작하는 데모(장비 30대 합성 데이터). Python 없이 시험할 때 씁니다. |
 
 ### 설치
 1. 수집용 PC에 Python 3.8 이상 설치.
-2. 이 저장소의 `aoi_collect.py`, `template.html`, `version.json`, `run_collect.bat`, `config.example.json`을 한 폴더(예: `C:\AOI_capacity`)에 둡니다.
+2. 이 저장소의 `aoi_collect.py`, `template.html`, `run_collect.bat`, `config.example.json`을 한 폴더(예: `C:\AOI_capacity`)에 둡니다. git으로 clone하지 말고 파일만 복사합니다(git 폴더에서는 자동 업데이트가 꺼지고 `git pull`을 씁니다).
 3. `config.example.json`을 `config.json`으로 복사하고 `nas_roots`(Camtek NAS 드라이브 문자 또는 UNC 경로)와 `output_dir`(모두가 여는 공유 폴더)을 수정합니다.
 4. `python aoi_collect.py`를 한 번 실행해 `output_dir`에 `AOI_capacity.html`이 생기는지 확인합니다.
 5. 작업 스케줄러에서 `run_collect.bat`를 10분 간격으로 등록합니다.
@@ -32,7 +31,7 @@ NAS (Report / Scanresult)  ──►  aoi_collect.py (작업 스케줄러, 10분
 - `nas_roots`의 각 경로에서 Report 폴더가 있는 하위 폴더를 장비로 자동 인식합니다(재귀 검색 없음). 경로 자체가 장비 폴더여도 됩니다. 장비가 늘어나면 자동 반영됩니다.
 - 장비마다 최신 N개 Report를 확인하고, 이미 읽은 파일(경로와 수정시각이 같음)은 건너뜁니다. 캐시에 `retention_days`(기본 90일) 동안 이력을 보관하므로 주·월 추이가 쌓입니다.
 - Wafer마다 계산된 정확 경로의 WaferInfo.ini만 확인하고 필요한 키만 읽습니다. 원본은 수정하지 않습니다.
-- 실행 시작 때 GitHub의 `version.json`을 확인해 새 버전이면 `template.html`, `aoi_collect.py`, `version.json`을 내려받고 스스로 재실행합니다. 오프라인이면 건너뜁니다. `--no-update`로 끌 수 있습니다.
+- 실행 시작 때 GitHub 저장소 기본 브랜치의 최신 커밋 SHA를 조회해 로컬 `VERSION` 파일과 다르면 브랜치 zip을 내려받아 검증(`template.html`의 `__DATA__` 자리, 스크립트 문법)한 뒤 파일을 교체하고 스스로 재실행합니다. 교체 전 파일은 `.bak`로 남기고 실패하면 되돌립니다. api.github.com이 막히면 github.com Atom 피드로, 회사 SSL 검사 프록시로 인증서 검증이 실패하면 검증 없이 한 번 더 시도합니다. 오프라인이면 건너뜁니다. `--no-update`로 끌 수 있습니다. (king-taek/coding 저장소의 updater 방식을 따랐습니다.)
 - 출력 HTML은 임시 파일에 쓴 뒤 교체하므로 여는 도중 깨진 파일을 보지 않습니다.
 
 ### 화면
@@ -51,4 +50,4 @@ NAS (Report / Scanresult)  ──►  aoi_collect.py (작업 스케줄러, 10분
 `aoi_collector_demo.html`을 Edge/Chrome에서 열고 설정에서 NAS 공유 폴더를 선택하면 브라우저가 직접 읽습니다. 매번 사람이 수집 버튼을 눌러야 하고 이력이 쌓이지 않으므로 시험용이나 임시 대체용입니다.
 
 ## 새 버전 배포
-`template.html`이나 `aoi_collect.py`를 고친 뒤 `version.json`의 `version`을 올려 main에 푸시하면, 수집기가 다음 실행 때 자동으로 받아 갑니다.
+`template.html`이나 `aoi_collect.py`를 고쳐 기본 브랜치에 푸시하기만 하면 됩니다. 버전 번호를 따로 올릴 필요 없이 수집기가 다음 실행 때 커밋 SHA 차이를 보고 자동으로 받아 갑니다. 화면 상단에도 새 커밋 안내가 표시됩니다.
