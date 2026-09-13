@@ -21,8 +21,14 @@ Camtek AOI 장비의 BatchReport/WaferInfo.ini 를 읽어 장비별 가동률을
 - 시각 테마의 단일 출처는 `aoi_capacity/ui/assets/template.html` 의 `:root` 토큰. `ui/theme.py` 는 그 값을 그대로 쓴다(가드: `test_theme.py`).
 - 사용자 데이터는 `%LOCALAPPDATA%\AOI_Capacity`(`utils/paths.data_root()`), 절대 `app/` 안이 아니다(업데이트가 `app/` 를 통째로 교체).
 
+## 빌드·업데이트
+- `python scripts\build.py exe-lite` → `dist/AOI_Capacity_Lite/` (런처 exe + `python/` + `app/`, `.deps_installed` **없음**), `make_release_zip.py --lite` 가 검증 통과 시에만 zip 을 만든다.
+- `utils/updater.py`: 기본 브랜치 SHA 비교 → 브랜치 zip → `app.new.part` 스테이징 → `_verify_staged`(필수 파일, template `__DATA__`, style.qss 렌더) → `app.new` rename. `_UPDATE_KEEP_ONLY` 의 이름은 실재해야 한다(`test_update_payload.py`).
+- `updater.DEFAULT_BRANCH` 는 오프라인 폴백 — GitHub 기본 브랜치가 바뀌면 함께 갱신한다.
+
 ## 테스트
 `QT_QPA_PLATFORM=offscreen python -m pytest -q` (빠른 확인: `-m "not ui"`). PyQt6 가 없는 환경에서는 ui 테스트가 skip 된다.
+테스트는 실제 pip·네트워크·서브프로세스를 절대 실행하지 않는다(`test_updater.py` 의 autouse 가드).
 
 ## 커밋
 한국어로 "무엇을·왜". PR 은 요청받을 때만. 저장소 산출물에 내부 모델 식별자를 남기지 않는다.

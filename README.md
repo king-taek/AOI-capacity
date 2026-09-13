@@ -1,67 +1,101 @@
-# AOI 장비 가동률 (AOI Capacity)
+# AOI Capacity — AOI 장비 가동률
 
-Camtek AOI 장비의 BatchReport와 WaferInfo.ini를 읽어 장비별 가동률을 보여주는 대시보드입니다.
+Camtek AOI 장비의 NAS `Report/*_BatchReport.htm` 과 `Scanresult/.../WaferInfo.ini` 를 읽어 장비별 가동률(검사 / 오류 / 미가동)을
+보여주는 **PyQt6 데스크톱 앱**입니다. 각자 PC 에서 실행하며, 설정·장비 목록·수집 캐시·결과 HTML 은 모두 그 PC 의
+`%LOCALAPPDATA%\AOI_Capacity` 에만 저장됩니다.
 
-## 구성 (권장: Python 수집기 + HTML 화면)
+> **NAS 원본은 읽기만 합니다.** NAS 경로 아래에는 어떤 파일도 만들거나 바꾸거나 지우지 않습니다.
+> 코드(`aoi_capacity/nas_guard.py`)와 테스트(`dev/tests/test_nas_guard.py`)가 이를 강제합니다.
 
-```
-NAS (Report / Scanresult)  ──►  aoi_collect.py (작업 스케줄러, 10분마다)
-                                    │  증분 캐시 aoi_cache.json
-                                    │  GitHub에서 template.html / aoi_collect.py 자동 갱신
-                                    ▼
-                          공유 폴더\AOI_capacity.html  ◄── 사용자는 이 파일만 엽니다
-```
+## 화면
 
-| 파일 | 역할 |
+| 메뉴 | 내용 |
 |---|---|
-| `aoi_collect.py` | 수집기. 표준 라이브러리만 사용. NAS를 읽고 `template.html`에 데이터를 넣어 HTML 1개를 씁니다. |
-| `template.html` | 화면 템플릿. `__DATA__` 자리에 데이터가 들어갑니다. |
-| `config.example.json` | 설정 예시. `config.json`으로 복사해 수정합니다. |
-| `devices.example.csv` | 장비 목록 예시. `devices.csv`로 복사해 Excel에서 편집합니다. |
-| `run_collect.bat` | 작업 스케줄러에 등록할 실행 파일. |
-| `aoi_collector_demo.html` | 브라우저만으로 동작하는 데모(장비 30대 합성 데이터). Python 없이 시험할 때 씁니다. |
+| 홈 | 선택한 날짜의 모든 장비 가동률 카드/표. 카드 클릭 → Lot 단위 24시간 타임라인 + 오류 목록 |
+| 추이 | 일 · 주 · 월 막대, 이번 기간 vs 이전 기간 비교 |
+| 장비 비교 | 선택한 날 · 최근 7일 · 최근 30일 기준 장비 순위와 변화 |
+| 장비 목록 | `devices.csv` 편집(행 추가/삭제, 폴더 찾아보기, `*` 자동, CSV 가져오기/내보내기, 연결 확인) |
+| 수집 | **지금 수집** 버튼, 처음 수집 기간 / 이력 보관 기간, 결과 폴더, 로그 |
+| 설정 · 정보 | 어두운 화면, 주의 장비 기준, 화면 엔진 옵션, 데이터 폴더, 버전 · 업데이트 확인 |
 
-### 설치
-1. 수집용 PC에 Python 3.8 이상 설치.
-2. 이 저장소의 `aoi_collect.py`, `template.html`, `run_collect.bat`, `config.example.json`을 한 폴더(예: `C:\AOI_capacity`)에 둡니다. git으로 clone하지 말고 파일만 복사합니다(git 폴더에서는 자동 업데이트가 꺼지고 `git pull`을 씁니다).
-3. `devices.example.csv`를 `devices.csv`로 복사해 장비 목록을 적습니다(아래 참고). `config.example.json`을 `config.json`으로 복사하고 `output_dir`(모두가 여는 공유 폴더)을 수정합니다.
-4. `python aoi_collect.py`를 한 번 실행해 `output_dir`에 `AOI_capacity.html`이 생기는지 확인합니다.
-5. 작업 스케줄러에서 `run_collect.bat`를 10분 간격으로 등록합니다.
+가동률 = 검사시간(WaferStartTime~WaferEndTime 합) ÷ 24시간. 오늘은 00:00 부터 현재 시각까지로 나눕니다.
+오류 Wafer 종료부터 다음 Wafer 시작까지의 공백은 '정지(추정)' 으로 봅니다(장비 이벤트 로그가 아닙니다).
 
-### 장비 목록 (devices.csv)
-Excel에서 편집해 CSV로 저장하면 됩니다(한글 Windows Excel의 cp949 저장, UTF-8 모두 읽습니다).
+## 설치 (사용자)
+
+1. 배포 zip(`AOI_Capacity_<날짜>_<sha7>.zip`)을 원하는 위치(예: `C:\AOI_Capacity`)에 압축 해제합니다. NAS 나 OneDrive 안은 피하세요.
+2. `AOI_Capacity.exe` 를 실행합니다. 백신이 exe 를 막으면 `run_aoi.bat` 을 대신 실행합니다.
+3. **처음 실행**(lite 배포)에는 콘솔 창이 뜨고 필요한 패키지(PyQt6 등, 약 250 MB)를 인터넷에서 설치합니다. 몇 분 걸릴 수 있으니 창을 닫지 마세요. 두 번째 실행부터는 바로 창이 뜹니다.
+4. '장비 목록' 에서 NAS 경로와 장비 폴더를 적고 저장한 뒤, '수집' 에서 **지금 수집**을 누릅니다.
+
+자세한 안내는 zip 안의 `설치방법.txt` 에 있습니다.
+
+## 장비 목록 (devices.csv)
+
+첫 실행 때 `aoi_capacity/assets/devices.default.csv` 가 데이터 폴더의 `devices.csv` 로 복사됩니다. GUI 에서 편집하거나 Excel 로 편집해 가져올 수 있습니다(cp949 · UTF-8 모두 읽습니다).
 
 | 장비명 | NAS경로 | 폴더 | 사용 | 메모 |
 |---|---|---|---|---|
-| AOI-9 | M:\ | AOI-9 | Y | Camtek 8~9 (\\10.142.80.90) |
-| AOI-24 | \\10.142.80.88\Camtek24-25 | AOI-24 | Y | 드라이브 문자 대신 UNC 경로도 됨 |
-| 4층 | I:\ | * | Y | 폴더가 *이면 이 NAS 안의 장비 폴더를 모두 자동 등록 |
+| AOI-9 | M:\ | AOI-9 | Y | Camtek 8~9 |
+| AOI-24 | \\10.142.80.88\Camtek24-25 | AOI-24 | Y | UNC 경로도 됨 |
+| 4층 | I:\ | * | Y | `*` 면 이 NAS 안의 장비 폴더를 모두 자동 등록 |
 
-- 폴더: NAS경로 아래의 장비 폴더 이름. 비우면 NAS경로 자체가 장비 폴더입니다. `*`면 Report 폴더가 있는 하위 폴더를 모두 자동 등록하므로 장비가 늘어나도 CSV를 고칠 필요가 없습니다.
-- 사용: `N`이면 수집하지 않습니다. 메모는 자유 입력입니다.
-- 접근할 수 없는 행은 로그에 남기고 건너뜁니다. 같은 폴더가 두 번 나오면 먼저 적힌 행의 이름을 씁니다.
+- 폴더를 비우면 NAS경로 자체가 장비 폴더입니다. `*` 면 Report 폴더가 있는 하위 폴더를 모두 자동 등록하므로 장비가 늘어나도 CSV 를 고칠 필요가 없습니다.
+- 사용이 `N` 이면 수집하지 않습니다. 접근할 수 없는 행은 로그에 남기고 건너뜁니다.
 
-### 수집기 동작
-- `devices.csv`의 각 행을 장비로 씁니다. CSV가 없으면 `config.json`의 `nas_roots`를 자동 탐색합니다(재귀 검색 없음).
-- **수집 기간**: 처음 실행(캐시 없음)이나 `--backfill` 실행에서는 수정시각이 최근 `backfill_days`(기본 30일) 안인 Report를 개수 제한 없이 전부 읽어 과거 이력을 채웁니다. 이후 정기 실행은 장비마다 마지막으로 가져온 Report의 수정시각 이후에 생긴 파일을 전부 읽습니다(시계 오차 대비 60초 여유). 처음 보는 장비는 backfill 기간으로 읽습니다. 캐시는 `retention_days`(기본 90일) 동안 보관하므로 시간이 갈수록 90일치 주·월 추이가 쌓입니다.
-- Wafer마다 계산된 정확 경로의 WaferInfo.ini만 확인하고 필요한 키만 읽습니다. 원본은 수정하지 않습니다.
-- 실행 시작 때 GitHub 저장소 기본 브랜치의 최신 커밋 SHA를 조회해 로컬 `VERSION` 파일과 다르면 브랜치 zip을 내려받아 검증(`template.html`의 `__DATA__` 자리, 스크립트 문법)한 뒤 파일을 교체하고 스스로 재실행합니다. 교체 전 파일은 `.bak`로 남기고 실패하면 되돌립니다. api.github.com이 막히면 github.com Atom 피드로, 회사 SSL 검사 프록시로 인증서 검증이 실패하면 검증 없이 한 번 더 시도합니다. 오프라인이면 건너뜁니다. `--no-update`로 끌 수 있습니다. (king-taek/coding 저장소의 updater 방식을 따랐습니다.)
-- 출력 HTML은 임시 파일에 쓴 뒤 교체하므로 여는 도중 깨진 파일을 보지 않습니다.
+## 수집 기간
 
-### 화면
-- **홈**: 선택한 날짜의 모든 장비 가동률. 상단 요약(평균, 주의 장비, 오류 장비, 최저 장비), 정렬(낮은 순·오류 먼저·이름순), 카드/표 전환, 전일 대비 화살표. 카드를 클릭하면 Lot 단위 24시간 타임라인(막대 하나 = Lot 하나, 오류 Wafer와 정지는 빨강)과 Lot 목록, 오류 목록이 펼쳐집니다.
-- **추이**: 일·주·월 단위 막대(전체 평균 또는 장비 하나)와 이번 기간 vs 이전 기간 비교 카드.
-- **장비 비교**: 선택한 날·최근 7일·최근 30일 기준 장비 순위와 이전 기간 대비 변화.
-- **설정**: 브라우저 직접 수집(수동 대체 수단), 이상 판정 기준, HTML 저장, 로그.
-- 상단 배지에 마지막 수집 시각과 경과 시간이 나오고, 2시간 이상 지나면 노란색으로 바뀝니다. GitHub에 새 버전이 있으면 안내 줄이 표시됩니다.
+- 처음 수집(캐시 없음)이나 '과거 이력 다시 채우기' 는 수정시각이 최근 `처음 수집 기간`(기본 30일) 안인 Report 를 전부 읽습니다.
+- 이후에는 장비마다 **마지막으로 가져온 Report 이후에 생긴 파일을 전부** 읽습니다. 처음 보는 장비는 30일치로 읽습니다.
+- 캐시는 `이력 보관 기간`(기본 90일) 동안 유지되어 주·월 추이가 쌓입니다.
+- Scanresult 는 재귀 검색하지 않고 Wafer 마다 계산된 정확 경로의 WaferInfo.ini 만 확인합니다.
+- 수집을 중지하면 이번 결과는 버리고 이전 결과가 그대로 남습니다.
 
-### 가동률 정의
-- 가동률 = 검사시간(WaferStartTime~WaferEndTime 합) ÷ 24시간. 오늘이면 00:00부터 현재 시각까지로 나눕니다.
-- 오류 Wafer 종료부터 다음 Wafer 시작까지의 공백을 "정지(추정)"로 봅니다. 장비 이벤트 로그가 아닙니다.
-- 주·월 가동률 = 기간 내 검사시간 합 ÷ 기간 내 경과시간 합. 주는 월요일 시작입니다.
+## 데이터 폴더
 
-## 브라우저만으로 쓰기 (Python 없이)
-`aoi_collector_demo.html`을 Edge/Chrome에서 열고 설정에서 NAS 공유 폴더를 선택하면 브라우저가 직접 읽습니다. 매번 사람이 수집 버튼을 눌러야 하고 이력이 쌓이지 않으므로 시험용이나 임시 대체용입니다.
+`%LOCALAPPDATA%\AOI_Capacity` (환경변수 `AOI_DATA_HOME` 으로 바꿀 수 있음)
 
-## 새 버전 배포
-`template.html`이나 `aoi_collect.py`를 고쳐 기본 브랜치에 푸시하기만 하면 됩니다. 버전 번호를 따로 올릴 필요 없이 수집기가 다음 실행 때 커밋 SHA 차이를 보고 자동으로 받아 갑니다. 화면 상단에도 새 커밋 안내가 표시됩니다.
+| 파일 | 내용 |
+|---|---|
+| `prefs.json` | 설정 |
+| `devices.csv` | 장비 목록 |
+| `aoi_cache.json` | 수집 캐시(장비별 마지막 수정시각 커서 포함) |
+| `AOI_capacity.html` | 결과 화면(브라우저로 열어도 됨) |
+| `app.log`, `collect.log` | 로그 |
+
+결과 폴더를 바꿀 수는 있지만 NAS 경로 아래로는 지정할 수 없습니다.
+
+## 자동 업데이트
+
+실행할 때 GitHub 저장소 기본 브랜치의 최신 커밋 SHA 를 `app/VERSION` 과 비교해 새 버전을 안내합니다. 동의하면 브랜치 zip 을 받아
+새 트리를 만들고 검증한 뒤 `app.new` 로 준비해 두며, **다음 실행 때** 런처(`AOI_Capacity.exe`)가 `app/` 을 교체합니다.
+새 버전이 다른 패키지를 요구하면 동봉 파이썬에 먼저 설치하고, 설치에 실패하면 업데이트를 적용하지 않습니다.
+api.github.com 이 막히면 github.com Atom 피드로, 회사 SSL 검사 프록시에서 인증서 검증이 실패하면 검증 없이 한 번 더 시도합니다.
+git 작업 폴더에서 실행 중이면 자동 적용을 하지 않습니다(`git pull` 사용).
+
+새 버전 배포는 기본 브랜치에 푸시하기만 하면 됩니다. `requirements.txt` 를 바꾸는 변경은 사용자 PC 의 첫 업데이트에서 패키지 설치가 필요하니 주의하세요.
+
+## 헤드리스 수집 (선택)
+
+작업 스케줄러 등에서 GUI 없이 수집하려면 `scripts/run_collect.bat`(→ `python -m aoi_capacity.cli`) 을 씁니다. GUI 와 같은 데이터 폴더를 쓰며,
+`--config` 로 `docs/config.example.json` 형식의 설정 파일을 줄 수도 있습니다.
+
+## 개발
+
+```
+pip install -r requirements.txt -r dev/requirements-dev.txt
+python main.py                                   # 개발 실행
+QT_QPA_PLATFORM=offscreen python -m pytest -q    # 테스트 (빠른 확인: -m "not ui")
+```
+
+빌드(Windows + 인터넷):
+
+```
+python scripts\build.py exe-lite        # 런처 exe + python 런타임 + app\  (라이브러리는 첫 실행 때 설치)
+python scripts\build.py exe             # 라이브러리까지 동봉(인터넷 없는 PC 용)
+python scripts\make_release_zip.py --lite
+```
+
+폴더 구성: `main.py`(진입) · `aoi_capacity/`(`collect.py` 수집 코어, `devices.py`, `nas_guard.py`, `i18n/`, `utils/`, `workers/`, `ui/`) ·
+`scripts/`(런처·빌드) · `dev/`(테스트) · `docs/`(브라우저 데모 `aoi_collector_demo.html`, 설정 예시, 스크린샷).
+작업 규칙은 `CLAUDE.md` 를 보세요.

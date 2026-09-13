@@ -1,18 +1,13 @@
 {
-  "_설명": "update.branch 를 비우면 저장소 기본 브랜치를 따릅니다. 이 파일을 config.json 으로 복사해 값을 수정하세요. 장비 목록은 devices_csv 파일(장비명, NAS경로, 폴더, 사용, 메모)에서 읽습니다. CSV가 없을 때만 nas_roots 를 자동 탐색합니다.",
+  "_설명": "헤드리스 수집(aoi_capacity.cli) 전용 예시. GUI 는 이 파일을 쓰지 않고 데이터 폴더의 prefs.json 을 씁니다. 이 파일을 config.json 으로 복사해 값을 수정하세요. 장비 목록은 devices_csv(장비명, NAS경로, 폴더, 사용, 메모)에서 읽고, CSV 가 없을 때만 nas_roots 를 자동 탐색합니다. output_dir·cache_file 은 반드시 이 PC 의 로컬 폴더여야 합니다(NAS 아래면 실행을 거부합니다).",
   "devices_csv": "C:\\AOI_capacity\\devices.csv",
   "nas_roots": [],
   "report_dir": "Report",
   "scan_dir": "Scanresult",
   "backfill_days": 30,
   "retention_days": 90,
-  "output_dir": "\\\\10.142.80.90\\share\\AOI_capacity",
+  "output_dir": "C:\\AOI_capacity\\out",
   "output_name": "AOI_capacity.html",
   "write_csv": false,
-  "cache_file": "C:\\AOI_capacity\\aoi_cache.json",
-  "update": {
-    "enabled": true,
-    "repo": "king-taek/AOI-capacity",
-    "branch": ""
-  }
+  "cache_file": "C:\\AOI_capacity\\aoi_cache.json"
 }
