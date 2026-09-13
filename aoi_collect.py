@@ -13,6 +13,10 @@ Standard library only. Windows / Python 3.8+.
     python aoi_collect.py --full          # ignore cache, re-read the latest N reports per device
     python aoi_collect.py --no-update     # skip the GitHub self-update check
 
+Device list: devices.csv next to this file (columns 장비명, NAS경로, 폴더, 사용, 메모).
+  폴더 = device folder under the NAS root; empty = the root itself is the device; "*" = auto-discover
+  every sub-folder that contains a Report folder. Excel's cp949 CSV and UTF-8 are both accepted.
+
 Design rules (from the hand-over document):
   * Never walk Scanresult recursively. The INI path is computed exactly:
         {scan_root}/{equipment}/{process_code}/{lot}/{wafer_id}/WaferInfo.ini
@@ -27,7 +31,8 @@ from html.parser import HTMLParser
 HERE = os.path.dirname(os.path.abspath(__file__))
 VERSION_FILE = os.path.join(HERE, "VERSION")
 DEFAULT_CONFIG = {
-    "nas_roots": ["X:\\", "M:\\", "V:\\", "P:\\", "Y:\\", "I:\\"],
+    "devices_csv": os.path.join(HERE, "devices.csv"),
+    "nas_roots": [],
     "report_dir": "Report",
     "scan_dir": "Scanresult",
     "reports_per_device": 50,
@@ -167,7 +172,89 @@ def rows_for_report(dev_name, rep, scan_root):
     return rows
 
 
-# ----------------------------------------------------------------------------- discovery
+# ----------------------------------------------------------------------------- device list (CSV)
+CSV_ALIASES = {"name": ["장비명", "장비", "name", "device"], "root": ["nas경로", "nas", "경로", "root", "path"],
+               "sub": ["폴더", "장비폴더", "folder", "sub"], "on": ["사용", "enabled", "use", "on"], "memo": ["메모", "memo", "note"]}
+
+
+def read_devices_csv(path):
+    """Read the device list CSV (UTF-8 with/without BOM, or cp949 from Korean Excel). Returns list of dicts."""
+    raw = open(path, "rb").read()
+    text = None
+    for enc in ("utf-8-sig", "cp949", "euc-kr"):
+        try: text = raw.decode(enc); break
+        except UnicodeDecodeError: continue
+    if text is None: text = raw.decode("utf-8", "replace")
+    rows = list(csv.reader([l for l in text.splitlines() if l.strip() and not l.lstrip().startswith("#")]))
+    if not rows: return []
+    head = [h.strip().lower() for h in rows[0]]
+    def col(key):
+        for a in CSV_ALIASES[key]:
+            if a in head: return head.index(a)
+        return -1
+    ix = {k: col(k) for k in CSV_ALIASES}
+    if ix["root"] < 0:  # no header: assume 장비명, NAS경로, 폴더, 사용, 메모
+        ix = {"name": 0, "root": 1, "sub": 2, "on": 3, "memo": 4}; body = rows
+    else: body = rows[1:]
+    out = []
+    for r in body:
+        g = lambda k: r[ix[k]].strip() if 0 <= ix[k] < len(r) else ""
+        if not g("root"): continue
+        on = g("on").upper() not in ("N", "NO", "0", "FALSE", "X", "아니오")
+        out.append({"name": g("name"), "root": g("root"), "sub": g("sub"), "on": on, "memo": g("memo")})
+    return out
+
+
+def devices_from_csv(cfg):
+    """Resolve CSV rows to device folders. Unreachable entries are logged and skipped."""
+    devs = []
+    for row in read_devices_csv(cfg["devices_csv"]):
+        if not row["on"]: continue
+        root = row["root"]
+        root = root.rstrip("\\/") + os.sep if re.fullmatch(r"[A-Za-z]:\\?", root) else root
+        sub = row["sub"]
+        if sub in ("*", "auto", "AUTO"):
+            found = _discover_under(root, cfg)
+            if not found: log(f"[건너뜀] {row['name'] or root}: NAS 접근 불가 또는 장비 폴더 없음 ({root})")
+            devs.extend(found); continue
+        path = os.path.join(root, sub) if sub else root
+        if not os.path.isdir(os.path.join(path, cfg["report_dir"])):
+            log(f"[건너뜀] {row['name'] or sub or root}: Report 폴더 없음/접근 불가 ({path})"); continue
+        devs.append({"name": row["name"] or sub or os.path.basename(path.rstrip("\\/")) or path, "path": path})
+    return _dedupe_sort(devs)
+
+
+def _discover_under(root, cfg):
+    if not os.path.isdir(root): return []
+    if os.path.isdir(os.path.join(root, cfg["report_dir"])):
+        return [{"name": os.path.basename(root.rstrip("\\/")) or root, "path": root}]
+    out = []
+    try:
+        for e in os.scandir(root):
+            if e.is_dir() and os.path.isdir(os.path.join(e.path, cfg["report_dir"])): out.append({"name": e.name, "path": e.path})
+    except OSError as ex:
+        log(f"[건너뜀] {root}: {ex}")
+    return out
+
+
+def _dedupe_sort(devs):
+    seen, uniq = set(), []  # same folder listed twice (explicit row + "*" row): the first row wins
+    for d in devs:
+        key = os.path.normcase(os.path.normpath(d["path"]))
+        if key in seen: continue
+        seen.add(key); uniq.append(d)
+    devs = uniq
+    names = {}
+    for d in devs: names[d["name"]] = names.get(d["name"], 0) + 1
+    for d in devs:  # duplicate names across shares: prefix with the share (drive letter or host)
+        if names[d["name"]] > 1:
+            share = d["path"].split(os.sep)[0] or d["path"][:2]
+            d["name"] = f"{share} {d['name']}"
+    devs.sort(key=lambda d: [int(t) if t.isdigit() else t.lower() for t in re.split(r"(\d+)", d["name"])])
+    return devs
+
+
+# ----------------------------------------------------------------------------- discovery (fallback when no CSV)
 def discover_devices(cfg):
     """Each NAS root either IS a device folder (has Report/) or CONTAINS device folders. One listing per root, no recursion."""
     devs, names = [], {}
@@ -200,8 +287,11 @@ def collect(cfg, full=False):
             with open(cfg["cache_file"], "r", encoding="utf-8") as f: cache = json.load(f)
         except Exception as e:  # noqa
             log(f"캐시 읽기 실패, 새로 시작: {e}")
-    devs = discover_devices(cfg)
-    log(f"장비 {len(devs)}대 발견: {', '.join(d['name'] for d in devs)}")
+    if os.path.isfile(cfg.get("devices_csv") or ""):
+        devs = devices_from_csv(cfg); log(f"devices.csv 기준 장비 {len(devs)}대: {', '.join(d['name'] for d in devs)}")
+    else:
+        log(f"devices.csv 가 없어 nas_roots 를 자동 탐색합니다 ({cfg.get('devices_csv')})")
+        devs = discover_devices(cfg); log(f"장비 {len(devs)}대 발견: {', '.join(d['name'] for d in devs)}")
     reports, dev_meta, errors, n_new = cache["reports"], [], [], 0
     for d in devs:
         dm = {"name": d["name"], "note": d["path"], "reports": 0, "found": 0, "error": ""}
@@ -275,7 +365,7 @@ def write_html(cfg, rows, dev_meta, errors, started):
 #    retry once without verification;
 #  * download the branch zip, stage a verified tree, then swap files with .bak rollback;
 #  * a git checkout (developer run) never self-updates.
-UPDATE_FILES = ["aoi_collect.py", "template.html", "run_collect.bat", "config.example.json", "README.md"]
+UPDATE_FILES = ["aoi_collect.py", "template.html", "run_collect.bat", "config.example.json", "devices.example.csv", "README.md"]
 _last_error = ""
 
 
