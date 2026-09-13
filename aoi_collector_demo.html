@@ -56,6 +56,9 @@ button{font:inherit;color:inherit}
 .brand .logo svg{width:16px;height:16px}
 .pill{display:inline-flex;align-items:center;gap:6px;padding:3px 10px;border-radius:999px;font-size:12px;font-weight:600;background:var(--accent-soft);color:var(--accent-2);white-space:nowrap}
 .pill.live{background:var(--good-soft);color:var(--good)}
+.pill.stale{background:var(--warn-soft);color:var(--warn)}
+.upd{display:flex;gap:10px;align-items:center;padding:8px 14px;margin:-6px 0 14px;border-radius:10px;background:var(--accent-soft);color:var(--accent-2);font-size:13px}
+.upd a{color:inherit;font-weight:600}
 .grow{flex:1}
 .daynav{display:flex;align-items:center;gap:6px}
 .daynav .d{font-family:var(--display);font-size:18px;font-weight:600;min-width:150px;text-align:center}
@@ -240,6 +243,7 @@ details.adv summary{cursor:pointer;color:var(--accent-2);font-size:13px}
 </nav>
 
 <main class="main">
+  <div class="upd" id="upd" hidden></div>
   <!-- ================= HOME ================= -->
   <section class="view on" id="v-home">
     <div class="strip-sum" id="homeSum"></div>
@@ -257,7 +261,7 @@ details.adv summary{cursor:pointer;color:var(--accent-2);font-size:13px}
     <div class="card detail" id="detail" hidden>
       <div class="dh">
         <h2 id="detTitle"></h2>
-        <div class="legend"><span><i class="sw" style="background:var(--run)"></i>검사</span><span><i class="sw" style="background:var(--err)"></i>오류·정지</span><span><i class="sw" style="background:var(--off)"></i>미가동</span></div>
+        <div class="legend"><span><i class="sw" style="background:var(--run)"></i>Lot 검사 (막대 하나 = Lot 하나)</span><span><i class="sw" style="background:var(--err)"></i>오류 Wafer·정지</span><span><i class="sw" style="background:var(--off)"></i>미가동</span></div>
         <button class="btn ghost" onclick="selectDev(null)" aria-label="닫기">닫기 ✕</button>
       </div>
       <div class="db"><div id="detTl"></div><div class="errs" id="detErrs"></div></div>
@@ -330,6 +334,7 @@ const COLS=["device","report_rank","equipment","process_code","report_lot","lot"
 const INI_KEYS={Recipe:["Name"],AutoCycleInfo:["Machine","Operator","WaferStartTime","WaferEndTime","BatchStartTime","OCRID","ActiveStation","ActiveSlot","FillID","CarrierID","UseLot","UseWaferID"],BatchInfo:["GlobalLotId","OperatorId"]};
 const MON={jan:0,feb:1,mar:2,apr:3,may:4,jun:5,jul:6,aug:7,sep:8,oct:9,nov:10,dec:11};
 const FS=!!window.showDirectoryPicker;
+const APP_VERSION="2026.09.13.1";const UPDATE_BASE="https://raw.githubusercontent.com/king-taek/AOI-capacity/main/";
 const DAY=86400000;
 const ERR_KO={ID_READ_ERROR:"Wafer ID 인식 실패",SCAN_ERROR:"스캔 오류",USER_ABORT:"사용자 중단",ABORTED:"중단됨",OTHER:"기타 오류"};
 const ERR_TXT={USER_ABORT:"Aborted. Wafer aborted by user.",ABORTED:"Aborted.",SCAN_ERROR:"Scan Error: Scan2d optic is not valid on machine.",ID_READ_ERROR:"Failed to read wafer id. Reading error = . Aborted."};
@@ -525,8 +530,11 @@ const periodName={day:"일",week:"주",month:"월"};
 /* ---------- init / day nav ---------- */
 function init(){D=build();const days=dataDays();day=days[days.length-1]||todayKey();selDev=null;ui.cmpAnchor=null;
   $("#dayPick").min=days[0]||"";$("#dayPick").max=todayKey()>day?todayKey():day;
-  $("#modeTxt").textContent=meta.mode==="live"?"실제 수집 · "+meta.generated:meta.mode==="saved"?"저장된 결과 · "+meta.generated:"데모 데이터 · 장비 "+devNames.length+"대";
-  $("#modePill").classList.toggle("live",meta.mode==="live");
+  let modeTxt=meta.mode==="live"?"실제 수집 · "+meta.generated:meta.mode==="saved"?"저장된 결과 · "+meta.generated:meta.mode==="auto"?"자동 수집 · "+meta.generated:"데모 데이터 · 장비 "+devNames.length+"대";
+  if(meta.mode==="auto"&&meta.generated_iso){const age=(Date.now()-new Date(meta.generated_iso))/60000;modeTxt+=age<60?` (${Math.round(age)}분 전)`:` (${(age/60).toFixed(1)}시간 전)`;$("#modePill").classList.toggle("stale",age>120);}
+  $("#modeTxt").textContent=modeTxt;$("#modePill").title=meta.mode==="auto"?"Python 수집기가 마지막으로 이 파일을 만든 시각. 2시간 이상 지나면 수집기 상태를 확인하세요.":"";
+  $("#modePill").classList.toggle("live",meta.mode==="live"||meta.mode==="auto");
+  $("#footTxt").innerHTML=`정확 경로만 확인 · 재귀 검색 없음<br>원본 Report / INI 수정 없음${meta.version?`<br>v${esc(meta.version)}`:APP_VERSION?`<br>v${APP_VERSION}`:""}`;checkUpdate();
   $("#trendDev").innerHTML='<option value="">전체 평균</option>'+devNames.map(n=>`<option value="${esc(n)}">${esc(n)}</option>`).join("");
   $("#thUtil").value=th.util;$("#thErr").value=th.err;renderAll();}
 function setDay(k){day=k;renderAll();}
@@ -585,15 +593,22 @@ function renderDetail(){
   s+=`<rect x="${L}" y="${barY}" width="${W-L-R}" height="${barH}" fill="var(--nodata)" rx="3"/>`;
   if(m.hasData)s+=`<rect x="${L}" y="${barY}" width="${(x(m.partial?Math.min(now,a+DAY):a+DAY)-L).toFixed(1)}" height="${barH}" fill="var(--off)" rx="3"/>`;
   for(let h=0;h<=24;h+=2){const xx=x(a+h*3.6e6);s+=`<line class="grid" x1="${xx.toFixed(1)}" x2="${xx.toFixed(1)}" y1="${barY+barH+4}" y2="${barY+barH+10}"/><text x="${xx.toFixed(1)}" y="${barY+barH+26}" text-anchor="middle">${p2(h)}</text>`;}
+  /* Lot blocks: consecutive wafers of the same lot (gap under 10 min) become one bar */
+  const lots=[];const ws=m.items.filter(i=>i.kind!=="stop").sort((p,q)=>p.s-q.s);
+  for(const it of ws){const L=lots[lots.length-1];if(L&&L.lot===it.g.r.lot&&it.s-L.e<=600000){L.e=Math.max(L.e,it.e);L.n++;L.run+=it.kind==="run"?(it.e-it.s):0;if(it.kind==="err")L.err++;}else lots.push({lot:it.g.r.lot,recipe:it.g.r.recipe,s:it.s,e:it.e,n:1,run:it.kind==="run"?(it.e-it.s):0,err:it.kind==="err"?1:0});}
+  m.lots=lots;
   m.items.filter(i=>i.kind==="stop").forEach(it=>{s+=`<rect class="seg" data-i="${m.items.indexOf(it)}" x="${x(it.s).toFixed(1)}" y="${barY}" width="${Math.max(1,x(it.e)-x(it.s)).toFixed(1)}" height="${barH}" fill="var(--err)" opacity=".45"/>`;});
-  m.items.filter(i=>i.kind!=="stop").forEach(it=>{s+=`<rect class="seg" tabindex="0" data-i="${m.items.indexOf(it)}" x="${x(it.s).toFixed(1)}" y="${barY}" width="${Math.max(1.5,x(it.e)-x(it.s)).toFixed(1)}" height="${barH}" fill="${it.kind==="err"?"var(--err)":"var(--run)"}"/>`;});
+  lots.forEach((L,i)=>{s+=`<rect class="seg lot" tabindex="0" data-l="${i}" x="${x(L.s).toFixed(1)}" y="${barY}" width="${Math.max(2,x(L.e)-x(L.s)).toFixed(1)}" height="${barH}" fill="var(--run)" opacity="${i%2?.72:1}" rx="1"/>`;const w=x(L.e)-x(L.s);if(w>46)s+=`<text x="${(x(L.s)+4).toFixed(1)}" y="${barY+barH/2+4}" fill="var(--accent-ink)" style="font-size:11px;font-weight:600;pointer-events:none">${esc(L.lot.length>10?L.lot.slice(0,9)+"…":L.lot)}</text>`;});
+  m.items.filter(i=>i.kind==="err").forEach(it=>{s+=`<rect class="seg" tabindex="0" data-i="${m.items.indexOf(it)}" x="${x(it.s).toFixed(1)}" y="${barY}" width="${Math.max(2,x(it.e)-x(it.s)).toFixed(1)}" height="${barH}" fill="var(--err)"/>`;});
   if(m.partial)s+=`<line class="now" x1="${x(now).toFixed(1)}" x2="${x(now).toFixed(1)}" y1="${barY-8}" y2="${barY+barH+8}"/><text x="${x(now).toFixed(1)}" y="${barY-10}" text-anchor="middle" fill="var(--accent-2)">지금</text>`;
   s+="</svg>";$("#detTl").innerHTML=s;
-  bindTips($("#detTl"),"rect.seg",el=>{const it=m.items[+el.dataset.i],r=it.g.r;if(it.kind==="stop")return`<b>오류 후 정지 (추정)</b> · ${fmtSec((it.e-it.s)/1000)}<br>${hm(new Date(it.s))} → ${hm(new Date(it.e))}<br><span class="k">${esc(r.lot)} / ${esc(r.wafer_id)} 오류 이후 다음 Wafer 시작까지</span>`;
+  bindTips($("#detTl"),"rect.seg",el=>{if(el.dataset.l!=null){const L=m.lots[+el.dataset.l];return`<b>Lot ${esc(L.lot)}</b> · ${esc(L.recipe)}<br>${hm(new Date(L.s))} → ${hm(new Date(L.e))} · ${fmtSec((L.e-L.s)/1000)}<br>Wafer ${L.n}장 · 검사 ${fmtSec(L.run/1000)}${L.err?` · <span style="color:var(--crit-ink)">오류 ${L.err}건</span>`:""}`;}
+    const it=m.items[+el.dataset.i],r=it.g.r;if(it.kind==="stop")return`<b>오류 후 정지 (추정)</b> · ${fmtSec((it.e-it.s)/1000)}<br>${hm(new Date(it.s))} → ${hm(new Date(it.e))}<br><span class="k">${esc(r.lot)} / ${esc(r.wafer_id)} 오류 이후 다음 Wafer 시작까지</span>`;
     return`<b>${esc(r.lot)} / ${esc(r.wafer_id)}</b><br>${hm(new Date(it.g.s))} → ${hm(new Date(it.g.e))} · ${fmtSec((it.g.e-it.g.s)/1000)}<br>${it.kind==="err"?`<span style="color:var(--crit-ink)">${ERR_KO[r.norm_status]||"오류"}</span> · ${esc(r.status)}`:`정상 검사 · ${esc(r.recipe)}`}`;});
-  $("#detTl").querySelectorAll("rect.seg").forEach(el=>el.onclick=()=>{const it=m.items[+el.dataset.i];const idx=m.errors.findIndex(e=>e.r===it.g.r);if(idx>=0)hlSeg(idx);});
-  $("#detErrs").innerHTML=m.errors.length?`<table class="tbl"><thead><tr><th>시각</th><th>Lot / Wafer</th><th>오류</th><th class="r">정지 시간 (추정)</th><th>장비 메시지</th></tr></thead><tbody>${m.errors.map((e,i)=>`<tr class="click" data-e="${i}" onclick="hlSeg(${i})"><td class="num">${e.t?hm(new Date(e.t)):"–"}${e.noTime?' <span class="chip mute" title="INI가 없어 Batch 시작 시각으로 표시">Batch 시작</span>':""}</td><td class="mono">${esc(e.r.lot)} / ${esc(e.r.wafer_id)}</td><td><span class="chip crit">${ERR_KO[e.r.norm_status]||"오류"}</span></td><td class="r">${e.open?'<span class="chip warn">복구 기록 없음</span>':e.stop!=null?fmtSec(e.stop):"–"}</td><td class="faint">${esc(e.r.status)}</td></tr>`).join("")}</tbody></table><p class="faint" style="font-size:12px;margin-top:8px">정지 시간은 오류 Wafer 종료부터 다음 Wafer 시작까지의 공백으로 추정한 값입니다. 장비 이벤트 로그가 아닙니다.</p>`
-    :(m.hasData?'<p class="faint" style="font-size:13px;padding:6px 0">이 날은 오류가 없습니다.</p>':'<p class="faint" style="font-size:13px;padding:6px 0">이 날은 데이터가 없습니다.</p>');
+  $("#detTl").querySelectorAll("rect.seg").forEach(el=>el.onclick=()=>{if(el.dataset.l!=null)return;const it=m.items[+el.dataset.i];const idx=m.errors.findIndex(e=>e.r===it.g.r);if(idx>=0)hlSeg(idx);});
+  const lotTbl=m.lots.length?`<details style="margin:6px 0 10px"><summary style="cursor:pointer;color:var(--accent-2);font-size:13px">Lot ${m.lots.length}개 목록</summary><table class="tbl" style="margin-top:6px"><thead><tr><th>Lot</th><th>Recipe</th><th>시작</th><th>종료</th><th class="r">소요</th><th class="r">Wafer</th><th class="r">검사</th><th class="r">오류</th></tr></thead><tbody>${m.lots.map(L=>`<tr><td class="mono">${esc(L.lot)}</td><td>${esc(L.recipe)}</td><td class="num">${hm(new Date(L.s))}</td><td class="num">${hm(new Date(L.e))}</td><td class="r">${fmtSecS((L.e-L.s)/1000)}</td><td class="r">${L.n}</td><td class="r">${fmtSecS(L.run/1000)}</td><td class="r">${L.err?`<span class="chip crit">${L.err}</span>`:0}</td></tr>`).join("")}</tbody></table></details>`:"";
+  $("#detErrs").innerHTML=lotTbl+(m.errors.length?`<table class="tbl"><thead><tr><th>시각</th><th>Lot / Wafer</th><th>오류</th><th class="r">정지 시간 (추정)</th><th>장비 메시지</th></tr></thead><tbody>${m.errors.map((e,i)=>`<tr class="click" data-e="${i}" onclick="hlSeg(${i})"><td class="num">${e.t?hm(new Date(e.t)):"–"}${e.noTime?' <span class="chip mute" title="INI가 없어 Batch 시작 시각으로 표시">Batch 시작</span>':""}</td><td class="mono">${esc(e.r.lot)} / ${esc(e.r.wafer_id)}</td><td><span class="chip crit">${ERR_KO[e.r.norm_status]||"오류"}</span></td><td class="r">${e.open?'<span class="chip warn">복구 기록 없음</span>':e.stop!=null?fmtSec(e.stop):"–"}</td><td class="faint">${esc(e.r.status)}</td></tr>`).join("")}</tbody></table><p class="faint" style="font-size:12px;margin-top:8px">정지 시간은 오류 Wafer 종료부터 다음 Wafer 시작까지의 공백으로 추정한 값입니다. 장비 이벤트 로그가 아닙니다.</p>`
+    :(m.hasData?'<p class="faint" style="font-size:13px;padding:6px 0">이 날은 오류가 없습니다.</p>':'<p class="faint" style="font-size:13px;padding:6px 0">이 날은 데이터가 없습니다.</p>'));
   window._m=m;}
 function hlSeg(i){const m=window._m;const e=m.errors[i];$("#detErrs").querySelectorAll("tr.hl").forEach(t=>t.classList.remove("hl"));const tr=$("#detErrs").querySelector(`tr[data-e="${i}"]`);if(tr){tr.classList.add("hl");tr.scrollIntoView({block:"nearest"});}$("#detTl").querySelectorAll("rect.hl").forEach(t=>t.classList.remove("hl"));const idx=m.items.findIndex(it=>it.g.r===e.r&&it.kind!=="stop");if(idx>=0)$("#detTl").querySelector(`rect[data-i="${idx}"]`).classList.add("hl");}
 
@@ -642,6 +657,10 @@ function renderCompare(){
   $("#cmpNote").textContent=`${n===1?fmtDay(day):curKeys[0].slice(5).replace("-","/")+" ~ "+fmtDay(day)} · 전체 평균 ${pct(f.util)} (이전 ${pct(fp.util)}) · 이전 기간: ${n===1?"전일":"직전 "+n+"일"}`;
   $("#cmpBody").innerHTML=list.map((x,i)=>`<tr class="click" onclick="selDev='${esc(x.name)}';go('home');renderAll();" title="클릭하면 홈에서 이 장비의 타임라인을 봅니다"><td class="r faint">${i+1}</td><td><b>${esc(x.name)}</b>${x.c.hasData&&(x.c.util<th.util||x.c.nErr>=th.err*n)?' <span class="chip crit">주의</span>':""}</td><td><div style="display:flex;flex-direction:column;gap:2px"><span class="hbar" style="width:${x.c.util==null?0:x.c.util.toFixed(1)}%"></span><span class="hbar prev" style="width:${x.p.util==null?0:x.p.util.toFixed(1)}%"></span></div></td><td class="r"><b>${x.c.util==null?'<span class="faint">데이터 없음</span>':pct(x.c.util)}</b></td><td class="r muted">${pct(x.p.util)}</td><td class="r">${deltaHtml(x.c.util,x.p.util)}</td><td class="r">${x.c.nErr?`<span class="chip crit">${x.c.nErr}</span>`:0}</td><td class="r">${fmtSecS(x.c.stop+x.c.err)}</td></tr>`).join("")||'<tr><td colspan="8" class="empty">데이터 없음</td></tr>';
 }
+
+/* ---------- GitHub version check (silent when offline) ---------- */
+let _updChecked=false;
+async function checkUpdate(){if(_updChecked)return;_updChecked=true;try{const r=await fetch(UPDATE_BASE+"version.json",{cache:"no-store"});if(!r.ok)return;const v=await r.json();const cur=meta.version||APP_VERSION;if(String(v.version)!==String(cur)){const el=$("#upd");el.hidden=false;el.innerHTML=`새 버전 v${esc(v.version)}이 있습니다 (현재 v${esc(cur)}). ${meta.mode==="auto"?"수집기가 다음 실행 때 자동으로 갱신합니다.":`<a href="${UPDATE_BASE}aoi_collector_demo.html" download="aoi_collector_demo.html">최신 파일 내려받기</a>`}${v.note?` · ${esc(v.note)}`:""}`;}}catch(e){}}
 
 /* ---------- save ---------- */
 async function writeOut(name,blob,accept){

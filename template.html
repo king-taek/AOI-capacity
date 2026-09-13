@@ -1,0 +1,681 @@
+<!doctype html>
+<html lang="ko" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>AOI Capacity</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Outfit:wght@500;600;700&family=DM+Sans:wght@400;500;600&display=swap" media="print" onload="this.media='all'">
+<style>
+:root{
+  color-scheme:dark;
+  --bg:#0F1319; --surface:#141920; --surface-2:#1A2130; --raise:#1E2838;
+  --ink:#E4EEF8; --ink-2:#8AAEC8; --ink-3:#5C7086; --line:#1E3050; --line-2:#2A4060;
+  --accent:#4A9EE8; --accent-2:#7EC8F0; --accent-ink:#0F1319; --accent-soft:#0D2A44;
+  --run:#4A9EE8; --err:#E85A5A; --off:#243040; --nodata:#182030; --prev:#3A4A60;
+  --good:#3DCC8E; --good-soft:#0F2E24; --warn:#E0A82E; --warn-soft:#332608; --crit:#E85A5A; --crit-ink:#F08080; --crit-soft:#3A1818;
+  --display:"Outfit","Segoe UI","Malgun Gothic",system-ui,sans-serif;
+  --sans:"DM Sans","Segoe UI","Malgun Gothic","Apple SD Gothic Neo",system-ui,sans-serif;
+  --mono:"Cascadia Mono","Consolas",ui-monospace,monospace;
+  --shadow:0 2px 6px rgba(0,0,0,.35),0 12px 32px rgba(0,0,0,.35);
+  --glow:0 0 0 1px var(--line-2),0 8px 30px rgba(74,158,232,.14);
+  --silk:cubic-bezier(.16,1,.3,1);
+}
+:root[data-theme="light"]{
+  color-scheme:light;
+  --bg:#f2f5f9; --surface:#ffffff; --surface-2:#f7f9fc; --raise:#e9eef5;
+  --ink:#0f1720; --ink-2:#4b5865; --ink-3:#7a8794; --line:#dde3ea; --line-2:#c6d0dc;
+  --accent:#2A6AAA; --accent-2:#4A9EE8; --accent-ink:#ffffff; --accent-soft:#e1eefb;
+  --run:#2A6AAA; --err:#d64545; --off:#d3dbe5; --nodata:#eef2f7; --prev:#b9c4d2;
+  --good:#1f9e6a; --good-soft:#dff4ea; --warn:#d99a12; --warn-soft:#fff1cf; --crit:#d64545; --crit-ink:#a02525; --crit-soft:#fbe3e3;
+  --shadow:0 1px 2px rgba(15,23,32,.06),0 8px 24px rgba(15,23,32,.08);
+  --glow:0 0 0 1px var(--line),0 8px 24px rgba(42,106,170,.10);
+}
+*{box-sizing:border-box}
+html,body{height:100%}
+body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.5 var(--sans);-webkit-font-smoothing:antialiased}
+h1,h2,h3{margin:0;font-family:var(--display)}
+h2{font-size:16px;font-weight:600;letter-spacing:-.01em}
+p{margin:0}
+button{font:inherit;color:inherit}
+.num{font-variant-numeric:tabular-nums}
+.mono{font-family:var(--mono);font-size:.92em}
+.faint{color:var(--ink-3)}
+.muted{color:var(--ink-2)}
+:focus-visible{outline:2px solid var(--accent-2);outline-offset:2px}
+@media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+::-webkit-scrollbar{width:10px;height:10px}::-webkit-scrollbar-thumb{background:var(--line-2);border-radius:5px;border:2px solid var(--bg)}::-webkit-scrollbar-track{background:transparent}
+.btn,.card,.input,.nav{transition:background .35s var(--silk),border-color .35s var(--silk),transform .5s var(--silk),box-shadow .5s var(--silk),color .35s var(--silk)}
+
+/* shell */
+.app{display:grid;grid-template-columns:210px 1fr;grid-template-rows:60px 1fr;height:100vh}
+.top{grid-column:1/-1;display:flex;align-items:center;gap:14px;padding:0 20px;background:rgba(20,25,32,.85);backdrop-filter:blur(16px);border-bottom:1px solid var(--line);z-index:5}
+:root[data-theme="light"] .top{background:rgba(255,255,255,.85)}
+.brand{display:flex;align-items:center;gap:10px;font-family:var(--display);font-weight:700;letter-spacing:-.02em;font-size:17px;width:180px}
+.brand .logo{width:28px;height:28px;border-radius:8px;background:var(--accent);display:grid;place-items:center;box-shadow:0 0 18px rgba(74,158,232,.35)}
+.brand .logo svg{width:16px;height:16px}
+.pill{display:inline-flex;align-items:center;gap:6px;padding:3px 10px;border-radius:999px;font-size:12px;font-weight:600;background:var(--accent-soft);color:var(--accent-2);white-space:nowrap}
+.pill.live{background:var(--good-soft);color:var(--good)}
+.pill.stale{background:var(--warn-soft);color:var(--warn)}
+.upd{display:flex;gap:10px;align-items:center;padding:8px 14px;margin:-6px 0 14px;border-radius:10px;background:var(--accent-soft);color:var(--accent-2);font-size:13px}
+.upd a{color:inherit;font-weight:600}
+.grow{flex:1}
+.daynav{display:flex;align-items:center;gap:6px}
+.daynav .d{font-family:var(--display);font-size:18px;font-weight:600;min-width:150px;text-align:center}
+.daynav .today{font-size:11px;font-weight:600;color:var(--good);letter-spacing:.06em;margin-left:4px}
+.side{background:var(--surface);border-right:1px solid var(--line);padding:14px 10px;display:flex;flex-direction:column;gap:2px}
+.nav{display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:8px;border:0;background:none;text-align:left;width:100%;cursor:pointer;color:var(--ink-2);font-size:14px}
+.nav:hover{background:var(--raise);color:var(--ink);transform:translateX(2px)}
+.nav[aria-current="page"]{background:var(--accent-soft);color:var(--accent-2);font-weight:600;box-shadow:inset 2px 0 0 var(--accent)}
+:root[data-theme="light"] .nav[aria-current="page"]{color:var(--accent)}
+.nav svg{width:17px;height:17px;flex:none}
+.nav .sub{display:block;font-size:11px;font-weight:400;color:var(--ink-3);margin-top:1px}
+.side .foot{margin-top:auto;padding:10px 12px;font-size:11.5px;color:var(--ink-3);line-height:1.5}
+.main{overflow:auto;padding:20px 24px 80px}
+.view{display:none;max-width:1360px;margin:0 auto}
+.view.on{display:block;animation:silk-in .6s var(--silk)}
+@keyframes silk-in{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:none}}
+@media (max-width:820px){.app{grid-template-columns:1fr}.side{display:none}.brand{width:auto}.daynav .d{min-width:0;font-size:15px}.main{padding:14px}}
+
+/* controls */
+.btn{display:inline-flex;align-items:center;gap:7px;padding:7px 12px;border-radius:8px;border:1px solid var(--line-2);background:var(--surface);cursor:pointer;font-weight:500;font-size:13px;white-space:nowrap}
+.btn:hover{background:var(--raise);transform:translateY(-1px)}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-ink);font-weight:600}
+.btn.primary:hover{box-shadow:0 6px 20px rgba(74,158,232,.35)}
+.btn.ghost{border-color:transparent;background:none}
+.btn:disabled{opacity:.4;cursor:not-allowed;transform:none;box-shadow:none}
+.btn svg{width:15px;height:15px}
+.btn.icon{padding:7px}
+.input,select.input{padding:7px 10px;border:1px solid var(--line-2);border-radius:8px;background:var(--surface);color:var(--ink);font:inherit;font-size:13px;min-width:0}
+.input:focus{border-color:var(--accent);outline:none;box-shadow:0 0 0 3px var(--accent-soft)}
+input[type=date].input{font-family:var(--mono);font-size:12.5px}
+textarea.input{width:100%;min-height:110px;font-family:var(--mono);font-size:12.5px;resize:vertical}
+.seg{display:inline-flex;border:1px solid var(--line-2);border-radius:8px;overflow:hidden}
+.seg button{border:0;background:var(--surface);padding:6px 11px;font-size:12.5px;cursor:pointer;color:var(--ink-2)}
+.seg button+button{border-left:1px solid var(--line-2)}
+.seg button:hover{background:var(--raise);color:var(--ink)}
+.seg button[aria-pressed="true"]{background:var(--accent-soft);color:var(--accent-2);font-weight:600}
+:root[data-theme="light"] .seg button[aria-pressed="true"]{color:var(--accent)}
+.toolbar{display:flex;gap:8px 14px;align-items:center;flex-wrap:wrap;margin:0 0 14px}
+.toolbar .lbl{font-size:11.5px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-3)}
+.toolbar .sp{flex:1}
+.sec{display:flex;align-items:baseline;justify-content:space-between;gap:12px;margin:22px 0 12px;flex-wrap:wrap}
+.sec .sub{font-size:12.5px;color:var(--ink-3)}
+.legend{display:flex;flex-wrap:wrap;gap:6px 16px;font-size:12px;color:var(--ink-2)}
+.sw{display:inline-block;width:10px;height:10px;border-radius:2px;vertical-align:-1px;margin-right:5px}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:14px;position:relative}
+.empty{padding:30px;text-align:center;color:var(--ink-3);font-size:13px}
+.chip{display:inline-flex;align-items:center;gap:4px;padding:1px 8px;border-radius:999px;font-size:11.5px;font-weight:600;white-space:nowrap}
+.chip.crit{background:var(--crit-soft);color:var(--crit-ink)}.chip.mute{background:var(--raise);color:var(--ink-2)}.chip.warn{background:var(--warn-soft);color:var(--warn)}.chip.ok{background:var(--good-soft);color:var(--good)}
+.delta{font-size:12px;font-weight:600;white-space:nowrap}
+.delta.up{color:var(--good)}.delta.dn{color:var(--crit-ink)}.delta.flat{color:var(--ink-3)}
+
+/* summary strip */
+.strip-sum{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:16px}
+.ss{padding:12px 16px}
+.ss .k{font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-3)}
+.ss .v{font-family:var(--display);font-size:26px;font-weight:700;letter-spacing:-.03em;line-height:1.15;margin-top:2px}
+.ss .v small{font-size:14px;color:var(--ink-3);font-weight:500}
+.ss .s{font-size:12px;color:var(--ink-3)}
+.ss.hero{background:linear-gradient(135deg,var(--surface),var(--surface-2))}
+.ss.hero .v{background:linear-gradient(135deg,var(--ink) 30%,var(--accent-2));-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent}
+
+/* device cards (compact, 30+) */
+.cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(196px,1fr));gap:10px}
+.dev{padding:12px 14px;cursor:pointer;display:flex;flex-direction:column;gap:7px;overflow:hidden}
+.dev:hover{transform:translateY(-2px);box-shadow:var(--glow);border-color:var(--line-2)}
+.dev.sel{border-color:var(--accent);box-shadow:var(--glow)}
+.dev.alert{border-left:3px solid var(--crit)}
+.dev .hd{display:flex;align-items:center;justify-content:space-between;gap:6px}
+.dev .name{font-family:var(--display);font-size:14.5px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.dev .st{font-size:10.5px;font-weight:600;padding:1px 7px;border-radius:999px;white-space:nowrap}
+.st.ok{background:var(--good-soft);color:var(--good)}.st.bad{background:var(--crit-soft);color:var(--crit-ink)}.st.none{background:var(--raise);color:var(--ink-3)}
+.dev .row1{display:flex;align-items:baseline;justify-content:space-between;gap:6px}
+.dev .big{font-family:var(--display);font-size:30px;font-weight:700;letter-spacing:-.04em;line-height:1}
+.dev .big small{font-size:14px;font-weight:500;color:var(--ink-3);margin-left:1px}
+.dev .big.none{color:var(--ink-3);font-size:20px}
+.strip{display:flex;height:6px;border-radius:3px;overflow:hidden;background:var(--nodata)}
+.strip i{display:block;height:100%}
+.dev .kv{display:flex;gap:12px;font-size:11.5px;color:var(--ink-3)}
+.dev .kv b{color:var(--ink-2);font-weight:600}
+.dev .kv b.err{color:var(--crit-ink)}
+
+/* tables */
+.tbl{width:100%;border-collapse:collapse;font-size:13px}
+.tbl th,.tbl td{padding:8px 10px;border-bottom:1px solid var(--line);text-align:left;white-space:nowrap;vertical-align:middle}
+.tbl th{font-size:11.5px;font-weight:600;color:var(--ink-3);letter-spacing:.02em;position:sticky;top:0;background:var(--surface);z-index:1}
+.tbl td.r,.tbl th.r{text-align:right;font-variant-numeric:tabular-nums}
+.tbl tbody tr.click{cursor:pointer}.tbl tbody tr.click:hover{background:var(--surface-2)}
+.tbl tbody tr.sel{background:var(--accent-soft)}
+.tbl tbody tr.hl{background:var(--accent-soft)}
+.hbar{display:inline-block;height:8px;border-radius:2px;background:var(--run);vertical-align:middle}
+.hbar.prev{background:var(--prev);height:4px}
+.tscroll{overflow:auto;max-height:70vh}
+
+/* detail panel */
+.detail{margin-top:14px;padding:0;overflow:hidden}
+.detail .dh{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:14px 20px;border-bottom:1px solid var(--line);flex-wrap:wrap}
+.detail .dh h2{display:flex;align-items:center;gap:10px}
+.detail .db{padding:16px 20px}
+.errs{margin-top:8px}
+
+/* charts */
+.chart{width:100%;display:block;overflow:visible}
+.chart text{font-family:var(--sans);fill:var(--ink-3);font-size:11px}
+.chart .grid{stroke:var(--line);stroke-width:1}
+.chart .axis{stroke:var(--line-2);stroke-width:1}
+.chart rect.dbar{cursor:pointer;transition:opacity .25s var(--silk)}
+.chart rect.dbar:hover,.chart rect.dbar:focus{stroke:var(--ink);stroke-width:1;outline:none}
+.chart .band{fill:var(--accent);opacity:.08}
+.chart .xl{fill:var(--ink-2)}
+.chart .xl.sel{fill:var(--accent-2);font-weight:600}
+.chart .vl{fill:var(--ink);font-size:11px;font-weight:600}
+.chart rect.seg{cursor:pointer}
+.chart rect.seg:hover,.chart rect.seg.hl{stroke:var(--ink);stroke-width:1.5}
+.chart .now{stroke:var(--accent-2);stroke-width:1;stroke-dasharray:3 3}
+.chart .avgline{stroke:var(--warn);stroke-width:1;stroke-dasharray:4 3}
+.tip{position:fixed;z-index:50;pointer-events:none;background:var(--raise);color:var(--ink);border:1px solid var(--line-2);padding:8px 10px;border-radius:8px;font-size:12px;line-height:1.45;box-shadow:var(--shadow);max-width:320px;display:none}
+.tip b{font-weight:600}.tip .k{color:var(--ink-2)}
+.toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%) translateY(20px);opacity:0;background:var(--raise);border:1px solid var(--line-2);color:var(--ink);padding:9px 14px;border-radius:10px;font-size:13px;box-shadow:var(--shadow);transition:all .5s var(--silk);z-index:60;pointer-events:none}
+.toast.on{opacity:1;transform:translateX(-50%)}
+
+/* compare cards (trend view) */
+.cmp{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+@media (max-width:900px){.cmp{grid-template-columns:1fr}}
+.cmp .card{padding:14px 18px}
+.cmp .k{font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-3)}
+.cmp .v{font-family:var(--display);font-size:34px;font-weight:700;letter-spacing:-.03em;line-height:1.1;margin:2px 0}
+.cmp .v small{font-size:15px;color:var(--ink-3);font-weight:500}
+.cmp .row{display:flex;gap:18px;font-size:12.5px;color:var(--ink-3);flex-wrap:wrap}
+.cmp .row b{color:var(--ink-2);font-weight:600}
+.cmp .card.cur{border-color:var(--accent)}
+
+/* settings */
+.nas{border:1px solid var(--line);border-radius:10px;background:var(--surface-2);padding:10px 12px;margin-bottom:8px}
+.nas .hd{display:grid;grid-template-columns:170px 1.4fr auto auto;gap:8px;align-items:center}
+.nas .hd .input{width:100%;padding:5px 8px}
+.nas .subs{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+.nas .subs label{display:inline-flex;align-items:center;gap:5px;padding:3px 9px;border-radius:999px;border:1px solid var(--line-2);font-size:12.5px;cursor:pointer;background:var(--surface)}
+.nas .subs label.off{opacity:.55}
+.nas .subs input{margin:0}
+@media (max-width:900px){.nas .hd{grid-template-columns:1fr 1fr}}
+.set{max-width:1000px}
+.set .card{padding:16px 20px;margin-bottom:14px}
+.set p.help{font-size:13px;color:var(--ink-2);margin:4px 0 12px;max-width:72ch}
+.dc{display:grid;grid-template-columns:130px 1.4fr 96px 96px auto auto;gap:8px;align-items:center;padding:8px 10px;border:1px solid var(--line);border-radius:10px;background:var(--surface-2);margin-bottom:6px}
+.dc .input{width:100%;padding:5px 8px}
+.dc .stt{font-size:12px;display:flex;align-items:center;gap:6px;white-space:nowrap}
+@media (max-width:900px){.dc{grid-template-columns:1fr 1fr}}
+.prog{height:4px;background:var(--raise);border-radius:2px;overflow:hidden;margin-top:12px}
+.prog i{display:block;height:100%;background:var(--accent);width:0;transition:width .3s var(--silk)}
+.console{font-family:var(--mono);font-size:12px;line-height:1.55;background:#0A0E14;color:#c8d3de;border:1px solid var(--line);border-radius:8px;padding:12px 14px;max-height:220px;overflow:auto;white-space:pre-wrap}
+.callout{display:flex;gap:10px;padding:10px 12px;border-radius:8px;background:var(--warn-soft);color:var(--warn);font-size:13px;line-height:1.5;margin-bottom:14px}
+.row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+details.adv{margin-top:10px}
+details.adv summary{cursor:pointer;color:var(--accent-2);font-size:13px}
+@media print{.top,.side,.toast,.tip{display:none!important}.app{display:block;height:auto}.main{overflow:visible}body{background:#fff}}
+</style>
+</head>
+<body>
+<div class="app">
+<header class="top">
+  <div class="brand"><span class="logo"><svg viewBox="0 0 16 16" fill="none" stroke="#fff" stroke-width="1.6"><circle cx="8" cy="8" r="6"/><path d="M2 8h12M8 2c-2.2 2-2.2 10 0 12M8 2c2.2 2 2.2 10 0 12"/></svg></span>AOI Capacity</div>
+  <span id="modePill" class="pill"><span id="modeTxt">데모 데이터</span></span>
+  <div class="grow"></div>
+  <div class="daynav" id="daynav">
+    <button class="btn icon" id="dPrev" title="이전 날짜 (←)" onclick="stepDay(-1)"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M10 3L5 8l5 5"/></svg></button>
+    <span class="d" id="dayTxt">–</span>
+    <button class="btn icon" id="dNext" title="다음 날짜 (→)" onclick="stepDay(1)"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M6 3l5 5-5 5"/></svg></button>
+    <input class="input" type="date" id="dayPick" title="날짜 선택">
+    <button class="btn ghost" onclick="goToday()" title="가장 최근 데이터 날짜로">최근</button>
+  </div>
+  <div class="grow"></div>
+  <button class="btn primary" id="btnRunTop" onclick="collectAll()">수집 실행</button>
+  <button class="btn icon ghost" title="밝은/어두운 테마" onclick="toggleTheme()"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M13 9.5A5.5 5.5 0 016.5 3a5.5 5.5 0 100 10 5.5 5.5 0 006.5-3.5z"/></svg></button>
+</header>
+
+<nav class="side">
+  <button class="nav" data-v="home" aria-current="page"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2 7.5L8 2l6 5.5V14H2z"/><path d="M6 14v-4h4v4"/></svg><span>홈<span class="sub">오늘 모든 장비 가동률</span></span></button>
+  <button class="nav" data-v="trend"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2 12l4-5 3 3 5-6"/><path d="M2 14h12"/></svg><span>추이<span class="sub">일 · 주 · 월 · 기간 비교</span></span></button>
+  <button class="nav" data-v="compare"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2 3h10M2 7h7M2 11h12"/></svg><span>장비 비교<span class="sub">기간별 순위와 변화</span></span></button>
+  <button class="nav" data-v="set" style="margin-top:10px"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="8" r="2.2"/><path d="M8 1.5v2M8 12.5v2M1.5 8h2M12.5 8h2M3.4 3.4l1.4 1.4M11.2 11.2l1.4 1.4M3.4 12.6l1.4-1.4M11.2 4.8l1.4-1.4"/></svg><span>설정<span class="sub">장비 · 경로 · 수집</span></span></button>
+  <div class="foot" id="footTxt">정확 경로만 확인 · 재귀 검색 없음<br>원본 Report / INI 수정 없음</div>
+</nav>
+
+<main class="main">
+  <div class="upd" id="upd" hidden></div>
+  <!-- ================= HOME ================= -->
+  <section class="view on" id="v-home">
+    <div class="strip-sum" id="homeSum"></div>
+    <div class="toolbar">
+      <span class="lbl">정렬</span>
+      <div class="seg" id="sortSeg"><button data-s="low" aria-pressed="true">가동률 낮은 순</button><button data-s="err">오류 먼저</button><button data-s="name">이름순</button></div>
+      <span class="lbl">보기</span>
+      <div class="seg" id="viewSeg"><button data-m="cards" aria-pressed="true">카드</button><button data-m="table">표</button></div>
+      <div class="sp"></div>
+      <span class="faint" style="font-size:12px" id="homeBasis"></span>
+    </div>
+    <div class="cards" id="cards"></div>
+    <div class="card" id="homeTable" hidden><div class="tscroll"><table class="tbl"><thead><tr><th>장비</th><th>가동률</th><th class="r">%</th><th class="r">전일 대비</th><th class="r">검사</th><th class="r">오류</th><th class="r">오류·정지</th><th class="r">Wafer</th></tr></thead><tbody id="homeTbody"></tbody></table></div></div>
+
+    <div class="card detail" id="detail" hidden>
+      <div class="dh">
+        <h2 id="detTitle"></h2>
+        <div class="legend"><span><i class="sw" style="background:var(--run)"></i>Lot 검사 (막대 하나 = Lot 하나)</span><span><i class="sw" style="background:var(--err)"></i>오류 Wafer·정지</span><span><i class="sw" style="background:var(--off)"></i>미가동</span></div>
+        <button class="btn ghost" onclick="selectDev(null)" aria-label="닫기">닫기 ✕</button>
+      </div>
+      <div class="db"><div id="detTl"></div><div class="errs" id="detErrs"></div></div>
+    </div>
+  </section>
+
+  <!-- ================= TREND ================= -->
+  <section class="view" id="v-trend">
+    <div class="toolbar">
+      <span class="lbl">단위</span><div class="seg" id="unitSeg"><button data-u="day" aria-pressed="true">일</button><button data-u="week">주</button><button data-u="month">월</button></div>
+      <span class="lbl">범위</span><div class="seg" id="spanSeg"></div>
+      <span class="lbl">장비</span><select class="input" id="trendDev"><option value="">전체 평균</option></select>
+      <div class="sp"></div><span class="faint" style="font-size:12px" id="trendNote"></span>
+    </div>
+    <div class="cmp" id="cmpBox" style="margin-bottom:14px"></div>
+    <div class="card" style="padding:16px 18px 8px"><div id="trendChart"></div><div class="legend" style="margin-top:6px"><span><i class="sw" style="background:var(--run)"></i>가동률</span><span><i class="sw" style="background:var(--warn);height:2px;vertical-align:3px"></i>범위 평균</span><span class="faint" style="margin-left:auto">막대를 클릭하면 그 기간이 비교 기준이 됩니다. 일 단위는 홈으로 이동합니다.</span></div></div>
+  </section>
+
+  <!-- ================= COMPARE ================= -->
+  <section class="view" id="v-compare">
+    <div class="toolbar">
+      <span class="lbl">기간</span><div class="seg" id="cmpSeg"><button data-p="1" aria-pressed="true">선택한 날</button><button data-p="7">최근 7일</button><button data-p="30">최근 30일</button></div>
+      <span class="lbl">정렬</span><div class="seg" id="cmpSort"><button data-s="high" aria-pressed="true">높은 순</button><button data-s="low">낮은 순</button><button data-s="delta">하락 큰 순</button></div>
+      <div class="sp"></div><span class="faint" style="font-size:12px" id="cmpNote"></span>
+    </div>
+    <div class="card"><div class="tscroll" style="max-height:none"><table class="tbl"><thead><tr><th class="r">#</th><th>장비</th><th style="width:42%">이번 기간 <span class="faint">(가는 막대: 이전 기간)</span></th><th class="r">가동률</th><th class="r">이전 기간</th><th class="r">변화</th><th class="r">오류</th><th class="r">정지 시간</th></tr></thead><tbody id="cmpBody"></tbody></table></div></div>
+  </section>
+
+  <!-- ================= SETTINGS ================= -->
+  <section class="view set" id="v-set">
+    <div id="fsWarn" class="callout" hidden>이 브라우저는 폴더 접근을 지원하지 않습니다. Microsoft Edge 또는 Chrome에서 열면 실제 수집이 가능합니다. 지금은 데모 데이터만 보입니다.</div>
+    <div class="card">
+      <h2>NAS 공유 폴더 <span class="faint" style="font-weight:400;font-size:13px" id="devCount"></span></h2>
+      <p class="help">Camtek NAS 공유 하나에 장비 여러 대의 폴더가 들어 있습니다. 수집할 때마다 공유 폴더를 다시 훑어 새로 생긴 장비 폴더를 자동으로 추가합니다(예: 4층에 장비가 늘어나는 경우). 공유마다 <b>폴더 선택</b>을 한 번 누르면 그 안의 장비 폴더(Report 폴더가 있는 폴더)를 자동으로 찾아 아래에 나열합니다. 네트워크 드라이브 문자(X:)나 주소(\\10.142.80.90\…) 어느 쪽으로 선택해도 됩니다. 브라우저가 선택을 기억하므로 다음부터는 수집만 누르면 됩니다.</p>
+      <div id="nasList"></div>
+      <div class="row" style="margin-top:12px">
+        <button class="btn" onclick="addNas()">NAS 추가</button>
+        <label class="row" style="font-size:13px;color:var(--ink-2)">Report 폴더명 <input class="input" id="repName" value="Report" style="width:110px" onchange="saveNas()"></label>
+        <label class="row" style="font-size:13px;color:var(--ink-2)">Scanresult 폴더명 <input class="input" id="scanName" value="Scanresult" style="width:110px" onchange="saveNas()"></label>
+        <label class="row" style="font-size:13px;color:var(--ink-2)">장비당 Report 최신 <input class="input num" id="limit" type="number" value="50" min="1" style="width:70px"> 개</label>
+        <div class="grow"></div>
+        <button class="btn primary" id="btnRun" onclick="collectAll()">실제 수집 실행</button>
+      </div>
+      <div class="prog"><i id="progBar"></i></div><div class="faint" style="font-size:12px;margin-top:6px" id="progTxt"></div>
+    </div>
+    <div class="card">
+      <h2>이상 판정 기준</h2>
+      <p class="help">홈 화면에서 이 기준에 걸린 장비를 붉게 표시하고 요약에 개수를 넣습니다.</p>
+      <div class="row"><label class="row" style="font-size:13px;color:var(--ink-2)">가동률 <input class="input num" id="thUtil" type="number" value="40" min="0" max="100" style="width:64px" onchange="saveTh();renderAll()"> % 미만</label><label class="row" style="font-size:13px;color:var(--ink-2)">또는 오류 <input class="input num" id="thErr" type="number" value="3" min="0" style="width:56px" onchange="saveTh();renderAll()"> 건 이상</label></div>
+    </div>
+    <div class="card">
+      <h2>결과 보관</h2>
+      <p class="help">수집 결과를 담은 HTML 파일로 저장하면 나중에 그 파일만 열어도 같은 화면이 보입니다.</p>
+      <div class="row"><button class="btn" onclick="saveHtml()">HTML로 저장</button><button class="btn ghost" onclick="loadDemo()">데모 데이터 다시 불러오기</button></div>
+    </div>
+    <div class="card"><h2>로그</h2><div class="console" id="log" style="margin-top:8px"></div></div>
+  </section>
+</main>
+</div>
+
+<div class="tip" id="tip"></div>
+<div class="toast" id="toast"></div>
+
+<script type="application/json" id="embedded">__DATA__</script>
+<script>
+/* ====================================================================
+   AOI Capacity - utilization dashboard (single file, no dependencies)
+   ==================================================================== */
+const COLS=["device","report_rank","equipment","process_code","report_lot","lot","wafer_id","status","norm_status","recipe","faults","scanned_dice","bad_dice","good_dice","yield","batch_start","batch_end","batch_time","report_path","ini_match","ini_path","machine","operator","wafer_start_time","wafer_end_time","wafer_duration_seconds","ini_batch_start_time","ocr_id","fill_id","carrier_id","active_station","active_slot","use_lot","use_wafer_id","global_lot_id","operator_id","ini_recipe","data_issue"];
+const INI_KEYS={Recipe:["Name"],AutoCycleInfo:["Machine","Operator","WaferStartTime","WaferEndTime","BatchStartTime","OCRID","ActiveStation","ActiveSlot","FillID","CarrierID","UseLot","UseWaferID"],BatchInfo:["GlobalLotId","OperatorId"]};
+const MON={jan:0,feb:1,mar:2,apr:3,may:4,jun:5,jul:6,aug:7,sep:8,oct:9,nov:10,dec:11};
+const FS=!!window.showDirectoryPicker;
+const APP_VERSION="2026.09.13.1";const UPDATE_BASE="https://raw.githubusercontent.com/king-taek/AOI-capacity/main/";
+const DAY=86400000;
+const ERR_KO={ID_READ_ERROR:"Wafer ID 인식 실패",SCAN_ERROR:"스캔 오류",USER_ABORT:"사용자 중단",ABORTED:"중단됨",OTHER:"기타 오류"};
+const ERR_TXT={USER_ABORT:"Aborted. Wafer aborted by user.",ABORTED:"Aborted.",SCAN_ERROR:"Scan Error: Scan2d optic is not valid on machine.",ID_READ_ERROR:"Failed to read wafer id. Reading error = . Aborted."};
+
+let rows=[],meta={},devNames=[],D=null,day=null,selDev=null;
+let ui={group:"",sort:"low",view:"cards",unit:"day",span:14,trendDev:"",cmpP:1,cmpSort:"high",cmpAnchor:null};
+let th={util:40,err:3};
+
+/* ---------- utils ---------- */
+const $=s=>document.querySelector(s);
+const esc=s=>String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const p2=n=>String(n).padStart(2,"0");
+function log(m){const l=$("#log");l.textContent+=`[${new Date().toLocaleTimeString("ko-KR",{hour12:false})}] ${m}\n`;l.scrollTop=l.scrollHeight;}
+let toastT;function toast(m){const t=$("#toast");t.textContent=m;t.classList.add("on");clearTimeout(toastT);toastT=setTimeout(()=>t.classList.remove("on"),2200);}
+function stamp(d=new Date()){return `${d.getFullYear()}-${p2(d.getMonth()+1)}-${p2(d.getDate())}_${p2(d.getHours())}${p2(d.getMinutes())}${p2(d.getSeconds())}`;}
+function parseDt(s){if(!s)return null;s=String(s).trim();
+  let m=s.match(/^(\d{1,2})-([A-Za-z]{3})-(\d{2})\s+(\d{1,2}):(\d{2}):(\d{2})\s*(AM|PM)?$/i);
+  if(m){let h=+m[4];if(m[7]){const pm=m[7].toUpperCase()==="PM";if(pm&&h<12)h+=12;if(!pm&&h===12)h=0;}return new Date(2000+ +m[3],MON[m[2].toLowerCase()],+m[1],h,+m[5],+m[6]);}
+  m=s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})\s+(\d{1,2}):(\d{2}):(\d{2})$/);if(m)return new Date(+m[3],+m[1]-1,+m[2],+m[4],+m[5],+m[6]);
+  m=s.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})$/);if(m)return new Date(+m[1],+m[2]-1,+m[3],+m[4],+m[5],+m[6]);return null;}
+function normStatus(s){const t=(s||"").trim().toLowerCase();if(t==="pass")return"PASS";if(t.includes("skip"))return"SKIPPED";if(t.includes("failed to read wafer id"))return"ID_READ_ERROR";if(t.includes("scan error"))return"SCAN_ERROR";if(t.includes("wafer aborted by user"))return"USER_ABORT";if(t.includes("abort"))return"ABORTED";return t?"OTHER":"";}
+const isErr=n=>["ID_READ_ERROR","SCAN_ERROR","USER_ABORT","ABORTED","OTHER"].includes(n);
+function fmtSec(s){if(s==null||isNaN(s))return"–";s=Math.round(s);const h=Math.floor(s/3600),m=Math.floor(s%3600/60),x=s%60;if(h)return`${h}시간 ${p2(m)}분`;if(m)return`${m}분 ${p2(x)}초`;return`${x}초`;}
+function fmtSecS(s){if(s==null||isNaN(s))return"–";s=Math.round(s);const h=Math.floor(s/3600),m=Math.floor(s%3600/60);if(h)return`${h}h ${p2(m)}m`;return`${m}m`;}
+const hm=d=>`${p2(d.getHours())}:${p2(d.getMinutes())}`;
+const dayKey=d=>`${d.getFullYear()}-${p2(d.getMonth()+1)}-${p2(d.getDate())}`;
+const keyDay=k=>{const[y,m,d]=k.split("-").map(Number);return new Date(y,m-1,d);};
+const WD=["일","월","화","수","목","금","토"];
+const fmtDay=k=>{const d=keyDay(k);return`${d.getMonth()+1}/${d.getDate()} (${WD[d.getDay()]})`;};
+const addDays=(k,n)=>{const d=keyDay(k);d.setDate(d.getDate()+n);return dayKey(d);};
+const todayKey=()=>dayKey(new Date());
+const isToday=k=>k===todayKey();
+const rowDate=r=>parseDt(r.wafer_start_time)||parseDt(r.batch_start);
+const pct=v=>v==null||isNaN(v)?"–":v.toFixed(1)+"%";
+function deltaHtml(cur,prev,suffix="p"){if(cur==null||prev==null)return'<span class="delta flat">–</span>';const d=cur-prev;if(Math.abs(d)<0.05)return'<span class="delta flat">± 0.0'+suffix+'</span>';return`<span class="delta ${d>0?"up":"dn"}">${d>0?"▲":"▼"} ${Math.abs(d).toFixed(1)}${suffix}</span>`;}
+
+/* ---------- navigation ---------- */
+function go(v){document.querySelectorAll(".nav").forEach(b=>b.setAttribute("aria-current",b.dataset.v===v?"page":"false"));document.querySelectorAll(".view").forEach(s=>s.classList.toggle("on",s.id==="v-"+v));$("#daynav").style.visibility=v==="set"||v==="trend"?"hidden":"";$(".main").scrollTop=0;if(v==="trend")renderTrend();if(v==="compare")renderCompare();}
+document.querySelectorAll(".nav").forEach(b=>b.addEventListener("click",()=>go(b.dataset.v)));
+function toggleTheme(){const r=document.documentElement;r.dataset.theme=r.dataset.theme==="light"?"dark":"light";try{localStorage.setItem("aoi.theme",r.dataset.theme);}catch(e){}}
+(function(){let t="dark";try{t=localStorage.getItem("aoi.theme")||"dark";const s=localStorage.getItem("aoi.th");if(s)th=JSON.parse(s);}catch(e){}document.documentElement.dataset.theme=t;})();
+function saveTh(){th={util:+$("#thUtil").value||0,err:+$("#thErr").value||0};try{localStorage.setItem("aoi.th",JSON.stringify(th));}catch(e){}}
+const tip=$("#tip");
+function showTip(html,ev){tip.innerHTML=html;tip.style.display="block";moveTip(ev);}
+function moveTip(ev){const w=tip.offsetWidth,h=tip.offsetHeight;let x=ev.clientX+14,y=ev.clientY+14;if(x+w>innerWidth-8)x=ev.clientX-w-14;if(y+h>innerHeight-8)y=ev.clientY-h-14;tip.style.left=x+"px";tip.style.top=y+"px";}
+function hideTip(){tip.style.display="none";}
+function bindTips(root,sel,fn){root.querySelectorAll(sel).forEach(el=>{el.addEventListener("mouseenter",ev=>showTip(fn(el),ev));el.addEventListener("mousemove",moveTip);el.addEventListener("mouseleave",hideTip);el.addEventListener("focus",()=>{const b=el.getBoundingClientRect();showTip(fn(el),{clientX:b.left+b.width/2,clientY:b.top});});el.addEventListener("blur",hideTip);});}
+function segBind(id,attr,cb){document.querySelectorAll(`#${id} button`).forEach(b=>b.onclick=()=>{document.querySelectorAll(`#${id} button`).forEach(x=>x.setAttribute("aria-pressed",x===b));cb(b.dataset[attr]);});}
+
+/* ---------- NAS / device config ----------
+   nasList: [{name, note, subs:[{name,on}], handle}] ; devices are derived from NAS sub-folders */
+let nasList=[];let devGroup={};
+const shortNas=n=>n.replace(/^camtek\s*/i,"").trim()||n;
+const REP=()=>$("#repName").value.trim()||"Report",SCAN=()=>$("#scanName").value.trim()||"Scanresult";
+function loadNas(){try{const s=localStorage.getItem("aoi.nas");nasList=s?JSON.parse(s):[];const f=JSON.parse(localStorage.getItem("aoi.folders")||"{}");if(f.rep)$("#repName").value=f.rep;if(f.scan)$("#scanName").value=f.scan;}catch(e){nasList=[];}nasList.forEach(n=>{n.handle=null;n.subs=n.subs||[];});}
+function saveNas(){try{localStorage.setItem("aoi.nas",JSON.stringify(nasList.map(({name,note,subs})=>({name,note,subs}))));localStorage.setItem("aoi.folders",JSON.stringify({rep:REP(),scan:SCAN()}));}catch(e){}}
+function devicesFromNas(){const cnt={};for(const n of nasList)for(const s of n.subs)if(s.on)cnt[s.name]=(cnt[s.name]||0)+1;const out=[];for(const n of nasList)for(const s of n.subs)if(s.on)out.push({name:cnt[s.name]>1?`${shortNas(n.name)} ${s.name}`:s.name,nas:n.name,note:(n.note?n.note.split(" (")[0]:n.name)+(s.self?"":"\\"+s.name),sub:s.name,self:!!s.self,nasRef:n});return out;}
+function renderDevs(){const devs=devicesFromNas();$("#devCount").textContent=`${nasList.length}개 공유 · 장비 ${devs.length}대`;
+  $("#nasList").innerHTML=nasList.map((n,i)=>`<div class="nas"><div class="hd">
+    <input class="input" value="${esc(n.name)}" placeholder="예: Camtek 1~7" onchange="nasList[${i}].name=this.value;saveNas();renderDevs()">
+    <input class="input mono" value="${esc(n.note)}" placeholder="예: X: (\\\\10.142.80.90)" onchange="nasList[${i}].note=this.value;saveNas();renderDevs()">
+    <span class="stt">${n.handle?'<span class="chip ok">연결됨</span>':n.subs.length?'<span class="chip warn">권한 확인 필요</span>':'<span class="chip mute">폴더 미선택</span>'}<button class="btn" ${FS?"":"disabled"} onclick="pickNas(${i})">${n.subs.length?"다시 찾기":"폴더 선택"}</button></span>
+    <button class="btn ghost" onclick="nasList.splice(${i},1);saveNas();renderDevs()">삭제</button></div>
+    ${n.subs.length?`<div class="subs">${n.subs.map((s,j)=>`<label class="${s.on?"":"off"}"><input type="checkbox" ${s.on?"checked":""} onchange="nasList[${i}].subs[${j}].on=this.checked;saveNas();renderDevs()">${esc(s.name)}${s.self?" (루트)":""}</label>`).join("")}</div>`:`<p class="faint" style="font-size:12px;margin-top:6px">폴더를 선택하면 장비 폴더를 자동으로 찾습니다.</p>`}
+  </div>`).join("")||'<p class="faint">등록된 NAS가 없습니다. "NAS 추가"를 누르세요.</p>';}
+function addNas(){nasList.push({name:"Camtek "+(nasList.length+1),note:"",subs:[],handle:null});saveNas();renderDevs();}
+async function pickNas(i){const n=nasList[i];try{n.handle=await showDirectoryPicker({mode:"read",id:"nas-"+i});}catch(e){if(e.name!=="AbortError")log(`[${n.name}] 폴더 선택 실패: ${e.message}`);renderDevs();return;}
+  await idbPut("nas:"+n.name,n.handle);n.subs=await discover(n.handle,n.subs);saveNas();renderDevs();
+  log(`[${n.name}] ${n.handle.name}: 장비 폴더 ${n.subs.length}개 발견 (${n.subs.map(s=>s.name).join(", ")})`);toast(`${n.name}: 장비 ${n.subs.length}대 발견`);}
+/* one directory listing of the share root + one existence check per sub-folder: no recursion */
+async function discover(root,prevSubs){const rep=REP();const has=async h=>{try{await h.getDirectoryHandle(rep);return true;}catch(e){return false;}};
+  if(await has(root))return[{name:root.name,on:true,self:true}];
+  const subs=[];for await(const[name,h]of root.entries()){if(h.kind==="directory"&&await has(h)){const prev=(prevSubs||[]).find(s=>s.name===name);subs.push({name,on:prev?prev.on:true});}}
+  return subs.sort((a,b)=>a.name.localeCompare(b.name,undefined,{numeric:true}));}
+function idb(){return new Promise((res,rej)=>{const r=indexedDB.open("aoi-handles",1);r.onupgradeneeded=()=>r.result.createObjectStore("h");r.onsuccess=()=>res(r.result);r.onerror=()=>rej(r.error);});}
+async function idbPut(k,v){try{const db=await idb();db.transaction("h","readwrite").objectStore("h").put(v,k);}catch(e){}}
+async function idbGet(k){try{const db=await idb();return await new Promise(res=>{const r=db.transaction("h").objectStore("h").get(k);r.onsuccess=()=>res(r.result||null);r.onerror=()=>res(null);});}catch(e){return null;}}
+async function restoreHandles(){for(const n of nasList){const h=await idbGet("nas:"+n.name);if(h)n.handle=h;}renderDevs();}
+async function ensurePerm(h){if(await h.queryPermission({mode:"read"})==="granted")return true;return(await h.requestPermission({mode:"read"}))==="granted";}
+
+/* ---------- collection (File System Access API; exact INI path only) ---------- */
+async function getDirPath(root,parts){let h=root;for(const p of parts)h=await h.getDirectoryHandle(p);return h;}
+function setProg(f,txt){$("#progBar").style.width=Math.round(f*100)+"%";$("#progTxt").textContent=txt||"";}
+async function collectAll(){
+  if(!FS){toast("Edge 또는 Chrome에서 열어야 실제 수집이 됩니다");go("set");return;}
+  let targets=devicesFromNas().filter(d=>d.nasRef.handle||d.nasRef.subs.length);
+  if(!targets.length){toast("먼저 NAS 폴더를 선택하세요");go("set");return;}
+  go("set");$("#btnRun").disabled=$("#btnRunTop").disabled=true;
+  const limit=Math.max(1,+$("#limit").value||50),rep=REP(),scan=SCAN();const out=[],errs=[],devMeta=[];const t0=performance.now();
+  for(const n of nasList){if(!n.handle){const h=await idbGet("nas:"+n.name);if(h)n.handle=h;}
+    if(n.handle&&await ensurePerm(n.handle)){const before=n.subs.map(s=>s.name).join("|");n.subs=await discover(n.handle,n.subs);const added=n.subs.filter(s=>!before.split("|").includes(s.name)).map(s=>s.name);if(added.length)log(`[${n.name}] 새 장비 폴더 발견: ${added.join(", ")}`);}}
+  saveNas();renderDevs();const targets2=devicesFromNas().filter(d=>d.nasRef.handle);targets.length=0;targets.push(...targets2);
+  for(const[di,d]of targets.entries()){
+    const dm={name:d.name,nas:d.nas,note:d.note,reports:0,found:0,error:""};const n=d.nasRef;
+    try{
+      if(!n.handle){dm.error="NAS 폴더 미선택";devMeta.push(dm);continue;}
+      if(!await ensurePerm(n.handle)){dm.error="폴더 권한 거부";devMeta.push(dm);log(`[${n.name}] 폴더 권한이 거부되었습니다.`);continue;}
+      const root=d.self?n.handle:await n.handle.getDirectoryHandle(d.sub);
+      const repDir=await root.getDirectoryHandle(rep),scanDir=await root.getDirectoryHandle(scan);
+      const files=[];for await(const[name,h]of repDir.entries()){if(h.kind==="file"&&/\.html?$/i.test(name))files.push({name,f:await h.getFile()});}
+      files.sort((a,b)=>b.f.lastModified-a.f.lastModified);const pick=files.slice(0,limit);dm.reports=pick.length;dm.found=files.length;
+      log(`[${d.name}] Report ${files.length}개 중 최신 ${pick.length}개 처리`);
+      for(let i=0;i<pick.length;i++){const{name,f}=pick[i];const rpath=`${d.note}\\${rep}\\${name}`;
+        setProg((di+i/pick.length)/targets.length,`${d.name} (${di+1}/${targets.length}) · ${i+1}/${pick.length} · ${name}`);
+        try{const rp=parseReport(name,await f.text());for(const w of rp.wafers){const r=baseRow(d.name,i+1,rp,w,rpath);await attachIni(r,scanDir,rp,w,d,scan);out.push(r);}}
+        catch(e){errs.push({device:d.name,path:rpath,error:`${e.name}: ${e.message}`});}
+        if(i%5===0)await new Promise(r=>setTimeout(r,0));}
+    }catch(e){dm.error=`${e.name}: ${e.message}`;log(`[${d.name}] ${dm.error}`);}
+    devMeta.push(dm);}
+  rows=out;meta={generated:new Date().toLocaleString("ko-KR"),mode:"live",devices:devMeta,reportErrors:errs,limit,elapsed:Math.round(performance.now()-t0)};
+  setProg(1,`완료 · 장비 ${targets.length}대 · Wafer ${rows.length}행 · Report 오류 ${errs.length}건 · ${Math.round(meta.elapsed/1000)}초`);log(`완료: 장비 ${targets.length}대, Wafer ${rows.length}행, Report 읽기 오류 ${errs.length}건, ${meta.elapsed}ms`);
+  const bad=devMeta.filter(d=>d.error);if(bad.length)log("접근 실패 장비: "+bad.map(d=>d.name+" ("+d.error+")").join(", "));
+  $("#btnRun").disabled=$("#btnRunTop").disabled=false;
+  init();go("home");toast(`수집 완료 · 장비 ${targets.length}대 · Wafer ${rows.length}행`);
+}
+function parseReport(name,html){
+  const m=name.match(/^(.+?)_(\d{4})_(.+)_(\d{1,2}-[A-Za-z]{3}-\d{2})_\((\d{2}\.\d{2}\.\d{2})\)_BatchReport\.html?$/i);
+  const rep={equipment:m?m[1]:"",process_code:m?m[2]:"",report_lot:m?m[3]:"",summary:{},wafers:[]};
+  const doc=new DOMParser().parseFromString(html,"text/html");const txt=el=>el.textContent.replace(/\s+/g," ").trim();
+  for(const tb of doc.querySelectorAll("table")){const trs=[...tb.querySelectorAll("tr")].filter(tr=>tr.closest("table")===tb);if(!trs.length)continue;
+    const head=[...trs[0].children].map(txt);const iw=head.findIndex(h=>/^wafer\s*id$/i.test(h)),il=head.findIndex(h=>/^lot$/i.test(h));
+    if(iw>=0&&il>=0){const idx=k=>head.findIndex(h=>h.toLowerCase().startsWith(k));const ix={faults:idx("fault"),scanned:idx("scanned"),bad:idx("bad"),good:idx("good"),yld:idx("yield"),pf:idx("pass"),rec:idx("recipe")};
+      for(const tr of trs.slice(1)){const c=[...tr.children].map(txt);if(c.length<=iw)continue;const g=i=>i>=0&&i<c.length?c[i]:"";
+        rep.wafers.push({lot:c[il],wafer_id:c[iw],faults:g(ix.faults),scanned_dice:g(ix.scanned),bad_dice:g(ix.bad),good_dice:g(ix.good),yield:g(ix.yld),status:g(ix.pf),recipe:g(ix.rec)});}}
+    else{for(const tr of trs){const c=[...tr.children].map(txt);for(let i=0;i+1<c.length;i+=2){const k=c[i].replace(/[:\s]+$/,"");if(k&&!(k in rep.summary))rep.summary[k]=c[i+1];}}}}
+  return rep;}
+function baseRow(dev,rank,rep,w,rpath){const s=rep.summary;const r={};COLS.forEach(c=>r[c]="");
+  Object.assign(r,{device:dev,report_rank:rank,equipment:rep.equipment,process_code:rep.process_code,report_lot:rep.report_lot,lot:w.lot,wafer_id:w.wafer_id,status:w.status,norm_status:normStatus(w.status),recipe:w.recipe||s["Recipe"]||"",faults:w.faults,scanned_dice:w.scanned_dice,bad_dice:w.bad_dice,good_dice:w.good_dice,yield:w.yield,batch_start:s["Batch Start"]||"",batch_end:s["Batch End"]||"",batch_time:s["Batch Time"]||"",report_path:rpath});return r;}
+async function attachIni(r,scanDir,rep,w,d,scan){
+  if(/^loadport/i.test(w.lot)||/^slot\s*\d+/i.test(w.wafer_id)||!w.wafer_id){r.ini_match="NO_WAFER_ID";r.data_issue="LoadPort/Slot 행이라 INI 경로를 만들 수 없음";return;}
+  const parts=[rep.equipment,rep.process_code,w.lot,w.wafer_id];r.ini_path=`${d.note}\\${scan}\\${parts.join("\\")}\\WaferInfo.ini`;
+  let fh;try{fh=await(await getDirPath(scanDir,parts)).getFileHandle("WaferInfo.ini");}catch(e){r.ini_match="NOT_FOUND";r.data_issue="예상 경로에 WaferInfo.ini 없음";return;}
+  try{const ini=parseIni(await(await fh.getFile()).text());const a=ini.AutoCycleInfo||{},b=ini.BatchInfo||{},rc=ini.Recipe||{};
+    Object.assign(r,{ini_match:"EXACT",machine:a.Machine||"",operator:a.Operator||"",wafer_start_time:a.WaferStartTime||"",wafer_end_time:a.WaferEndTime||"",ini_batch_start_time:a.BatchStartTime||"",ocr_id:a.OCRID||"",fill_id:a.FillID||"",carrier_id:a.CarrierID||"",active_station:a.ActiveStation||"",active_slot:a.ActiveSlot||"",use_lot:a.UseLot||"",use_wafer_id:a.UseWaferID||"",global_lot_id:b.GlobalLotId||"",operator_id:b.OperatorId||"",ini_recipe:rc.Name||""});
+    const st=parseDt(r.wafer_start_time),en=parseDt(r.wafer_end_time);const iss=[];
+    if(st&&en&&en>=st)r.wafer_duration_seconds=Math.round((en-st)/1000);else iss.push("Wafer 시작/종료 시각 누락 또는 역전");
+    if(r.use_lot&&r.use_lot!==w.lot)iss.push("Lot 불일치");if(r.use_wafer_id&&r.use_wafer_id!==w.wafer_id)iss.push("Wafer ID 불일치");r.data_issue=iss.join("; ");
+  }catch(e){r.ini_match="READ_ERROR";r.data_issue=`${e.name}: ${e.message}`;}}
+function parseIni(t){const o={};let sec="";for(let line of t.split(/\r?\n/)){line=line.trim();if(!line||line[0]===";"||line[0]==="#")continue;const s=line.match(/^\[(.+)\]$/);if(s){sec=s[1];o[sec]=o[sec]||{};continue;}const i=line.indexOf("=");if(i<0)continue;const k=line.slice(0,i).trim();if(INI_KEYS[sec]&&INI_KEYS[sec].includes(k))o[sec][k]=line.slice(i+1).trim();}return o;}
+
+/* ---------- demo / embedded ---------- */
+function loadDemo(){
+  const emb=JSON.parse($("#embedded").textContent);
+  if(emb.cols){rows=emb.rows.map(a=>{const o={};emb.cols.forEach((c,i)=>o[c]=a[i]);o.norm_status=o.norm_status||normStatus(o.status);return o;});meta=emb.meta||{generated:"",mode:"saved"};}
+  else{ /* compact demo: days are offsets from today, segments delta-encoded; expanded relative to the real current date */
+    rows=[];const now=Date.now();const t0=keyDay(todayKey()).getTime();const codes={2:"USER_ABORT",3:"ABORTED",4:"SCAN_ERROR",5:"ID_READ_ERROR"};
+    const iso=t=>{const d=new Date(t);return`${d.getFullYear()}-${p2(d.getMonth()+1)}-${p2(d.getDate())}T${p2(d.getHours())}:${p2(d.getMinutes())}:${p2(d.getSeconds())}`;};
+    const dupe={};emb.devs.forEach(d=>dupe[d.name]=(dupe[d.name]||0)+1);
+    for(const dv of emb.devs){const dvName=dupe[dv.name]>1?`${shortNas(dv.nas)} ${dv.name}`:dv.name;for(const[off,str]of Object.entries(dv.days)){const base=t0-off*DAY;let prev=0,lot="",rec="",wi=0;
+      for(const p of str.split(" ")){if(p[0]==="L"){[lot,rec]=emb.lots[+p.slice(1)];wi=0;continue;}const[gap,dur,code]=p.split(".").map(Number);const s=base+(prev+gap)*1000,e=s+dur*1000;prev=prev+gap+dur;if(e>now)break;wi++;
+        const ns=code?codes[code]:"PASS";rows.push({device:dvName,lot,wafer_id:`${lot.slice(0,3).toUpperCase()}${String(off).padStart(2,"0")}-${p2(wi)}`,recipe:rec,norm_status:ns,status:code?ERR_TXT[ns]:"Pass",wafer_start_time:iso(s),wafer_end_time:iso(e),batch_start:"",ini_match:"EXACT",data_issue:""});}}}
+    meta={generated:new Date().toLocaleString("ko-KR"),mode:"demo",devices:emb.devs.map(d=>({name:dupe[d.name]>1?`${shortNas(d.nas)} ${d.name}`:d.name,nas:d.nas,note:d.path}))};
+    if(!nasList.length){nasList=emb.nas.map(n=>({name:n.name,note:n.note,subs:emb.devs.filter(d=>d.nas===n.name).map(d=>({name:d.name,on:true})),handle:null}));renderDevs();}}
+  devGroup={};(meta.devices||[]).forEach(d=>{if(d.nas)devGroup[d.name]=d.nas;});
+  log(meta.mode==="demo"?`데모 데이터: 장비 ${new Set(rows.map(r=>r.device)).size}대, 최근 5주 분량을 실제 검사 패턴으로 재구성한 예시입니다.`:"저장된 수집 결과를 불러왔습니다.");init();}
+
+/* ---------- model ---------- */
+function build(){
+  devNames=[...new Set(rows.map(r=>r.device))].sort((a,b)=>a.localeCompare(b,undefined,{numeric:true}));
+  const M={};for(const n of devNames)M[n]={name:n,segs:[],errNoTime:[],cache:{}};
+  for(const r of rows){const d=M[r.device];const st=parseDt(r.wafer_start_time),en=parseDt(r.wafer_end_time);
+    if(st&&en&&en>=st)d.segs.push({s:st.getTime(),e:en.getTime(),err:isErr(r.norm_status),r});
+    else if(isErr(r.norm_status)){const b=parseDt(r.batch_start);d.errNoTime.push({t:b?b.getTime():null,r});}}
+  for(const d of Object.values(M)){d.segs.sort((a,b)=>a.s-b.s);d.segs.forEach((g,i)=>{const nx=d.segs[i+1];g.stopEnd=g.err&&nx?nx.s:g.err?null:undefined;});
+    /* index segments by day for fast per-day lookups */
+    d.byDay={};d.segs.forEach((g,i)=>{for(let t=keyDay(dayKey(new Date(g.s))).getTime();t<=g.e;t+=DAY){const k=dayKey(new Date(t));(d.byDay[k]=d.byDay[k]||[]).push(i);}if(g.err&&g.stopEnd!==undefined){const se=g.stopEnd===null?g.e+DAY:g.stopEnd;for(let t=keyDay(dayKey(new Date(g.e))).getTime();t<=se;t+=DAY){const k=dayKey(new Date(t));const a=(d.byDay[k]=d.byDay[k]||[]);if(!a.includes(i))a.push(i);}}});}
+  return M;}
+function dayMetrics(d,k){
+  if(d.cache[k]&&!isToday(k))return d.cache[k];
+  const a=keyDay(k).getTime();const now=Date.now();if(a>now)return{key:k,future:true,run:0,err:0,stop:0,nErr:0,nWafer:0,items:[],errors:[],denom:0,util:null,hasData:false,off:0};
+  const b=isToday(k)?Math.min(now,a+DAY):a+DAY;const denom=(b-a)/1000;
+  const m={key:k,run:0,err:0,stop:0,nErr:0,nWafer:0,first:null,last:null,items:[],errors:[]};
+  const clip=(s,e)=>{const x=Math.max(s,a),y=Math.min(e,b);return y>x?[x,y]:null;};
+  for(const i of(d.byDay[k]||[])){const g=d.segs[i];const c=clip(g.s,g.e);if(c){m.nWafer++;const len=(c[1]-c[0])/1000;if(g.err){m.err+=len;m.nErr++;m.errors.push({t:g.s,end:g.e,r:g.r,stop:g.stopEnd?(g.stopEnd-g.e)/1000:null,open:g.stopEnd===null});}else m.run+=len;
+      m.items.push({s:c[0],e:c[1],kind:g.err?"err":"run",g});if(!m.first||c[0]<m.first)m.first=c[0];if(!m.last||c[1]>m.last)m.last=c[1];}
+    if(g.err){const se=g.stopEnd===null?b:g.stopEnd;const cs=se?clip(g.e,se):null;if(cs){m.stop+=(cs[1]-cs[0])/1000;m.items.push({s:cs[0],e:cs[1],kind:"stop",g});}}}
+  for(const x of d.errNoTime){if(x.t!=null&&x.t>=a&&x.t<b){m.nErr++;m.errors.push({t:x.t,end:null,r:x.r,stop:null,noTime:true});}}
+  m.errors.sort((x,y)=>x.t-y.t);m.denom=denom;m.util=m.run/denom*100;m.hasData=m.nWafer>0||m.nErr>0;m.off=Math.max(0,denom-m.run-m.err-m.stop);m.partial=isToday(k);
+  d.cache[k]=m;return m;}
+/* aggregate over a list of day keys: util = Σrun / Σdenom (days up to now) */
+function aggMetrics(d,keys){const o={run:0,denom:0,nErr:0,stop:0,err:0,nWafer:0,days:0,hasData:false};for(const k of keys){const m=dayMetrics(d,k);if(m.future)continue;o.run+=m.run;o.denom+=m.denom;o.nErr+=m.nErr;o.stop+=m.stop;o.err+=m.err;o.nWafer+=m.nWafer;o.days++;if(m.hasData)o.hasData=true;}o.util=o.denom>0&&o.hasData?o.run/o.denom*100:null;return o;}
+function fleetAvg(keys,devList=devNames){const vals=devList.map(n=>aggMetrics(D[n],keys)).filter(o=>o.util!=null);return{util:vals.length?vals.reduce((a,o)=>a+o.util,0)/vals.length:null,n:vals.length,nErr:vals.reduce((a,o)=>a+o.nErr,0),stop:vals.reduce((a,o)=>a+o.stop+o.err,0)};}
+function dataDays(){const s=new Set();for(const r of rows){const d=rowDate(r);if(d)s.add(dayKey(d));}return[...s].sort();}
+const rangeKeys=(endK,n)=>{const out=[];for(let i=n-1;i>=0;i--)out.push(addDays(endK,-i));return out;};
+/* period helpers */
+const weekStart=k=>{const d=keyDay(k);const w=(d.getDay()+6)%7;d.setDate(d.getDate()-w);return dayKey(d);};
+const monthStart=k=>k.slice(0,7)+"-01";
+function periodKeys(unit,startK){if(unit==="day")return[startK];if(unit==="week")return rangeKeys(addDays(startK,6),7);const d=keyDay(startK);const n=new Date(d.getFullYear(),d.getMonth()+1,0).getDate();const out=[];for(let i=0;i<n;i++)out.push(addDays(startK,i));return out;}
+function periodPrev(unit,startK){if(unit==="day")return addDays(startK,-1);if(unit==="week")return addDays(startK,-7);const d=keyDay(startK);return dayKey(new Date(d.getFullYear(),d.getMonth()-1,1));}
+function periodLabel(unit,startK){if(unit==="day")return fmtDay(startK);if(unit==="week"){const e=addDays(startK,6);return`${startK.slice(5).replace("-","/")}~${e.slice(5).replace("-","/")}`;}return startK.slice(0,7).replace("-","년 ")+"월";}
+const periodName={day:"일",week:"주",month:"월"};
+
+/* ---------- init / day nav ---------- */
+function init(){D=build();const days=dataDays();day=days[days.length-1]||todayKey();selDev=null;ui.cmpAnchor=null;
+  $("#dayPick").min=days[0]||"";$("#dayPick").max=todayKey()>day?todayKey():day;
+  let modeTxt=meta.mode==="live"?"실제 수집 · "+meta.generated:meta.mode==="saved"?"저장된 결과 · "+meta.generated:meta.mode==="auto"?"자동 수집 · "+meta.generated:"데모 데이터 · 장비 "+devNames.length+"대";
+  if(meta.mode==="auto"&&meta.generated_iso){const age=(Date.now()-new Date(meta.generated_iso))/60000;modeTxt+=age<60?` (${Math.round(age)}분 전)`:` (${(age/60).toFixed(1)}시간 전)`;$("#modePill").classList.toggle("stale",age>120);}
+  $("#modeTxt").textContent=modeTxt;$("#modePill").title=meta.mode==="auto"?"Python 수집기가 마지막으로 이 파일을 만든 시각. 2시간 이상 지나면 수집기 상태를 확인하세요.":"";
+  $("#modePill").classList.toggle("live",meta.mode==="live"||meta.mode==="auto");
+  $("#footTxt").innerHTML=`정확 경로만 확인 · 재귀 검색 없음<br>원본 Report / INI 수정 없음${meta.version?`<br>v${esc(meta.version)}`:APP_VERSION?`<br>v${APP_VERSION}`:""}`;checkUpdate();
+  $("#trendDev").innerHTML='<option value="">전체 평균</option>'+devNames.map(n=>`<option value="${esc(n)}">${esc(n)}</option>`).join("");
+  $("#thUtil").value=th.util;$("#thErr").value=th.err;renderAll();}
+function setDay(k){day=k;renderAll();}
+function stepDay(n){const k=addDays(day,n);const days=dataDays();const maxK=todayKey()>days[days.length-1]?todayKey():days[days.length-1];if(k>maxK||k<days[0])return;setDay(k);}
+function goToday(){const days=dataDays();setDay(days[days.length-1]||todayKey());}
+$("#dayPick").onchange=()=>{if($("#dayPick").value)setDay($("#dayPick").value);};
+segBind("sortSeg","s",v=>{ui.sort=v;renderHome();});
+segBind("viewSeg","m",v=>{ui.view=v;renderHome();});
+segBind("unitSeg","u",v=>{ui.unit=v;ui.span={day:14,week:8,month:6}[v];ui.cmpAnchor=null;renderTrend();});
+segBind("cmpSeg","p",v=>{ui.cmpP=+v;renderCompare();});
+segBind("cmpSort","s",v=>{ui.cmpSort=v;renderCompare();});
+$("#trendDev").onchange=()=>{ui.trendDev=$("#trendDev").value;renderTrend();};
+document.addEventListener("keydown",e=>{if(e.target.tagName==="INPUT"||e.target.tagName==="SELECT"||e.target.tagName==="TEXTAREA")return;if(!$("#v-home").classList.contains("on"))return;if(e.key==="ArrowLeft")stepDay(-1);if(e.key==="ArrowRight")stepDay(1);if(e.key==="Escape")selectDev(null);});
+
+/* ---------- render: home ---------- */
+function renderAll(){
+  const days=dataDays();
+  $("#dayTxt").innerHTML=fmtDay(day)+(isToday(day)?'<span class="today">TODAY</span>':"");$("#dayPick").value=day;
+  $("#dPrev").disabled=day<=days[0];$("#dNext").disabled=day>=(todayKey()>days[days.length-1]?todayKey():days[days.length-1]);
+  $("#homeBasis").textContent=isToday(day)?`00:00 ~ ${hm(new Date())} 기준 · 검사시간 ÷ 경과시간`:"00:00 ~ 24:00 기준 · 검사시간 ÷ 24시간";
+  renderHome();renderDetail();if($("#v-trend").classList.contains("on"))renderTrend();if($("#v-compare").classList.contains("on"))renderCompare();}
+const isAlert=m=>m.hasData&&(m.util<th.util||m.nErr>=th.err);
+const groups=()=>[...new Set(devNames.map(n=>devGroup[n]).filter(Boolean))];
+const visDevs=()=>ui.group?devNames.filter(n=>devGroup[n]===ui.group):devNames;
+function homeList(){const prevK=addDays(day,-1);return visDevs().map(n=>({n,m:dayMetrics(D[n],day),p:dayMetrics(D[n],prevK)}));}
+function renderHome(){
+  const list=homeList();const prevK=addDays(day,-1);const vd=visDevs();
+  const cur=fleetAvg([day],vd),prev=fleetAvg([prevK],vd);
+  const alerts=list.filter(x=>isAlert(x.m)),nod=list.filter(x=>!x.m.hasData),errs=list.filter(x=>x.m.nErr>0);
+  const worst=[...list].filter(x=>x.m.hasData).sort((a,b)=>a.m.util-b.m.util)[0];
+  $("#homeSum").innerHTML=`<div class="card ss hero"><div class="k">평균 가동률 · ${isToday(day)?"현재까지":"하루"}</div><div class="v">${cur.util==null?"–":cur.util.toFixed(1)+"<small>%</small>"}</div><div class="s">전일 ${pct(prev.util)} · ${deltaHtml(cur.util,prev.util)}</div></div>
+    <div class="card ss"><div class="k">장비</div><div class="v num">${vd.length}<small>대</small></div><div class="s">데이터 있음 ${cur.n}대</div></div>
+    <div class="card ss"><div class="k">주의 장비</div><div class="v num" style="color:${alerts.length?"var(--crit-ink)":"inherit"}">${alerts.length}<small>대</small></div><div class="s">가동률 ${th.util}% 미만 또는 오류 ${th.err}건↑</div></div>
+    <div class="card ss"><div class="k">오류 발생</div><div class="v num">${errs.length}<small>대</small></div><div class="s">총 ${errs.reduce((a,x)=>a+x.m.nErr,0)}건 · 정지 ${fmtSecS(list.reduce((a,x)=>a+x.m.stop+x.m.err,0))}</div></div>
+    <div class="card ss"><div class="k">최저 장비</div><div class="v" style="font-size:20px">${worst?esc(worst.n):"–"}</div><div class="s">${worst?pct(worst.m.util)+" · "+deltaHtml(worst.m.util,worst.p.hasData?worst.p.util:null):"–"}${nod.length?` · 데이터 없음 ${nod.length}대`:""}</div></div>`;
+  const key=x=>x.m.hasData?x.m.util:999;
+  list.sort((a,b)=>ui.sort==="name"?a.n.localeCompare(b.n,undefined,{numeric:true}):ui.sort==="err"?(b.m.nErr-a.m.nErr)||(key(a)-key(b)):(key(a)-key(b)));
+  $("#cards").hidden=ui.view!=="cards";$("#homeTable").hidden=ui.view!=="table";
+  if(ui.view==="cards"){
+    $("#cards").innerHTML=list.map(({n,m,p})=>{const st=!m.hasData?'<span class="st none">데이터 없음</span>':m.nErr?`<span class="st bad">오류 ${m.nErr}</span>`:isAlert(m)?'<span class="st bad">주의</span>':'<span class="st ok">정상</span>';
+      return`<div class="card dev ${selDev===n?"sel":""} ${isAlert(m)?"alert":""}" tabindex="0" role="button" aria-pressed="${selDev===n}" onclick="selectDev('${esc(n)}')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();selectDev('${esc(n)}')}" title="클릭하면 타임라인과 오류 목록">
+        <div class="hd"><span class="name">${esc(n)}</span>${st}</div>
+        <div class="row1"><div class="big ${m.hasData?"":"none"}">${m.hasData?`${m.util.toFixed(1)}<small>%</small>`:"–"}</div>${deltaHtml(m.hasData?m.util:null,p.hasData?p.util:null)}</div>
+        <div class="strip">${m.hasData?`<i style="width:${(m.run/m.denom*100).toFixed(2)}%;background:var(--run)"></i><i style="width:${((m.err+m.stop)/m.denom*100).toFixed(2)}%;background:var(--err)"></i>`:""}</div>
+        <div class="kv"><span>검사 <b>${fmtSecS(m.run)}</b></span><span>정지 <b class="${m.stop?"err":""}">${fmtSecS(m.err+m.stop)}</b></span><span>Wafer <b>${m.nWafer}</b></span></div></div>`;}).join("")||'<div class="card empty">장비 데이터가 없습니다. 설정에서 장비 폴더를 등록하세요.</div>';}
+  else{
+    $("#homeTbody").innerHTML=list.map(({n,m,p})=>`<tr class="click ${selDev===n?"sel":""}" onclick="selectDev('${esc(n)}')"><td><b>${esc(n)}</b>${isAlert(m)?' <span class="chip crit">주의</span>':""}${!m.hasData?' <span class="chip mute">데이터 없음</span>':""}</td><td style="width:32%"><span class="hbar" style="width:${m.hasData?m.util.toFixed(1):0}%"></span></td><td class="r"><b>${m.hasData?pct(m.util):"–"}</b></td><td class="r">${deltaHtml(m.hasData?m.util:null,p.hasData?p.util:null)}</td><td class="r">${fmtSecS(m.run)}</td><td class="r">${m.nErr?`<span class="chip crit">${m.nErr}</span>`:0}</td><td class="r">${fmtSecS(m.err+m.stop)}</td><td class="r">${m.nWafer}</td></tr>`).join("");}
+}
+function selectDev(n){selDev=selDev===n?null:n;renderHome();renderDetail();if(selDev)setTimeout(()=>$("#detail").scrollIntoView({behavior:"smooth",block:"nearest"}),50);}
+function renderDetail(){
+  const box=$("#detail");if(!selDev||!D[selDev]){box.hidden=true;return;}box.hidden=false;
+  const m=dayMetrics(D[selDev],day);const a=keyDay(day).getTime();const now=Date.now();const p=dayMetrics(D[selDev],addDays(day,-1));
+  $("#detTitle").innerHTML=`${esc(selDev)} <span class="faint" style="font-weight:400;font-size:13px">${fmtDay(day)} · 가동률 ${m.hasData?m.util.toFixed(1)+"%":"–"} ${deltaHtml(m.hasData?m.util:null,p.hasData?p.util:null)} · 검사 ${fmtSecS(m.run)} · 오류·정지 ${fmtSecS(m.err+m.stop)} · Wafer ${m.nWafer}</span>`;
+  const W=1200,L=14,R=14,H=96,barY=16,barH=34;const x=t=>L+(t-a)/DAY*(W-L-R);
+  let s=`<svg class="chart" viewBox="0 0 ${W} ${H}" style="height:${H}px" role="img" aria-label="${fmtDay(day)} 타임라인">`;
+  s+=`<rect x="${L}" y="${barY}" width="${W-L-R}" height="${barH}" fill="var(--nodata)" rx="3"/>`;
+  if(m.hasData)s+=`<rect x="${L}" y="${barY}" width="${(x(m.partial?Math.min(now,a+DAY):a+DAY)-L).toFixed(1)}" height="${barH}" fill="var(--off)" rx="3"/>`;
+  for(let h=0;h<=24;h+=2){const xx=x(a+h*3.6e6);s+=`<line class="grid" x1="${xx.toFixed(1)}" x2="${xx.toFixed(1)}" y1="${barY+barH+4}" y2="${barY+barH+10}"/><text x="${xx.toFixed(1)}" y="${barY+barH+26}" text-anchor="middle">${p2(h)}</text>`;}
+  /* Lot blocks: consecutive wafers of the same lot (gap under 10 min) become one bar */
+  const lots=[];const ws=m.items.filter(i=>i.kind!=="stop").sort((p,q)=>p.s-q.s);
+  for(const it of ws){const L=lots[lots.length-1];if(L&&L.lot===it.g.r.lot&&it.s-L.e<=600000){L.e=Math.max(L.e,it.e);L.n++;L.run+=it.kind==="run"?(it.e-it.s):0;if(it.kind==="err")L.err++;}else lots.push({lot:it.g.r.lot,recipe:it.g.r.recipe,s:it.s,e:it.e,n:1,run:it.kind==="run"?(it.e-it.s):0,err:it.kind==="err"?1:0});}
+  m.lots=lots;
+  m.items.filter(i=>i.kind==="stop").forEach(it=>{s+=`<rect class="seg" data-i="${m.items.indexOf(it)}" x="${x(it.s).toFixed(1)}" y="${barY}" width="${Math.max(1,x(it.e)-x(it.s)).toFixed(1)}" height="${barH}" fill="var(--err)" opacity=".45"/>`;});
+  lots.forEach((L,i)=>{s+=`<rect class="seg lot" tabindex="0" data-l="${i}" x="${x(L.s).toFixed(1)}" y="${barY}" width="${Math.max(2,x(L.e)-x(L.s)).toFixed(1)}" height="${barH}" fill="var(--run)" opacity="${i%2?.72:1}" rx="1"/>`;const w=x(L.e)-x(L.s);if(w>46)s+=`<text x="${(x(L.s)+4).toFixed(1)}" y="${barY+barH/2+4}" fill="var(--accent-ink)" style="font-size:11px;font-weight:600;pointer-events:none">${esc(L.lot.length>10?L.lot.slice(0,9)+"…":L.lot)}</text>`;});
+  m.items.filter(i=>i.kind==="err").forEach(it=>{s+=`<rect class="seg" tabindex="0" data-i="${m.items.indexOf(it)}" x="${x(it.s).toFixed(1)}" y="${barY}" width="${Math.max(2,x(it.e)-x(it.s)).toFixed(1)}" height="${barH}" fill="var(--err)"/>`;});
+  if(m.partial)s+=`<line class="now" x1="${x(now).toFixed(1)}" x2="${x(now).toFixed(1)}" y1="${barY-8}" y2="${barY+barH+8}"/><text x="${x(now).toFixed(1)}" y="${barY-10}" text-anchor="middle" fill="var(--accent-2)">지금</text>`;
+  s+="</svg>";$("#detTl").innerHTML=s;
+  bindTips($("#detTl"),"rect.seg",el=>{if(el.dataset.l!=null){const L=m.lots[+el.dataset.l];return`<b>Lot ${esc(L.lot)}</b> · ${esc(L.recipe)}<br>${hm(new Date(L.s))} → ${hm(new Date(L.e))} · ${fmtSec((L.e-L.s)/1000)}<br>Wafer ${L.n}장 · 검사 ${fmtSec(L.run/1000)}${L.err?` · <span style="color:var(--crit-ink)">오류 ${L.err}건</span>`:""}`;}
+    const it=m.items[+el.dataset.i],r=it.g.r;if(it.kind==="stop")return`<b>오류 후 정지 (추정)</b> · ${fmtSec((it.e-it.s)/1000)}<br>${hm(new Date(it.s))} → ${hm(new Date(it.e))}<br><span class="k">${esc(r.lot)} / ${esc(r.wafer_id)} 오류 이후 다음 Wafer 시작까지</span>`;
+    return`<b>${esc(r.lot)} / ${esc(r.wafer_id)}</b><br>${hm(new Date(it.g.s))} → ${hm(new Date(it.g.e))} · ${fmtSec((it.g.e-it.g.s)/1000)}<br>${it.kind==="err"?`<span style="color:var(--crit-ink)">${ERR_KO[r.norm_status]||"오류"}</span> · ${esc(r.status)}`:`정상 검사 · ${esc(r.recipe)}`}`;});
+  $("#detTl").querySelectorAll("rect.seg").forEach(el=>el.onclick=()=>{if(el.dataset.l!=null)return;const it=m.items[+el.dataset.i];const idx=m.errors.findIndex(e=>e.r===it.g.r);if(idx>=0)hlSeg(idx);});
+  const lotTbl=m.lots.length?`<details style="margin:6px 0 10px"><summary style="cursor:pointer;color:var(--accent-2);font-size:13px">Lot ${m.lots.length}개 목록</summary><table class="tbl" style="margin-top:6px"><thead><tr><th>Lot</th><th>Recipe</th><th>시작</th><th>종료</th><th class="r">소요</th><th class="r">Wafer</th><th class="r">검사</th><th class="r">오류</th></tr></thead><tbody>${m.lots.map(L=>`<tr><td class="mono">${esc(L.lot)}</td><td>${esc(L.recipe)}</td><td class="num">${hm(new Date(L.s))}</td><td class="num">${hm(new Date(L.e))}</td><td class="r">${fmtSecS((L.e-L.s)/1000)}</td><td class="r">${L.n}</td><td class="r">${fmtSecS(L.run/1000)}</td><td class="r">${L.err?`<span class="chip crit">${L.err}</span>`:0}</td></tr>`).join("")}</tbody></table></details>`:"";
+  $("#detErrs").innerHTML=lotTbl+(m.errors.length?`<table class="tbl"><thead><tr><th>시각</th><th>Lot / Wafer</th><th>오류</th><th class="r">정지 시간 (추정)</th><th>장비 메시지</th></tr></thead><tbody>${m.errors.map((e,i)=>`<tr class="click" data-e="${i}" onclick="hlSeg(${i})"><td class="num">${e.t?hm(new Date(e.t)):"–"}${e.noTime?' <span class="chip mute" title="INI가 없어 Batch 시작 시각으로 표시">Batch 시작</span>':""}</td><td class="mono">${esc(e.r.lot)} / ${esc(e.r.wafer_id)}</td><td><span class="chip crit">${ERR_KO[e.r.norm_status]||"오류"}</span></td><td class="r">${e.open?'<span class="chip warn">복구 기록 없음</span>':e.stop!=null?fmtSec(e.stop):"–"}</td><td class="faint">${esc(e.r.status)}</td></tr>`).join("")}</tbody></table><p class="faint" style="font-size:12px;margin-top:8px">정지 시간은 오류 Wafer 종료부터 다음 Wafer 시작까지의 공백으로 추정한 값입니다. 장비 이벤트 로그가 아닙니다.</p>`
+    :(m.hasData?'<p class="faint" style="font-size:13px;padding:6px 0">이 날은 오류가 없습니다.</p>':'<p class="faint" style="font-size:13px;padding:6px 0">이 날은 데이터가 없습니다.</p>'));
+  window._m=m;}
+function hlSeg(i){const m=window._m;const e=m.errors[i];$("#detErrs").querySelectorAll("tr.hl").forEach(t=>t.classList.remove("hl"));const tr=$("#detErrs").querySelector(`tr[data-e="${i}"]`);if(tr){tr.classList.add("hl");tr.scrollIntoView({block:"nearest"});}$("#detTl").querySelectorAll("rect.hl").forEach(t=>t.classList.remove("hl"));const idx=m.items.findIndex(it=>it.g.r===e.r&&it.kind!=="stop");if(idx>=0)$("#detTl").querySelector(`rect[data-i="${idx}"]`).classList.add("hl");}
+
+/* ---------- render: trend (day / week / month + period comparison) ---------- */
+function renderTrend(){
+  const unit=ui.unit;const spans={day:[14,30,60],week:[8,12,26],month:[6,12]}[unit];
+  $("#spanSeg").innerHTML=spans.map(n=>`<button data-n="${n}" aria-pressed="${n===ui.span}">${n}${periodName[unit]}</button>`).join("");
+  segBind("spanSeg","n",v=>{ui.span=+v;renderTrend();});
+  const devList=ui.trendDev?[ui.trendDev]:devNames;
+  /* periods ending at the period containing the selected day */
+  let startK=unit==="day"?day:unit==="week"?weekStart(day):monthStart(day);
+  const starts=[];let k=startK;for(let i=0;i<ui.span;i++){starts.unshift(k);k=periodPrev(unit,k);}
+  const vals=starts.map(s=>({start:s,keys:periodKeys(unit,s),...fleetAvg(periodKeys(unit,s),devList)}));
+  const anchor=ui.cmpAnchor&&starts.includes(ui.cmpAnchor)?ui.cmpAnchor:startK;
+  /* comparison cards */
+  const curKeys=periodKeys(unit,anchor),prevStart=periodPrev(unit,anchor),prevKeys=periodKeys(unit,prevStart);
+  const cur=fleetAvg(curKeys,devList),prev=fleetAvg(prevKeys,devList);
+  const scopeTxt=ui.trendDev||`전체 ${devNames.length}대 평균`;
+  $("#cmpBox").innerHTML=`<div class="card cur"><div class="k">이번 ${periodName[unit]} · ${periodLabel(unit,anchor)} · ${esc(scopeTxt)}</div><div class="v">${cur.util==null?"–":cur.util.toFixed(1)+"<small>%</small>"} ${deltaHtml(cur.util,prev.util)}</div><div class="row"><span>오류 <b>${cur.nErr}건</b></span><span>오류·정지 <b>${fmtSecS(cur.stop)}</b></span><span>데이터 장비 <b>${cur.n}대</b></span></div></div>
+    <div class="card"><div class="k">이전 ${periodName[unit]} · ${periodLabel(unit,prevStart)}</div><div class="v" style="color:var(--ink-2)">${cur.util!=null||prev.util!=null?(prev.util==null?"–":prev.util.toFixed(1)+"<small>%</small>"):"–"}</div><div class="row"><span>오류 <b>${prev.nErr}건</b></span><span>오류·정지 <b>${fmtSecS(prev.stop)}</b></span><span>데이터 장비 <b>${prev.n}대</b></span></div></div>`;
+  $("#trendNote").textContent=unit==="week"?"주는 월요일 시작":unit==="month"?"월은 1일 시작":"";
+  /* bar chart */
+  const box=$("#trendChart");const W=1200,L=44,R=12,T=16,B=30,H=230;const ph=H-T-B;const n=vals.length;const gw=(W-L-R)/n;const bw=Math.min(gw*0.62,56);const y=v=>T+ph-(v/100)*ph;
+  const withU=vals.filter(v=>v.util!=null);const avg=withU.length?withU.reduce((a,v)=>a+v.util,0)/withU.length:null;
+  let s=`<svg class="chart" viewBox="0 0 ${W} ${H}" style="height:${H}px" role="img" aria-label="가동률 추이">`;
+  [0,25,50,75,100].forEach(v=>{s+=`<line class="grid" x1="${L}" x2="${W-R}" y1="${y(v)}" y2="${y(v)}"/><text x="${L-6}" y="${y(v)+4}" text-anchor="end">${v}%</text>`;});
+  vals.forEach((v,i)=>{const gx=L+i*gw;const sel=v.start===anchor;if(sel)s+=`<rect class="band" x="${gx}" y="${T-6}" width="${gw}" height="${ph+6}" rx="4"/>`;
+    const val=v.util==null?0:v.util;const hh=Math.max(v.util==null?0:2,(val/100)*ph);const xx=gx+(gw-bw)/2;
+    s+=`<rect class="dbar" tabindex="0" data-s="${v.start}" x="${xx.toFixed(1)}" y="${(T+ph-hh).toFixed(1)}" width="${bw.toFixed(1)}" height="${hh.toFixed(1)}" rx="2" fill="${v.util==null?"var(--nodata)":"var(--run)"}" opacity="${sel?1:.75}"/>`;
+    if(n<=16&&v.util!=null)s+=`<text class="vl" x="${(xx+bw/2).toFixed(1)}" y="${(T+ph-hh-5).toFixed(1)}" text-anchor="middle">${val.toFixed(0)}%</text>`;
+    const lbl=unit==="day"?(n>16?v.start.slice(5).replace("-","/"):fmtDay(v.start)):unit==="week"?v.start.slice(5).replace("-","/"):v.start.slice(2,7).replace("-","/");
+    s+=`<text class="xl ${sel?"sel":""}" x="${gx+gw/2}" y="${H-10}" text-anchor="middle">${lbl}</text>`;});
+  if(avg!=null)s+=`<line class="avgline" x1="${L}" x2="${W-R}" y1="${y(avg)}" y2="${y(avg)}"/><text x="${W-R}" y="${y(avg)-4}" text-anchor="end" fill="var(--warn)">평균 ${avg.toFixed(1)}%</text>`;
+  s+=`<line class="axis" x1="${L}" x2="${W-R}" y1="${T+ph}" y2="${T+ph}"/></svg>`;box.innerHTML=s;
+  bindTips(box,"rect.dbar",el=>{const v=vals.find(x=>x.start===el.dataset.s);const i=vals.indexOf(v);const pv=i>0?vals[i-1]:null;return`<b>${periodLabel(unit,v.start)}</b><br>가동률 <b>${v.util==null?"데이터 없음":v.util.toFixed(1)+"%"}</b> ${pv?deltaHtml(v.util,pv.util):""}<br>오류 ${v.nErr}건 · 정지 ${fmtSecS(v.stop)} · 장비 ${v.n}대`;});
+  box.querySelectorAll("rect.dbar").forEach(el=>{const act=()=>{if(unit==="day"){day=el.dataset.s;go("home");renderAll();}else{ui.cmpAnchor=el.dataset.s;renderTrend();}};el.onclick=act;el.onkeydown=e=>{if(e.key==="Enter"||e.key===" "){e.preventDefault();act();}};});
+}
+
+/* ---------- render: device comparison ---------- */
+function renderCompare(){
+  const n=ui.cmpP;const curKeys=rangeKeys(day,n),prevKeys=rangeKeys(addDays(day,-n),n);
+  const list=devNames.map(name=>({name,c:aggMetrics(D[name],curKeys),p:aggMetrics(D[name],prevKeys)}));
+  const key=x=>x.c.util==null?-1:x.c.util;
+  list.sort((a,b)=>ui.cmpSort==="high"?key(b)-key(a):ui.cmpSort==="low"?((a.c.util==null?999:a.c.util)-(b.c.util==null?999:b.c.util)):(((a.c.util==null||a.p.util==null)?99:a.c.util-a.p.util)-((b.c.util==null||b.p.util==null)?99:b.c.util-b.p.util)));
+  const f=fleetAvg(curKeys),fp=fleetAvg(prevKeys);
+  $("#cmpNote").textContent=`${n===1?fmtDay(day):curKeys[0].slice(5).replace("-","/")+" ~ "+fmtDay(day)} · 전체 평균 ${pct(f.util)} (이전 ${pct(fp.util)}) · 이전 기간: ${n===1?"전일":"직전 "+n+"일"}`;
+  $("#cmpBody").innerHTML=list.map((x,i)=>`<tr class="click" onclick="selDev='${esc(x.name)}';go('home');renderAll();" title="클릭하면 홈에서 이 장비의 타임라인을 봅니다"><td class="r faint">${i+1}</td><td><b>${esc(x.name)}</b>${x.c.hasData&&(x.c.util<th.util||x.c.nErr>=th.err*n)?' <span class="chip crit">주의</span>':""}</td><td><div style="display:flex;flex-direction:column;gap:2px"><span class="hbar" style="width:${x.c.util==null?0:x.c.util.toFixed(1)}%"></span><span class="hbar prev" style="width:${x.p.util==null?0:x.p.util.toFixed(1)}%"></span></div></td><td class="r"><b>${x.c.util==null?'<span class="faint">데이터 없음</span>':pct(x.c.util)}</b></td><td class="r muted">${pct(x.p.util)}</td><td class="r">${deltaHtml(x.c.util,x.p.util)}</td><td class="r">${x.c.nErr?`<span class="chip crit">${x.c.nErr}</span>`:0}</td><td class="r">${fmtSecS(x.c.stop+x.c.err)}</td></tr>`).join("")||'<tr><td colspan="8" class="empty">데이터 없음</td></tr>';
+}
+
+/* ---------- GitHub version check (silent when offline) ---------- */
+let _updChecked=false;
+async function checkUpdate(){if(_updChecked)return;_updChecked=true;try{const r=await fetch(UPDATE_BASE+"version.json",{cache:"no-store"});if(!r.ok)return;const v=await r.json();const cur=meta.version||APP_VERSION;if(String(v.version)!==String(cur)){const el=$("#upd");el.hidden=false;el.innerHTML=`새 버전 v${esc(v.version)}이 있습니다 (현재 v${esc(cur)}). ${meta.mode==="auto"?"수집기가 다음 실행 때 자동으로 갱신합니다.":`<a href="${UPDATE_BASE}aoi_collector_demo.html" download="aoi_collector_demo.html">최신 파일 내려받기</a>`}${v.note?` · ${esc(v.note)}`:""}`;}}catch(e){}}
+
+/* ---------- save ---------- */
+async function writeOut(name,blob,accept){
+  if(window.showSaveFilePicker){try{const h=await showSaveFilePicker({suggestedName:name,types:[accept]});const w=await h.createWritable();await w.write(blob);await w.close();toast("저장 완료 · "+h.name);return;}catch(e){if(e.name==="AbortError")return;}}
+  const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download=name;document.body.appendChild(a);a.click();a.remove();toast("다운로드 · "+name);}
+function saveHtml(){if(!rows.length){toast("저장할 데이터가 없습니다");return;}
+  const cols=["device","lot","wafer_id","status","norm_status","recipe","wafer_start_time","wafer_end_time","batch_start","ini_match","data_issue"];
+  const emb={cols,rows:rows.map(r=>cols.map(c=>r[c]??"")),meta:{...meta,mode:meta.mode==="demo"?"demo":"saved"}};
+  const clone=document.documentElement.cloneNode(true);clone.querySelector("#embedded").textContent=JSON.stringify(emb).replace(/<\//g,"<\\/");
+  clone.querySelector("#log").textContent="";clone.querySelector("#tip").style.display="none";clone.querySelector("#toast").classList.remove("on");
+  writeOut("AOI_capacity_"+stamp()+".html",new Blob(["<!doctype html>\n"+clone.outerHTML],{type:"text/html;charset=utf-8"}),{description:"HTML",accept:{"text/html":[".html"]}});}
+
+/* ---------- boot ---------- */
+if(!FS)$("#fsWarn").hidden=false;
+loadNas();renderDevs();restoreHandles();loadDemo();
+</script>
+</body>
+</html>
