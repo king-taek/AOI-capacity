@@ -26,8 +26,14 @@ EQ, PROC = "2D@R2-GA285AAB_0859840PD-0A", "6321"
 INI = "[AutoCycleInfo]\nWaferStartTime=15-Sep-26 05:31:04 PM\nWaferEndTime=15-Sep-26 05:32:02 PM\nUseLot={lot}\n"
 
 
+JOB, SETUP = "TB500_RDL2 - Multi", "Setup1"
+
+
 def _report(lot: str, status: str) -> str:
-    return ("<html><body><table><tr><td>Batch Start:</td><td>15-Sep-26 05:25:14 PM</td></tr></table>"
+    """실장비 형식 — 경로의 출처는 파일명이 아니라 Job/Setup 이다."""
+    return ("<html><body><table>"
+            "<tr><td>Batch Start</td><td>15-Sep-26 05:25:14 PM</td><td>Batch End</td><td>15-Sep-26 06:25:14 PM</td></tr>"
+            f"<tr><td>Wafers Scanned</td><td>2</td><td>Job/Setup</td><td>{JOB}/{SETUP}</td></tr></table>"
             "<table><tr><th>Lot</th><th>Wafer ID</th><th>Pass/Fail</th></tr>"
             f"<tr><td>{lot}</td><td>K625407-01B0</td><td>Pass</td></tr>"
             f"<tr><td>{lot}</td><td>K625407-02B0</td><td>{status}</td></tr></table></body></html>")
@@ -47,10 +53,10 @@ def nas(tmp_path):
         p.write_text(_report(lot, status), encoding="utf-8")
         os.utime(p, (now - (len(cases) - i) * 600,) * 2)
         for w in ("K625407-01B0", "K625407-02B0"):
-            d = scan / EQ / PROC / lot / w
+            d = scan / JOB / SETUP / lot / w
             d.mkdir(parents=True, exist_ok=True)
             (d / "WaferInfo.ini").write_text(INI.format(lot=lot), encoding="utf-8")
-    (scan / EQ / PROC / "HCL" / "K625407-02B0_RE").mkdir()      # 재스캔용 폴더처럼 보이는 것(INI 없음)
+    (scan / JOB / SETUP / "HCL" / "K625407-02B0_RE").mkdir()      # 재스캔용 폴더처럼 보이는 것(INI 없음)
     (rep / "다른이름.htm").write_text("<html>x</html>", encoding="utf-8")
     return root
 
@@ -111,12 +117,20 @@ def test_missing_report_dir_is_reported_not_crashed(tmp_path, capsys):
     assert "없음" in out and "--list" in out          # 원인과 다음 시도를 알려 준다
 
 
-def test_diagnose_points_at_the_real_report_folder_name(tmp_path, nas, capsys):
-    """Report 폴더 이름이 다르면(Reports 등) 그 이름을 찾아 알려 준다."""
+def test_reports_folder_name_is_detected_automatically(tmp_path, nas):
+    """AOI-25 는 Report 가 아니라 Reports 다 — 설정 없이도 찾아낸다."""
     (nas / "Report").rename(nas / "Reports")
+    assert sampler.main(["--root", str(nas), "--out", str(tmp_path / "d")]) == 0
+    folder = next(p for p in (tmp_path / "d").iterdir() if p.is_dir())
+    assert list(folder.rglob("WaferInfo.ini"))
+
+
+def test_diagnose_points_at_an_unexpected_report_folder_name(tmp_path, nas, capsys):
+    """이름을 짐작할 수 없으면 그 폴더 안에 무엇이 있는지 보여 준다."""
+    (nas / "Report").rename(nas / "보고서")
     assert sampler.main(["--root", str(nas), "--out", str(tmp_path / "d")]) == 2
     out = capsys.readouterr().out
-    assert "Reports" in out and "--report-dir" in out
+    assert "보고서" in out and "--root" in out
 
 
 def test_list_mode_shows_immediate_children(tmp_path, nas, capsys):

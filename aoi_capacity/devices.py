@@ -145,14 +145,44 @@ def _norm_root(root: str) -> str:
     return root.rstrip("\\/") + os.sep if re.fullmatch(r"[A-Za-z]:\\?", root) else root
 
 
+#: 장비마다 폴더 이름이 다르다 — AOI-25 는 `Reports`, 예전 장비는 `Report`. 설정값을 먼저 보고 순서대로 확인한다.
+REPORT_DIR_NAMES = ("Report", "Reports")
+SCAN_DIR_NAMES = ("Scanresult", "ScanResult", "Scanresults")
+
+
+def _candidates(configured: str, defaults) -> List[str]:
+    out, seen = [], set()
+    for n in [str(configured or "").strip(), *defaults]:
+        k = n.lower()
+        if n and k not in seen:
+            seen.add(k)
+            out.append(n)
+    return out
+
+
+def find_subdir(path: str, configured: str, defaults) -> str:
+    """실제로 있는 하위 폴더 이름을 돌려준다(없으면 빈 문자열). 후보 몇 개만 존재 확인한다 — 탐색이 아니다."""
+    for name in _candidates(configured, defaults):
+        if os.path.isdir(os.path.join(path, name)):
+            return name
+    return ""
+
+
 def _has_report(path: str, cfg: dict) -> bool:
-    return os.path.isdir(os.path.join(path, cfg["report_dir"]))
+    return bool(find_subdir(path, cfg.get("report_dir", ""), REPORT_DIR_NAMES))
 
 
 def _entry(folder: str, path: str, *hints) -> Dict[str, object]:
     """장비 하나 — 표시명/경로/안정 키/예전 이름 후보."""
     return {"name": display_name(folder, *hints), "path": path, "id": device_id(path),
             "aliases": [a for a in (folder, *[str(h) for h in hints if h]) if a]}
+
+
+def with_dirs(dev: Dict[str, object], cfg: dict) -> Dict[str, object]:
+    """이 장비에서 실제로 쓰는 Report·Scanresult 폴더 이름을 붙인다(장비마다 다르다)."""
+    dev["report_dir"] = find_subdir(str(dev["path"]), cfg.get("report_dir", ""), REPORT_DIR_NAMES) or str(cfg.get("report_dir") or "Report")
+    dev["scan_dir"] = find_subdir(str(dev["path"]), cfg.get("scan_dir", ""), SCAN_DIR_NAMES) or str(cfg.get("scan_dir") or "Scanresult")
+    return dev
 
 
 def device_id(path) -> str:
@@ -203,6 +233,14 @@ def _dedupe_sort(devs: List[Dict[str, object]]) -> List[Dict[str, object]]:
             d["aliases"] = list(d["aliases"]) + [plain]
     uniq.sort(key=lambda d: sort_key(str(d["name"])))
     return uniq
+
+
+def _attach_dirs(devs: List[Dict[str, object]], cfg: dict, log: Optional[LogFn] = None) -> List[Dict[str, object]]:
+    for d in devs:
+        with_dirs(d, cfg)
+        if d["report_dir"] != (cfg.get("report_dir") or "Report"):
+            _log(log, f"[{d['name']}] Report 폴더 이름이 '{d['report_dir']}' 입니다")
+    return devs
 
 
 # ----------------------------------------------------------------------------- 장비 목록 풀기
@@ -288,11 +326,11 @@ def resolve_devices(cfg: dict, log: Optional[LogFn] = None) -> List[Dict[str, ob
         _log(log, f"수집 범위: {scope.describe(cfg)} (다른 장비에는 접근하지 않습니다)")
     path = cfg.get("devices_csv") or ""
     if path and os.path.isfile(path):
-        devs = devices_from_csv(cfg, log)
+        devs = _attach_dirs(devices_from_csv(cfg, log), cfg, log)
         _log(log, f"devices.csv 기준 장비 {len(devs)}대: {', '.join(str(d['name']) for d in devs)}")
         return devs
     _log(log, f"devices.csv 가 없어 nas_roots 를 자동 탐색합니다 ({path or '경로 미지정'})")
-    devs = discover_devices(cfg, log)
+    devs = _attach_dirs(discover_devices(cfg, log), cfg, log)
     _log(log, f"장비 {len(devs)}대 발견: {', '.join(str(d['name']) for d in devs)}")
     return devs
 

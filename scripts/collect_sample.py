@@ -24,6 +24,7 @@ import sys
 import time
 import zipfile
 from collections import Counter
+from html.parser import HTMLParser
 from pathlib import Path
 
 REPORT_RE = re.compile(
@@ -37,6 +38,81 @@ STATUS_PATTERNS = [
 ]
 TAGS = re.compile(r"<[^>]+>")
 DEFAULT_ROOT = r"Y:\AOI-25"
+REPORT_DIR_NAMES = ("Report", "Reports")
+SCAN_DIR_NAMES = ("Scanresult", "ScanResult", "Scanresults")
+
+
+class _Tables(HTMLParser):
+    """표를 행 단위 셀 목록으로 모은다(앱의 TableParser 와 같은 방식, 여기서는 단독 실행을 위해 따로 둔다)."""
+
+    def __init__(self):
+        super().__init__(convert_charrefs=True)
+        self.tables, self._t, self._r, self._c = [], None, None, None
+
+    def handle_starttag(self, tag, attrs):
+        if tag == "table":
+            self._t = []
+        elif tag == "tr" and self._t is not None:
+            self._r = []
+        elif tag in ("td", "th") and self._r is not None:
+            self._c = []
+
+    def handle_endtag(self, tag):
+        if tag in ("td", "th") and self._c is not None and self._r is not None:
+            self._r.append(re.sub(r"\s+", " ", "".join(self._c)).strip())
+            self._c = None
+        elif tag == "tr" and self._r is not None and self._t is not None:
+            self._t.append(self._r)
+            self._r = None
+        elif tag == "table" and self._t is not None:
+            self.tables.append(self._t)
+            self._t = None
+
+    def handle_data(self, data):
+        if self._c is not None:
+            self._c.append(data)
+
+
+def report_facts(text: str) -> dict:
+    """Report 안에서 Job/Setup · Lot · Wafer ID · Batch 시각을 꺼낸다.
+
+    ★ Scanresult 경로의 출처는 파일명이 아니라 이 `Job/Setup` 이다."""
+    p = _Tables()
+    p.feed(text)
+    out = {"job": "", "setup": "", "lots": [], "wafers": [], "summary": {}}
+    for tb in p.tables:
+        if not tb:
+            continue
+        head = [h.lower() for h in tb[0]]
+        iw = next((i for i, h in enumerate(head) if re.fullmatch(r"wafer\s*id", h)), -1)
+        il = next((i for i, h in enumerate(head) if h == "lot"), -1)
+        if iw >= 0 and il >= 0:
+            for row in tb[1:]:
+                if len(row) > max(iw, il):
+                    out["wafers"].append((row[il], row[iw]))
+        else:
+            for row in tb:
+                for i in range(0, len(row) - 1, 2):
+                    k = re.sub(r"[:\s]+$", "", row[i])
+                    if k and k not in out["summary"]:
+                        out["summary"][k] = row[i + 1]
+    js = out["summary"].get("Job/Setup", "")
+    if "/" in js:
+        out["job"], _, out["setup"] = js.rpartition("/")
+        out["job"], out["setup"] = out["job"].strip(), out["setup"].strip()
+    seen = []
+    for lot, _w in out["wafers"]:
+        if lot and lot not in seen and not re.match(r"^loadport", lot, re.I):
+            seen.append(lot)
+    out["lots"] = seen
+    return out
+
+
+def find_subdir(root: Path, configured: str, defaults) -> str:
+    for name in ([configured] if configured else []) + list(defaults):
+        if os.path.isdir(root / name):
+            return name
+    return ""
 
 
 def say(msg: str) -> None:
@@ -70,8 +146,15 @@ def scan_reports(rep_dir: Path, limit: int):
                 "lot": m.group(3) if m else "", "matched": bool(m), "flags": [], "read": False}
         if i < limit:
             try:
-                text = TAGS.sub(" ", read_text(e.path))
-                info["flags"] = [k for k, rx in STATUS_PATTERNS if rx.search(text)]
+                raw = read_text(e.path)
+                info["flags"] = [k for k, rx in STATUS_PATTERNS if rx.search(TAGS.sub(" ", raw))]
+                facts = report_facts(raw)
+                info.update({"job": facts["job"], "setup": facts["setup"], "lots": facts["lots"],
+                             "batch_start": facts["summary"].get("Batch Start", ""),
+                             "batch_end": facts["summary"].get("Batch End", ""),
+                             "wafers_scanned": facts["summary"].get("Wafers Scanned", "")})
+                if facts["lots"]:
+                    info["lot"] = facts["lots"][0]        # 파일명 대신 Report 안의 Lot 을 믿는다
                 info["read"] = True
             except OSError as ex:
                 info["flags"] = [f"READ_ERROR({type(ex).__name__})"]
@@ -128,9 +211,10 @@ def pick_samples(infos, days: int, max_reports: int):
 
 def copy_ini_for(info, scan_root: Path, out_dir: Path, max_ini: int, lines: list, seen=None) -> int:
     """Report 에서 계산한 **정확한** Lot 폴더 하나만 나열해 WaferInfo.ini 를 복사한다(재귀 검색 없음)."""
-    if not info["matched"]:
-        return 0
-    lot_dir = scan_root / info["equipment"] / info["process"] / info["lot"]
+    job, setup = info.get("job", ""), info.get("setup", "")
+    if not job:
+        return 0                                   # Job/Setup 을 못 읽은 Report 는 경로를 만들 수 없다
+    lot_dir = scan_root / job / setup / info["lot"] if setup else scan_root / job / info["lot"]
     if seen is not None:
         if str(lot_dir) in seen:
             return 0                       # 같은 Lot 을 가리키는 Report 가 여럿이면 한 번만 나열한다
@@ -154,7 +238,8 @@ def copy_ini_for(info, scan_root: Path, out_dir: Path, max_ini: int, lines: list
             st = ini.stat()
             lines.append(f"  {w.name}/WaferInfo.ini  {st.st_size}B  수정 {stamp(st.st_mtime)}")
             if n < max_ini:
-                dst = out_dir / "Scanresult" / info["equipment"] / info["process"] / info["lot"] / w.name / "WaferInfo.ini"
+                rel = Path(job) / setup / info["lot"] / w.name if setup else Path(job) / info["lot"] / w.name
+                dst = out_dir / "Scanresult" / rel / "WaferInfo.ini"
                 dst.parent.mkdir(parents=True, exist_ok=True)
                 shutil.copy2(ini, dst)
                 n += 1
@@ -230,8 +315,8 @@ def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description="AOI 샘플 모으기(NAS 읽기 전용)")
     ap.add_argument("--root", default=DEFAULT_ROOT, help=r"장비 폴더 (기본 Y:\AOI-25)")
     ap.add_argument("--out", default="", help="저장 위치 (기본 바탕화면)")
-    ap.add_argument("--report-dir", default="Report")
-    ap.add_argument("--scan-dir", default="Scanresult")
+    ap.add_argument("--report-dir", default="", help="비우면 Report / Reports 를 자동으로 찾는다")
+    ap.add_argument("--scan-dir", default="", help="비우면 Scanresult 를 자동으로 찾는다")
     ap.add_argument("--scan", type=int, default=120, help="상태를 보려고 열어 볼 최근 Report 개수")
     ap.add_argument("--days", type=int, default=1, help="최근 며칠치 Report 를 함께 담을지")
     ap.add_argument("--max-reports", type=int, default=40, help="담을 Report 최대 개수")
@@ -240,12 +325,15 @@ def main(argv=None) -> int:
     args = ap.parse_args(argv)
 
     root = norm_root(args.root)
-    rep_dir, scan_root = root / args.report_dir, root / args.scan_dir
     if args.list:
         return list_folder(root)
-    if not os.path.isdir(rep_dir):
-        diagnose(root, args.report_dir)
+    rep_name = find_subdir(root, args.report_dir, REPORT_DIR_NAMES)
+    scan_name = find_subdir(root, args.scan_dir, SCAN_DIR_NAMES) or (args.scan_dir or "Scanresult")
+    if not rep_name:
+        diagnose(root, args.report_dir or "Report")
         return 2
+    rep_dir, scan_root = root / rep_name, root / scan_name
+    say(f"    폴더: {rep_name} · {scan_name}")
 
     out_base = Path(args.out) if args.out else Path(os.environ.get("USERPROFILE", Path.home())) / "Desktop"
     # ★ NAS 아래에는 절대 쓰지 않는다
@@ -296,6 +384,10 @@ def main(argv=None) -> int:
         "",
         "■ 열어 본 Report 의 상태 표시",
         *[f"   {k:<16} {v}건" for k, v in flags.most_common()],
+        "",
+        "■ Job/Setup (Scanresult 경로의 출처)",
+        *[f"   {k:<40} {v}건" for k, v in Counter(f"{i.get('job','')}/{i.get('setup','')}"
+                                                  for i in infos if i.get("read")).most_common(10)],
         "",
         "■ 담은 Report 와 고른 이유",
         *[f"   {i['name']}\n      → {why[i['name']]}" for i in chosen],

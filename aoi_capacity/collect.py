@@ -5,7 +5,8 @@
   * ★ NAS 는 읽기만 한다. 쓰기(`open(...,'w')`, `os.replace`, `os.makedirs`)는 `_save_cache` · `write_html` · `_write_csv`
     세 함수에만 있고, 각 함수가 첫 줄에서 `nas_guard.assert_local` 을 부른다. 회귀 가드: dev/tests/test_nas_guard.py
   * Scanresult 를 재귀 검색하지 않는다. INI 경로는 정확히 계산해 존재만 확인한다:
-        {scan_root}/{equipment}/{process_code}/{lot}/{wafer_id}/WaferInfo.ini
+        {scan_root}/{job}/{setup}/{lot}/{wafer_id}/WaferInfo.ini
+    job·setup 은 Report 안의 `Job/Setup` 값에서 온다(파일명이 아니다). 옛 형식은 파일명 규칙으로 폴백.
   * 필요한 INI 키만 읽는다. Report 하나가 깨져도 기록만 남기고 계속 간다.
   * 진행 보고: `progress(done, total, phase)` — 총량을 모르는 단계는 `total<=0`(busy).
     장비별 상태는 `on_device(name, state, detail)` — state ∈ {"listing","parsing","done","error","skipped"}.
@@ -97,6 +98,8 @@ def norm_status(s) -> str:
         return "ID_READ_ERROR"
     if "scan error" in t:
         return "SCAN_ERROR"
+    if "alignment error" in t:
+        return "ALIGN_ERROR"
     if "wafer aborted by user" in t:
         return "USER_ABORT"
     if "abort" in t:
@@ -139,6 +142,12 @@ class TableParser(HTMLParser):
 
 
 def parse_report(name: str, text: str) -> dict:
+    """Report 한 장을 (job, setup, lot, wafer 행, 요약)으로 푼다.
+
+    ★ Scanresult 경로의 출처는 **Report 안의 `Job/Setup`** 이다(파일명이 아니다).
+      파일명은 `{Job}_{Setup}_{Lot}_{날짜}_({시각})_BatchReport.htm` 인데 Job 과 Lot 에 `_`·` `·`-` 가
+      섞여 있어 파일명만으로는 경계를 못 가른다(실장비 516개 중 옛 규칙에 맞는 건 6개뿐이었다).
+      `Job/Setup` 이 없는 옛 형식 Report 만 파일명 규칙으로 되돌아간다."""
     m = REPORT_RE.match(name)
     rep = {"equipment": m.group(1) if m else "", "process_code": m.group(2) if m else "",
            "report_lot": m.group(3) if m else "", "summary": {}, "wafers": []}
@@ -170,7 +179,22 @@ def parse_report(name: str, text: str) -> dict:
                     k = re.sub(r"[:\s]+$", "", row[i])
                     if k and k not in rep["summary"]:
                         rep["summary"][k] = row[i + 1]
+    job, setup = split_job_setup(rep["summary"].get("Job/Setup", ""))
+    if job:
+        rep["equipment"], rep["process_code"] = job, setup
+    rep["job"], rep["setup"] = rep["equipment"], rep["process_code"]
+    if not rep["report_lot"]:
+        rep["report_lot"] = next((w["lot"] for w in rep["wafers"] if w.get("lot")), "")
     return rep
+
+
+def split_job_setup(value: str) -> Tuple[str, str]:
+    """`TB500_RDL2 - Multi/Setup1` → (`TB500_RDL2 - Multi`, `Setup1`). 마지막 `/` 로만 가른다."""
+    v = str(value or "").strip()
+    if "/" not in v:
+        return (v, "") if v else ("", "")
+    job, _, setup = v.rpartition("/")
+    return job.strip(), setup.strip()
 
 
 def read_ini(path) -> dict:
@@ -335,7 +359,7 @@ def _list_new_reports(devs, cache, cfg, backfill, log, progress, on_device, shou
         on_device(d["name"], "listing", "")
         did = str(d["id"])
         dm = {"name": d["name"], "id": did, "note": d["path"], "reports": 0, "found": 0, "error": ""}
-        rep_dir = os.path.join(d["path"], cfg["report_dir"])
+        rep_dir = os.path.join(d["path"], str(d.get("report_dir") or cfg["report_dir"]))
         try:
             files = [e for e in nas_guard.scandir(rep_dir) if e.is_file() and e.name.lower().endswith((".htm", ".html"))]
             files.sort(key=lambda e: e.stat().st_mtime, reverse=True)
@@ -409,7 +433,7 @@ def collect(cfg: dict, full: bool = False, backfill: bool = False, *,
             dev_meta.append(dm)
             continue
         did = str(d["id"])
-        scan_root = os.path.join(d["path"], cfg["scan_dir"])
+        scan_root = os.path.join(d["path"], str(d.get("scan_dir") or cfg["scan_dir"]))
         on_device(d["name"], "parsing", "")
         ok_mtimes, blocked = list(known), []
         for e in pick:

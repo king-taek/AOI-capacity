@@ -18,7 +18,10 @@ Camtek AOI 장비의 BatchReport/WaferInfo.ini 를 읽어 장비별 가동률을
    `AOI_capacity.html` 한 장을 사용자가 더블클릭해 브라우저에서 본다. QtWebEngine·로컬 서버·localhost 를 쓰지 않는다.
    그 HTML 은 데이터·CSS·JS 를 모두 품고 **바깥으로 요청을 한 건도 보내지 않는다**(가드: `test_template_contract.py`).
    브라우저가 NAS 를 직접 읽는 경로도 두지 않는다 — 수집은 Python 만 한다. 자동 주기 수집은 없다(수동 실행만).
-4. **Scanresult 를 재귀 검색하지 않는다.** INI 경로는 `{scan}/{equipment}/{process}/{lot}/{wafer}/WaferInfo.ini` 로 계산해 존재만 확인한다.
+4. **Scanresult 를 재귀 검색하지 않는다.** INI 경로는 `{scan}/{job}/{setup}/{lot}/{wafer}/WaferInfo.ini` 로 계산해 존재만 확인한다.
+   `job`·`setup` 의 출처는 **Report 안의 `Job/Setup` 값**이다(파일명이 아니다 — 실장비 516개 중 옛 파일명 규칙에 맞는 건 6개뿐이었다).
+   `Job/Setup` 이 없는 옛 형식만 파일명 규칙으로 되돌아간다. Report·Scanresult 폴더 이름은 장비마다 달라(`Reports`)
+   `devices.find_subdir` 이 후보 몇 개의 존재만 확인해 고른다.
 5. **런처 exe 에는 앱 코드가 0줄이다.** `scripts/exe_launcher.py` 는 표준 라이브러리만 import 한다
    (PyInstaller 의 FrozenImporter 가 디스크의 새 코드를 가린다). `hiddenimports=[]`, `pathex=[]`, 앱 패키지는 `excludes`.
 6. **`app.new` 는 완성·검증된 트리만.** `app.new.part` 에 만들고 검증 후 rename 한 것이 준비 신호. VERSION 은 스테이징 트리에만 쓴다.

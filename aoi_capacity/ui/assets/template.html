@@ -307,7 +307,7 @@ const COLS=["device","report_rank","equipment","process_code","report_lot","lot"
 const MON={jan:0,feb:1,mar:2,apr:3,may:4,jun:5,jul:6,aug:7,sep:8,oct:9,nov:10,dec:11};
 const APP_VERSION="";
 const DAY=86400000;
-const ERR_KO={ID_READ_ERROR:"Wafer ID 인식 실패",SCAN_ERROR:"스캔 오류",USER_ABORT:"사용자 중단",ABORTED:"중단됨",OTHER:"기타 오류"};
+const ERR_KO={ID_READ_ERROR:"Wafer ID 인식 실패",SCAN_ERROR:"스캔 오류",ALIGN_ERROR:"정렬 오류",USER_ABORT:"사용자 중단",ABORTED:"중단됨",OTHER:"기타 오류"};
 const ERR_TXT={USER_ABORT:"Aborted. Wafer aborted by user.",ABORTED:"Aborted.",SCAN_ERROR:"Scan Error: Scan2d optic is not valid on machine.",ID_READ_ERROR:"Failed to read wafer id. Reading error = . Aborted."};
 
 let rows=[],meta={},devNames=[],D=null,day=null,selDev=null;
@@ -326,8 +326,8 @@ function parseDt(s){if(!s)return null;s=String(s).trim();
   if(m){let h=+m[4];if(m[7]){const pm=m[7].toUpperCase()==="PM";if(pm&&h<12)h+=12;if(!pm&&h===12)h=0;}return new Date(2000+ +m[3],MON[m[2].toLowerCase()],+m[1],h,+m[5],+m[6]);}
   m=s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})\s+(\d{1,2}):(\d{2}):(\d{2})$/);if(m)return new Date(+m[3],+m[1]-1,+m[2],+m[4],+m[5],+m[6]);
   m=s.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})$/);if(m)return new Date(+m[1],+m[2]-1,+m[3],+m[4],+m[5],+m[6]);return null;}
-function normStatus(s){const t=(s||"").trim().toLowerCase();if(t==="pass")return"PASS";if(t.includes("skip"))return"SKIPPED";if(t.includes("failed to read wafer id"))return"ID_READ_ERROR";if(t.includes("scan error"))return"SCAN_ERROR";if(t.includes("wafer aborted by user"))return"USER_ABORT";if(t.includes("abort"))return"ABORTED";return t?"OTHER":"";}
-const isErr=n=>["ID_READ_ERROR","SCAN_ERROR","USER_ABORT","ABORTED","OTHER"].includes(n);
+function normStatus(s){const t=(s||"").trim().toLowerCase();if(t==="pass")return"PASS";if(t.includes("skip"))return"SKIPPED";if(t.includes("failed to read wafer id"))return"ID_READ_ERROR";if(t.includes("scan error"))return"SCAN_ERROR";if(t.includes("alignment error"))return"ALIGN_ERROR";if(t.includes("wafer aborted by user"))return"USER_ABORT";if(t.includes("abort"))return"ABORTED";return t?"OTHER":"";}
+const isErr=n=>["ID_READ_ERROR","SCAN_ERROR","ALIGN_ERROR","USER_ABORT","ABORTED","OTHER"].includes(n);
 function fmtSec(s){if(s==null||isNaN(s))return"–";s=Math.round(s);const h=Math.floor(s/3600),m=Math.floor(s%3600/60),x=s%60;if(h)return`${h}시간 ${p2(m)}분`;if(m)return`${m}분 ${p2(x)}초`;return`${x}초`;}
 function fmtSecS(s){if(s==null||isNaN(s))return"–";s=Math.round(s);const h=Math.floor(s/3600),m=Math.floor(s%3600/60);if(h)return`${h}h ${p2(m)}m`;return`${m}m`;}
 const hm=d=>`${p2(d.getHours())}:${p2(d.getMinutes())}`;
