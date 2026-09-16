@@ -44,7 +44,8 @@ button{font:inherit;color:inherit}
 :focus-visible{outline:2px solid var(--accent-2);outline-offset:2px}
 @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
 ::-webkit-scrollbar{width:10px;height:10px}::-webkit-scrollbar-thumb{background:var(--line-2);border-radius:5px;border:2px solid var(--bg)}::-webkit-scrollbar-track{background:transparent}
-.btn,.card,.input,.nav{transition:background .35s var(--silk),border-color .35s var(--silk),transform .5s var(--silk),box-shadow .5s var(--silk),color .35s var(--silk)}
+/* hover 에서 요소를 옮기지 않는다(transform 없음) — 경계에서 mouseleave 가 되풀이되며 hit box 가 흔들린다. 반응은 120ms. */
+.btn,.card,.input,.nav{transition:background .12s var(--silk),border-color .12s var(--silk),box-shadow .12s var(--silk),color .12s var(--silk)}
 
 /* shell */
 .app{display:grid;grid-template-columns:210px 1fr;grid-template-rows:60px 1fr;height:100vh}
@@ -64,7 +65,7 @@ button{font:inherit;color:inherit}
 .daynav .today{font-size:11px;font-weight:600;color:var(--good);letter-spacing:.06em;margin-left:4px}
 .side{background:var(--surface);border-right:1px solid var(--line);padding:14px 10px;display:flex;flex-direction:column;gap:2px}
 .nav{display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:8px;border:0;background:none;text-align:left;width:100%;cursor:pointer;color:var(--ink-2);font-size:14px}
-.nav:hover{background:var(--raise);color:var(--ink);transform:translateX(2px)}
+.nav:hover{background:var(--raise);color:var(--ink)}
 .nav[aria-current="page"]{background:var(--accent-soft);color:var(--accent-2);font-weight:600;box-shadow:inset 2px 0 0 var(--accent)}
 :root[data-theme="light"] .nav[aria-current="page"]{color:var(--accent)}
 .nav svg{width:17px;height:17px;flex:none}
@@ -72,13 +73,13 @@ button{font:inherit;color:inherit}
 .side .foot{margin-top:auto;padding:10px 12px;font-size:11.5px;color:var(--ink-3);line-height:1.5}
 .main{overflow:auto;padding:20px 24px 80px}
 .view{display:none;max-width:1360px;margin:0 auto}
-.view.on{display:block;animation:silk-in .6s var(--silk)}
-@keyframes silk-in{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:none}}
+.view.on{display:block;animation:silk-in .15s var(--silk)}
+@keyframes silk-in{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
 @media (max-width:820px){.app{grid-template-columns:1fr}.side{display:none}.brand{width:auto}.daynav .d{min-width:0;font-size:15px}.main{padding:14px}}
 
 /* controls */
 .btn{display:inline-flex;align-items:center;gap:7px;padding:7px 12px;border-radius:8px;border:1px solid var(--line-2);background:var(--surface);cursor:pointer;font-weight:500;font-size:13px;white-space:nowrap}
-.btn:hover{background:var(--raise);transform:translateY(-1px)}
+.btn:hover{background:var(--raise)}
 .btn.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-ink);font-weight:600}
 .btn.primary:hover{box-shadow:0 6px 20px rgba(74,158,232,.35)}
 .btn.ghost{border-color:transparent;background:none}
@@ -120,7 +121,7 @@ textarea.input{width:100%;min-height:110px;font-family:var(--mono);font-size:12.
 /* device cards (compact, 30+) */
 .cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(196px,1fr));gap:10px}
 .dev{padding:12px 14px;cursor:pointer;display:flex;flex-direction:column;gap:7px;overflow:hidden}
-.dev:hover{transform:translateY(-2px);box-shadow:var(--glow);border-color:var(--line-2)}
+.dev:hover{box-shadow:var(--glow);border-color:var(--line-2)}
 .dev.sel{border-color:var(--accent);box-shadow:var(--glow)}
 .dev.alert{border-left:3px solid var(--crit)}
 .dev .hd{display:flex;align-items:center;justify-content:space-between;gap:6px}
@@ -170,7 +171,8 @@ textarea.input{width:100%;min-height:110px;font-family:var(--mono);font-size:12.
 .chart .xl.sel{fill:var(--accent-2);font-weight:600}
 .chart .vl{fill:var(--ink);font-size:11px;font-weight:600}
 .chart rect.seg{cursor:pointer}
-.chart rect.seg:hover,.chart rect.seg.hl{stroke:var(--ink);stroke-width:1.5}
+.chart rect.seg.hot,.chart rect.seg:focus,.chart rect.seg.hl{stroke:var(--ink);stroke-width:1.5;outline:none}
+.chart rect.hit{fill:transparent;cursor:default}.chart rect.hit.pick{cursor:pointer}
 .chart .now{stroke:var(--accent-2);stroke-width:1;stroke-dasharray:3 3}
 .chart .avgline{stroke:var(--warn);stroke-width:1;stroke-dasharray:4 3}
 .tip{position:fixed;z-index:50;pointer-events:none;background:var(--raise);color:var(--ink);border:1px solid var(--line-2);padding:8px 10px;border-radius:8px;font-size:12px;line-height:1.45;box-shadow:var(--shadow);max-width:320px;display:none}
@@ -375,7 +377,9 @@ function setThresholds(u,e){th={util:+u||0,err:+e||0};if($("#thUtil")){$("#thUti
 function saveTh(){th={util:+$("#thUtil").value||0,err:+$("#thErr").value||0};try{localStorage.setItem("aoi.th",JSON.stringify(th));}catch(e){}}
 const tip=$("#tip");
 function showTip(html,ev){tip.innerHTML=html;tip.style.display="block";moveTip(ev);}
-function moveTip(ev){const w=tip.offsetWidth,h=tip.offsetHeight;let x=ev.clientX+14,y=ev.clientY+14;if(x+w>innerWidth-8)x=ev.clientX-w-14;if(y+h>innerHeight-8)y=ev.clientY-h-14;tip.style.left=x+"px";tip.style.top=y+"px";}
+function moveTip(ev){const w=tip.offsetWidth,h=tip.offsetHeight;let x=ev.clientX+14,y=ev.clientY+14;if(x+w>innerWidth-8)x=ev.clientX-w-14;if(y+h>innerHeight-8)y=ev.clientY-h-14;
+  x=Math.max(8,Math.min(x,innerWidth-w-8));y=Math.max(8,Math.min(y,innerHeight-h-8));   /* 왼쪽·위도 잘리지 않게 */
+  tip.style.left=x+"px";tip.style.top=y+"px";}
 function hideTip(){tip.style.display="none";}
 function bindTips(root,sel,fn){root.querySelectorAll(sel).forEach(el=>{el.addEventListener("mouseenter",ev=>showTip(fn(el),ev));el.addEventListener("mousemove",moveTip);el.addEventListener("mouseleave",hideTip);el.addEventListener("focus",()=>{const b=el.getBoundingClientRect();showTip(fn(el),{clientX:b.left+b.width/2,clientY:b.top});});el.addEventListener("blur",hideTip);});}
 function segBind(id,attr,cb){document.querySelectorAll(`#${id} button`).forEach(b=>b.onclick=()=>{document.querySelectorAll(`#${id} button`).forEach(x=>x.setAttribute("aria-pressed",x===b));cb(b.dataset[attr]);});}
@@ -409,32 +413,23 @@ function loadDemo(){
 /* Lot 막대 툴팁 — 한 막대 안에 섞여 있는 것을 **종합**해서 보여 준다(사용자 확정).
    막대만 보고는 "몇 장이 정상이고 몇 장이 실패했는지" 를 알 수 없기 때문이다. */
 function lotTip(L){
-  const kinds=[["정상 검사",L.parts.filter(p=>p.kind==="run"&&!p.g.redo&&p.g.dups<2&&!p.g.rework).length,"var(--run)"],
-               ["다시 검사",L.parts.filter(p=>p.kind==="run"&&(p.g.redo||p.g.dups>1)).length,"var(--warn)"],
+  const kinds=[["정상",L.parts.filter(p=>p.kind==="run"&&!p.g.redo&&p.g.dups<2&&!p.g.rework).length,"var(--run)"],
+               ["재검사",L.parts.filter(p=>p.kind==="run"&&(p.g.redo||p.g.dups>1)).length,"var(--warn)"],
                ["재작업",L.parts.filter(p=>p.kind==="run"&&p.g.rework&&!(p.g.redo||p.g.dups>1)).length,"var(--rework)"],
-               ["오류·중단",L.err,"var(--err)"],["시험 가동",L.nTest,"var(--prev)"]].filter(x=>x[1]);
+               ["오류",L.err,"var(--err)"],["시험",L.nTest,"var(--prev)"]].filter(x=>x[1]);
   const mix=kinds.map(([n,c,col])=>`<span style="color:${col}">■</span> ${n} ${c}`).join(" · ");
-  const errs=L.parts.filter(p=>p.kind==="err");
-  const list=errs.length?"<br>"+errs.slice(0,4).map(p=>`<span class="k">${hm(new Date(p.g.s))} · ${ERR_KO[p.g.r.norm_status]||"오류"}${p.g.batch?" (배치 전체)":""}</span>`).join("<br>")
-    +(errs.length>4?`<br><span class="k">… 외 ${errs.length-4}건</span>`:""):"";
   const nBatch=L.parts.filter(p=>p.g.batch).length,nWafer=L.parts.length-nBatch;   /* 통째로 실패한 시도는 Wafer 가 아니다 */
-  return`<b>Lot ${esc(L.lot)}</b> · ${esc(L.recipe)}<br>${hm(new Date(L.s))} → ${hm(new Date(L.e))} · ${fmtSec((L.e-L.s)/1000)}`
-    +`<br>Wafer ${nWafer}장${nBatch?` · 배치 ${nBatch}건`:""} — ${mix||"—"}`
-    +`<br>검사 시간 ${fmtSec(L.run/1000)}${L.test?' <span class="chip mute">가동률 제외</span>':""}${list}${openHint(L.r)}`;}
-
-/* Lot 막대를 묶는 기준 — **Lot 이름을 있는 그대로** 쓴다(사용자 확정).
-   `TTP DIA` 와 `TTP-DIA`, `GUX-PIDS3` 와 `GUX-PIDS3 RE`, `DYD-FS` 와 `DYD-FS REWORK` 는 전부 따로다 —
-   따로 돌린 것이면 따로 보여야 실가동률을 깎은 원인(재스캔·재작업)이 화면에 남는다. */
+  /* hover 는 3줄 — 대상 / 시각·기간 / 핵심 상태. 파일명·원문·계산식은 상세에서 본다. */
+  return`<b>Lot ${esc(L.lot)}</b> · ${esc(L.recipe)}`
+    +`<br>${hm(new Date(L.s))} → ${hm(new Date(L.e))} · ${fmtSec((L.e-L.s)/1000)} · 검사 ${fmtSec(L.run/1000)}${L.test?' <span class="chip mute">가동률 제외</span>':""}`
+    +`<br>Wafer ${nWafer}장${nBatch?` · 배치 ${nBatch}건`:""} — ${mix||"—"}`+tipHint();}
+/* 툴팁 맨 아래 한 줄 — 무엇을 더 할 수 있는지만 짧게 */
+const tipHint=()=>'<br><span class="k">더블클릭: Report 열기</span>';
 const lotKey=(lot,isTest)=>(isTest?"TEST\u0000":"")+String(lot||"");
 /* 같은 Lot 이어도 **중간에 시간이 비면 막대를 나눈다**(사용자 확정).
    실장비 3일치(같은 Lot 안 연속 Wafer 사이 11,529건)에서 99%가 60초 이내였다 — 그보다 길게 빈 것은
    Wafer 교체가 아니라 설비가 실제로 쉰 것이므로 한 막대로 이어 붙이지 않는다. */
 const LOT_GAP_SEC=60;
-
-/* ---------- Report 열기 ----------
-   상태바를 더블클릭하면 그 구간을 만든 BatchReport(.htm) 를 브라우저 새 탭으로 연다.
-   경로는 수집기가 넣어 준 장비 경로(meta.devices[].note) + Report 폴더 + 파일 이름으로 만든다.
-   NAS 를 읽는 건 사람이 연 그 탭이지 이 화면이 아니다 — 이 화면은 여전히 요청을 한 건도 보내지 않는다. */
 function devPath(name){const d=(meta.devices||[]).find(x=>x.name===name);return d?{path:d.note||"",dir:d.report_dir||"Report"}:null;}
 function reportUrl(r){
   if(!r||!r.report)return"";const d=devPath(r.device);if(!d||!d.path)return"";
@@ -445,7 +440,6 @@ function reportUrl(r){
 function openReport(r){const u=reportUrl(r);if(!u){log("이 구간에는 Report 파일 이름이 없습니다");return;}
   const a=document.createElement("a");a.href=u;a.target="_blank";a.rel="noopener";
   document.body.appendChild(a);a.click();a.remove();}
-const openHint=r=>reportUrl(r)?`<br><span class="k">더블클릭하면 Report 를 엽니다 · ${esc(r.report)}</span>`:"";
 /* ---------- model ---------- */
 function build(){
   devNames=[...new Set(rows.map(r=>r.device))].sort(cmpDev);
@@ -537,7 +531,7 @@ segBind("unitSeg","u",v=>{ui.unit=v;ui.span={day:14,week:8,month:6}[v];ui.cmpAnc
 segBind("cmpSeg","p",v=>{ui.cmpP=+v;renderCompare();});
 segBind("cmpSort","s",v=>{ui.cmpSort=v;renderCompare();});
 $("#trendDev").onchange=()=>{ui.trendDev=$("#trendDev").value;renderTrend();};
-document.addEventListener("keydown",e=>{if(e.target.tagName==="INPUT"||e.target.tagName==="SELECT"||e.target.tagName==="TEXTAREA")return;if(!$("#v-home").classList.contains("on"))return;if(e.key==="ArrowLeft")stepDay(-1);if(e.key==="ArrowRight")stepDay(1);if(e.key==="Escape")selectDev(null);});
+document.addEventListener("keydown",e=>{if(e.target.tagName==="INPUT"||e.target.tagName==="SELECT"||e.target.tagName==="TEXTAREA")return;if(!$("#v-home").classList.contains("on"))return;if(e.key==="Tab"&&hitCycle&&hitCycle()){e.preventDefault();return;}if(e.key==="ArrowLeft")stepDay(-1);if(e.key==="ArrowRight")stepDay(1);if(e.key==="Escape")selectDev(null);});
 
 /* ---------- render: home ---------- */
 function renderAll(){
@@ -580,7 +574,54 @@ function renderHome(){
     $("#homeTbody").innerHTML=list.map(({n,m})=>`<tr class="click ${selDev===n?"sel":""}" onclick="selectDev('${esc(n)}')"><td><b>${esc(n)}</b>${collectChip(n)?" "+collectChip(n):""}${isAlert(m)?' <span class="chip crit">주의</span>':""}${!m.hasData?' <span class="chip mute">데이터 없음</span>':""}</td><td style="width:32%"><span class="hbar" style="width:${m.hasData?m.util.toFixed(1):0}%"></span></td><td class="r"><b>${m.hasData?pct(m.util):"–"}</b></td><td class="r">${fmtSecS(m.run)}</td><td class="r">${m.nErr?`<span class="chip crit">${m.nErr}</span>`:0}</td><td class="r">${fmtSecS(m.err+m.stop)}</td></tr>`).join("")
       +out.map(d=>`<tr class="off"><td><b>${esc(d.name)}</b> <span class="chip mute">수집 안 함</span></td><td colspan="5" class="faint">현재 수집 범위가 아닙니다${d.note?" · "+esc(d.note):""}</td></tr>`).join("");}
 }
-function selectDev(n){selDev=selDev===n?null:n;renderHome();renderDetail();if(selDev)setTimeout(()=>$("#detail").scrollIntoView({behavior:"smooth",block:"nearest"}),50);}
+const smooth=()=>matchMedia("(prefers-reduced-motion: reduce)").matches?"auto":"smooth";   /* 움직임 줄이기 설정이면 스크롤도 바로 */
+function selectDev(n){selDev=selDev===n?null:n;renderHome();renderDetail();if(selDev)setTimeout(()=>$("#detail").scrollIntoView({behavior:smooth(),block:"nearest"}),50);}
+/* ---------- 타임라인 포인터 층 ----------
+   막대의 반응 영역이 그려진 폭과 같아(실측: 1440px 창에서 최소 1.9px) 짧은 오류·재검사를 조준하기 어렵다.
+   시각 막대는 그대로 두고, 맨 위의 투명 층이 포인터 x 에서 **가장 가까운 막대**를 고른다.
+   - 막대 안이면 거리 0. 겹치면(오류 막대가 Lot 위에 있다) **폭이 좁은 쪽**이 이긴다 — 작은 오류가 넓은 Lot 에 묻히지 않게.
+   - 막대 밖이면 가장자리까지의 거리(CSS px)가 HIT_MAX_PX 안일 때만 잡는다. 그 밖은 '기록 없음' — 엉뚱한 막대에 붙이지 않는다.
+   - 시간 길이·가동률·Lot 경계는 건드리지 않는다. 키보드(Tab·Enter)는 막대 자체의 tabindex 가 그대로 받는다. */
+const HIT_MAX_PX=6;
+function bindHitLayer(svg,m){const hit=svg.querySelector("rect.hit");if(!hit)return;
+  /* 오류 막대는 자기 Wafer 가 속한 Lot 막대와 늘 겹친다 — 같은 대상을 가리키면 더 구체적인 오류 쪽을 먼저 보여 준다.
+     서로 다른 Lot 이 겹칠 때만 좁은 쪽이 이긴다(작은 막대가 넓은 막대에 묻히지 않게). */
+  const segs=[...svg.querySelectorAll("rect.seg")].map(el=>({el,x0:+el.getAttribute("x"),x1:+el.getAttribute("x")+ +el.getAttribute("width"),err:el.dataset.l==null,
+    i:el.dataset.i!=null?+el.dataset.i:null,parts:el.dataset.l!=null?new Set(m.lots[+el.dataset.l].parts.map(p=>m.items.indexOf(p))):null}));
+  let cur=null,cands=[],pick=0;
+  const scale=()=>svg.getScreenCTM().a||1;
+  const toX=ev=>{const pt=svg.createSVGPoint();pt.x=ev.clientX;pt.y=ev.clientY;return pt.matrixTransform(svg.getScreenCTM().inverse()).x;};
+  const choose=sx=>{const k=scale();const inside=segs.filter(t=>sx>=t.x0&&sx<=t.x1).sort((p,q)=>(p.x1-p.x0)-(q.x1-q.x0)||(q.err-p.err));
+    if(inside.length){const e=inside.find(t=>t.err&&inside.some(o=>o.parts&&o.parts.has(t.i)));return e?[e,...inside.filter(t=>t!==e)]:inside;}
+    let best=null,bd=HIT_MAX_PX;for(const t of segs){const d=(sx<t.x0?t.x0-sx:sx-t.x1)*k;if(d<=bd){bd=d;best=t;}}return best?[best]:[];};
+  const apply=(list,i)=>{const nxt=list[i]?list[i].el:null;if(nxt===cur&&list.length===cands.length)return;
+    if(cur)cur.classList.remove("hot");cur=nxt;cands=list;pick=i;
+    if(!cur){hideTip();hit.classList.remove("pick");return;}
+    cur.classList.add("hot");hit.classList.toggle("pick",cur.dataset.open==="1");
+    tip.innerHTML=(list.length>1?`<span class="k">겹친 막대 ${list.length}개 · Tab 으로 전환 (${i+1}/${list.length})</span><br>`:"")+segTip(m,cur);tip.style.display="block";};
+  hit.onmousemove=ev=>{const list=choose(toX(ev));const keep=pick>0&&cur&&list.some(t=>t.el===cur);apply(list,keep?list.findIndex(t=>t.el===cur):0);if(cur)moveTip(ev);};
+  hit.onmouseleave=()=>apply([],0);
+  hit.onclick=()=>{if(cur&&cur.onclick)cur.onclick();};
+  hit.ondblclick=ev=>{ev.preventDefault();if(cur&&cur.ondblclick)cur.ondblclick(ev);};
+  hitCycle=()=>{if(!(cands.length>1&&cur))return false;apply(cands,(pick+1)%cands.length);return true;};}
+let hitCycle=null;   /* 겹친 막대 사이를 Tab 으로 옮기는 콜백 — document 의 keydown 이 부른다 */
+
+/* 타임라인 막대 hover — 3줄(대상 / 시각·기간 / 핵심 상태). 오류는 발생 시각·종류·구간·그 뒤 정지를 나눠 적는다(사용자 확정). */
+function segTip(m,el){if(el.dataset.l!=null)return lotTip(m.lots[+el.dataset.l]);
+  const it=m.items[+el.dataset.i],r=it.g.r;const span=`${hm(new Date(it.g.s))} → ${hm(new Date(it.g.e))} · ${fmtSec((it.g.e-it.g.s)/1000)}`;
+  if(it.kind==="test")return`<b>시험 · ${escLot(r)}</b><br>${span}<br><span class="k">가동률 제외 (Lot 이름에 TEST)</span>`+tipHint();
+  if(it.kind==="stop")return`<b>정지(추정)</b> · ${fmtSec((it.e-it.s)/1000)}<br>${hm(new Date(it.s))} → ${hm(new Date(it.e))}<br><span class="k">${escLot(r)} / ${esc(r.wafer_id)} 오류 뒤 다음 Wafer 까지</span>`;
+  const marks=[it.g.redo?'<span class="chip redo">재검사</span>':"",it.g.rework?'<span class="chip rework">재작업</span>':""].filter(Boolean).join(" ");
+  const dup=it.g.dups>1?` · <span class="k">기록 ${it.g.dups}건 · 시간은 1번만 계산</span>`:"";
+  if(it.kind==="err"){
+    const st=m.items.find(i=>i.kind==="stop"&&i.g===it.g);
+    return`<b><span style="color:var(--crit-ink)">${ERR_KO[r.norm_status]||"오류"}</span>${it.g.batch?" · 배치 중단":""}</b> · ${escLot(r)}${r.kind==="batch"?"":" / "+esc(r.wafer_id)}`
+      +`<br>오류 발생 <b>${hm(new Date(it.g.s))}</b> · 오류 구간 ${fmtSec((it.g.e-it.g.s)/1000)}`
+      +(st?`<br>그 뒤 정지(추정) ${fmtSec((st.e-st.s)/1000)} → ${hm(new Date(st.e))} · <span class="k">합계 ${fmtSec((st.e-it.g.s)/1000)}</span>`
+          :`<br><span class="k">복구 기록 없음 — 이 뒤로 검사된 Wafer 가 없습니다</span>`)
+      +(marks?"<br>"+marks:"")+dup+tipHint();}
+  return`<b>${esc(r.lot)} / ${esc(r.wafer_id)}</b><br>${span}<br>정상 검사 · ${esc(r.recipe)}${marks?" "+marks:""}${dup}`+tipHint();}
+
 function renderDetail(){
   const box=$("#detail");if(!selDev||!D[selDev]){box.hidden=true;return;}box.hidden=false;
   const m=dayMetrics(D[selDev],day);const a=keyDay(day).getTime();const now=Date.now();
@@ -621,29 +662,17 @@ function renderDetail(){
   errIt.forEach(it=>{const sp=stopOf(it.g),e2=sp?Math.max(it.e,sp.e):it.e;
     s+=`<rect class="seg" tabindex="0" data-i="${m.items.indexOf(it)}" x="${x(it.s).toFixed(1)}" y="${barY}" width="${Math.max(2,x(e2)-x(it.s)).toFixed(1)}" height="${barH}" fill="var(--err)"/>`;});
   if(m.partial)s+=`<line class="now" x1="${x(now).toFixed(1)}" x2="${x(now).toFixed(1)}" y1="${barY-8}" y2="${barY+barH+8}"/><text x="${x(now).toFixed(1)}" y="${barY-10}" text-anchor="middle" fill="var(--accent-2)">지금</text>`;
+  /* 포인터용 투명 층 — 맨 위에 두어 마우스는 이 층이 받고, 가장 가까운 막대에 넘긴다(막대 크기는 그대로) */
+  s+=`<rect class="hit" x="${L}" y="${barY-8}" width="${W-L-R}" height="${barH+16}"/>`;
   s+="</svg>";$("#detTl").innerHTML=s;
-  bindTips($("#detTl"),"rect.seg",el=>{if(el.dataset.l!=null)return lotTip(m.lots[+el.dataset.l]);
-    const it=m.items[+el.dataset.i],r=it.g.r;if(it.kind==="test")return`<b>시험 가동 (가동률에서 제외)</b> · ${escLot(r)}<br>${hm(new Date(it.g.s))} → ${hm(new Date(it.g.e))} · ${fmtSec((it.g.e-it.g.s)/1000)}<br><span class="k">Lot 이름에 TEST 가 있어 가동률에 넣지 않습니다</span>`;
-    if(it.kind==="stop")return`<b>오류 후 정지 (추정)</b> · ${fmtSec((it.e-it.s)/1000)}<br>${hm(new Date(it.s))} → ${hm(new Date(it.e))}<br><span class="k">${esc(r.lot)} / ${esc(r.wafer_id)} 오류 이후 다음 Wafer 시작까지</span>`;
-    const marks=[it.g.redo?'<span class="chip redo">다시 검사</span>':"",it.g.rework?'<span class="chip rework">재작업</span>':""].filter(Boolean).join(" ");
-    const dup=(marks?"<br>"+marks:"")+(it.g.dups>1?`<br><span class="k">같은 시각의 기록 ${it.g.dups}건(다시 검사한 것으로 보입니다) — 시간은 1번만 계산</span>`:"");
-    if(it.kind==="err"){
-      /* 한 막대로 이어 그리되, 안에서는 **언제 무슨 오류가 났고 그 뒤 얼마를 기다렸는지**를 나눠 적는다 */
-      const st=m.items.find(i=>i.kind==="stop"&&i.g===it.g);
-      return`<b>${it.g.batch?"배치 중단 · ":""}${escLot(r)}${r.kind==="batch"?"":" / "+esc(r.wafer_id)}</b>`
-        +`<br><span style="color:var(--crit-ink)">${ERR_KO[r.norm_status]||"오류"}</span> · ${esc(r.status)}`
-        +`<br>오류 발생 <b>${hm(new Date(it.g.s))}</b> · 오류 구간 ${fmtSec((it.g.e-it.g.s)/1000)}`
-        +(st?`<br>그 뒤 정지(추정) ${fmtSec((st.e-st.s)/1000)} — ${hm(new Date(st.s))} → ${hm(new Date(st.e))} 다음 Wafer 시작까지`
-            :`<br><span class="k">복구 기록 없음 — 이 뒤로 검사된 Wafer 가 없습니다</span>`)
-        +(st?`<br><span class="k">합계 ${fmtSec((st.e-it.g.s)/1000)} (막대 전체 길이)</span>`:"")
-        +(it.g.batch?'<br><span class="k">검사된 Wafer 가 없어 Batch 시각으로만 표시합니다</span>':"")+dup+openHint(r);}
-    return`<b>${esc(r.lot)} / ${esc(r.wafer_id)}</b><br>${hm(new Date(it.g.s))} → ${hm(new Date(it.g.e))} · ${fmtSec((it.g.e-it.g.s)/1000)}<br>정상 검사 · ${esc(r.recipe)}${dup}${openHint(r)}`;});
+  bindTips($("#detTl"),"rect.seg",el=>segTip(m,el));
   const rowOf=el=>el.dataset.l!=null?m.lots[+el.dataset.l].r:m.items[+el.dataset.i].g.r;
   $("#detTl").querySelectorAll("rect.seg").forEach(el=>{
     el.onclick=()=>{if(el.dataset.l!=null)return;const it=m.items[+el.dataset.i];const idx=m.errors.findIndex(e=>e.r===it.g.r);if(idx>=0)hlSeg(idx);};
     el.ondblclick=ev=>{ev.preventDefault();openReport(rowOf(el));};
     el.onkeydown=ev=>{if(ev.key==="Enter"){ev.preventDefault();openReport(rowOf(el));}};
-    const u=reportUrl(rowOf(el));if(u)el.style.cursor="pointer";});
+    el.dataset.open=reportUrl(rowOf(el))?"1":"";});
+  bindHitLayer($("#detTl svg"),m);
   const lotTbl=m.lots.length?`<details style="margin:6px 0 10px"><summary style="cursor:pointer;color:var(--accent-2);font-size:13px">Lot ${m.lots.length}개 목록</summary><table class="tbl" style="margin-top:6px"><thead><tr><th>Lot</th><th>표기</th><th>Recipe</th><th>시작</th><th>종료</th><th class="r">소요</th><th class="r">검사</th><th class="r">오류</th></tr></thead><tbody>${m.lots.map((L,i)=>`<tr class="click" ondblclick="openReport(window._m.lots[${i}].r)" title="더블클릭: Report 열기"><td class="mono">${esc(L.lot)}</td><td>${L.test?'<span class="chip mute">시험 · 제외</span>':L.redo?'<span class="chip redo">다시 검사</span>':L.rework?'<span class="chip rework">재작업</span>':""}</td><td>${esc(L.recipe)}</td><td class="num">${hm(new Date(L.s))}</td><td class="num">${hm(new Date(L.e))}</td><td class="r">${fmtSecS((L.e-L.s)/1000)}</td><td class="r">${fmtSecS(L.run/1000)}</td><td class="r">${L.err?`<span class="chip crit">${L.err}</span>`:0}</td></tr>`).join("")}</tbody></table></details>`:"";
   $("#detErrs").innerHTML=lotTbl+(m.errors.length?`<table class="tbl"><thead><tr><th>시각</th><th>Lot / Wafer</th><th>오류</th><th class="r">정지 시간 (추정)</th><th>장비 메시지</th></tr></thead><tbody>${m.errors.map((e,i)=>`<tr class="click" data-e="${i}" onclick="hlSeg(${i})" ondblclick="openReport(window._m.errors[${i}].r)" title="더블클릭: Report 열기"><td class="num">${e.t?hm(new Date(e.t)):"–"}${e.noTime?' <span class="chip mute" title="INI가 없어 Batch 시작 시각으로 표시">Batch 시작</span>':""}</td><td class="mono">${escLot(e.r)}${e.r.kind==="batch"?' <span class="chip crit">배치 전체</span>':" / "+esc(e.r.wafer_id)}</td><td><span class="chip crit">${ERR_KO[e.r.norm_status]||"오류"}</span>${e.r.kind==="batch"?' <span class="chip mute">검사 전 중단</span>':""}</td><td class="r">${e.open?'<span class="chip warn">복구 기록 없음</span>':e.stop!=null?fmtSec(e.stop):"–"}</td><td class="faint">${esc(e.r.status)}</td></tr>`).join("")}</tbody></table><p class="faint" style="font-size:12px;margin-top:8px">정지 시간은 오류 Wafer 종료부터 다음 Wafer 시작까지의 공백으로 추정한 값입니다. 장비 이벤트 로그가 아닙니다. 타임라인에서는 오류 구간과 그 뒤 정지를 빨간 막대 하나로 이어 그립니다.</p>`
     :(m.hasData?'<p class="faint" style="font-size:13px;padding:6px 0">이 날은 오류가 없습니다.</p>':'<p class="faint" style="font-size:13px;padding:6px 0">이 날은 데이터가 없습니다.</p>'));

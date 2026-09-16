@@ -135,7 +135,7 @@ def test_error_and_the_stop_after_it_are_drawn_as_one_bar():
     # 한 막대로 그리되 툴팁에서는 언제·무슨 오류·얼마나 기다렸는지를 나눠 적는다(사용자 확정)
     assert "오류 발생 <b>${hm(new Date(it.g.s))}</b> · 오류 구간" in HTML
     assert "그 뒤 정지(추정) ${fmtSec((st.e-st.s)/1000)}" in HTML
-    assert "합계 ${fmtSec((st.e-it.g.s)/1000)} (막대 전체 길이)" in HTML
+    assert "합계 ${fmtSec((st.e-it.g.s)/1000)}" in HTML
     assert "오류·중단 + 그 뒤 정지 (한 막대)" in HTML
 
 
@@ -233,3 +233,34 @@ def test_home_distinguishes_unreachable_and_partial_devices_from_no_data():
 def test_settings_tab_shows_collector_timing_when_present():
     assert "function renderTiming(" in HTML and 'id="timingCard" hidden' in HTML
     assert "meta.timing||{}" in HTML and "INI 요청" in HTML
+
+
+def test_timeline_has_a_pointer_hit_layer_with_a_max_distance():
+    """★ 실측: 막대의 반응 영역이 그려진 폭과 같아 1440px 창에서 최소 1.9px 였다. 시각 막대는 그대로 두고
+    맨 위의 투명 층이 가장 가까운 막대를 고른다 — 최대 거리 밖은 잡지 않고, 겹치면 좁은 쪽이 이긴다."""
+    assert "const HIT_MAX_PX=6;" in HTML and "function bindHitLayer(" in HTML
+    assert '<rect class="hit"' in HTML and "bindHitLayer($(\"#detTl svg\"),m)" in HTML
+    assert "(p.x1-p.x0)-(q.x1-q.x0)" in HTML                    # 겹치면 폭이 좁은 막대 우선
+    assert "겹친 막대 ${list.length}개 · Tab 으로 전환" in HTML
+    # hit 영역을 넓혀도 실제 막대 폭·시간 길이는 바꾸지 않는다
+    assert "const w=Math.max(2,x(L.e)-x(L.s));" in HTML
+    assert 'width="${Math.max(2,x(e2)-x(it.s)).toFixed(1)}"' in HTML
+
+
+def test_tooltip_is_clamped_on_all_four_sides():
+    assert "x=Math.max(8,Math.min(x,innerWidth-w-8));y=Math.max(8,Math.min(y,innerHeight-h-8));" in HTML
+
+
+def test_hover_tooltips_are_short_and_carry_no_file_names():
+    """hover 는 3줄(대상 / 시각·기간 / 핵심 상태) + 안내 한 줄. 파일명·원문·계산식은 상세에서 본다."""
+    assert "function segTip(" in HTML and "const tipHint=" in HTML
+    assert "더블클릭하면 Report 를 엽니다 · " not in HTML and "openHint" not in HTML
+    assert "${esc(r.report)}" not in HTML[HTML.index("function lotTip("):HTML.index("function renderDetail(")]
+
+
+def test_hover_does_not_move_the_target():
+    """hover 에서 요소가 움직이면 경계에서 mouseleave 가 되풀이된다 — 색·그림자만 바뀐다."""
+    css = HTML[:HTML.index("</style>")]
+    assert "translateY(-2px)" not in css and "translateY(-1px)" not in css and "translateX(2px)" not in css
+    assert "animation:silk-in .15s" in css and ".12s var(--silk)" in css
+    assert 'const smooth=()=>matchMedia("(prefers-reduced-motion: reduce)")' in HTML
