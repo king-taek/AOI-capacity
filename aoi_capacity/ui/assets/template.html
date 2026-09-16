@@ -245,7 +245,7 @@ details.adv summary{cursor:pointer;color:var(--accent-2);font-size:13px}
     <div class="card detail" id="detail" hidden>
       <div class="dh">
         <h2 id="detTitle"></h2>
-        <div class="legend"><span><i class="sw" style="background:var(--run)"></i>Lot 검사 (막대 하나 = Lot 하나)</span><span><i class="sw" style="background:var(--warn)"></i>다시 검사 (RE)</span><span><i class="sw" style="background:var(--rework)"></i>재작업 (REWORK)</span><span><i class="sw" style="background:var(--err)"></i>오류·중단·정지</span><span><i class="sw" style="background:var(--prev)"></i>시험 가동 (TEST · 가동률 제외)</span><span><i class="sw" style="background:var(--off)"></i>미가동</span></div>
+        <div class="legend"><span><i class="sw" style="background:var(--run)"></i>Lot 검사 (막대 하나 = Lot 하나)</span><span><i class="sw" style="background:var(--warn)"></i>다시 검사 (RE)</span><span><i class="sw" style="background:var(--rework)"></i>재작업 (REWORK)</span><span><i class="sw" style="background:var(--err)"></i>오류·중단 + 그 뒤 정지 (한 막대)</span><span><i class="sw" style="background:var(--prev)"></i>시험 가동 (TEST · 가동률 제외)</span><span><i class="sw" style="background:var(--off)"></i>미가동</span><span class="faint" style="margin-left:auto">막대를 <b>더블클릭</b>하면 그 BatchReport 파일이 열립니다</span></div>
         <button class="btn ghost" onclick="selectDev(null)" aria-label="닫기">닫기 ✕</button>
       </div>
       <div class="db"><div id="detTl"></div><div class="errs" id="detErrs"></div></div>
@@ -383,7 +383,9 @@ let devGroup={};
 /* ---------- demo / embedded ---------- */
 function loadDemo(){
   const emb=JSON.parse($("#embedded").textContent);
-  if(emb.cols){rows=emb.rows.map(a=>{const o={};emb.cols.forEach((c,i)=>o[c]=a[i]);o.norm_status=o.norm_status||normStatus(o.status);return o;});meta=emb.meta||{generated:"",mode:"saved"};}
+  /* 되풀이되는 열은 문자열 풀 번호로 접혀 온다(collect._embed_rows) — 여기서 되돌린다 */
+  if(emb.cols){const P=emb.pool||null,F=new Set(emb.pooled||[]);
+    rows=emb.rows.map(a=>{const o={};emb.cols.forEach((c,i)=>o[c]=P&&F.has(c)?(P[a[i]]??""):a[i]);o.norm_status=o.norm_status||normStatus(o.status);return o;});meta=emb.meta||{generated:"",mode:"saved"};}
   else{ /* compact demo: days are offsets from today, segments delta-encoded; expanded relative to the real current date */
     rows=[];const now=Date.now();const t0=keyDay(todayKey()).getTime();const codes={2:"USER_ABORT",3:"ABORTED",4:"SCAN_ERROR",5:"ID_READ_ERROR"};
     const iso=t=>{const d=new Date(t);return`${d.getFullYear()}-${p2(d.getMonth()+1)}-${p2(d.getDate())}T${p2(d.getHours())}:${p2(d.getMinutes())}:${p2(d.getSeconds())}`;};
@@ -396,6 +398,21 @@ function loadDemo(){
   devGroup={};(meta.devices||[]).forEach(d=>{if(d.nas)devGroup[d.name]=d.nas;});
   log(meta.mode==="demo"?`데모 데이터: 장비 ${new Set(rows.map(r=>r.device)).size}대, 최근 5주 분량을 실제 검사 패턴으로 재구성한 예시입니다.`:"저장된 수집 결과를 불러왔습니다.");init();}
 
+/* ---------- Report 열기 ----------
+   상태바를 더블클릭하면 그 구간을 만든 BatchReport(.htm) 를 브라우저 새 탭으로 연다.
+   경로는 수집기가 넣어 준 장비 경로(meta.devices[].note) + Report 폴더 + 파일 이름으로 만든다.
+   NAS 를 읽는 건 사람이 연 그 탭이지 이 화면이 아니다 — 이 화면은 여전히 요청을 한 건도 보내지 않는다. */
+function devPath(name){const d=(meta.devices||[]).find(x=>x.name===name);return d?{path:d.note||"",dir:d.report_dir||"Report"}:null;}
+function reportUrl(r){
+  if(!r||!r.report)return"";const d=devPath(r.device);if(!d||!d.path)return"";
+  const base=String(d.path).replace(/[\\/]+$/,"");const unc=/^\\\\/.test(base);
+  const parts=(base.replace(/^\\\\/,"")+"/"+d.dir+"/"+r.report).split(/[\\/]+/).filter(Boolean);
+  const enc=parts.map((p,i)=>i===0&&/^[A-Za-z]:$/.test(p)?p:encodeURIComponent(p));
+  return(unc?"file://":"file:///")+enc.join("/");}
+function openReport(r){const u=reportUrl(r);if(!u){log("이 구간에는 Report 파일 이름이 없습니다");return;}
+  const a=document.createElement("a");a.href=u;a.target="_blank";a.rel="noopener";
+  document.body.appendChild(a);a.click();a.remove();}
+const openHint=r=>reportUrl(r)?`<br><span class="k">더블클릭하면 Report 를 엽니다 · ${esc(r.report)}</span>`:"";
 /* ---------- model ---------- */
 function build(){
   devNames=[...new Set(rows.map(r=>r.device))].sort(cmpDev);
@@ -525,28 +542,40 @@ function renderDetail(){
   for(let h=0;h<=24;h+=2){const xx=x(a+h*3.6e6);s+=`<line class="grid" x1="${xx.toFixed(1)}" x2="${xx.toFixed(1)}" y1="${barY+barH+4}" y2="${barY+barH+10}"/><text x="${xx.toFixed(1)}" y="${barY+barH+26}" text-anchor="middle">${p2(h)}</text>`;}
   /* Lot blocks: consecutive wafers of the same lot (gap under 10 min) become one bar */
   const lots=[];const ws=m.items.filter(i=>i.kind!=="stop").sort((p,q)=>p.s-q.s);   /* 시험 구간도 Lot 목록에는 남긴다(검사 시간만 0) */
-  for(const it of ws){const L=lots[lots.length-1];if(L&&L.lot===it.g.r.lot&&it.s-L.e<=600000){L.e=Math.max(L.e,it.e);L.n++;L.run+=it.kind==="run"?(it.e-it.s):0;if(it.kind==="err")L.err++;if(it.g.redo||it.g.dups>1)L.redo=true;if(it.g.rework)L.rework=true;if(it.g.test)L.test=true;}else lots.push({lot:it.g.r.lot,recipe:it.g.r.recipe,s:it.s,e:it.e,n:1,run:it.kind==="run"?(it.e-it.s):0,err:it.kind==="err"?1:0,redo:!!(it.g.redo||it.g.dups>1),rework:!!it.g.rework,test:!!it.g.test});}
+  for(const it of ws){const L=lots[lots.length-1];if(L&&L.lot===it.g.r.lot&&it.s-L.e<=600000){L.e=Math.max(L.e,it.e);L.n++;L.run+=it.kind==="run"?(it.e-it.s):0;if(it.kind==="err")L.err++;if(it.g.redo||it.g.dups>1)L.redo=true;if(it.g.rework)L.rework=true;if(it.g.test)L.test=true;}else lots.push({lot:it.g.r.lot,recipe:it.g.r.recipe,s:it.s,e:it.e,n:1,run:it.kind==="run"?(it.e-it.s):0,err:it.kind==="err"?1:0,redo:!!(it.g.redo||it.g.dups>1),rework:!!it.g.rework,test:!!it.g.test,r:it.g.r});}
   m.lots=lots;
-  m.items.filter(i=>i.kind==="stop").forEach(it=>{s+=`<rect class="seg" data-i="${m.items.indexOf(it)}" x="${x(it.s).toFixed(1)}" y="${barY}" width="${Math.max(1,x(it.e)-x(it.s)).toFixed(1)}" height="${barH}" fill="var(--err)" opacity=".45"/>`;});
+  /* 오류 Wafer 구간과 그 뒤 '정지(추정)' 는 한 줄로 이어 그린다(사용자 확정).
+     어제 난 오류가 오늘까지 이어진 경우엔 오늘 화면에 오류 구간이 없으므로 정지만 따로 그린다. */
+  const errIt=m.items.filter(i=>i.kind==="err"),hasErr=new Set(errIt.map(i=>i.g));
+  const stopOf=g=>m.items.find(i=>i.kind==="stop"&&i.g===g);
+  m.items.filter(i=>i.kind==="stop"&&!hasErr.has(i.g)).forEach(it=>{s+=`<rect class="seg" tabindex="0" data-i="${m.items.indexOf(it)}" x="${x(it.s).toFixed(1)}" y="${barY}" width="${Math.max(1,x(it.e)-x(it.s)).toFixed(1)}" height="${barH}" fill="var(--err)" opacity=".55"/>`;});
   lots.forEach((L,i)=>{s+=`<rect class="seg lot" tabindex="0" data-l="${i}" x="${x(L.s).toFixed(1)}" y="${barY}" width="${Math.max(2,x(L.e)-x(L.s)).toFixed(1)}" height="${barH}" fill="${L.test?"var(--prev)":"var(--run)"}" opacity="${i%2?.72:1}" rx="1"/>`;const w=x(L.e)-x(L.s);if(w>46)s+=`<text x="${(x(L.s)+4).toFixed(1)}" y="${barY+barH/2+4}" fill="var(--accent-ink)" style="font-size:11px;font-weight:600;pointer-events:none">${esc(L.lot.length>10?L.lot.slice(0,9)+"…":L.lot)}</text>`;});
   /* 다시 검사(Lot 이름의 RE·RESCAN 또는 같은 Wafer 두 번)는 노랑, 재작업(REWORK)은 보라.
      둘 다 정상 가동으로 세고 색으로만 구분한다(사용자 확정). */
   const mark=it=>it.g.redo||it.g.dups>1?"var(--warn)":it.g.rework?"var(--rework)":"";
   m.items.filter(i=>i.kind==="run"&&mark(i)).forEach(it=>{s+=`<rect class="seg redo" tabindex="0" data-i="${m.items.indexOf(it)}" x="${x(it.s).toFixed(1)}" y="${barY}" width="${Math.max(2,x(it.e)-x(it.s)).toFixed(1)}" height="${barH}" fill="${mark(it)}"/>`;});
   m.items.filter(i=>i.kind==="test").forEach(it=>{s+=`<rect class="seg" tabindex="0" data-i="${m.items.indexOf(it)}" x="${x(it.s).toFixed(1)}" y="${barY}" width="${Math.max(2,x(it.e)-x(it.s)).toFixed(1)}" height="${barH}" fill="var(--prev)"/>`;});
-  m.items.filter(i=>i.kind==="err").forEach(it=>{s+=`<rect class="seg" tabindex="0" data-i="${m.items.indexOf(it)}" x="${x(it.s).toFixed(1)}" y="${barY}" width="${Math.max(2,x(it.e)-x(it.s)).toFixed(1)}" height="${barH}" fill="var(--err)"/>`;});
+  errIt.forEach(it=>{const sp=stopOf(it.g),e2=sp?Math.max(it.e,sp.e):it.e;
+    s+=`<rect class="seg" tabindex="0" data-i="${m.items.indexOf(it)}" x="${x(it.s).toFixed(1)}" y="${barY}" width="${Math.max(2,x(e2)-x(it.s)).toFixed(1)}" height="${barH}" fill="var(--err)"/>`;});
   if(m.partial)s+=`<line class="now" x1="${x(now).toFixed(1)}" x2="${x(now).toFixed(1)}" y1="${barY-8}" y2="${barY+barH+8}"/><text x="${x(now).toFixed(1)}" y="${barY-10}" text-anchor="middle" fill="var(--accent-2)">지금</text>`;
   s+="</svg>";$("#detTl").innerHTML=s;
-  bindTips($("#detTl"),"rect.seg",el=>{if(el.dataset.l!=null){const L=m.lots[+el.dataset.l];return`<b>Lot ${esc(L.lot)}</b> · ${esc(L.recipe)}<br>${hm(new Date(L.s))} → ${hm(new Date(L.e))} · ${fmtSec((L.e-L.s)/1000)}<br>검사 ${fmtSec(L.run/1000)}${L.err?` · <span style="color:var(--crit-ink)">오류 ${L.err}건</span>`:""}`;}
+  bindTips($("#detTl"),"rect.seg",el=>{if(el.dataset.l!=null){const L=m.lots[+el.dataset.l];return`<b>Lot ${esc(L.lot)}</b> · ${esc(L.recipe)}<br>${hm(new Date(L.s))} → ${hm(new Date(L.e))} · ${fmtSec((L.e-L.s)/1000)}<br>검사 ${fmtSec(L.run/1000)}${L.err?` · <span style="color:var(--crit-ink)">오류 ${L.err}건</span>`:""}${openHint(L.r)}`;}
     const it=m.items[+el.dataset.i],r=it.g.r;if(it.kind==="test")return`<b>시험 가동 (가동률에서 제외)</b> · ${escLot(r)}<br>${hm(new Date(it.g.s))} → ${hm(new Date(it.g.e))} · ${fmtSec((it.g.e-it.g.s)/1000)}<br><span class="k">Lot 이름에 TEST 가 있어 가동률에 넣지 않습니다</span>`;
     if(it.kind==="stop")return`<b>오류 후 정지 (추정)</b> · ${fmtSec((it.e-it.s)/1000)}<br>${hm(new Date(it.s))} → ${hm(new Date(it.e))}<br><span class="k">${esc(r.lot)} / ${esc(r.wafer_id)} 오류 이후 다음 Wafer 시작까지</span>`;
     if(it.g.batch)return`<b>배치 중단</b> · ${escLot(r)}<br>${hm(new Date(it.g.s))} → ${hm(new Date(it.g.e))} · ${fmtSec((it.g.e-it.g.s)/1000)}<br><span style="color:var(--crit-ink)">${ERR_KO[r.norm_status]||"오류"}</span> · ${esc(r.status)}<br><span class="k">검사된 Wafer 가 없어 배치 시각으로만 표시합니다</span>`;
     const marks=[it.g.redo?'<span class="chip redo">다시 검사</span>':"",it.g.rework?'<span class="chip rework">재작업</span>':""].filter(Boolean).join(" ");
     const dup=(marks?"<br>"+marks:"")+(it.g.dups>1?`<br><span class="k">같은 시각의 기록 ${it.g.dups}건(다시 검사한 것으로 보입니다) — 시간은 1번만 계산</span>`:"");
-    return`<b>${esc(r.lot)} / ${esc(r.wafer_id)}</b><br>${hm(new Date(it.g.s))} → ${hm(new Date(it.g.e))} · ${fmtSec((it.g.e-it.g.s)/1000)}<br>${it.kind==="err"?`<span style="color:var(--crit-ink)">${ERR_KO[r.norm_status]||"오류"}</span> · ${esc(r.status)}`:`정상 검사 · ${esc(r.recipe)}`}${dup}`;});
-  $("#detTl").querySelectorAll("rect.seg").forEach(el=>el.onclick=()=>{if(el.dataset.l!=null)return;const it=m.items[+el.dataset.i];const idx=m.errors.findIndex(e=>e.r===it.g.r);if(idx>=0)hlSeg(idx);});
-  const lotTbl=m.lots.length?`<details style="margin:6px 0 10px"><summary style="cursor:pointer;color:var(--accent-2);font-size:13px">Lot ${m.lots.length}개 목록</summary><table class="tbl" style="margin-top:6px"><thead><tr><th>Lot</th><th>표기</th><th>Recipe</th><th>시작</th><th>종료</th><th class="r">소요</th><th class="r">검사</th><th class="r">오류</th></tr></thead><tbody>${m.lots.map(L=>`<tr><td class="mono">${esc(L.lot)}</td><td>${L.test?'<span class="chip mute">시험 · 제외</span>':L.redo?'<span class="chip redo">다시 검사</span>':L.rework?'<span class="chip rework">재작업</span>':""}</td><td>${esc(L.recipe)}</td><td class="num">${hm(new Date(L.s))}</td><td class="num">${hm(new Date(L.e))}</td><td class="r">${fmtSecS((L.e-L.s)/1000)}</td><td class="r">${fmtSecS(L.run/1000)}</td><td class="r">${L.err?`<span class="chip crit">${L.err}</span>`:0}</td></tr>`).join("")}</tbody></table></details>`:"";
-  $("#detErrs").innerHTML=lotTbl+(m.errors.length?`<table class="tbl"><thead><tr><th>시각</th><th>Lot / Wafer</th><th>오류</th><th class="r">정지 시간 (추정)</th><th>장비 메시지</th></tr></thead><tbody>${m.errors.map((e,i)=>`<tr class="click" data-e="${i}" onclick="hlSeg(${i})"><td class="num">${e.t?hm(new Date(e.t)):"–"}${e.noTime?' <span class="chip mute" title="INI가 없어 Batch 시작 시각으로 표시">Batch 시작</span>':""}</td><td class="mono">${escLot(e.r)}${e.r.kind==="batch"?' <span class="chip crit">배치 전체</span>':" / "+esc(e.r.wafer_id)}</td><td><span class="chip crit">${ERR_KO[e.r.norm_status]||"오류"}</span>${e.r.kind==="batch"?' <span class="chip mute">검사 전 중단</span>':""}</td><td class="r">${e.open?'<span class="chip warn">복구 기록 없음</span>':e.stop!=null?fmtSec(e.stop):"–"}</td><td class="faint">${esc(e.r.status)}</td></tr>`).join("")}</tbody></table><p class="faint" style="font-size:12px;margin-top:8px">정지 시간은 오류 Wafer 종료부터 다음 Wafer 시작까지의 공백으로 추정한 값입니다. 장비 이벤트 로그가 아닙니다.</p>`
+    const st=it.kind==="err"?m.items.find(i=>i.kind==="stop"&&i.g===it.g):null;
+    const split=st?`<br><span class="k">오류 ${fmtSec((it.g.e-it.g.s)/1000)} + 정지(추정) ${fmtSec((st.e-st.s)/1000)}</span>`:"";
+    return`<b>${esc(r.lot)} / ${esc(r.wafer_id)}</b><br>${hm(new Date(it.g.s))} → ${hm(new Date(st?st.e:it.g.e))} · ${fmtSec(((st?st.e:it.g.e)-it.g.s)/1000)}<br>${it.kind==="err"?`<span style="color:var(--crit-ink)">${ERR_KO[r.norm_status]||"오류"}</span> · ${esc(r.status)}`:`정상 검사 · ${esc(r.recipe)}`}${split}${dup}${openHint(r)}`;});
+  const rowOf=el=>el.dataset.l!=null?m.lots[+el.dataset.l].r:m.items[+el.dataset.i].g.r;
+  $("#detTl").querySelectorAll("rect.seg").forEach(el=>{
+    el.onclick=()=>{if(el.dataset.l!=null)return;const it=m.items[+el.dataset.i];const idx=m.errors.findIndex(e=>e.r===it.g.r);if(idx>=0)hlSeg(idx);};
+    el.ondblclick=ev=>{ev.preventDefault();openReport(rowOf(el));};
+    el.onkeydown=ev=>{if(ev.key==="Enter"){ev.preventDefault();openReport(rowOf(el));}};
+    const u=reportUrl(rowOf(el));if(u)el.style.cursor="pointer";});
+  const lotTbl=m.lots.length?`<details style="margin:6px 0 10px"><summary style="cursor:pointer;color:var(--accent-2);font-size:13px">Lot ${m.lots.length}개 목록</summary><table class="tbl" style="margin-top:6px"><thead><tr><th>Lot</th><th>표기</th><th>Recipe</th><th>시작</th><th>종료</th><th class="r">소요</th><th class="r">검사</th><th class="r">오류</th></tr></thead><tbody>${m.lots.map((L,i)=>`<tr class="click" ondblclick="openReport(window._m.lots[${i}].r)" title="더블클릭: Report 열기"><td class="mono">${esc(L.lot)}</td><td>${L.test?'<span class="chip mute">시험 · 제외</span>':L.redo?'<span class="chip redo">다시 검사</span>':L.rework?'<span class="chip rework">재작업</span>':""}</td><td>${esc(L.recipe)}</td><td class="num">${hm(new Date(L.s))}</td><td class="num">${hm(new Date(L.e))}</td><td class="r">${fmtSecS((L.e-L.s)/1000)}</td><td class="r">${fmtSecS(L.run/1000)}</td><td class="r">${L.err?`<span class="chip crit">${L.err}</span>`:0}</td></tr>`).join("")}</tbody></table></details>`:"";
+  $("#detErrs").innerHTML=lotTbl+(m.errors.length?`<table class="tbl"><thead><tr><th>시각</th><th>Lot / Wafer</th><th>오류</th><th class="r">정지 시간 (추정)</th><th>장비 메시지</th></tr></thead><tbody>${m.errors.map((e,i)=>`<tr class="click" data-e="${i}" onclick="hlSeg(${i})" ondblclick="openReport(window._m.errors[${i}].r)" title="더블클릭: Report 열기"><td class="num">${e.t?hm(new Date(e.t)):"–"}${e.noTime?' <span class="chip mute" title="INI가 없어 Batch 시작 시각으로 표시">Batch 시작</span>':""}</td><td class="mono">${escLot(e.r)}${e.r.kind==="batch"?' <span class="chip crit">배치 전체</span>':" / "+esc(e.r.wafer_id)}</td><td><span class="chip crit">${ERR_KO[e.r.norm_status]||"오류"}</span>${e.r.kind==="batch"?' <span class="chip mute">검사 전 중단</span>':""}</td><td class="r">${e.open?'<span class="chip warn">복구 기록 없음</span>':e.stop!=null?fmtSec(e.stop):"–"}</td><td class="faint">${esc(e.r.status)}</td></tr>`).join("")}</tbody></table><p class="faint" style="font-size:12px;margin-top:8px">정지 시간은 오류 Wafer 종료부터 다음 Wafer 시작까지의 공백으로 추정한 값입니다. 장비 이벤트 로그가 아닙니다. 타임라인에서는 오류 구간과 그 뒤 정지를 빨간 막대 하나로 이어 그립니다.</p>`
     :(m.hasData?'<p class="faint" style="font-size:13px;padding:6px 0">이 날은 오류가 없습니다.</p>':'<p class="faint" style="font-size:13px;padding:6px 0">이 날은 데이터가 없습니다.</p>'));
   window._m=m;}
 function hlSeg(i){const m=window._m;const e=m.errors[i];$("#detErrs").querySelectorAll("tr.hl").forEach(t=>t.classList.remove("hl"));const tr=$("#detErrs").querySelector(`tr[data-e="${i}"]`);if(tr){tr.classList.add("hl");tr.scrollIntoView({block:"nearest"});}$("#detTl").querySelectorAll("rect.hl").forEach(t=>t.classList.remove("hl"));const idx=m.items.findIndex(it=>it.g.r===e.r&&it.kind!=="stop");if(idx>=0)$("#detTl").querySelector(`rect[data-i="${idx}"]`).classList.add("hl");}

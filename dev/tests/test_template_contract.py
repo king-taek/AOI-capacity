@@ -113,3 +113,32 @@ def test_test_lots_are_excluded_from_the_utilisation_numbers():
     assert 'if(g.test){' in HTML and 'm.nTest++' in HTML   # run/err/stop 어디에도 더하지 않는다
     assert '시험 가동 ${m.nTest}건 제외' in HTML            # 몇 건을 뺐는지 밝힌다
     assert "시험 가동 (TEST · 가동률 제외)" in HTML         # 범례에도 있다
+
+
+def test_report_opens_on_double_click_without_any_request_from_the_page():
+    """★ 상태바를 더블클릭하면 그 BatchReport 를 새 탭으로 연다.
+
+    여는 주체는 사람이 연 그 탭이지 이 화면이 아니다 — 화면은 여전히 요청을 한 건도 보내지 않는다
+    (`test_no_network_use_at_all` 이 계속 지킨다). 경로는 수집기가 넣어 준 값으로만 만든다."""
+    assert "function reportUrl(" in HTML and "function openReport(" in HTML
+    assert "el.ondblclick=" in HTML                       # 단일 클릭은 그대로 오류 표 연결
+    assert 'd.report_dir||"Report"' in HTML                # 장비마다 다른 Report 폴더 이름
+    assert '(unc?"file://":"file:///")' in HTML            # UNC(\\\\10.x) 와 드라이브 문자 둘 다
+    assert "encodeURIComponent" in HTML                    # Lot 이름의 '#'·공백이 있어도 열린다
+    assert "더블클릭" in HTML
+
+
+def test_error_and_the_stop_after_it_are_drawn_as_one_bar():
+    """사용자 확정: 오류 발생과 그 뒤 정지는 막대 하나로 이어 그린다(숫자는 그대로 따로 센다)."""
+    assert "const stopOf=g=>m.items.find(" in HTML
+    assert "errIt.forEach(it=>{const sp=stopOf(it.g),e2=sp?Math.max(it.e,sp.e):it.e;" in HTML
+    assert '오류 ${fmtSec((it.g.e-it.g.s)/1000)} + 정지(추정)' in HTML   # 툴팁에서는 나눠 보여 준다
+    assert "오류·중단 + 그 뒤 정지 (한 막대)" in HTML
+
+
+def test_embedded_string_pool_is_unfolded_on_load():
+    from aoi_capacity import collect
+
+    assert "const P=emb.pool||null,F=new Set(emb.pooled||[]);" in HTML
+    assert "P&&F.has(c)?(P[a[i]]??\"\"):a[i]" in HTML
+    assert set(collect.POOLED_COLS) < set(collect.OUT_COLS)

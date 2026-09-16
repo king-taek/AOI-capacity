@@ -58,6 +58,8 @@ Camtek AOI 장비의 BatchReport/WaferInfo.ini 를 읽어 장비별 가동률을
   넣지 않는다. 다만 화면에서 사라지지는 않는다: 타임라인에 회색 띠, 제목에 '시험 가동 n건 제외',
   Lot 목록에 '시험 · 제외' 표. 빼는 것과 없었던 것은 다르다.
 - 행 데이터 계약(`collect.OUT_COLS`): `kind`("" = Wafer 한 장 · "batch" = 통째로 실패한 시도), `batch_end`,
+  `job`·`setup`(Report 안의 `Job/Setup`, 없으면 파일명 규칙 — 나중에 쓸 일이 있어 함께 담는다),
+  `report`(BatchReport 파일 이름 — 화면에서 그 파일을 다시 여는 근거),
   `scan_type`("" · RESCAN · REWORK · TEST — 겹치면 TEST → RESCAN → REWORK 순), `ini_match`(EXACT · NOT_FOUND · NO_WAFER_ID · READ_ERROR · STALE · BATCH_FAILED · BATCH).
   상태 분류는 `collect._STATUS_RULES` 와 template 의 `normStatus` 가 **같은 순서**를 쓴다(가드: `test_template_contract.py`).
   표기는 30대 전수 샘플(Report 55,717개)에서 나온 것만 넣었다 — Pass · Skipped. · Aborted. · Alignment Error. ·
@@ -68,6 +70,16 @@ Camtek AOI 장비의 BatchReport/WaferInfo.ini 를 읽어 장비별 가동률을
 - `LoadPort A` · `Slot n` 은 Lot·Wafer 가 아니라 자리표시다(`collect._is_placeholder`). Lot 이 비면
   `os.path.join` 에서 그 칸이 사라져 **다른 Lot 의 INI** 를 가리키므로 경로를 아예 만들지 않는다.
   배치 행의 Lot 도 자리표시를 거른 뒤 고른다 — 못 고르면 빈칸으로 두고 화면이 `(Lot 확인 불가)` 라 적는다.
+- HTML 에 박는 JSON 은 `collect._embed_rows` 가 접는다 — `POOLED_COLS`(시각 두 열 빼고 전부)를 문자열 풀의
+  번호로 바꾼다. 30대 × 90일이면 행이 십수만 개라 접지 않으면 HTML 이 수십 MB 가 된다. template 의 로더가 편다.
+  CSV 는 사람이 읽는 파일이라 접지 않는다.
+- 결과 화면에서 **막대·오류 표·Lot 표를 더블클릭하면 그 BatchReport 가 새 탭으로 열린다**
+  (`reportUrl`·`openReport`). 경로는 `meta.devices[].note` + `report_dir` + `report` 로만 만들고
+  드라이브 문자와 UNC(`\\10.x`) 를 모두 다룬다. 여는 주체는 사람이 연 그 탭이지 이 화면이 아니다 —
+  화면은 여전히 바깥으로 요청을 한 건도 보내지 않는다.
+- 타임라인에서 **오류 구간과 그 뒤 '정지(추정)' 는 막대 하나로 이어 그린다**(사용자 확정).
+  숫자(`m.err`·`m.stop`)는 그대로 따로 세고 툴팁에서 나눠 보여 준다. 어제 난 오류가 오늘까지 이어진
+  경우엔 오늘 화면에 오류 구간이 없으므로 정지만 흐리게 따로 그린다.
 - 결과 HTML 의 위치·생성은 `utils/results.py` 한 곳에서만 묻는다(`html_path` · `ensure_html` · `last_collect_time`).
 - 장비는 `id`(정규화 경로, 캐시 커서·집계 키) · `path` · `name`(표시명 `AOI-25` · `4F-AOI-01`) · `aliases`(옛 표시명) 로 나눠 다룬다.
   표시명을 바꿔도 이력이 갈라지지 않는다. 홈 정렬은 `devices.sort_key`(= template 의 `cmpDev`) — AOI-1…AOI-25 뒤에 4F-AOI-01….

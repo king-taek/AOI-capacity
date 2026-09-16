@@ -56,8 +56,11 @@ INI_KEYS = {
     "BatchInfo": ["GlobalLotId", "OperatorId"],
 }
 #: kind = "" (Wafer 한 장) · "batch" (통째로 실패한 배치 한 건 — Wafer 시각이 하나도 없는 시도)
-OUT_COLS = ["device", "kind", "lot", "wafer_id", "status", "norm_status", "scan_type", "recipe",
-            "wafer_start_time", "wafer_end_time", "batch_start", "batch_end", "ini_match", "data_issue"]
+OUT_COLS = ["device", "kind", "job", "setup", "lot", "wafer_id", "status", "norm_status", "scan_type", "recipe",
+            "wafer_start_time", "wafer_end_time", "batch_start", "batch_end", "report", "ini_match", "data_issue"]
+#: HTML 에 박아 넣는 JSON 에서 문자열 풀로 접는 열 — 같은 값이 수없이 되풀이되는 열들이다.
+#: (90일치 30대면 행이 십수만 개다. 시각 두 열만 값이 거의 다 달라 접지 않는다.)
+POOLED_COLS = tuple(c for c in OUT_COLS if c not in ("wafer_start_time", "wafer_end_time"))
 REPORT_RE = re.compile(r"^(.+?)_(\d{4})_(.+)_(\d{1,2}-[A-Za-z]{3}-\d{2})_\((\d{2}\.\d{2}\.\d{2})\)_BatchReport\.html?$", re.I)
 #: 장비마다 다르다 — AOI-8·25 는 `13-Sep-26 01:03:29 PM`, AOI-1 은 `9/16/2026 1:54:03 PM`,
 #: INI 의 BatchStartTime 은 `09/10/2026 18:50:08`(24시간제).
@@ -188,7 +191,7 @@ def parse_report(name: str, text: str) -> dict:
       섞여 있어 파일명만으로는 경계를 못 가른다(실장비 516개 중 옛 규칙에 맞는 건 6개뿐이었다).
       `Job/Setup` 이 없는 옛 형식 Report 만 파일명 규칙으로 되돌아간다."""
     m = REPORT_RE.match(name)
-    rep = {"equipment": m.group(1) if m else "", "process_code": m.group(2) if m else "",
+    rep = {"name": name, "equipment": m.group(1) if m else "", "process_code": m.group(2) if m else "",
            "report_lot": m.group(3) if m else "", "summary": {}, "wafers": []}
     p = TableParser()
     p.feed(text)
@@ -282,7 +285,8 @@ def rows_for_report(dev_name: str, rep: dict, scan_root: str) -> List[dict]:
     s = rep["summary"]
     b_start, b_end = parse_dt(s.get("Batch Start", "")), parse_dt(s.get("Batch End", ""))
     for w in rep["wafers"]:
-        r = {"device": dev_name, "kind": "", "lot": w["lot"], "wafer_id": w["wafer_id"], "status": w["status"],
+        r = {"device": dev_name, "kind": "", "job": rep.get("job", ""), "setup": rep.get("setup", ""),
+             "report": rep.get("name", ""), "lot": w["lot"], "wafer_id": w["wafer_id"], "status": w["status"],
              "norm_status": norm_status(w["status"]), "scan_type": scan_type(w["lot"]),
              "recipe": w["recipe"] or s.get("Recipe", ""),
              "wafer_start_time": "", "wafer_end_time": "", "batch_start": s.get("Batch Start", ""),
@@ -356,7 +360,8 @@ def failed_batch_row(dev_name: str, rep: dict, rows: List[dict]) -> Optional[dic
         or rep.get("report_lot", "")
     for r in rows:                                    # 이 배치의 행들은 배치 한 건으로 묶어 센다(사용자 확정)
         r["ini_match"] = "BATCH_FAILED"
-    return {"device": dev_name, "kind": "batch", "lot": lot, "wafer_id": "",
+    return {"device": dev_name, "kind": "batch", "job": rep.get("job", ""), "setup": rep.get("setup", ""),
+            "report": rep.get("name", ""), "lot": lot, "wafer_id": "",
             "status": lead["status"], "norm_status": norm_status(lead["status"]), "scan_type": scan_type(lot),
             "recipe": lead.get("recipe", ""), "wafer_start_time": s.get("Batch Start", ""),
             "wafer_end_time": s.get("Batch End", ""), "batch_start": s.get("Batch Start", ""),
@@ -471,7 +476,8 @@ def _list_new_reports(devs, cache, cfg, backfill, log, progress, on_device, shou
         progress(0, 0, i18n.KO.COLLECT_PHASE_LIST_FMT.format(device=d["name"], i=i + 1, n=len(devs)))
         on_device(d["name"], "listing", "")
         did = str(d["id"])
-        dm = {"name": d["name"], "id": did, "note": d["path"], "reports": 0, "found": 0, "error": ""}
+        dm = {"name": d["name"], "id": did, "note": d["path"], "reports": 0, "found": 0, "error": "",
+              "report_dir": str(d.get("report_dir") or cfg["report_dir"])}
         rep_dir = os.path.join(d["path"], str(d.get("report_dir") or cfg["report_dir"]))
         try:
             files = [e for e in nas_guard.scandir(rep_dir) if e.is_file() and e.name.lower().endswith((".htm", ".html"))]
@@ -625,6 +631,30 @@ def _version_info() -> dict:
         return {}
 
 
+def _embed_rows(rows: List[dict]) -> dict:
+    """HTML 에 박을 형태로 접는다 — `POOLED_COLS` 는 문자열 풀의 번호로 바꾼다.
+
+    장비 30대 × 보관 90일이면 행이 십수만 개다. 장비명·Job·Setup·Report 이름·상태 문구는 행마다
+    같은 값이 되풀이되므로 그대로 두면 HTML 이 수십 MB 가 된다. 풀로 접으면 그 반복이 사라진다.
+    (CSV 는 사람이 읽는 파일이라 접지 않는다 — `_write_csv` 는 원래 문자열을 그대로 쓴다.)"""
+    pool: List[str] = []
+    index: Dict[str, int] = {}
+
+    def put(v) -> int:
+        v = "" if v is None else str(v)
+        i = index.get(v)
+        if i is None:
+            i = index[v] = len(pool)
+            pool.append(v)
+        return i
+
+    pooled = [c in POOLED_COLS for c in OUT_COLS]
+    out = [[put(r.get(c, "")) if pooled[i] else str(r.get(c, "") or "")
+            for i, c in enumerate(OUT_COLS)] for r in rows]
+    return {"cols": list(OUT_COLS), "pooled": [c for c in OUT_COLS if c in POOLED_COLS],
+            "pool": pool, "rows": out}
+
+
 def write_html(cfg: dict, rows: List[dict], dev_meta: List[dict], errors: List[dict], started: float, *,
                mode: str = "auto", log: Optional[LogFn] = None, progress: Optional[ProgressFn] = None) -> str:
     """template.html 에 데이터를 넣어 출력 폴더에 HTML 한 장을 쓴다. 임시 파일에 쓴 뒤 교체(원자적)."""
@@ -642,7 +672,8 @@ def write_html(cfg: dict, rows: List[dict], dev_meta: List[dict], errors: List[d
             "elapsed": int((time.time() - started) * 1000), "retention_days": cfg["retention_days"],
             "sha": ver.get("sha", ""), "branch": ver.get("branch", ""), "repo": ver.get("repo", ""),
             "version": (str(ver.get("sha", ""))[:7]) if ver.get("sha") else ""}
-    emb = {"cols": OUT_COLS, "rows": [[r.get(c, "") for c in OUT_COLS] for r in rows], "meta": meta}
+    emb = _embed_rows(rows)
+    emb["meta"] = meta
     data = json.dumps(emb, ensure_ascii=False, separators=(",", ":")).replace("</", "<\\/")
     if "__DATA__" not in tpl:
         raise RuntimeError("template.html 에 __DATA__ 자리가 없습니다")

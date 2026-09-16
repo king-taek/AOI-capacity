@@ -267,3 +267,35 @@ def test_empty_lot_never_builds_an_ini_path(tmp_path):
 ])
 def test_norm_status_covers_every_wording_seen_on_30_machines(raw, expected):
     assert collect.norm_status(raw) == expected
+
+
+# ── Job name · Report 파일 이름(나중에 쓸 일이 있어 함께 담는다) ───────────────
+def test_rows_carry_job_setup_and_report_file_name(tmp_path):
+    _live_ini(tmp_path, "15-Sep-26 07:30:00 PM", "15-Sep-26 07:44:00 PM")
+    rep = collect.parse_report(LIVE_NAME, LIVE_HTML)
+    rows = collect.rows_for_report("AOI-25", rep, str(tmp_path / "Scanresult"))
+    for r in rows:
+        assert (r["job"], r["setup"]) == ("TB500_RDL2 - Multi", "Setup1")   # Report 안의 Job/Setup
+        assert r["report"] == LIVE_NAME                                     # Report 를 다시 열 수 있게
+    assert {"job", "setup", "report"} <= set(collect.OUT_COLS)
+
+
+def test_old_format_job_falls_back_to_the_file_name_rule():
+    rep = collect.parse_report(REPORT_NAME, REPORT_HTML)
+    rows = collect.rows_for_report("AOI-1", rep, "/nowhere")
+    assert rows[0]["job"] == "2D@R2-GA285AAB_0859840PD-0A" and rows[0]["setup"] == "6321"
+    assert rows[0]["report"] == REPORT_NAME
+
+
+def test_embedded_rows_are_folded_into_a_string_pool():
+    """장비 30대 × 90일이면 행이 십수만 개다 — 되풀이되는 열은 번호로 접어 넣는다."""
+    rows = [{"device": "AOI-25", "job": "J", "setup": "S", "report": "r.htm", "lot": "L",
+             "wafer_start_time": f"15-Sep-26 07:{i:02d}:00 PM"} for i in range(50)]
+    emb = collect._embed_rows(rows)
+    assert emb["cols"] == collect.OUT_COLS
+    assert "wafer_start_time" not in emb["pooled"]          # 값이 거의 다 달라 접지 않는다
+    assert "device" in emb["pooled"] and "report" in emb["pooled"]
+    assert emb["pool"].count("AOI-25") == 1                 # 50행이 같은 번호를 가리킨다
+    di, ti = collect.OUT_COLS.index("device"), collect.OUT_COLS.index("wafer_start_time")
+    assert len({r[di] for r in emb["rows"]}) == 1
+    assert emb["rows"][3][ti] == "15-Sep-26 07:03:00 PM"    # 접지 않은 열은 문자열 그대로

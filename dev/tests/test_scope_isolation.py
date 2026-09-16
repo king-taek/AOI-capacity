@@ -194,9 +194,14 @@ def test_cli_run_stays_in_scope(tmp_path, scoped_nas, tripwire, monkeypatch):
 
 
 def _embedded(html_path) -> dict:
-    """생성된 HTML 한 장에 박힌 데이터를 그대로 꺼낸다(브라우저 없이)."""
+    """생성된 HTML 한 장에 박힌 데이터를 꺼낸다(브라우저 없이). 문자열 풀은 되돌려 준다."""
     text = Path(html_path).read_text(encoding="utf-8")
-    return json.loads(text.split('id="embedded">')[1].split("</script>")[0])
+    data = json.loads(text.split('id="embedded">')[1].split("</script>")[0])
+    pool, pooled = data.get("pool"), set(data.get("pooled") or [])
+    if pool is not None:                              # collect._embed_rows 가 접어 둔 것을 편다
+        data["rows"] = [[pool[v] if c in pooled else v for c, v in zip(data["cols"], row)]
+                        for row in data["rows"]]
+    return data
 
 
 def test_html_carries_scope_and_skipped_devices(tmp_path, scoped_nas):
