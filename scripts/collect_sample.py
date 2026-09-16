@@ -163,6 +163,64 @@ def copy_ini_for(info, scan_root: Path, out_dir: Path, max_ini: int, lines: list
     return n
 
 
+def norm_root(text: str) -> Path:
+    """`Y:` 처럼 드라이브 문자만 준 경우 `Y:\\` 로 맞춘다(그냥 두면 '그 드라이브의 현재 폴더' 가 된다)."""
+    t = str(text).strip().strip('"')
+    return Path(t + os.sep if re.fullmatch(r"[A-Za-z]:", t) else t)
+
+
+def list_folder(path: Path, title: str = "") -> int:
+    """폴더 바로 아래 이름만 보여 준다 — 경로를 못 찾을 때 어디에 무엇이 있는지 확인하는 용도."""
+    say(title or f"[{path}] 바로 아래 목록")
+    if not os.path.isdir(path):
+        say("   → 이 경로에 접근할 수 없습니다(없거나, 권한이 없거나, 드라이브가 연결되지 않음)")
+        return 2
+    try:
+        entries = sorted(os.scandir(path), key=lambda e: (not e.is_dir(), e.name.lower()))
+    except OSError as ex:
+        say(f"   → 목록을 읽지 못했습니다: {ex}")
+        return 2
+    if not entries:
+        say("   → 비어 있습니다")
+    for e in entries[:60]:
+        say(f"   {'[폴더] ' if e.is_dir() else '       '}{e.name}")
+    if len(entries) > 60:
+        say(f"   … 외 {len(entries) - 60}개")
+    return 0
+
+
+def diagnose(root: Path, report_dir: str) -> None:
+    """Report 폴더를 못 찾았을 때 무엇이 문제인지 짚어 준다(이름만 읽고 파일은 열지 않는다)."""
+    say(f"[오류] Report 폴더를 찾을 수 없습니다: {root / report_dir}")
+    say("")
+    say("■ 확인한 것")
+    drive = os.path.splitdrive(str(root.resolve() if not str(root).startswith("\\\\") else root))[0]
+    if drive:
+        ok = os.path.isdir(drive + os.sep)
+        say(f"   {drive}{os.sep:<24} {'있음' if ok else '없음 — 네트워크 드라이브가 연결되지 않았을 수 있습니다'}")
+    say(f"   {str(root):<25} {'있음' if os.path.isdir(root) else '없음'}")
+    if os.path.isdir(root):
+        say("")
+        list_folder(root, f"■ {root} 안에 있는 것")
+        try:
+            cand = [e.name for e in os.scandir(root) if e.is_dir() and e.name.lower().startswith("report")]
+        except OSError:
+            cand = []
+        if cand and cand[0] != report_dir:
+            say("")
+            say(f"   → Report 폴더 이름이 '{cand[0]}' 인 것 같습니다. `--report-dir \"{cand[0]}\"` 을 붙여 주세요.")
+    else:
+        letters = [f"{c}:" for c in "CDEFGHIJKLMNOPQRSTUVWXYZ" if os.path.isdir(f"{c}:{os.sep}")]
+        if letters:
+            say("")
+            say("   지금 이 PC 에서 보이는 드라이브: " + " ".join(letters))
+    say("")
+    say("■ 이렇게 해 보세요 (저장소 폴더에서 실행 · 경로에 공백이 있으면 따옴표)")
+    say(r'   python scripts\collect_sample.py --root Y:\AOI-25')
+    say(r'   python scripts\collect_sample.py --list --root Y:\          (Y 드라이브에 어떤 폴더가 있는지 보기)')
+    say(r'   python scripts\collect_sample.py --root \\10.142.80.88\공유이름\AOI-25   (드라이브 문자 대신 주소로)')
+
+
 def main(argv=None) -> int:
     for stream in (sys.stdout, sys.stderr):
         try:
@@ -178,13 +236,15 @@ def main(argv=None) -> int:
     ap.add_argument("--days", type=int, default=1, help="최근 며칠치 Report 를 함께 담을지")
     ap.add_argument("--max-reports", type=int, default=40, help="담을 Report 최대 개수")
     ap.add_argument("--max-ini", type=int, default=8, help="Report 한 건당 담을 INI 최대 개수")
+    ap.add_argument("--list", action="store_true", help="--root 폴더 안에 무엇이 있는지만 보고 끝낸다(경로 찾기용)")
     args = ap.parse_args(argv)
 
-    root = Path(args.root)
+    root = norm_root(args.root)
     rep_dir, scan_root = root / args.report_dir, root / args.scan_dir
+    if args.list:
+        return list_folder(root)
     if not os.path.isdir(rep_dir):
-        say(f"[오류] Report 폴더를 찾을 수 없습니다: {rep_dir}")
-        say("      --root 로 장비 폴더를 알려 주세요. 예) python collect_sample.py --root Y:\\AOI-25")
+        diagnose(root, args.report_dir)
         return 2
 
     out_base = Path(args.out) if args.out else Path(os.environ.get("USERPROFILE", Path.home())) / "Desktop"

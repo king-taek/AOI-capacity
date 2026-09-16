@@ -105,8 +105,32 @@ def test_scanresult_is_never_walked_recursively(tmp_path, nas, monkeypatch):
     assert not bad, f"Scanresult 를 훑었다: {bad}"
 
 
-def test_missing_report_dir_is_reported_not_crashed(tmp_path):
+def test_missing_report_dir_is_reported_not_crashed(tmp_path, capsys):
     assert sampler.main(["--root", str(tmp_path / "없는장비"), "--out", str(tmp_path / "d")]) == 2
+    out = capsys.readouterr().out
+    assert "없음" in out and "--list" in out          # 원인과 다음 시도를 알려 준다
+
+
+def test_diagnose_points_at_the_real_report_folder_name(tmp_path, nas, capsys):
+    """Report 폴더 이름이 다르면(Reports 등) 그 이름을 찾아 알려 준다."""
+    (nas / "Report").rename(nas / "Reports")
+    assert sampler.main(["--root", str(nas), "--out", str(tmp_path / "d")]) == 2
+    out = capsys.readouterr().out
+    assert "Reports" in out and "--report-dir" in out
+
+
+def test_list_mode_shows_immediate_children(tmp_path, nas, capsys):
+    assert sampler.main(["--list", "--root", str(nas)]) == 0
+    out = capsys.readouterr().out
+    assert "[폴더] Report" in out and "[폴더] Scanresult" in out
+    assert sampler.main(["--list", "--root", str(tmp_path / "없음")]) == 2
+
+
+@pytest.mark.parametrize("given,expected_tail", [("Y:", "Y:" + os.sep), ("Y:" + os.sep, "Y:" + os.sep),
+                                                 ('"Y:' + os.sep + 'AOI-25"', "AOI-25")])
+def test_norm_root_fixes_bare_drive_letter(given, expected_tail):
+    assert str(sampler.norm_root(given)).endswith(expected_tail.rstrip(os.sep)) or \
+           str(sampler.norm_root(given)) == expected_tail
 
 
 @pytest.mark.parametrize("lot,expected", [
