@@ -48,6 +48,17 @@ Camtek AOI 장비의 NAS `Report/*_BatchReport.htm` 과 `Scanresult/.../WaferInf
 
 자세한 안내는 zip 안의 `설치방법.txt` 에 있습니다.
 
+## 샘플 보내기 (개발용)
+
+재스캔(RE · SRD) 표기와 Scan error 뒤 재스캔 흐름을 정확히 구현하려면 실물 파일이 필요합니다.
+`scripts\make_sample.bat` 을 더블클릭하면(또는 `python scripts\collect_sample.py`) 바탕화면에
+`AOI_sample_<날짜>.zip` 한 장이 만들어집니다. **NAS 는 읽기만 하고**, Report 목록 · 고른 Report 원본 ·
+해당 Lot 폴더의 `WaferInfo.ini` 와 폴더 목록(수정시각 포함) · 요약(Lot 접미사 통계)이 들어갑니다.
+보내기 전에 `요약.txt` 로 내용을 확인하세요.
+
+    scripts\make_sample.bat                       :: Y:\AOI-25, 최근 1일치
+    scripts\make_sample.bat --days 3 --scan 300   :: 더 넓게
+
 ## 수집 범위 (현재 AOI-25 한 대)
 
 현장 검증 중이라 **수집·연결 확인은 `Y:\AOI-25` 한 대만** 합니다(`aoi_capacity/scope.py`). 다른 장비 폴더에는 목록 조회조차 하지

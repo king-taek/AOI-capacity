@@ -1,0 +1,263 @@
+"""AOI-25 샘플 모으기 — 개발에 필요한 실물 Report/INI 를 한 폴더에 모아 zip 한 장으로 만든다.
+
+무엇을 모으는가
+  1. Report 폴더의 **전체 파일 목록**(이름·크기·수정시각) — Lot 표기 규칙(RE · SRD · DIA · 3D …)을 여기서 본다.
+  2. 고른 Report 원본 `.htm` — Scan error 가 있는 것, 그 Lot 의 앞뒤(재스캔 후보), 표기별 대표, 최근 하루치.
+  3. 고른 Report 의 **정확 경로** Lot 폴더에 있는 `WaferInfo.ini` 와 그 폴더 목록(수정시각 포함).
+     INI 가 재스캔 때 덮어써지는지, 재스캔용 폴더가 따로 생기는지를 이 목록으로 본다.
+
+★ NAS 는 **읽기만** 한다. NAS 아래에는 파일을 만들지도 바꾸지도 지우지도 않는다. 쓰기는 `--out` 폴더(기본 바탕화면)뿐이다.
+★ Scanresult 를 재귀 검색하지 않는다. Report 파일명에서 계산한 Lot 폴더 **하나만** 나열한다.
+★ 표준 라이브러리만 쓴다 — 앱이 설치돼 있지 않아도 이 파일 하나만 있으면 돌아간다.
+
+    python collect_sample.py                          # Y:\\AOI-25 → 바탕화면에 zip
+    python collect_sample.py --root Y:\\AOI-25 --days 2
+    python collect_sample.py --scan 200               # 최근 Report 200개까지 훑어보기(기본 120)
+"""
+from __future__ import annotations
+
+import argparse
+import os
+import re
+import shutil
+import sys
+import time
+import zipfile
+from collections import Counter
+from pathlib import Path
+
+REPORT_RE = re.compile(
+    r"^(.+?)_(\d{4})_(.+)_(\d{1,2}-[A-Za-z]{3}-\d{2})_\((\d{2}\.\d{2}\.\d{2})\)_BatchReport\.html?$", re.I)
+STATUS_PATTERNS = [
+    ("SCAN_ERROR", re.compile(r"scan\s*error", re.I)),
+    ("ID_READ_ERROR", re.compile(r"failed\s+to\s+read\s+wafer\s+id", re.I)),
+    ("USER_ABORT", re.compile(r"wafer\s+aborted\s+by\s+user", re.I)),
+    ("ABORTED", re.compile(r"abort", re.I)),
+    ("SKIPPED", re.compile(r"skip", re.I)),
+]
+TAGS = re.compile(r"<[^>]+>")
+DEFAULT_ROOT = r"Y:\AOI-25"
+
+
+def say(msg: str) -> None:
+    print(msg, flush=True)
+
+
+def stamp(ts: float) -> str:
+    return time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(ts))
+
+
+def read_text(path) -> str:
+    with open(path, "r", encoding="utf-8", errors="replace") as f:
+        return f.read()
+
+
+def lot_parts(lot: str):
+    """Lot 이름을 앞부분과 접미사로 나눈다. 'TUK RESCAN' → ('TUK', 'RESCAN'), 'XAC-DIA' → ('XAC', 'DIA')."""
+    m = re.split(r"[\s_-]+", str(lot).strip(), maxsplit=1)
+    return (m[0], m[1].upper()) if len(m) == 2 else (str(lot).strip(), "")
+
+
+def scan_reports(rep_dir: Path, limit: int):
+    """Report 폴더를 한 번 나열하고(scandir+stat), 최근 것부터 limit 개만 열어 상태를 본다. 읽기 전용."""
+    files = [e for e in os.scandir(rep_dir) if e.is_file() and e.name.lower().endswith((".htm", ".html"))]
+    files.sort(key=lambda e: e.stat().st_mtime, reverse=True)
+    infos = []
+    for i, e in enumerate(files):
+        m = REPORT_RE.match(e.name)
+        info = {"name": e.name, "path": e.path, "mtime": e.stat().st_mtime, "size": e.stat().st_size,
+                "equipment": m.group(1) if m else "", "process": m.group(2) if m else "",
+                "lot": m.group(3) if m else "", "matched": bool(m), "flags": [], "read": False}
+        if i < limit:
+            try:
+                text = TAGS.sub(" ", read_text(e.path))
+                info["flags"] = [k for k, rx in STATUS_PATTERNS if rx.search(text)]
+                info["read"] = True
+            except OSError as ex:
+                info["flags"] = [f"READ_ERROR({type(ex).__name__})"]
+        infos.append(info)
+    return infos
+
+
+def pick_samples(infos, days: int, max_reports: int):
+    """보내면 도움이 되는 Report 를 고른다. (선택목록, 이유별 설명)"""
+    chosen, why = [], {}
+
+    def add(info, reason):
+        if info["name"] in why:
+            why[info["name"]] += f" · {reason}"
+            return
+        if len(chosen) >= max_reports:
+            return
+        why[info["name"]] = reason
+        chosen.append(info)
+
+    read = [i for i in infos if i["read"]]
+    # 1) Scan error 가 있는 Report 와, 같은 Lot 의 앞뒤 Report(재스캔 전후를 보기 위해)
+    errs = [i for i in read if "SCAN_ERROR" in i["flags"]][:6]
+    for e in errs:
+        add(e, "Scan error 포함")
+        same = [i for i in read if i["lot"] == e["lot"] and i["name"] != e["name"]]
+        same.sort(key=lambda i: abs(i["mtime"] - e["mtime"]))
+        for s in same[:2]:
+            add(s, f"같은 Lot({e['lot']}) 앞뒤 — 재스캔 확인용")
+    # 2) 다른 오류 유형도 한 개씩
+    for kind in ("ID_READ_ERROR", "USER_ABORT", "ABORTED"):
+        for i in read:
+            if kind in i["flags"]:
+                add(i, f"{kind} 포함")
+                break
+    # 3) Lot 접미사(RE · SRD · DIA · 3D …) 별 대표 2개씩 — 표기 규칙 확정용
+    by_suffix = {}
+    for i in read:
+        if i["matched"]:
+            by_suffix.setdefault(lot_parts(i["lot"])[1], []).append(i)
+    for suffix, items in sorted(by_suffix.items()):
+        for i in items[:2]:
+            add(i, f"Lot 표기 '{suffix or '(접미사 없음)'}' 대표")
+    # 4) 최근 N일치 — 하루 가동률을 실제와 맞춰 보기 위해
+    since = time.time() - days * 86400
+    for i in read:
+        if i["mtime"] >= since:
+            add(i, f"최근 {days}일치")
+    # 5) 파일명 형식이 다른 것(파서가 못 읽는 이름) 2개
+    for i in [x for x in infos if not x["matched"]][:2]:
+        add(i, "파일명 형식이 다름")
+    return chosen, why
+
+
+def copy_ini_for(info, scan_root: Path, out_dir: Path, max_ini: int, lines: list, seen=None) -> int:
+    """Report 에서 계산한 **정확한** Lot 폴더 하나만 나열해 WaferInfo.ini 를 복사한다(재귀 검색 없음)."""
+    if not info["matched"]:
+        return 0
+    lot_dir = scan_root / info["equipment"] / info["process"] / info["lot"]
+    if seen is not None:
+        if str(lot_dir) in seen:
+            return 0                       # 같은 Lot 을 가리키는 Report 가 여럿이면 한 번만 나열한다
+        seen.add(str(lot_dir))
+    lines.append(f"\n[{info['name']}]\n  Lot 폴더: {lot_dir}")
+    if not os.path.isdir(lot_dir):
+        lines.append("  → 폴더 없음(이 Lot 의 Scanresult 가 지워졌거나 경로 규칙이 다릅니다)")
+        return 0
+    n = 0
+    try:
+        wafers = sorted(os.scandir(lot_dir), key=lambda e: e.name)
+    except OSError as ex:
+        lines.append(f"  → 나열 실패: {ex}")
+        return 0
+    for w in wafers:
+        if not w.is_dir():
+            lines.append(f"  (파일) {w.name}")
+            continue
+        ini = Path(w.path) / "WaferInfo.ini"
+        if ini.is_file():
+            st = ini.stat()
+            lines.append(f"  {w.name}/WaferInfo.ini  {st.st_size}B  수정 {stamp(st.st_mtime)}")
+            if n < max_ini:
+                dst = out_dir / "Scanresult" / info["equipment"] / info["process"] / info["lot"] / w.name / "WaferInfo.ini"
+                dst.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(ini, dst)
+                n += 1
+        else:
+            lines.append(f"  {w.name}/  (WaferInfo.ini 없음)")
+    return n
+
+
+def main(argv=None) -> int:
+    for stream in (sys.stdout, sys.stderr):
+        try:
+            stream.reconfigure(encoding="utf-8", errors="replace")
+        except Exception:  # noqa: BLE001
+            pass
+    ap = argparse.ArgumentParser(description="AOI 샘플 모으기(NAS 읽기 전용)")
+    ap.add_argument("--root", default=DEFAULT_ROOT, help=r"장비 폴더 (기본 Y:\AOI-25)")
+    ap.add_argument("--out", default="", help="저장 위치 (기본 바탕화면)")
+    ap.add_argument("--report-dir", default="Report")
+    ap.add_argument("--scan-dir", default="Scanresult")
+    ap.add_argument("--scan", type=int, default=120, help="상태를 보려고 열어 볼 최근 Report 개수")
+    ap.add_argument("--days", type=int, default=1, help="최근 며칠치 Report 를 함께 담을지")
+    ap.add_argument("--max-reports", type=int, default=40, help="담을 Report 최대 개수")
+    ap.add_argument("--max-ini", type=int, default=8, help="Report 한 건당 담을 INI 최대 개수")
+    args = ap.parse_args(argv)
+
+    root = Path(args.root)
+    rep_dir, scan_root = root / args.report_dir, root / args.scan_dir
+    if not os.path.isdir(rep_dir):
+        say(f"[오류] Report 폴더를 찾을 수 없습니다: {rep_dir}")
+        say("      --root 로 장비 폴더를 알려 주세요. 예) python collect_sample.py --root Y:\\AOI-25")
+        return 2
+
+    out_base = Path(args.out) if args.out else Path(os.environ.get("USERPROFILE", Path.home())) / "Desktop"
+    # ★ NAS 아래에는 절대 쓰지 않는다
+    if os.path.normcase(os.path.abspath(out_base)).startswith(os.path.normcase(os.path.abspath(root))):
+        say(f"[오류] 저장 위치가 NAS 안입니다: {out_base}. 다른 폴더를 --out 으로 지정하세요.")
+        return 2
+    name = "AOI_sample_" + time.strftime("%Y%m%d_%H%M")
+    out_dir = out_base / name
+    (out_dir / "Report").mkdir(parents=True, exist_ok=True)
+
+    say(f"1/4 Report 폴더 목록 읽는 중… {rep_dir}")
+    infos = scan_reports(rep_dir, args.scan)
+    if not infos:
+        say("[오류] Report 폴더에 .htm 파일이 없습니다.")
+        return 2
+    say(f"    Report {len(infos)}개 · 최근 {min(args.scan, len(infos))}개를 열어 상태를 봅니다")
+
+    listing = [f"# {rep_dir}", f"# 전체 {len(infos)}개 · 만든 시각 {stamp(time.time())}", "",
+               "수정시각\t크기\t파일명"]
+    listing += [f"{stamp(i['mtime'])}\t{i['size']}\t{i['name']}" for i in infos]
+    (out_dir / "report_목록.txt").write_text("\n".join(listing), encoding="utf-8")
+
+    say("2/4 보낼 Report 고르는 중…")
+    chosen, why = pick_samples(infos, args.days, args.max_reports)
+    for i in chosen:
+        try:
+            shutil.copy2(i["path"], out_dir / "Report" / i["name"])
+        except OSError as ex:
+            why[i["name"]] += f" (복사 실패: {ex})"
+
+    say("3/4 WaferInfo.ini 와 Lot 폴더 목록 모으는 중…")
+    scan_lines = [f"# {scan_root}", "# 고른 Report 의 Lot 폴더만 정확 경로로 한 번씩 나열했습니다(재귀 검색 없음).",
+                  "# INI 수정시각이 Report 시각보다 늦으면 재스캔 때 덮어써졌을 수 있습니다."]
+    seen_lots = set()
+    n_ini = sum(copy_ini_for(i, scan_root, out_dir, args.max_ini, scan_lines, seen_lots) for i in chosen)
+    (out_dir / "scan_폴더구조.txt").write_text("\n".join(scan_lines), encoding="utf-8")
+
+    suffixes = Counter(lot_parts(i["lot"])[1] or "(접미사 없음)" for i in infos if i["matched"])
+    flags = Counter(f for i in infos if i["read"] for f in (i["flags"] or ["(오류 표시 없음)"]))
+    summary = [
+        f"AOI 샘플 · {stamp(time.time())}",
+        f"대상: {root}",
+        f"Report 전체 {len(infos)}개 (기간 {stamp(infos[-1]['mtime'])} ~ {stamp(infos[0]['mtime'])})",
+        f"열어 본 Report {sum(1 for i in infos if i['read'])}개 · 담은 Report {len(chosen)}개 · 담은 INI {n_ini}개",
+        "",
+        "■ Lot 접미사 (RE · SRD · DIA · 3D 표기 확인용)",
+        *[f"   {k:<16} {v}건" for k, v in suffixes.most_common()],
+        "",
+        "■ 열어 본 Report 의 상태 표시",
+        *[f"   {k:<16} {v}건" for k, v in flags.most_common()],
+        "",
+        "■ 담은 Report 와 고른 이유",
+        *[f"   {i['name']}\n      → {why[i['name']]}" for i in chosen],
+        "",
+        "※ 이 폴더에는 NAS 에서 '복사'만 했습니다. NAS 원본은 읽기만 했고 아무것도 바꾸지 않았습니다.",
+    ]
+    (out_dir / "요약.txt").write_text("\n".join(summary), encoding="utf-8")
+
+    say("4/4 zip 으로 묶는 중…")
+    zip_path = out_base / (name + ".zip")
+    with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as z:
+        for p in sorted(out_dir.rglob("*")):
+            if p.is_file():
+                z.write(p, p.relative_to(out_base))
+    size_mb = zip_path.stat().st_size / 1e6
+    say("")
+    say("완료했습니다.")
+    say(f"  보낼 파일: {zip_path}  ({size_mb:.1f} MB)")
+    say(f"  풀린 폴더: {out_dir}")
+    say("  먼저 요약.txt 를 열어 내용을 확인한 뒤 보내 주세요.")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

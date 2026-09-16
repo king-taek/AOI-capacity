@@ -358,7 +358,8 @@ def manual_check() -> tuple:
 _UPDATE_SKIP_TOP = {".git", ".github", "__pycache__", ".pytest_cache", ".idea", ".vscode", ".claude", ".coverage",
                     "dev", "docs", "pytest.ini", ".gitignore", "CLAUDE.md", "README.md"}
 # 최상위는 남기되 그 안에서 내려보낼 것만(기본값 '안 보냄' — 빌드 도구가 사용자 PC 로 새지 않게).
-_UPDATE_KEEP_ONLY = {"scripts": {"run_aoi.bat", "run_aoi_debug.bat", "run_collect.bat"}}
+_UPDATE_KEEP_ONLY = {"scripts": {"run_aoi.bat", "run_aoi_debug.bat", "run_collect.bat",
+                                "make_sample.bat", "collect_sample.py"}}
 _REQUIRED_IN_STAGING = ("main.py", "requirements.txt", "aoi_capacity/ui/main_window.py",
                         "aoi_capacity/ui/assets/template.html", "aoi_capacity/ui/style.qss",
                         "aoi_capacity/utils/updater.py", "aoi_capacity/assets/devices.default.csv", "VERSION")
