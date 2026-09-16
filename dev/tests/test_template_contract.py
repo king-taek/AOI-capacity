@@ -144,7 +144,7 @@ def test_a_lot_bar_shows_what_is_mixed_inside_it():
     (실물: 9/15 AOI-8 NTM). 막대는 하나로 두되 안을 조각별 색으로 칠하고, 툴팁이 종합해 준다."""
     assert "function lotTip(" in HTML and 'class="part"' in HTML
     assert 'const mark=it=>it.kind==="test"?"var(--prev)":it.kind==="err"?"var(--err)"' in HTML
-    assert "Wafer ${L.parts.length}장" in HTML          # 몇 장인지
+    assert "Wafer ${nWafer}장" in HTML and "배치 ${nBatch}건" in HTML   # Wafer 장수와 통째로 실패한 시도는 따로
     assert "정상 검사" in HTML and "오류·중단" in HTML   # 무엇이 섞였는지
 
 
@@ -190,3 +190,32 @@ def test_embedded_string_pool_is_unfolded_on_load():
     assert "const P=emb.pool||null,F=new Set(emb.pooled||[]);" in HTML
     assert "P&&F.has(c)?(P[a[i]]??\"\"):a[i]" in HTML
     assert set(collect.POOLED_COLS) < set(collect.OUT_COLS)
+
+
+def test_save_html_keeps_every_collector_column_and_the_pool():
+    """★ 저장 버튼이 열을 골라 담으면 kind·scan_type·report 가 사라져 TEST 가 실가동에 섞이고(실데이터 +150,204초)
+    배치 표시·Report 열기가 없어진다. 수집기가 준 열 목록과 문자열 풀 구조를 그대로 다시 접어야 한다."""
+    body = HTML[HTML.index("function saveHtml("):HTML.index("/* ---------- boot")]
+    assert '"device","lot","wafer_id"' not in body          # 열을 손으로 고르지 않는다
+    assert "embCols" in body and "embPooled" in body         # 로더가 받은 계약 그대로
+    assert "pooled,pool,rows" in body                        # collect._embed_rows 와 같은 모양
+    assert "embCols=emb.cols.slice()" in HTML
+
+
+def test_today_basis_wording_is_last_scan_not_now():
+    """사용자 확정(D17): 오늘 분모는 '지금' 이 아니라 그날 마지막 스캔까지다 — 화면 문구도 그렇게 말해야
+    다음 날 열었을 때 숫자가 달라지는 이유가 설명된다."""
+    for bad in ("현재까지", "00:00 ~ 현재", "hm(new Date())} 기준"):
+        assert bad not in HTML, bad
+    assert "마지막 스캔 기준" in HTML
+
+
+def test_readme_and_settings_help_follow_the_confirmed_rules():
+    from pathlib import Path
+    from aoi_capacity.i18n import ko
+
+    readme = Path(__file__).resolve().parents[2].joinpath("README.md").read_text(encoding="utf-8")
+    for bad in ("이전 기간 비교", "현재 시각까지"):
+        assert bad not in readme, bad
+        assert bad not in ko.SET_UTIL_DEFINITION, bad
+    assert "마지막 스캔" in readme and "마지막 스캔" in ko.SET_UTIL_DEFINITION

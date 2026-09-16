@@ -377,12 +377,14 @@ function segBind(id,attr,cb){document.querySelectorAll(`#${id} button`).forEach(
 
 /* 장비 그룹(있으면 홈 필터에 쓴다) — 수집기가 meta.devices 에 넣어 준다 */
 let devGroup={};
+/* 수집기가 준 열 목록과 풀 열(collect.OUT_COLS · POOLED_COLS) — 저장할 때 같은 계약으로 다시 접는다 */
+let embCols=[],embPooled=[];
 
 /* ---------- demo / embedded ---------- */
 function loadDemo(){
   const emb=JSON.parse($("#embedded").textContent);
   /* 되풀이되는 열은 문자열 풀 번호로 접혀 온다(collect._embed_rows) — 여기서 되돌린다 */
-  if(emb.cols){const P=emb.pool||null,F=new Set(emb.pooled||[]);
+  if(emb.cols){const P=emb.pool||null,F=new Set(emb.pooled||[]);embCols=emb.cols.slice();embPooled=[...F];
     rows=emb.rows.map(a=>{const o={};emb.cols.forEach((c,i)=>o[c]=P&&F.has(c)?(P[a[i]]??""):a[i]);o.norm_status=o.norm_status||normStatus(o.status);return o;});meta=emb.meta||{generated:"",mode:"saved"};}
   else{ /* compact demo: days are offsets from today, segments delta-encoded; expanded relative to the real current date */
     rows=[];const now=Date.now();const t0=keyDay(todayKey()).getTime();const codes={2:"USER_ABORT",3:"ABORTED",4:"SCAN_ERROR",5:"ID_READ_ERROR"};
@@ -407,9 +409,9 @@ function lotTip(L){
   const errs=L.parts.filter(p=>p.kind==="err");
   const list=errs.length?"<br>"+errs.slice(0,4).map(p=>`<span class="k">${hm(new Date(p.g.s))} · ${ERR_KO[p.g.r.norm_status]||"오류"}${p.g.batch?" (배치 전체)":""}</span>`).join("<br>")
     +(errs.length>4?`<br><span class="k">… 외 ${errs.length-4}건</span>`:""):"";
-  const skipped=L.parts.length-L.n+0;   /* parts 와 n 은 같지만, 뒤에 조각 개념이 바뀌어도 티가 나게 둔다 */
+  const nBatch=L.parts.filter(p=>p.g.batch).length,nWafer=L.parts.length-nBatch;   /* 통째로 실패한 시도는 Wafer 가 아니다 */
   return`<b>Lot ${esc(L.lot)}</b> · ${esc(L.recipe)}<br>${hm(new Date(L.s))} → ${hm(new Date(L.e))} · ${fmtSec((L.e-L.s)/1000)}`
-    +`<br>Wafer ${L.parts.length}장 — ${mix||"—"}`
+    +`<br>Wafer ${nWafer}장${nBatch?` · 배치 ${nBatch}건`:""} — ${mix||"—"}`
     +`<br>검사 시간 ${fmtSec(L.run/1000)}${L.test?' <span class="chip mute">가동률 제외</span>':""}${list}${openHint(L.r)}`;}
 
 /* Lot 막대를 묶는 기준 — **Lot 이름을 있는 그대로** 쓴다(사용자 확정).
@@ -528,7 +530,7 @@ function renderAll(){
   const days=dataDays();
   $("#dayTxt").innerHTML=fmtDay(day)+(isToday(day)?'<span class="today">TODAY</span>':"");$("#dayPick").value=day;
   $("#dPrev").disabled=day<=days[0];$("#dNext").disabled=day>=(todayKey()>days[days.length-1]?todayKey():days[days.length-1]);
-  $("#homeBasis").textContent=isToday(day)?`00:00 ~ ${hm(new Date())} 기준 · 검사시간 ÷ 경과시간`:"00:00 ~ 24:00 기준 · 검사시간 ÷ 24시간";
+  $("#homeBasis").textContent=isToday(day)?"00:00 ~ 장비별 마지막 스캔 · 검사시간 ÷ 경과시간":"00:00 ~ 24:00 · 검사시간 ÷ 24시간";
   renderHome();renderDetail();if($("#v-trend").classList.contains("on"))renderTrend();if($("#v-compare").classList.contains("on"))renderCompare();}
 const isAlert=m=>m.hasData&&(m.util<th.util||m.nErr>=th.err);
 const groups=()=>[...new Set(devNames.map(n=>devGroup[n]).filter(Boolean))];
@@ -541,7 +543,7 @@ function renderHome(){
   const cur=fleetAvg([day],vd);
   const alerts=list.filter(x=>isAlert(x.m)),nod=list.filter(x=>!x.m.hasData),errs=list.filter(x=>x.m.nErr>0);
   const worst=[...list].filter(x=>x.m.hasData).sort((a,b)=>a.m.util-b.m.util)[0];
-  $("#homeSum").innerHTML=`<div class="card ss hero"><div class="k">평균 가동률 · ${isToday(day)?"현재까지":"하루"}</div><div class="v">${cur.util==null?"–":cur.util.toFixed(1)+"<small>%</small>"}</div><div class="s">${isToday(day)?"00:00 ~ 현재":"00:00 ~ 24:00"} · 검사시간 ÷ 경과시간</div></div>
+  $("#homeSum").innerHTML=`<div class="card ss hero"><div class="k">평균 가동률 · ${isToday(day)?"마지막 스캔 기준":"하루"}</div><div class="v">${cur.util==null?"–":cur.util.toFixed(1)+"<small>%</small>"}</div><div class="s">${isToday(day)?"00:00 ~ 장비별 마지막 스캔":"00:00 ~ 24:00"} · 검사시간 ÷ 경과시간</div></div>
     <div class="card ss"><div class="k">장비</div><div class="v num">${vd.length}<small>대</small></div><div class="s">데이터 있음 ${cur.n}대</div></div>
     <div class="card ss"><div class="k">주의 장비</div><div class="v num" style="color:${alerts.length?"var(--crit-ink)":"inherit"}">${alerts.length}<small>대</small></div><div class="s">가동률 ${th.util}% 미만 또는 오류 ${th.err}건↑</div></div>
     <div class="card ss"><div class="k">오류 발생</div><div class="v num">${errs.length}<small>대</small></div><div class="s">총 ${errs.reduce((a,x)=>a+x.m.nErr,0)}건 · 정지 ${fmtSecS(list.reduce((a,x)=>a+x.m.stop+x.m.err,0))}</div></div>
@@ -684,8 +686,12 @@ async function writeOut(name,blob,accept){
   if(window.showSaveFilePicker){try{const h=await showSaveFilePicker({suggestedName:name,types:[accept]});const w=await h.createWritable();await w.write(blob);await w.close();toast("저장 완료 · "+h.name);return;}catch(e){if(e.name==="AbortError")return;}}
   const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download=name;document.body.appendChild(a);a.click();a.remove();toast("다운로드 · "+name);}
 function saveHtml(){if(!rows.length){toast("저장할 데이터가 없습니다");return;}
-  const cols=["device","lot","wafer_id","status","norm_status","recipe","wafer_start_time","wafer_end_time","batch_start","ini_match","data_issue"];
-  const emb={cols,rows:rows.map(r=>cols.map(c=>r[c]??"")),meta:{...meta,mode:meta.mode==="demo"?"demo":"saved"}};
+  /* ★ 수집기가 준 열을 하나도 빠뜨리지 않고, 같은 문자열 풀 구조로 다시 접는다(collect._embed_rows 와 같은 계약).
+     열을 골라 저장하면 kind·scan_type·report 가 사라져 TEST 가 실가동에 섞이고 배치·Report 열기가 없어진다(실데이터로 확인). */
+  const cols=embCols.length?embCols:Object.keys(rows[0]);const pooled=embCols.length?embPooled:cols.filter(c=>c!=="wafer_start_time"&&c!=="wafer_end_time");
+  const pool=[],idx=new Map(),F=new Set(pooled);const put=v=>{v=v==null?"":String(v);let i=idx.get(v);if(i==null){i=pool.length;pool.push(v);idx.set(v,i);}return i;};
+  const emb={cols,pooled,pool,rows:rows.map(r=>cols.map(c=>F.has(c)?put(r[c]):(r[c]??""))),
+             meta:{...meta,mode:meta.mode==="demo"?"demo":"saved",saved_iso:new Date().toISOString().slice(0,19)}};
   const clone=document.documentElement.cloneNode(true);clone.querySelector("#embedded").textContent=JSON.stringify(emb).replace(/<\//g,"<\\/");
   clone.querySelector("#tip").style.display="none";clone.querySelector("#toast").classList.remove("on");
   writeOut("AOI_capacity_"+stamp()+".html",new Blob(["<!doctype html>\n"+clone.outerHTML],{type:"text/html;charset=utf-8"}),{description:"HTML",accept:{"text/html":[".html"]}});}
