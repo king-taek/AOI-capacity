@@ -1,0 +1,19 @@
+#!/bin/sh
+# 코드를 고치는 커밋에는 진행상황.md 를 함께 넣게 한다(CLAUDE.md '커밋' 규칙).
+# 켜기:  git config core.hooksPath dev/hooks
+# 건너뛰기: git commit --no-verify
+# -c core.quotepath=false: 한글 파일 이름이 \354\247... 로 나오지 않게 한다
+staged=$(git -c core.quotepath=false diff --cached --name-only)
+code=$(printf '%s\n' "$staged" | grep -E '^(aoi_capacity|scripts|dev|main\.py|requirements\.txt)' || true)
+[ -z "$code" ] && exit 0
+printf '%s\n' "$staged" | grep -qx '진행상황.md' && exit 0
+cat >&2 <<'MSG'
+✗ 진행상황.md 가 이번 커밋에 없습니다.
+
+  코드를 고치는 커밋에는 진행상황.md 를 함께 넣습니다 — 세션이 바뀌어도 이어서 일할 수 있게
+  '작업 기록' 맨 위에 한 줄, 달라진 항목(지금 상태 · 확정된 결정 · 다음 할 일)을 고쳐 주세요.
+
+    git add 진행상황.md
+    git commit --no-verify        # 정말 필요할 때만
+MSG
+exit 1
