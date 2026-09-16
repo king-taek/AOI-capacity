@@ -132,8 +132,42 @@ def test_error_and_the_stop_after_it_are_drawn_as_one_bar():
     """사용자 확정: 오류 발생과 그 뒤 정지는 막대 하나로 이어 그린다(숫자는 그대로 따로 센다)."""
     assert "const stopOf=g=>m.items.find(" in HTML
     assert "errIt.forEach(it=>{const sp=stopOf(it.g),e2=sp?Math.max(it.e,sp.e):it.e;" in HTML
-    assert '오류 ${fmtSec((it.g.e-it.g.s)/1000)} + 정지(추정)' in HTML   # 툴팁에서는 나눠 보여 준다
+    # 한 막대로 그리되 툴팁에서는 언제·무슨 오류·얼마나 기다렸는지를 나눠 적는다(사용자 확정)
+    assert "오류 발생 <b>${hm(new Date(it.g.s))}</b> · 오류 구간" in HTML
+    assert "그 뒤 정지(추정) ${fmtSec((st.e-st.s)/1000)}" in HTML
+    assert "합계 ${fmtSec((st.e-it.g.s)/1000)} (막대 전체 길이)" in HTML
     assert "오류·중단 + 그 뒤 정지 (한 막대)" in HTML
+
+
+def test_a_lot_bar_shows_what_is_mixed_inside_it():
+    """★ 한 Lot 에 정상·오류·건너뜀이 섞였는데 통째로 파랗게 칠하면 '다 잘 된 것' 처럼 보인다
+    (실물: 9/15 AOI-8 NTM). 막대는 하나로 두되 안을 조각별 색으로 칠하고, 툴팁이 종합해 준다."""
+    assert "function lotTip(" in HTML and 'class="part"' in HTML
+    assert 'const mark=it=>it.kind==="test"?"var(--prev)":it.kind==="err"?"var(--err)"' in HTML
+    assert "Wafer ${L.parts.length}장" in HTML          # 몇 장인지
+    assert "정상 검사" in HTML and "오류·중단" in HTML   # 무엇이 섞였는지
+
+
+def test_rework_of_the_same_lot_joins_one_bar():
+    """사용자 확정: Rework 도 같은 LOT 이면 한 막대. 구분자 차이(`TTP DIA`·`TTP-DIA`)도 같은 Lot 으로 본다."""
+    assert "function lotKey(" in HTML and "LOT_MARKS=/^(RE|RESCAN|REWORK|RW)$/i" in HTML
+    assert "L.key===key" in HTML
+    assert 'isTest?"TEST\\u0000":""' in HTML            # 시험 가동만은 섞지 않는다(가동률에서 빠지므로)
+
+
+def test_denominator_is_a_fixed_day_but_today_stops_at_the_last_scan():
+    """사용자 확정: 분모는 하루 24시간 고정. 오늘만 **마지막으로 스캔된 시각**까지로 끊는다."""
+    assert "function dayLastScan(" in HTML
+    assert "const b=isToday(k)?Math.max(a,lastScan||now):a+DAY;" in HTML
+    # 장비 시계가 PC 보다 앞서 있어도 마지막 스캔을 잘라 내지 않는다(now 로 다시 줄이지 않는다)
+    assert "Math.min(now,Math.max(a,lastScan" not in HTML
+
+
+def test_test_lots_count_in_the_denominator_but_not_in_the_numerator():
+    """사용자 확정: 시험 가동은 양산이 아니라 실가동(분자)에서 빼되, 분모(24시간)에서는 빼지 않는다."""
+    assert "m.util=denom>0?m.run/denom*100:0;" in HTML          # 분자는 run 만
+    assert "m.hasData=m.nWafer>0||m.nErr>0||m.nTest>0;" in HTML  # 시험만 돈 날도 '데이터 없음' 이 아니다
+    assert "m.testRun+=(c[1]-c[0])/1000" in HTML                # 미가동으로도 세지 않는다
 
 
 def test_embedded_string_pool_is_unfolded_on_load():

@@ -18,7 +18,9 @@ Camtek AOI 장비의 BatchReport/WaferInfo.ini 를 읽어 장비별 가동률을
    목록을 바꿀 때는 `prefs.migrate` 도 함께 본다 — 이미 저장된 설정 중 **옛 기본값 그대로인 것만** 새 목록으로 옮긴다.
    범위 밖 장비에는 `scandir/stat/isdir/isfile/open` 을 한 번도 부르지 않는다 — 게이트는 "파일을 만지기 전" 단계인
    `devices.py`(`devices_from_rows` · `discover_devices` · `check_rows`)에 있고 수집 루프·CLI·백필·예약·연결 확인이 모두 같은 함수를 쓴다.
-   `폴더 *`(자동 탐색)은 공유 나열 자체가 다른 장비 접근이라 제한 중에는 건너뛴다. 범위 밖 캐시는 **지우지 않고** 출력에서만 뺀다.
+   `폴더 *`(자동 탐색)은 제한 중에 **공유를 나열하지 않고** 허용 목록의 이름만 `root/<이름>` 으로 만들어 존재만 확인한다
+   (`devices._discover_under`) — 만지는 경로가 전부 허용 장비라 규칙을 지키면서도 `*` 행이 동작한다.
+   (이 길이 없던 동안 실장비에서 4층 5대가 3일 내내 한 번도 수집되지 않았다.) 범위 밖 캐시는 **지우지 않고** 출력에서만 뺀다.
    회귀 가드: `dev/tests/test_scope_isolation.py`.
 3. **결과 화면은 앱 안에 없다.** PyQt6 창은 **수집 전용**(수집 · 장비 목록 · 설정)이고, 화면은 수집이 만든
    `AOI_capacity.html` 한 장을 사용자가 더블클릭해 브라우저에서 본다. QtWebEngine·로컬 서버·localhost 를 쓰지 않는다.
@@ -26,7 +28,10 @@ Camtek AOI 장비의 BatchReport/WaferInfo.ini 를 읽어 장비별 가동률을
    브라우저가 NAS 를 직접 읽는 경로도 두지 않는다 — 수집은 Python 만 한다. 자동 주기 수집은 없다(수동 실행만).
 4. **Scanresult 를 재귀 검색하지 않는다.** INI 경로는 `{scan}/{job}/{setup}/{lot}/{wafer}/WaferInfo.ini` 로 계산해 존재만 확인한다.
    `job`·`setup` 의 출처는 **Report 안의 `Job/Setup` 값**이다(파일명이 아니다 — 실장비 516개 중 옛 파일명 규칙에 맞는 건 6개뿐이었다).
-   `Job/Setup` 이 없는 옛 형식만 파일명 규칙으로 되돌아간다. Report·Scanresult 폴더 이름은 장비마다 달라(`Reports`)
+   `Job/Setup` 이 없는 옛 형식만 파일명 규칙(`{job}_{4자리}_{lot}_…`)으로 되돌아가고, 그것도 안 맞으면
+   **표의 Lot 을 파일명 뒤에서 떼어** job·setup 을 되찾는다(`_job_setup_by_table_lot`).
+   실물: AOI-10 은 Setup 이 `SETUP` 이라 4자리 규칙에 걸리지 않아 job 이 비었고, INI 경로가 통째로 어긋나
+   9/15 하루에만 8.8시간이 '미가동' 으로 보였다. job 이 비면 경로를 만들지 않는다(빈 칸은 사라져 남의 INI 를 가리킨다). Report·Scanresult 폴더 이름은 장비마다 달라(`Reports`)
    `devices.find_subdir` 이 후보 몇 개의 존재만 확인해 고른다.
 5. **시각은 근거가 있을 때만 쓴다.** `WaferInfo.ini` 는 다시 검사하면 **같은 경로에 덮어써진다**(실물 확인:
    AOI-25 9/14 `00NSP049XYG7`). 그래서 옛 Report 행에도 나중 시각이 붙는다 — INI 시각이 그 Report 의
@@ -61,8 +66,8 @@ Camtek AOI 장비의 BatchReport/WaferInfo.ini 를 읽어 장비별 가동률을
   `TEST` → TEST(회색). 토큰이 통째로 맞을 때만 걸린다(`RETURN`·`REX`·`TESTER` 제외).
   **`SRD`·`DIA`·`3D`·`EDGE`·`BUMP`·`PIDS3/5/7/9`·`RDL2/3/4`·`TPST6`·`TPDV`·`WBG`·`STRIP`·`DUMMY`·`RW` 는
   전부 정상 검사**다(사용자 확정 — `RW` 는 확실하지 않아 정상으로 둔다). RESCAN·REWORK 도 가동률에 포함한다.
-  **`TEST` 만 가동률에서 뺀다**(사용자 확정, `collect.EXCLUDED_SCAN_TYPES`) — 분자·분모·오류 건수 어디에도
-  넣지 않는다. 다만 화면에서 사라지지는 않는다: 타임라인에 회색 띠, 제목에 '시험 가동 n건 제외',
+  **`TEST` 는 분모(24시간)에는 들어가되 분자(실가동)에서만 뺀다**(사용자 확정 — 양산을 위해 돈 게 아니다).
+  오류 건수에도 넣지 않는다. 화면에서 사라지지는 않는다: 타임라인에 회색 띠, 제목에 '시험 가동 n건 제외',
   Lot 목록에 '시험 · 제외' 표. 빼는 것과 없었던 것은 다르다.
 - 행 데이터 계약(`collect.OUT_COLS`): `kind`("" = Wafer 한 장 · "batch" = 통째로 실패한 시도), `batch_end`,
   `job`·`setup`(Report 안의 `Job/Setup`, 없으면 파일명 규칙 — 나중에 쓸 일이 있어 함께 담는다),
@@ -84,9 +89,16 @@ Camtek AOI 장비의 BatchReport/WaferInfo.ini 를 읽어 장비별 가동률을
   (`reportUrl`·`openReport`). 경로는 `meta.devices[].note` + `report_dir` + `report` 로만 만들고
   드라이브 문자와 UNC(`\\10.x`) 를 모두 다룬다. 여는 주체는 사람이 연 그 탭이지 이 화면이 아니다 —
   화면은 여전히 바깥으로 요청을 한 건도 보내지 않는다.
+- **가동률 = 검사시간 ÷ 하루 24시간**(사용자 확정, 분모 고정). 단 **오늘만** 아직 오지 않은 시간을
+  미가동으로 셀 수 없으므로 `00:00 ~ 그날 마지막 스캔`(`dayLastScan`)까지로 끊는다.
 - 타임라인에서 **오류 구간과 그 뒤 '정지(추정)' 는 막대 하나로 이어 그린다**(사용자 확정).
-  숫자(`m.err`·`m.stop`)는 그대로 따로 세고 툴팁에서 나눠 보여 준다. 어제 난 오류가 오늘까지 이어진
-  경우엔 오늘 화면에 오류 구간이 없으므로 정지만 흐리게 따로 그린다.
+  숫자(`m.err`·`m.stop`)는 그대로 따로 세고, 툴팁이 **오류 발생 시각 · 오류 종류 · 오류 구간 · 그 뒤 정지**를
+  나눠 적는다. 어제 난 오류가 오늘까지 이어진 경우엔 오늘 화면에 오류 구간이 없으므로 정지만 흐리게 따로 그린다.
+- **Lot 막대는 하나로 두되 안을 조각별 색으로 칠한다**(사용자 확정). 통째로 파랗게 칠하면 섞여 있는 오류가
+  묻힌다(실물: 9/15 AOI-8 NTM — 배치가 통째로 중단된 시도가 파란 막대 안에 숨어 있었다).
+  툴팁(`lotTip`)이 Wafer 몇 장 중 정상·다시 검사·재작업·오류·시험이 각각 몇인지 종합해 준다.
+  막대를 묶는 기준은 `lotKey` — 구분자 차이(`TTP DIA`·`TTP-DIA`)와 `RE`·`RESCAN`·`REWORK`·`RW` 토큰을 지운
+  이름이 같으면 한 막대다(사용자 확정: "Rework 도 같은 LOT 이면 하나의 막대"). 시험 가동만은 섞지 않는다.
 - 결과 HTML 의 위치·생성은 `utils/results.py` 한 곳에서만 묻는다(`html_path` · `ensure_html` · `last_collect_time`).
 - 장비는 `id`(정규화 경로, 캐시 커서·집계 키) · `path` · `name`(표시명 `AOI-25` · `4F-AOI-01`) · `aliases`(옛 표시명) 로 나눠 다룬다.
   표시명을 바꿔도 이력이 갈라지지 않는다. 홈 정렬은 `devices.sort_key`(= template 의 `cmpDev`) — AOI-1…AOI-25 뒤에 4F-AOI-01….

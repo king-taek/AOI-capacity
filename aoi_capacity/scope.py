@@ -6,8 +6,9 @@
 
 - 비교는 **이름만** 본다(경로는 PC 마다 다르다). `key()` 로 공백·밑줄·하이픈을 지우고 소문자로 맞춘다:
   `AOI-25` == `aoi 25` == `AOI_25`.
-- `폴더 *`(자동 탐색) 행은 공유 폴더를 나열해야 어떤 장비인지 알 수 있다 → **나열 자체가 다른 장비 접근**이라
-  범위 제한 중에는 그 행을 통째로 건너뛴다(`allows_auto_row`).
+- `폴더 *`(자동 탐색) 행은 공유 폴더를 나열해야 어떤 장비인지 알 수 있는데, **나열 자체가 다른 장비 접근**이다.
+  그래서 범위 제한 중에는 나열하지 않고 **허용 목록의 이름만** `root/<이름>` 으로 만들어 존재를 확인한다
+  (`devices._discover_under`). 만지는 경로가 전부 허용 장비라 규칙을 지키면서도 `*` 행이 동작한다.
 - 탈출구: 범위에 `"*"` 하나만 넣으면 제한이 없어진다(되돌리기·향후 확장용, 기본값 아님).
 - 이 모듈은 파일시스템도 Qt 도 건드리지 않는 순수 함수다.
 """
@@ -77,8 +78,10 @@ def allows_row(cfg: Dict[str, object] | None, row: Dict[str, object]) -> bool:
     return is_allowed(cfg, *row_candidates(row))
 
 
-def allows_auto_row(cfg: Dict[str, object] | None = None) -> bool:
-    """`폴더 *` 자동 탐색을 해도 되는가 — 제한이 걸려 있으면 안 된다(공유 나열 = 다른 장비 접근)."""
+def lists_share(cfg: Dict[str, object] | None = None) -> bool:
+    """`폴더 *` 에서 **공유를 통째로 나열해도** 되는가 — 제한이 없을 때만.
+
+    제한 중에는 대신 허용 목록의 이름만 정확 경로로 확인한다(`devices._discover_under`)."""
     return unrestricted(cfg)
 
 

@@ -112,15 +112,21 @@ def parse_dt(s) -> Optional[dt.datetime]:
 _STATUS_RULES = [
     # 'Failed to move wafer from LoadPort A to End-Effector Error: Robot: The wafer could not be
     #  detected on Hand1 after the GET motion. . Batch Aborted. Skipped.'
+    # 반송(핸들링) 실패 — 'Wafer Handling Failure (LoadPort A to End-Effector).' · 'Failed on MoveToStation'
     ("WAFER_LOST", re.compile(r"wafer\s+lost|failed\s+to\s+sense\s+wafer"
-                              r"|failed\s+to\s+move\s+wafer|could\s+not\s+be\s+detected\s+on\s+hand", re.I)),
+                              r"|failed\s+to\s+move\s+wafer|could\s+not\s+be\s+detected\s+on\s+hand"
+                              r"|wafer\s+handling\s+failure|failed\s+on\s+movetostation", re.I)),
     ("HW_ERROR", re.compile(r"hardware\s+failure", re.I)),             # 'Camera Hardware Failure. … Batch Aborted.'
     ("SKIPPED", re.compile(r"skip", re.I)),
     ("ID_READ_ERROR", re.compile(r"failed\s+to\s+read\s+wafer\s+id", re.I)),
     ("SCAN_ERROR", re.compile(r"scan\s*(?:2d|3d)?\s*error", re.I)),     # 'Scan 2D Error.' · 'Scan Error: …'
-    ("ALIGN_ERROR", re.compile(r"alignment\s+error", re.I)),
+    # 'Alignment Error.' · 'Manual Alignment Failed.' · 'Prealigner failure'
+    ("ALIGN_ERROR", re.compile(r"alignment\s+error|alignment\s+failed|prealigner\s+fail", re.I)),
+    ("CLEAN_REF_ERROR", re.compile(r"clean\s+reference\s+error", re.I)),   # 3일치 실장비 72건
+    ("NOTHING_TO_SCAN", re.compile(r"nothing\s+to\s+scan", re.I)),
     # 'FAR Model inside recipe is invalid, …' · 'Scan 2D: Illegal Lot Name.' · 'Wafer Map Import failed.'
-    ("RECIPE_ERROR", re.compile(r"far\s*model|illegal\s+lot\s+name|wafer\s+map\s+import\s+failed", re.I)),
+    ("RECIPE_ERROR", re.compile(r"far\s*model|illegal\s+lot\s+name|wafer\s+map\s+import\s+failed"
+                                r"|multi\s*recipe\s+error", re.I)),
     ("USER_ABORT", re.compile(r"wafer\s+aborted\s+by\s+user", re.I)),
     ("ABORTED", re.compile(r"abort", re.I)),
 ]
@@ -233,6 +239,9 @@ def parse_report(name: str, text: str) -> dict:
     job, setup = split_job_setup(rep["summary"].get("Job/Setup", ""))
     if job:
         rep["equipment"], rep["process_code"] = job, setup
+    elif not rep["equipment"]:
+        # Job/Setup 도 없고 파일명 규칙(4자리 Setup)에도 안 맞는 옛 형식 — 표의 Lot 으로 되찾는다.
+        rep["equipment"], rep["process_code"] = _job_setup_by_table_lot(name, rep["wafers"])
     rep["job"], rep["setup"] = rep["equipment"], rep["process_code"]
     if rep["report_lot"] and setup:
         # 파일명의 Job 안에 `…_0614` 같은 4자리가 있으면 REPORT_RE 가 거기서 잘라 Lot 앞에 Setup 이 붙는다
@@ -242,6 +251,32 @@ def parse_report(name: str, text: str) -> dict:
     if not rep["report_lot"]:                        # 자리표시(`LoadPort A`)는 Lot 이 아니다
         rep["report_lot"] = next((w["lot"] for w in rep["wafers"] if not _is_placeholder(w)), "")
     return rep
+
+
+#: 파일명 뒤쪽의 `_{날짜}_({시각})_BatchReport.htm` — 앞부분(head)만 떼어 내려고 쓴다.
+REPORT_TAIL_RE = re.compile(
+    r"^(?P<head>.+)_(\d{1,2}-[A-Za-z]{3}-\d{2})_\((\d{2}\.\d{2}\.\d{2})\)_BatchReport\.html?$", re.I)
+
+
+def _job_setup_by_table_lot(name: str, wafers: List[dict]) -> Tuple[str, str]:
+    """`Job/Setup` 도 없고 `REPORT_RE`(4자리 Setup) 에도 안 맞는 파일명에서 job·setup 을 되찾는다.
+
+    파일명은 `{job}_{setup}_{lot}_{날짜}_({시각})_BatchReport.htm` 인데 job 과 lot 에 `_` 가 섞여 있어
+    파일명만으로는 경계를 못 가른다. 그런데 **Lot 은 Report 표 안에 적혀 있다** — 뒤에서 그만큼 떼어 내면
+    남는 것의 마지막 칸이 setup, 그 앞이 전부 job 이다.
+    실물 근거: AOI-10 `R_TB500 TOP D-DIE_0860312PD_SETUP_UDL_26-Sep-14_(01.02.37)_BatchReport.htm`
+    — setup 이 `SETUP` 이라 4자리 규칙에 걸리지 않아 job 이 비었고, INI 경로가 통째로 어긋나
+    9/15 하루에만 8.8시간이 '미가동' 으로 보였다(실장비 3일치에서 180행).
+    """
+    m = REPORT_TAIL_RE.match(str(name or ""))
+    if not m:
+        return "", ""
+    lot = next((str(w.get("lot") or "") for w in wafers if not _is_placeholder(w)), "")
+    head = m.group("head")
+    if not lot or not head.endswith("_" + lot):
+        return "", ""
+    job, _, setup = head[:-(len(lot) + 1)].rpartition("_")
+    return (job.strip(), setup.strip()) if job and setup else ("", "")
 
 
 def split_job_setup(value: str) -> Tuple[str, str]:

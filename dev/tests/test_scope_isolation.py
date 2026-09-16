@@ -44,33 +44,45 @@ def scoped_nas(tmp_path):
 
 
 class Tripwire:
-    """가짜 NAS 안에서 허용 폴더(그리고 그 상위) 밖을 건드리면 기록한다."""
+    """규칙 두 가지를 그대로 지켜본다.
 
-    def __init__(self, nas: Path, allowed):
+    ① **범위 밖 장비 폴더는 건드리지 않는다** — 그 폴더나 그 아래를 stat/isdir/isfile/open 하면 기록.
+    ② **공유를 나열하지 않는다** — 허용 장비 폴더 밖에서 scandir/listdir 을 부르면 기록
+       (나열은 '어떤 장비가 있는지' 를 알아내는 일이라 그 자체가 범위 밖 접근이다).
+    허용 이름으로 만든 정확 경로(`공유/AOI-9`)를 확인하는 것은 규칙 위반이 아니다 — 만지는 대상이
+    허용 장비이기 때문이다. `폴더 *` 행은 그 길로만 동작한다."""
+
+    LISTING = ("scandir", "listdir")
+
+    def __init__(self, nas: Path, allowed, blocked):
         self.nas = os.path.abspath(str(nas))
         self.allowed = [os.path.abspath(str(a)) for a in allowed]
+        self.blocked = [os.path.abspath(str(b)) for b in blocked]
         self.hits = []
 
-    def _ok(self, path) -> bool:
+    def _under(self, p: str, dirs) -> bool:
+        return any(p == d or p.startswith(d + os.sep) for d in dirs)
+
+    def _ok(self, api: str, path) -> bool:
         p = os.path.abspath(str(path))
         if not (p == self.nas or p.startswith(self.nas + os.sep)):
             return True                                    # NAS 밖(캐시·출력·임시폴더)은 관심 없음
-        for a in self.allowed:
-            if p == a or p.startswith(a + os.sep):
-                return True                                # 허용 장비 폴더 안
-            if a.startswith(p + os.sep):
-                return True                                # 허용 장비의 상위 폴더(공유 루트)
-        return False
+        if self._under(p, self.blocked):
+            return False                                   # ① 범위 밖 장비
+        if api in self.LISTING and not self._under(p, self.allowed):
+            return False                                   # ② 허용 장비 밖에서의 나열
+        return True
 
     def check(self, api: str, path):
-        if not self._ok(path):
+        if not self._ok(api, path):
             self.hits.append(f"{api}: {path}")
 
 
 @pytest.fixture
 def tripwire(monkeypatch, scoped_nas):
     nas, _ = scoped_nas
-    tw = Tripwire(nas, [nas / share / name for share, name in ALLOWED])
+    tw = Tripwire(nas, [nas / share / name for share, name in ALLOWED],
+                  [nas / share / name for share, name in BLOCKED])
     real = {"scandir": os.scandir, "stat": os.stat, "isdir": os.path.isdir,
             "isfile": os.path.isfile, "exists": os.path.exists, "open": builtins.open,
             "listdir": os.listdir}
@@ -137,13 +149,24 @@ def test_is_allowed_matches_by_name_only(name, expected):
 
 
 # ── 2. 장비 해석 · 연결 확인 ─────────────────────────────────────────────
-def test_resolve_devices_touches_only_aoi25(tmp_path, scoped_nas, tripwire):
+def test_resolve_devices_touches_only_allowed_machines(tmp_path, scoped_nas, tripwire):
     nas, csv_path = scoped_nas
-    logs = []
-    devs = devices.resolve_devices(_cfg(tmp_path, csv_path), logs.append)
+    devs = devices.resolve_devices(_cfg(tmp_path, csv_path), lambda m: None)
     assert [d["name"] for d in devs] == ["AOI-1", "AOI-8", "AOI-9", "AOI-25"]   # 번호순
     assert not tripwire.hits, tripwire.hits
-    assert any("범위 밖" in l and "4층" in l for l in logs)     # * 행은 나열도 하지 않고 건너뛴다
+
+
+def test_auto_row_finds_allowed_machines_without_listing_the_share(tmp_path, scoped_nas, tripwire):
+    """★ `폴더 *` 행은 범위 제한 중에도 동작해야 한다 — 실장비에서 4층 5대가 이것 때문에 3일 내내
+    한 번도 수집되지 않았다. 다만 공유를 나열하지는 않고 **허용 이름만** 정확 경로로 확인한다."""
+    nas, csv_path = scoped_nas
+    make_device(nas / "I", "4F-AOI-01")                     # 4층 공유에 허용 장비 하나를 둔다
+    cfg = _cfg(tmp_path, csv_path, scope_devices=[*SCOPE, "4F-AOI-01"])
+    devs = devices.devices_from_rows(
+        [{"name": "4층", "root": str(nas / "I"), "sub": devices.AUTO, "on": True, "memo": "Camtek 4층"}],
+        cfg)
+    assert [d["name"] for d in devs] == ["4F-AOI-01"]        # 같은 공유의 AOI-3(범위 밖)은 찾지 않는다
+    assert not tripwire.hits, tripwire.hits
 
 
 def test_check_rows_reports_out_of_scope_without_touching(tmp_path, scoped_nas, tripwire):
@@ -152,14 +175,15 @@ def test_check_rows_reports_out_of_scope_without_touching(tmp_path, scoped_nas, 
     st = {r["name"]: r["status"] for r in devices.check_rows(rows, _cfg(tmp_path, csv_path))}
     assert st == {"AOI-1": "ok", "AOI-8": "ok", "AOI-9": "ok", "AOI-25": "ok",
                   "AOI-2": "out_of_scope", "AOI-10": "out_of_scope", "AOI-24": "out_of_scope",
-                  "4층": "out_of_scope"}
+                  "4층": "no_report"}       # `*` 행은 확인은 하되 허용 장비가 없어 비어 있다
     assert not tripwire.hits, tripwire.hits
 
 
-def test_missing_csv_does_not_fall_back_to_scanning_the_nas(tmp_path, scoped_nas, tripwire):
+def test_missing_csv_falls_back_without_ever_listing_a_share(tmp_path, scoped_nas, tripwire):
+    """devices.csv 가 없으면 nas_roots 를 `*` 로 본다 — 그래도 공유를 나열하지 않고 허용 이름만 확인한다."""
     nas, _ = scoped_nas
     cfg = _cfg(tmp_path, tmp_path / "none.csv", nas_roots=[str(nas / "X"), str(nas / "Y"), str(nas / "M")])
-    assert devices.resolve_devices(cfg) == []
+    assert [d["name"] for d in devices.resolve_devices(cfg)] == ["AOI-1", "AOI-8", "AOI-9", "AOI-25"]
     assert not tripwire.hits, tripwire.hits
 
 
@@ -172,7 +196,7 @@ def test_collect_entry_points_stay_in_scope(tmp_path, scoped_nas, tripwire, kw):
     assert not tripwire.hits, tripwire.hits
     assert rows and {r["device"] for r in rows} == {"AOI-1", "AOI-8", "AOI-9", "AOI-25"}
     assert [d["name"] for d in dev_meta if d.get("scope") != "out"] == ["AOI-1", "AOI-8", "AOI-9", "AOI-25"]
-    assert {d["name"] for d in dev_meta if d.get("scope") == "out"} == {"AOI-2", "AOI-10", "AOI-24", "4층"}
+    assert {d["name"] for d in dev_meta if d.get("scope") == "out"} == {"AOI-2", "AOI-10", "AOI-24"}
     collect.collect(cfg)                                   # 증분 실행도 같은 범위
     assert not tripwire.hits, tripwire.hits
 
@@ -211,7 +235,7 @@ def test_html_carries_scope_and_skipped_devices(tmp_path, scoped_nas):
     target = collect.write_html(cfg, rows, dev_meta, errors, 0.0, mode="gui")
     data = _embedded(target)
     assert data["meta"]["scope"] == {"restricted": True, "devices": SCOPE}
-    assert {d["name"] for d in data["meta"]["devices"] if d.get("scope") == "out"} == {"AOI-2", "AOI-10", "AOI-24", "4층"}
+    assert {d["name"] for d in data["meta"]["devices"] if d.get("scope") == "out"} == {"AOI-2", "AOI-10", "AOI-24"}
 
 
 def _cursor_of(cache: dict, device_folder: str):

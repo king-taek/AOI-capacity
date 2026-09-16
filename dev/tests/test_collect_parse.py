@@ -299,3 +299,48 @@ def test_embedded_rows_are_folded_into_a_string_pool():
     di, ti = collect.OUT_COLS.index("device"), collect.OUT_COLS.index("wafer_start_time")
     assert len({r[di] for r in emb["rows"]}) == 1
     assert emb["rows"][3][ti] == "15-Sep-26 07:03:00 PM"    # 접지 않은 열은 문자열 그대로
+
+
+# ── 실장비 3일치(15,626행)에서 새로 드러난 것들 ──────────────────────────────
+@pytest.mark.parametrize("raw,expected", [
+    ("Clean Reference Error.", "CLEAN_REF_ERROR"),                  # 3일치 72건 — 가장 흔한 미분류였다
+    ("Nothing to Scan.", "NOTHING_TO_SCAN"),
+    ("Manual Alignment Failed.", "ALIGN_ERROR"),
+    ("Prealigner failure", "ALIGN_ERROR"),
+    ("Scanning Multi recipe error.", "RECIPE_ERROR"),
+    ("Wafer Handling Failure (LoadPort A to End-Effector).", "WAFER_LOST"),
+    ("Failed on MoveToStation", "WAFER_LOST"),
+])
+def test_norm_status_covers_the_three_day_field_run(raw, expected):
+    assert collect.norm_status(raw) == expected
+
+
+SETUP_NAME = "R_TB500 TOP D-DIE_0860312PD_SETUP_UDL_26-Sep-14_(01.02.37)_BatchReport.htm"
+SETUP_HTML = ("<html><body><table>"
+            "<tr><td>Batch Start</td><td>14-Sep-26 01:02:37 AM</td><td>Batch End</td><td>14-Sep-26 02:31:08 AM</td></tr>"
+            "</table><table><tr><th>Lot</th><th>Wafer ID</th><th>Pass/Fail</th></tr>"
+            "<tr><td>LoadPort A</td><td>Slot 1</td><td>Pass</td></tr>"
+            "<tr><td>UDL</td><td>SH75P23-G2</td><td>Pass</td></tr></table></body></html>")
+
+
+def test_old_report_without_job_setup_recovers_the_path_from_the_table_lot():
+    """★ 실물: AOI-10 은 `Job/Setup` 이 없는데 Setup 이 `SETUP`(4자리 아님) 이라 파일명 규칙도 빗나갔다.
+    그래서 job 이 비었고 INI 경로가 통째로 어긋나 9/15 하루에만 8.8시간이 '미가동' 으로 보였다."""
+    assert collect.REPORT_RE.match(SETUP_NAME) is None            # 옛 규칙으로는 못 읽는다
+    rep = collect.parse_report(SETUP_NAME, SETUP_HTML)
+    assert (rep["job"], rep["setup"]) == ("R_TB500 TOP D-DIE_0860312PD", "SETUP")
+    assert rep["report_lot"] == "UDL"
+    r = next(x for x in collect.rows_for_report("AOI-10", rep, "/nowhere") if x["wafer_id"] == "SH75P23-G2")
+    assert r["job"] and r["setup"]                              # 이제 경로를 만들 수 있다
+
+
+@pytest.mark.parametrize("name,lot,expected", [
+    (SETUP_NAME, "UDL", ("R_TB500 TOP D-DIE_0860312PD", "SETUP")),
+    ("INCI-W97255Z6BK16_0860703PD-0A_2D_YCL_26-Sep-16_(18.07.25)_BatchReport.htm", "YCL",
+     ("INCI-W97255Z6BK16_0860703PD-0A", "2D")),
+    # Lot 자리가 비어 있는 파일명 — 되찾을 근거가 없으니 지어내지 않는다
+    ("INCI-UZ0056B-CB001_0859659PD-0B123_6000__26-Sep-14_(22.53.10)_BatchReport.htm", "TNL", ("", "")),
+    ("이상한이름.htm", "AAA", ("", "")),
+])
+def test_job_setup_by_table_lot(name, lot, expected):
+    assert collect._job_setup_by_table_lot(name, [{"lot": lot, "wafer_id": "W1"}]) == expected

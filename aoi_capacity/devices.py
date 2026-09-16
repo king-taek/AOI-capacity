@@ -191,13 +191,24 @@ def device_id(path) -> str:
 
 
 def _discover_under(root: str, cfg: dict, log: Optional[LogFn] = None, hint: str = "") -> List[Dict[str, object]]:
-    """root 자체가 장비 폴더면 그것 하나, 아니면 root 바로 아래에서 Report 폴더가 있는 폴더들(한 단계, 재귀 없음)."""
+    """root 자체가 장비 폴더면 그것 하나, 아니면 root 바로 아래의 장비 폴더들(한 단계, 재귀 없음).
+
+    ★ 수집 범위가 제한돼 있으면 **공유를 나열하지 않는다** — 나열은 범위 밖 장비까지 훑는 일이다.
+      대신 허용 목록의 이름만 `root/<이름>` 으로 정확히 만들어 존재를 확인한다. 만지는 경로가 전부
+      허용 장비라서 규칙을 지키면서도 `폴더 *` 행이 그대로 동작한다.
+      (이 길이 없을 때 실장비에서 4층 5대가 3일 내내 한 번도 수집되지 않았다.)"""
     if not os.path.isdir(root):
         return []
     if _has_report(root, cfg):
         folder = os.path.basename(root.rstrip("\\/")) or root
         return [_entry(folder, root, hint)]
     out = []
+    if not scope.unrestricted(cfg):
+        for name in scope.scope_list(cfg):
+            path = os.path.join(root, name)
+            if os.path.isdir(path) and _has_report(path, cfg):
+                out.append(_entry(name, path, hint))
+        return out
     try:
         for e in nas_guard.scandir(root):
             if e.is_dir() and _has_report(e.path, cfg):
@@ -257,10 +268,7 @@ def devices_from_rows(rows: List[Dict[str, object]], cfg: dict, log: Optional[Lo
         label = str(row.get("name") or sub or root)
         hint = f"{row.get('name', '')} {row.get('memo', '')}"
         if sub in (AUTO, "auto", "AUTO"):
-            if not scope.allows_auto_row(cfg):
-                _log(log, f"[범위 밖] {label}: 자동 탐색(*) 은 수집 범위({scope.describe(cfg)}) 제한 중 건너뜁니다")
-                continue
-            found = _discover_under(root, cfg, log, hint)
+            found = _discover_under(root, cfg, log, hint)      # 제한 중이면 허용 이름만 정확 경로로 확인
             if not found:
                 _log(log, f"[건너뜀] {label}: NAS 접근 불가 또는 장비 폴더 없음 ({root})")
             devs.extend(found)
@@ -289,8 +297,8 @@ def skipped_by_scope(rows: List[Dict[str, object]], cfg: dict) -> List[Dict[str,
             continue
         sub = str(row.get("sub", "")).strip()
         auto = sub in (AUTO, "auto", "AUTO")
-        if auto and scope.allows_auto_row(cfg):
-            continue
+        if auto:
+            continue                                   # `*` 는 이제 제한 중에도 도므로 '수집 안 함' 이 아니다
         if not auto and scope.allows_row(cfg, row):
             continue
         folder = sub if not auto else ""
@@ -306,11 +314,10 @@ def devices_from_csv(cfg: dict, log: Optional[LogFn] = None) -> List[Dict[str, o
 
 
 def discover_devices(cfg: dict, log: Optional[LogFn] = None) -> List[Dict[str, object]]:
-    """devices.csv 가 없을 때의 폴백: nas_roots 각각을 * 로 본다. 범위 제한 중에는 자동 탐색을 하지 않는다."""
+    """devices.csv 가 없을 때의 폴백: nas_roots 각각을 `*` 로 본다.
+
+    범위 제한 중에는 `_discover_under` 가 공유를 나열하지 않고 허용 이름만 정확 경로로 확인한다."""
     devs: List[Dict[str, object]] = []
-    if not scope.allows_auto_row(cfg):
-        _log(log, f"[범위 밖] 수집 범위({scope.describe(cfg)}) 제한 중이라 NAS 자동 탐색을 하지 않습니다")
-        return devs
     for root in cfg.get("nas_roots") or []:
         root = _norm_root(root)
         found = _discover_under(root, cfg, log)
@@ -343,7 +350,7 @@ def check_rows(rows: List[Dict[str, object]], cfg: dict) -> List[Dict[str, objec
     for row in rows:
         sub = str(row.get("sub", "")).strip()
         auto = sub in (AUTO, "auto", "AUTO")
-        if (auto and not scope.allows_auto_row(cfg)) or (not auto and not scope.allows_row(cfg, row)):
+        if not auto and not scope.allows_row(cfg, row):
             out.append({**row, "status": "out_of_scope"})
             continue
         root = _norm_root(str(row.get("root", "")))
