@@ -279,3 +279,88 @@ def test_device_whose_reports_all_fail_is_partial_not_done(tmp_path, fake_nas, m
     assert by["AOI-10"]["read_errors"] == 1 and by["AOI-10"]["status"] == collect.DEV_PARTIAL
     assert by["9호기"]["read_errors"] == 0 and by["9호기"]["status"] == collect.DEV_OK and by["9호기"]["rows"] == 3
     assert len(errors) == 1 and errors[0]["device"] == "AOI-10"
+
+
+# ── INI 한 번만 읽기 · 사전 존재 확인 제거 · 단계별 계측 ─────────────────────────
+def test_same_ini_is_opened_once_per_run_and_no_stat_before_open(tmp_path, fake_nas, monkeypatch):
+    """★ 같은 Wafer 가 여러 Report 에 나오면(재검사) INI 경로가 같다(실장비 3일치: 후보 13,920건 중 반복 1,090건).
+    한 실행 안에서는 한 번만 열고, 열기 전에 `isfile` 로 한 번 더 왕복하지 않는다(없으면 open 이 알려 준다)."""
+    from conftest import REPORT_HTML
+
+    nas, csv_path = fake_nas
+    # 9호기에 같은 Lot·Wafer 를 다시 검사한 Report 를 하나 더 둔다 → INI 경로가 겹친다
+    (nas / "X" / "AOI-9" / "Report" / "2D@R2-GA285AAB_0859840PD-0A_6321_KLK-3D_26-Sep-13_(07.00.00)_BatchReport.htm").write_text(REPORT_HTML, encoding="utf-8")
+    real_isfile = os.path.isfile
+
+    def no_stat_on_ini(p):
+        assert not str(p).lower().endswith("waferinfo.ini"), "INI 는 존재 확인 없이 바로 연다"
+        return real_isfile(p)
+
+    monkeypatch.setattr(collect.os.path, "isfile", no_stat_on_ini)
+    seen = _count_nas_reads(monkeypatch)
+    cfg = make_cfg(tmp_path, csv_path)
+    stats = {}
+    rows, dev_meta, errors, _ = _run(cfg, stats=stats)
+    assert not errors and len(rows) == 12
+    # 장비 3대 × (01B0 있음 + 99Z9 없음) = 고유 경로 6개. 9호기 두 번째 Report 의 2건은 기억한 결과를 다시 쓴다.
+    assert seen["ini"] == 6 and seen["htm"] == 4
+    assert stats["ini_asked"] == 8 and stats["ini_unique"] == 6 and stats["ini_missing"] == 3
+    nine = [r for r in rows if r["device"] == "9호기" and r["wafer_id"] == "K625407-01B0"]
+    assert len(nine) == 2 and {r["ini_match"] for r in nine} == {"EXACT"}       # 두 Report 모두 같은 시각을 받았다
+    assert {r["ini_match"] for r in rows if r["wafer_id"] == "K625407-99Z9"} == {"NOT_FOUND"}
+
+
+def test_ini_read_error_is_kept_apart_from_not_found(tmp_path, fake_nas, monkeypatch):
+    nas, csv_path = fake_nas
+    real = collect.read_ini
+
+    def flaky(path):
+        if "AOI-10" in str(path) and "01B0" in str(path):
+            raise PermissionError("잠김")            # 있는 파일을 못 여는 것과 없는 파일은 다르게 남긴다
+        return real(path)
+
+    monkeypatch.setattr(collect, "read_ini", flaky)
+    cfg = make_cfg(tmp_path, csv_path)
+    rows, _, _, _ = _run(cfg)
+    ten = {r["wafer_id"]: r["ini_match"] for r in rows if r["device"] == "AOI-10" and r["kind"] == ""}
+    assert ten["K625407-01B0"] == "READ_ERROR" and ten["K625407-99Z9"] == "NOT_FOUND"
+
+
+def test_ini_memo_lets_concurrent_readers_share_one_open():
+    import threading as th
+    calls = []
+    gate = th.Event()
+
+    def slow(path):
+        calls.append(path)
+        gate.wait(2)
+        return {"AutoCycleInfo": {"WaferStartTime": "x"}}
+
+    memo = collect._IniMemo(reader=slow)
+    out = []
+    ts = [th.Thread(target=lambda: out.append(memo.get("/same/WaferInfo.ini"))) for _ in range(8)]
+    for t in ts:
+        t.start()
+    time.sleep(0.05)
+    gate.set()
+    for t in ts:
+        t.join(3)
+    assert calls == ["/same/WaferInfo.ini"] and len(out) == 8 and all(o[0] == "ok" for o in out)
+    assert memo.stats() == {"ini_asked": 8, "ini_unique": 1, "ini_missing": 0, "ini_read_error": 0}
+
+
+def test_write_html_embeds_timing_and_counts(tmp_path, fake_nas):
+    nas, csv_path = fake_nas
+    cfg = make_cfg(tmp_path, csv_path)
+    stats = {}
+    rows, dev_meta, errors, _ = _run(cfg, stats=stats)
+    for k in ("devices_ms", "list_ms", "read_ms", "cache_ms", "total_ms", "reports_found", "reports_read",
+              "ini_asked", "ini_unique", "ini_missing", "read_workers"):
+        assert isinstance(stats[k], int) and stats[k] >= 0, k
+    assert stats["reports_found"] == 3 == stats["reports_read"]
+    assert all("read_sum_ms" in d and "list_ms" not in d for d in dev_meta if not d.get("scope"))
+    target = collect.write_html(cfg, rows, dev_meta, errors, time.time(), mode="gui", timing=stats)
+    html = open(target, encoding="utf-8").read()
+    assert '"timing":{' in html and '"html_ms":' in html and '"ini_unique":' in html
+    # timing 을 안 주면 빈 객체 — 옛 호출 방식도 그대로 돈다
+    assert '"timing":{}' in open(collect.write_html(cfg, rows, dev_meta, errors, time.time()), encoding="utf-8").read()

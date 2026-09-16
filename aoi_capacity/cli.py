@@ -95,9 +95,10 @@ def main(argv=None) -> int:
     started = time.time()
     cfg = load_config(args.config)
     paths.ensure_user_files()
+    stats: dict = {}
     rows, dev_meta, errors = collect.collect(cfg, full=args.full, backfill=args.backfill, recover=args.recover,
-                                             progress=_progress_printer(), log=_print)
-    collect.write_html(cfg, rows, dev_meta, errors, started, mode="auto", log=_print)
+                                             progress=_progress_printer(), log=_print, stats=stats)
+    collect.write_html(cfg, rows, dev_meta, errors, started, mode="auto", log=_print, timing=stats)
     bad = [d for d in dev_meta if d.get("error")]
     if bad:
         _print("접근 실패 장비: " + ", ".join(f"{d['name']} ({d['error']})" for d in bad))

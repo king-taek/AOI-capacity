@@ -228,3 +228,8 @@ def test_home_distinguishes_unreachable_and_partial_devices_from_no_data():
     assert 'status==="unreachable"' in HTML and "수집 실패" in HTML
     assert 'status==="partial"' in HTML and "일부 누락" in HTML
     assert ".st.warn{" in HTML
+
+
+def test_settings_tab_shows_collector_timing_when_present():
+    assert "function renderTiming(" in HTML and 'id="timingCard" hidden' in HTML
+    assert "meta.timing||{}" in HTML and "INI 요청" in HTML

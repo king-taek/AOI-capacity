@@ -288,6 +288,11 @@ details.adv summary{cursor:pointer;color:var(--accent-2);font-size:13px}
       <p class="help">지금 보고 있는 내용을 날짜가 붙은 HTML 파일로 따로 저장해 둘 수 있습니다(원본 파일은 그대로 둡니다).</p>
       <div class="row"><button class="btn" onclick="saveHtml()">HTML로 저장</button></div>
     </div>
+    <div class="card" id="timingCard" hidden>
+      <h2>수집 시간</h2>
+      <p class="help">마지막 수집에서 단계마다 걸린 시간과 NAS 를 읽은 횟수입니다. 수집 속도를 재는 근거로 씁니다.</p>
+      <div id="timingBody"></div>
+    </div>
   </section>
 </main>
 </div>
@@ -515,7 +520,13 @@ function init(){D=build();const days=dataDays();day=days[days.length-1]||todayKe
   const sc=meta.scope||{};
   $("#footTxt").innerHTML=`${sc.restricted?`수집 범위 · ${esc((sc.devices||[]).join(", "))}<br>`:""}정확 경로만 확인 · 재귀 검색 없음<br>원본 Report / INI 수정 없음${meta.version?`<br>v${esc(meta.version)}`:APP_VERSION?`<br>v${APP_VERSION}`:""}`;
   $("#trendDev").innerHTML='<option value="">전체 평균</option>'+devNames.map(n=>`<option value="${esc(n)}">${esc(n)}</option>`).join("");
-  $("#thUtil").value=th.util;$("#thErr").value=th.err;renderAll();}
+  $("#thUtil").value=th.util;$("#thErr").value=th.err;renderTiming();renderAll();}
+/* 수집기가 잰 단계별 시간(meta.timing) — 없으면 카드를 숨긴다. 읽기 시간은 동시에 읽은 경과시간이다. */
+function renderTiming(){const t=meta.timing||{};const card=$("#timingCard");if(!card)return;const has=Object.keys(t).length>0;card.hidden=!has;if(!has)return;
+  const sec=v=>v==null?"–":v>=60000?fmtSec(Math.round(v/1000)):(v/1000).toFixed(1)+"초";const n=v=>v==null?"–":Number(v).toLocaleString("ko-KR");
+  const rowsT=[["장비 확인",sec(t.devices_ms),`장비 ${n(t.devices)}대`],["Report 목록",sec(t.list_ms),`Report ${n(t.reports_found)}개 중 새로 읽은 ${n(t.reports_read)}개${t.reports_failed?` · 실패 ${n(t.reports_failed)}개`:""}`],
+    ["Report·INI 읽기",sec(t.read_ms),`INI 요청 ${n(t.ini_asked)}건 → 실제 읽기 ${n(t.ini_unique)}건 · 없음 ${n(t.ini_missing)}건 · 동시 ${n(t.read_workers)}개`],["캐시 정리·저장",sec(t.cache_ms),""],["화면 만들기",sec(t.html_ms),""],["전체",sec(t.total_ms),""]];
+  $("#timingBody").innerHTML=`<table class="tbl"><thead><tr><th>단계</th><th class="r">시간</th><th>건수</th></tr></thead><tbody>${rowsT.map(([k,v,d])=>`<tr><td>${k}</td><td class="r mono">${v}</td><td class="faint">${d}</td></tr>`).join("")}</tbody></table>`;}
 function setDay(k){day=k;renderAll();}
 function stepDay(n){const k=addDays(day,n);const days=dataDays();const maxK=todayKey()>days[days.length-1]?todayKey():days[days.length-1];if(k>maxK||k<days[0])return;setDay(k);}
 function goToday(){const days=dataDays();setDay(days[days.length-1]||todayKey());}

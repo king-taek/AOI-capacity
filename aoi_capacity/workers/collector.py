@@ -70,6 +70,7 @@ class CollectorWorker(QThread):
     def run(self) -> None:  # noqa: D401
         tok = self.token
         started = time.time()
+        stats: dict = {}
         try:
             rows, dev_meta, errors = collect.collect(
                 self.cfg, self.full, self.backfill, recover=self.recover,
@@ -77,10 +78,11 @@ class CollectorWorker(QThread):
                 log=lambda m: self.signals.log.emit(tok, str(m)),
                 should_stop=self._stop.is_set,
                 on_device=lambda n, s, d: self.signals.device.emit(tok, str(n), str(s), str(d)),
+                stats=stats,
             )
             if self._stop.is_set():
                 raise collect.CollectCancelled()
-            path = collect.write_html(self.cfg, rows, dev_meta, errors, started, mode="gui",
+            path = collect.write_html(self.cfg, rows, dev_meta, errors, started, mode="gui", timing=stats,
                                       log=lambda m: self.signals.log.emit(tok, str(m)),
                                       progress=lambda d, t, p: self.signals.progress.emit(tok, int(d), int(t), str(p)))
         except collect.CollectCancelled:

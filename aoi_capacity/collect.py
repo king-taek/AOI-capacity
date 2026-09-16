@@ -319,6 +319,57 @@ def read_ini(path) -> dict:
     return out
 
 
+class _IniMemo:
+    """수집 한 번 안에서 같은 WaferInfo.ini 를 **한 번만** 연다.
+
+    같은 Wafer 가 여러 Report 에 나오면(재검사) INI 경로가 같다 — 실장비 3일치에서 후보 13,920건 중 1,090건이
+    같은 경로의 반복이었다. 결과(읽은 필드 / 없음 / 읽기 오류)를 경로별로 기억하고, 같은 경로를 동시에
+    요청한 스레드는 먼저 연 쪽을 기다린다. 실행마다 새로 만든다 — INI 는 다음 검사에서 덮어써지므로
+    실행을 넘어 기억하면 안 된다. 읽기 전용이다."""
+
+    MISSING = (FileNotFoundError, NotADirectoryError, IsADirectoryError)
+
+    def __init__(self, reader=None) -> None:
+        self._reader = reader or read_ini
+        self._lock = threading.Lock()
+        self._done: Dict[str, tuple] = {}
+        self._busy: Dict[str, threading.Event] = {}
+        self.asked = 0
+
+    def get(self, path: str) -> tuple:
+        """→ ("ok", 필드 dict) · ("missing", None) · ("error", 예외)"""
+        with self._lock:
+            self.asked += 1
+            hit = self._done.get(path)
+            if hit is not None:
+                return hit
+            ev = self._busy.get(path)
+            owner = ev is None
+            if owner:
+                ev = self._busy[path] = threading.Event()
+        if not owner:
+            ev.wait()
+            with self._lock:
+                return self._done[path]
+        try:
+            res = ("ok", self._reader(path))
+        except self.MISSING:
+            res = ("missing", None)
+        except Exception as e:  # noqa: BLE001
+            res = ("error", e)
+        with self._lock:
+            self._done[path] = res
+            self._busy.pop(path, None)
+        ev.set()
+        return res
+
+    def stats(self) -> Dict[str, int]:
+        with self._lock:
+            kinds = [k for k, _ in self._done.values()]
+            return {"ini_asked": self.asked, "ini_unique": len(self._done),
+                    "ini_missing": kinds.count("missing"), "ini_read_error": kinds.count("error")}
+
+
 def _is_placeholder(w: dict) -> bool:
     """INI 경로를 만들 수 없는 자리표시 행 — `LoadPort A` / `Slot 3`, Wafer ID 나 Lot 이 빈 행.
 
@@ -329,7 +380,7 @@ def _is_placeholder(w: dict) -> bool:
                 or not wid.strip() or not lot.strip())
 
 
-def rows_for_report(dev_name: str, rep: dict, scan_root: str) -> List[dict]:
+def rows_for_report(dev_name: str, rep: dict, scan_root: str, memo: Optional[_IniMemo] = None) -> List[dict]:
     """Report 한 장 → Wafer 행들(+ 통째로 실패한 배치면 배치 행 하나).
 
     ★ WaferInfo.ini 는 재검사 때 **같은 경로에 덮어써진다**(실물 확인: AOI-25 9/14 00NSP049XYG7).
@@ -337,6 +388,7 @@ def rows_for_report(dev_name: str, rep: dict, scan_root: str) -> List[dict]:
       여러 번 계산된다. → INI 시각이 이 Report 의 `Batch Start~End` 밖이면 **이 시도의 것이 아니므로
       시간을 쓰지 않는다**(`ini_match="STALE"`). 값을 지어내지 않고, 시각을 모른다고 표시한다."""
     rows = []
+    memo = memo if memo is not None else _IniMemo()
     s = rep["summary"]
     b_start, b_end = parse_dt(s.get("Batch Start", "")), parse_dt(s.get("Batch End", ""))
     for w in rep["wafers"]:
@@ -350,11 +402,15 @@ def rows_for_report(dev_name: str, rep: dict, scan_root: str) -> List[dict]:
             r["ini_match"], r["data_issue"] = "NO_WAFER_ID", "LoadPort/Slot 행이라 INI 경로를 만들 수 없음"
         else:
             ini_path = os.path.join(scan_root, rep["equipment"], rep["process_code"], w["lot"], w["wafer_id"], "WaferInfo.ini")
-            if not os.path.isfile(ini_path):
+            # 존재 확인(stat) 없이 바로 연다 — SMB 왕복이 행마다 2번에서 1번으로 준다. 없으면 open 이 알려 준다.
+            kind, got = memo.get(ini_path)
+            if kind == "missing":
                 r["ini_match"], r["data_issue"] = "NOT_FOUND", "예상 경로에 WaferInfo.ini 없음"
+            elif kind == "error":
+                r["ini_match"], r["data_issue"] = "READ_ERROR", f"{type(got).__name__}: {got}"
             else:
                 try:
-                    a = read_ini(ini_path).get("AutoCycleInfo", {})
+                    a = got.get("AutoCycleInfo", {})
                     r["ini_match"] = "EXACT"
                     r["wafer_start_time"], r["wafer_end_time"] = a.get("WaferStartTime", ""), a.get("WaferEndTime", "")
                     iss = []
@@ -664,24 +720,34 @@ def _advance_cursor(last: dict, did: str, ok_mtimes, blocked_mtimes) -> None:
 def collect(cfg: dict, full: bool = False, backfill: bool = False, *, recover: bool = False,
             progress: Optional[ProgressFn] = None, log: Optional[LogFn] = None,
             should_stop: Optional[Callable[[], bool]] = None,
-            on_device: Optional[DeviceFn] = None) -> Tuple[List[dict], List[dict], List[dict]]:
+            on_device: Optional[DeviceFn] = None, stats: Optional[dict] = None) -> Tuple[List[dict], List[dict], List[dict]]:
     """NAS 를 읽어 (rows, dev_meta, errors) 를 돌려주고 캐시를 갱신한다. HTML 은 `write_html` 이 따로 쓴다.
+
+    `stats` 에 dict 를 주면 단계별 경과(ms)·읽은 수·INI 왕복 수를 채워 준다(`write_html` 이 `meta.timing` 으로 박는다).
+    현장에서 "어디서 시간이 가는지" 를 재는 유일한 근거다 — 값은 결과에 영향을 주지 않는다.
 
     `recover` 는 INI 를 못 찾았던 Report(`RECOVERABLE_INI`)만 수정시각과 상관없이 다시 읽는다 — 파서를 고친 뒤
     옛 캐시를 되살리는 길. 나머지 캐시 Report 는 평소처럼 건너뛴다."""
     progress = progress or (lambda d, t, p: None)
     on_device = on_device or (lambda n, s, d: None)
+    stats = stats if stats is not None else {}
+    clock = time.perf_counter
+    t0 = clock()
     nas_guard.check_cfg(cfg)  # 출력·캐시가 NAS 아래면 시작조차 하지 않는다
     progress(0, 0, i18n.KO.COLLECT_PHASE_DEVICES)
     cache = _load_cache(cfg, full=full, log=log)
     backfill = backfill or full or not cache["reports"]
     devs = devices_mod.resolve_devices(cfg, log)
     _migrate_cursors(cache, devs, log)
+    stats["devices_ms"] = int((clock() - t0) * 1000)
+    t1 = clock()
     if backfill:
         _say(log, f"초기 수집: 최근 {cfg['backfill_days']}일 안의 Report 를 전부 읽습니다")
     elif recover:
         _say(log, f"누락 복구: 최근 {cfg['backfill_days']}일 안에서 INI 를 못 찾았던 Report 만 다시 읽습니다")
     plan = _list_new_reports(devs, cache, cfg, backfill, log, progress, on_device, should_stop, recover=recover)
+    stats["list_ms"] = int((clock() - t1) * 1000)
+    t2 = clock()
 
     reports, last, failed = cache["reports"], cache["last_mtime"], cache["failed"]
     total = sum(len(pick) for _, _, pick, _ in plan)
@@ -692,6 +758,7 @@ def collect(cfg: dict, full: bool = False, backfill: bool = False, *, recover: b
     #    Report 하나가 한 작업이라 장비마다 양이 달라도 알아서 고르게 나뉜다.
     #    스레드는 **읽기만** 하고(공유 dict 를 고치지 않는다), 캐시에 넣는 일은 아래 메인 스레드가 순서대로 한다.
     done, left, left_lock, bad_in = _Counter(), {}, threading.Lock(), {}
+    memo = _IniMemo()                         # 같은 WaferInfo.ini 는 이번 실행에서 한 번만 연다
     jobs = []
     for d, dm, pick, _known in plan:
         if dm["error"] or not pick:
@@ -704,14 +771,15 @@ def collect(cfg: dict, full: bool = False, backfill: bool = False, *, recover: b
     def read_one(job):
         d, _dm, e, scan_root = job
         _check(should_stop)
+        t_job = clock()
         mtime = e.stat().st_mtime
         try:
             rep = parse_report(e.name, nas_guard.read_text(e.path))
-            out = (job, mtime, rows_for_report(d["name"], rep, scan_root), None)
+            out = (job, mtime, rows_for_report(d["name"], rep, scan_root, memo), None, clock() - t_job)
         except CollectCancelled:
             raise
         except Exception as ex:  # noqa: BLE001
-            out = (job, mtime, None, f"{type(ex).__name__}: {ex}")
+            out = (job, mtime, None, f"{type(ex).__name__}: {ex}", clock() - t_job)
         progress(done.bump(), total, i18n.KO.COLLECT_PHASE_PARSE_FMT.format(device=d["name"], name=e.name))
         with left_lock:                       # 여러 스레드가 같이 줄이므로 잠그고 센다
             n = left.get(str(d["id"]))
@@ -725,8 +793,9 @@ def collect(cfg: dict, full: bool = False, backfill: bool = False, *, recover: b
 
     by_dev: Dict[str, dict] = {str(d["id"]): {"ok": list(known), "blocked": []}
                                for d, dm, _pick, known in plan if not dm["error"]}
-    for (d, _dm, e, _scan), mtime, rows_of, err in _run(cfg, jobs, read_one, should_stop):
+    for (d, _dm, e, _scan), mtime, rows_of, err, sec in _run(cfg, jobs, read_one, should_stop):
         did = str(d["id"])
+        _dm["read_sum_ms"] = _dm.get("read_sum_ms", 0) + int(sec * 1000)   # 병렬로 겹치는 시간의 **합**(경과시간 아님)
         if err is None:
             reports[e.path] = {"mtime": mtime, "device": d["name"], "device_id": did,
                                "rows": rows_of, "seen": time.time(), "parser_version": PARSER_VERSION}
@@ -752,6 +821,8 @@ def collect(cfg: dict, full: bool = False, backfill: bool = False, *, recover: b
         on_device(d["name"], "partial" if dm["read_errors"] else "done", "")
         dev_meta.append(dm)
     _check(should_stop)
+    stats["read_ms"] = int((clock() - t2) * 1000)
+    t3 = clock()
 
     progress(total, total, i18n.KO.COLLECT_PHASE_RETENTION)
     cutoff = dt.datetime.now() - dt.timedelta(days=float(cfg["retention_days"]))
@@ -769,7 +840,15 @@ def collect(cfg: dict, full: bool = False, backfill: bool = False, *, recover: b
     rows, hidden = _rows_from_cache(cache, devs, cfg)
     _mark_device_status(dev_meta, rows)
     dev_meta.extend(_out_of_scope_meta(cfg, devs))
+    stats["cache_ms"] = int((clock() - t3) * 1000)
+    stats.update(memo.stats())
+    stats.update({"reports_found": sum(int(dm.get("found") or 0) for dm in dev_meta),
+                  "reports_read": n_new, "reports_failed": len(errors), "devices": len(devs),
+                  "read_workers": _workers(cfg, max(1, len(jobs))), "total_ms": int((clock() - t0) * 1000)})
     _say(log, f"새로 읽은 Report {n_new}개 · 캐시 Report {len(reports)}개 · Wafer 행 {len(rows)} · 오류 {len(errors)}건")
+    _say(log, "단계별 경과: 장비 확인 {devices_ms}ms · 목록 {list_ms}ms · 읽기 {read_ms}ms"
+              "(Report {reports_read}개 · INI 요청 {ini_asked}건 → 실제 {ini_unique}건, 없음 {ini_missing}) · 캐시 {cache_ms}ms"
+              " · 동시 {read_workers}개".format(**stats))
     if hidden:
         _say(log, f"수집 범위({scope.describe(cfg)}) 밖 장비의 캐시 {hidden}행은 화면에서 제외했습니다(캐시는 그대로 둡니다)")
     return rows, dev_meta, errors
@@ -840,13 +919,15 @@ def _embed_rows(rows: List[dict]) -> dict:
 
 
 def write_html(cfg: dict, rows: List[dict], dev_meta: List[dict], errors: List[dict], started: float, *,
-               mode: str = "auto", log: Optional[LogFn] = None, progress: Optional[ProgressFn] = None) -> str:
+               mode: str = "auto", log: Optional[LogFn] = None, progress: Optional[ProgressFn] = None,
+               timing: Optional[dict] = None) -> str:
     """template.html 에 데이터를 넣어 출력 폴더에 HTML 한 장을 쓴다. 임시 파일에 쓴 뒤 교체(원자적)."""
     nas_guard.check_cfg(cfg)  # ★ NAS 아래에는 절대 쓰지 않는다
     if progress:
         progress(0, 0, i18n.KO.COLLECT_PHASE_WRITE)
     from .utils import paths
 
+    t_html = time.perf_counter()
     tpl = nas_guard.read_text(paths.template_path())
     ver = _version_info()
     now = dt.datetime.now()
@@ -854,9 +935,12 @@ def write_html(cfg: dict, rows: List[dict], dev_meta: List[dict], errors: List[d
             "mode": mode, "devices": dev_meta, "reportErrors": errors, "limit": "",
             "scope": {"restricted": not scope.unrestricted(cfg), "devices": scope.scope_list(cfg)},
             "elapsed": int((time.time() - started) * 1000), "retention_days": cfg["retention_days"],
+            "timing": dict(timing) if timing else {},
             "sha": ver.get("sha", ""), "branch": ver.get("branch", ""), "repo": ver.get("repo", ""),
             "version": (str(ver.get("sha", ""))[:7]) if ver.get("sha") else ""}
     emb = _embed_rows(rows)
+    if meta["timing"]:
+        meta["timing"]["html_ms"] = int((time.perf_counter() - t_html) * 1000)   # 템플릿 읽기 + 접기까지(쓰기 전)
     emb["meta"] = meta
     data = json.dumps(emb, ensure_ascii=False, separators=(",", ":")).replace("</", "<\\/")
     if "__DATA__" not in tpl:
