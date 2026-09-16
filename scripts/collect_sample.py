@@ -206,8 +206,10 @@ def scan_reports(rep_dir: Path, limit: int):
                              "batch_start": facts["summary"].get("Batch Start", ""),
                              "batch_end": facts["summary"].get("Batch End", ""),
                              "wafers_scanned": facts["summary"].get("Wafers Scanned", "")})
-                if facts["lots"]:
-                    info["lot"] = facts["lots"][0]        # 파일명 대신 Report 안의 Lot 을 믿는다
+                # 파일명 대신 Report 안의 Lot 을 믿는다. 단 `LoadPort A` 는 자리표시라 Lot 이 아니다.
+                real = [l for l in facts["lots"] if l.strip() and not re.match(r"^loadport", l, re.I)]
+                if real:
+                    info["lot"] = real[0]
                 info["read"] = True
             except OSError as ex:
                 info["flags"] = [f"READ_ERROR({type(ex).__name__})"]
@@ -267,8 +269,9 @@ def copy_ini_for(info, scan_root: Path, out_dir: Path, max_ini: int, lines: list
     # Job/Setup 이 있으면 그것이 정답이고, 없으면(AOI-1 처럼 옛 형식) 파일명 규칙으로 돌아간다
     job = info.get("job", "") or info.get("equipment", "")
     setup = info.get("setup", "") if info.get("job") else info.get("process", "")
-    if not job:
-        return 0                                   # 어느 쪽으로도 경로를 만들 수 없다
+    if not job or not str(info.get("lot") or "").strip():
+        return 0            # 경로를 만들 수 없다. ★ Lot 이 비면 그 칸이 사라져 Setup 폴더를
+                            #   통째로 나열하게 된다(실물 AOI-18) — 다른 Lot 을 엿보는 셈이라 건너뛴다.
     lot_dir = scan_root / job / setup / info["lot"] if setup else scan_root / job / info["lot"]
     if seen is not None:
         if str(lot_dir) in seen:

@@ -1,9 +1,9 @@
-"""★ 수집 범위(AOI-25) 격리 회귀 가드.
+"""★ 수집 범위 격리 회귀 가드 — 지금 허용 목록은 `scope.DEFAULT_SCOPE`(AOI-1 · 8 · 9 · 25) 다.
 
 두 겹으로 지킨다.
-1. 기본값: 설정에 아무것도 없어도 수집 허용 장비는 AOI-25 한 대다(collect.DEFAULT_CONFIG · prefs).
+1. 기본값: 설정에 아무것도 없어도 허용 목록은 `scope.DEFAULT_SCOPE` 뿐이다(collect.DEFAULT_CONFIG · prefs).
 2. 동적 트립와이어: 장비 해석·연결 확인·최초 수집·백필·전체 재수집·증분·CLI 어느 경로로 들어가도
-   가짜 NAS 안에서 **AOI-25 폴더(그리고 그 상위 폴더) 밖 경로**로는 scandir/stat/isdir/isfile/open 이
+   가짜 NAS 안에서 **허용 장비 폴더(그리고 그 상위 폴더) 밖 경로**로는 scandir/stat/isdir/isfile/open 이
    한 번도 불리지 않는다.
 
 또한 범위 밖 장비의 기존 캐시는 **지우지 않고** 출력에서만 빠지는지, 표시명을 바꿔도 같은 장비가

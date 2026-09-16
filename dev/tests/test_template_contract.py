@@ -76,3 +76,29 @@ def test_scope_notice_is_rendered_from_meta():
 
 def test_no_stale_update_base_constant():
     assert "UPDATE_BASE=" not in HTML
+
+
+def test_status_classification_matches_the_python_side():
+    """★ 같은 Report 를 파이썬과 브라우저가 다르게 읽으면 안 된다 — 코드 순서까지 같아야 한다.
+
+    반송 실패('… Batch Aborted. Skipped.')처럼 문구가 겹치는 표기가 있어 **순서가 곧 의미**다."""
+    import re
+
+    from aoi_capacity import collect
+
+    body = HTML[HTML.index("function normStatus"):HTML.index("const isErr=")]
+    js_codes = re.findall(r'return"([A-Z_]+)"', body)
+    assert js_codes[0] == "PASS" and 't?"OTHER":""' in body
+    assert js_codes[1:] == [c for c, _ in collect._STATUS_RULES]
+
+    err_codes = [c for c, _ in collect._STATUS_RULES if c != "SKIPPED"]
+    is_err = HTML[HTML.index("const isErr="):].split("\n")[0]
+    for code in err_codes:
+        assert f'"{code}"' in is_err, f"isErr 에 {code} 없음"
+        assert re.search(rf"\b{code}:", HTML), f"ERR_KO 에 {code} 한국어 이름 없음"
+
+
+def test_home_cards_sort_with_cmp_dev_not_alphabetically():
+    """★ 사전식으로 정렬하면 `4F-AOI-01` 이 `AOI-1` 앞으로 온다 — 홈 정렬은 devices.sort_key 와 같아야 한다."""
+    assert "localeCompare" not in HTML
+    assert 'ui.sort==="name"?cmpDev(a.n,b.n)' in HTML

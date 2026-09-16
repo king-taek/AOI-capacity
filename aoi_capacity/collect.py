@@ -94,13 +94,21 @@ def parse_dt(s) -> Optional[dt.datetime]:
     return None
 
 
-#: 실장비(AOI-25) Report 에서 실제로 나온 표기를 근거로 만든 순서 — 위에서부터 먼저 맞는 것을 쓴다.
+#: 실장비 Report 에서 실제로 나온 표기를 근거로 만든 순서 — 위에서부터 먼저 맞는 것을 쓴다.
+#: 근거는 30대 전수 샘플(Report 55,717개 중 2,400행)에서 나온 표기 전부다. 반송 실패는 문구 끝이
+#: `… Batch Aborted. Skipped.` 라 `skip` 규칙보다 **위**에 둔다 — 아래에 두면 '건너뜀'(정상)으로 묻힌다.
 _STATUS_RULES = [
+    # 'Failed to move wafer from LoadPort A to End-Effector Error: Robot: The wafer could not be
+    #  detected on Hand1 after the GET motion. . Batch Aborted. Skipped.'
+    ("WAFER_LOST", re.compile(r"wafer\s+lost|failed\s+to\s+sense\s+wafer"
+                              r"|failed\s+to\s+move\s+wafer|could\s+not\s+be\s+detected\s+on\s+hand", re.I)),
+    ("HW_ERROR", re.compile(r"hardware\s+failure", re.I)),             # 'Camera Hardware Failure. … Batch Aborted.'
     ("SKIPPED", re.compile(r"skip", re.I)),
     ("ID_READ_ERROR", re.compile(r"failed\s+to\s+read\s+wafer\s+id", re.I)),
     ("SCAN_ERROR", re.compile(r"scan\s*(?:2d|3d)?\s*error", re.I)),     # 'Scan 2D Error.' · 'Scan Error: …'
     ("ALIGN_ERROR", re.compile(r"alignment\s+error", re.I)),
-    ("WAFER_LOST", re.compile(r"wafer\s+lost|failed\s+to\s+sense\s+wafer", re.I)),   # 반송·척 감지 실패
+    # 'FAR Model inside recipe is invalid, …' · 'Scan 2D: Illegal Lot Name.' · 'Wafer Map Import failed.'
+    ("RECIPE_ERROR", re.compile(r"far\s*model|illegal\s+lot\s+name|wafer\s+map\s+import\s+failed", re.I)),
     ("USER_ABORT", re.compile(r"wafer\s+aborted\s+by\s+user", re.I)),
     ("ABORTED", re.compile(r"abort", re.I)),
 ]
@@ -206,8 +214,13 @@ def parse_report(name: str, text: str) -> dict:
     if job:
         rep["equipment"], rep["process_code"] = job, setup
     rep["job"], rep["setup"] = rep["equipment"], rep["process_code"]
-    if not rep["report_lot"]:
-        rep["report_lot"] = next((w["lot"] for w in rep["wafers"] if w.get("lot")), "")
+    if rep["report_lot"] and setup:
+        # 파일명의 Job 안에 `…_0614` 같은 4자리가 있으면 REPORT_RE 가 거기서 잘라 Lot 앞에 Setup 이 붙는다
+        # (`R_TB500_LIVE_PI3 AOI-22 Copy_0614_Setup1_GVB-PIDS3_…` → `Setup1_GVB-PIDS3`). Job/Setup 이
+        # 정답이므로 그 접두사만 떼어 낸다.
+        rep["report_lot"] = re.sub(rf"^{re.escape(setup)}[\s_]+", "", rep["report_lot"], flags=re.I)
+    if not rep["report_lot"]:                        # 자리표시(`LoadPort A`)는 Lot 이 아니다
+        rep["report_lot"] = next((w["lot"] for w in rep["wafers"] if not _is_placeholder(w)), "")
     return rep
 
 
@@ -240,6 +253,16 @@ def read_ini(path) -> dict:
     return out
 
 
+def _is_placeholder(w: dict) -> bool:
+    """INI 경로를 만들 수 없는 자리표시 행 — `LoadPort A` / `Slot 3`, Wafer ID 나 Lot 이 빈 행.
+
+    ★ Lot 이 비면 `os.path.join` 에서 그 칸이 통째로 사라져 **Setup 폴더의 엉뚱한 INI** 를 가리킨다.
+      (실물: AOI-18 은 Report 1,397개 중 절반 이상이 파일명 규칙 밖이라 Lot 을 못 읽는 경우가 있다.)"""
+    lot, wid = str(w.get("lot") or ""), str(w.get("wafer_id") or "")
+    return bool(re.match(r"^loadport", lot, re.I) or re.match(r"^slot\s*\d+", wid, re.I)
+                or not wid.strip() or not lot.strip())
+
+
 def rows_for_report(dev_name: str, rep: dict, scan_root: str) -> List[dict]:
     """Report 한 장 → Wafer 행들(+ 통째로 실패한 배치면 배치 행 하나).
 
@@ -256,7 +279,7 @@ def rows_for_report(dev_name: str, rep: dict, scan_root: str) -> List[dict]:
              "recipe": w["recipe"] or s.get("Recipe", ""),
              "wafer_start_time": "", "wafer_end_time": "", "batch_start": s.get("Batch Start", ""),
              "batch_end": s.get("Batch End", ""), "ini_match": "", "data_issue": ""}
-        if re.match(r"^loadport", w["lot"], re.I) or re.match(r"^slot\s*\d+", w["wafer_id"], re.I) or not w["wafer_id"]:
+        if _is_placeholder(w):
             r["ini_match"], r["data_issue"] = "NO_WAFER_ID", "LoadPort/Slot 행이라 INI 경로를 만들 수 없음"
         else:
             ini_path = os.path.join(scan_root, rep["equipment"], rep["process_code"], w["lot"], w["wafer_id"], "WaferInfo.ini")
@@ -319,9 +342,12 @@ def failed_batch_row(dev_name: str, rep: dict, rows: List[dict]) -> Optional[dic
         return None
     real = [r for r in errs if r["ini_match"] != "NO_WAFER_ID"]   # 자리표시(Slot)가 아닌 진짜 Wafer 행
     lead = (real or errs)[0]
+    # ★ Lot 은 **덮어쓰기 전에** 고른다 — 아래 루프가 ini_match 를 전부 BATCH_FAILED 로 바꾸면
+    #   'NO_WAFER_ID 가 아닌 행' 조건이 늘 참이 되어 `LoadPort A` 가 Lot 으로 올라온다(실물 30대 중 8건).
+    lot = next((r["lot"] for r in rows if r["ini_match"] != "NO_WAFER_ID" and r["lot"]), "") \
+        or rep.get("report_lot", "")
     for r in rows:                                    # 이 배치의 행들은 배치 한 건으로 묶어 센다(사용자 확정)
         r["ini_match"] = "BATCH_FAILED"
-    lot = next((r["lot"] for r in rows if r["ini_match"] != "NO_WAFER_ID" and r["lot"]), rep.get("report_lot", ""))
     return {"device": dev_name, "kind": "batch", "lot": lot, "wafer_id": "",
             "status": lead["status"], "norm_status": norm_status(lead["status"]), "scan_type": scan_type(lot),
             "recipe": lead.get("recipe", ""), "wafer_start_time": s.get("Batch Start", ""),

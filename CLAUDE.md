@@ -45,16 +45,26 @@ Camtek AOI 장비의 BatchReport/WaferInfo.ini 를 읽어 장비별 가동률을
 - 현장 샘플 수집 도구는 `scripts/collect_sample.py`(+`make_sample.bat`) — 표준 라이브러리만 쓰고 NAS 는 읽기만 하며
   Lot 폴더만 정확 경로로 나열한다(가드: `test_collect_sample.py`). 배포본에도 들어간다(`_UPDATE_KEEP_ONLY`).
   `--all` 은 파일 위쪽 `DEVICE_ROOTS`(전 장비 경로, 사용자가 고치는 값)를 차례로 훑어 **zip 한 장**을 만든다.
+  Lot 을 못 읽은 Report 는 **나열하지 않는다** — 그러면 Setup 폴더(= 다른 Lot 전부)를 훑게 된다(실물 AOI-18).
   한 대가 막혀도 계속하고, 맨 위 `요약.json`/`요약.txt` 에 장비별 점검 사실(폴더 이름·Job/Setup 유무·시각 표기·
   읽지 못한 시각 수·Lot 표기·INI 유무)을 남긴다. 이 도구는 사용자가 경로를 직접 지정하는 조사용이라
   `scope.py` 의 수집 범위와는 별개다 — **앱의 수집 경로는 여전히 범위 안 장비만 읽는다**.
 - Lot 이름의 작업 표기는 `collect.scan_type` 이 읽는다: `RE`·`RESCAN` → RESCAN(노랑), `REWORK` → REWORK(보라).
   토큰이 통째로 맞을 때만 걸린다(`RETURN`·`REX` 제외). **`SRD`·`DIA`·`3D`·`EDGE`·`BUMP` 는 검사 종류라 정상**이다(사용자 확정).
-  `RW`(AOI-1 13건·AOI-8 31건)는 재작업 줄임말로 보이지만 확인 전이라 넣지 않았다. 둘 다 가동률에는 포함한다.
+  `RW`(AOI-1 13건·AOI-8 31건, 30대 전수 샘플에서는 1건)는 재작업 줄임말로 보이지만 확인 전이라 넣지 않았다.
+  `PIDS3/5/7/9`·`RDL2/3/4`·`TPST6`·`TPDV`·`WBG`·`STRIP`·`DUMMY`·`TEST` 도 30대에서 나온 표기지만 뜻을 확인하기
+  전까지는 손대지 않는다(전부 정상 가동으로 센다). 둘 다 가동률에는 포함한다.
 - 행 데이터 계약(`collect.OUT_COLS`): `kind`("" = Wafer 한 장 · "batch" = 통째로 실패한 시도), `batch_end`,
   `scan_type`("" · RESCAN · REWORK), `ini_match`(EXACT · NOT_FOUND · NO_WAFER_ID · READ_ERROR · STALE · BATCH_FAILED · BATCH).
-  상태 분류는 `collect._STATUS_RULES` 와 template 의 `normStatus` 가 같은 순서를 쓴다(실장비 표기 근거:
-  Pass · Skipped. · Aborted. · Alignment Error. · Scan 2D Error. · Wafer lost… · Aborted. Wafer aborted by user.).
+  상태 분류는 `collect._STATUS_RULES` 와 template 의 `normStatus` 가 **같은 순서**를 쓴다(가드: `test_template_contract.py`).
+  표기는 30대 전수 샘플(Report 55,717개)에서 나온 것만 넣었다 — Pass · Skipped. · Aborted. · Alignment Error. ·
+  Scan 2D/3D Error. · Failed to read wafer id… · Aborted. Wafer aborted by user. · Camera Hardware Failure(HW_ERROR) ·
+  FAR Model…/Illegal Lot Name./Wafer Map Import failed.(RECIPE_ERROR) · Failed to move wafer…(WAFER_LOST).
+  ★ 순서가 곧 의미다: 반송 실패 문구는 `… Batch Aborted. Skipped.` 로 끝나 `skip` 규칙 **위**에 있어야 한다
+  (아래에 두면 오류가 '건너뜀'(정상)으로 묻힌다).
+- `LoadPort A` · `Slot n` 은 Lot·Wafer 가 아니라 자리표시다(`collect._is_placeholder`). Lot 이 비면
+  `os.path.join` 에서 그 칸이 사라져 **다른 Lot 의 INI** 를 가리키므로 경로를 아예 만들지 않는다.
+  배치 행의 Lot 도 자리표시를 거른 뒤 고른다 — 못 고르면 빈칸으로 두고 화면이 `(Lot 확인 불가)` 라 적는다.
 - 결과 HTML 의 위치·생성은 `utils/results.py` 한 곳에서만 묻는다(`html_path` · `ensure_html` · `last_collect_time`).
 - 장비는 `id`(정규화 경로, 캐시 커서·집계 키) · `path` · `name`(표시명 `AOI-25` · `4F-AOI-01`) · `aliases`(옛 표시명) 로 나눠 다룬다.
   표시명을 바꿔도 이력이 갈라지지 않는다. 홈 정렬은 `devices.sort_key`(= template 의 `cmpDev`) — AOI-1…AOI-25 뒤에 4F-AOI-01….

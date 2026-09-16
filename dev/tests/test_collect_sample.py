@@ -209,3 +209,26 @@ def test_norm_root_fixes_bare_drive_letter(given, expected_tail):
 ])
 def test_lot_suffix_split(lot, expected):
     assert sampler.lot_parts(lot) == expected
+
+
+def test_a_report_without_a_lot_never_lists_the_setup_folder(tmp_path, nas):
+    """★ Lot 이 비면 경로에서 그 칸이 사라져 **Setup 폴더 전체**(= 다른 Lot 들)를 나열하게 된다.
+
+    실물 AOI-18 에서 그렇게 149줄이 '(WaferInfo.ini 없음)' 으로 찍혔다 — 나열 자체를 하지 않는다."""
+    lines, seen = [], set()
+    setup_dir = nas / "Scanresult" / JOB / SETUP
+    info = {"name": "x.htm", "job": JOB, "setup": SETUP, "lot": ""}
+    assert sampler.copy_ini_for(info, nas / "Scanresult", tmp_path / "out", 5, lines, seen) == 0
+    assert not lines and not any(str(setup_dir) == s for s in seen)
+
+
+def test_loadport_placeholder_is_not_taken_as_the_lot(tmp_path, nas, capsys):
+    """통째로 실패한 배치는 `LoadPort A / Slot n` 자리표시만 남는다 — 그건 Lot 이 아니다."""
+    p = nas / "Report" / f"{EQ}_{PROC}_ZZZ_26-Sep-15_(23.00.00)_BatchReport.htm"
+    p.write_text(_report("KLN", "Pass").replace(
+        "<tr><td>KLN</td><td>K625407-01B0</td><td>Pass</td></tr>", "")
+        .replace("<tr><td>KLN</td><td>K625407-02B0</td><td>Pass</td></tr>",
+                 "<tr><td>LoadPort A</td><td>Slot 1</td><td>Aborted.</td></tr>"), encoding="utf-8")
+    info = next(i for i in sampler.scan_reports(nas / "Report", 50) if i["name"] == p.name)
+    assert info["lot"] == "ZZZ"                        # 파일명 규칙으로 되돌아간다
+    assert not info["lot"].lower().startswith("loadport")

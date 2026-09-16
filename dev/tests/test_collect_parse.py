@@ -220,3 +220,50 @@ def test_rows_for_report_flags_mismatch_and_reversed_time(tmp_path):
     rep = collect.parse_report(REPORT_NAME, REPORT_HTML)
     r = next(x for x in collect.rows_for_report("AOI-9", rep, str(dev / "Scanresult")) if x["wafer_id"] == "K625407-01B0")
     assert "역전" in r["data_issue"] and "Lot 불일치" in r["data_issue"]
+
+
+# ── 30대 전수 샘플(Report 55,717개)에서 새로 드러난 것들 ────────────────────────
+ALL_PLACEHOLDER_HTML = LIVE_HTML.replace(
+    "<tr><td>FUK-RDL2</td><td>54265662EWE7</td><td>10</td><td>40</td><td>9</td><td>31</td><td>77.5%</td><td>Pass</td>",
+    "<tr><td>LoadPort A</td><td>Slot 1</td><td>-</td><td>-</td><td>-</td><td>-</td><td>-</td><td>Aborted.</td>").replace(
+    "<tr><td>FUK-RDL2</td><td>54265684EWA2</td><td>-</td><td>-</td><td>-</td><td>-</td><td>-</td><td>Alignment Error.</td>",
+    "<tr><td>LoadPort A</td><td>Slot 2</td><td>-</td><td>-</td><td>-</td><td>-</td><td>-</td><td>Aborted.</td>")
+
+
+def test_batch_row_lot_is_never_the_loadport_placeholder(tmp_path):
+    """실물 30대 중 8건이 `LoadPort A` 를 Lot 으로 달고 있었다 — 자리표시는 Lot 이 아니다."""
+    rep = collect.parse_report(LIVE_NAME, ALL_PLACEHOLDER_HTML)
+    assert rep["report_lot"] == ""                       # 표에 진짜 Lot 이 하나도 없다
+    b = next(r for r in collect.rows_for_report("AOI-25", rep, str(tmp_path / "Scanresult"))
+             if r["kind"] == "batch")
+    assert b["lot"] == "" and not b["lot"].lower().startswith("loadport")
+
+
+def test_empty_lot_never_builds_an_ini_path(tmp_path):
+    """Lot 이 비면 경로에서 그 칸이 사라져 **다른 Lot 의 INI** 를 가리킨다 — 아예 만들지 않는다."""
+    d = tmp_path / "Scanresult" / "TB500_RDL2 - Multi" / "Setup1" / "54265662EWE7"
+    d.mkdir(parents=True)
+    (d / "WaferInfo.ini").write_text(WAFER_INI, encoding="utf-8")     # 있어도 쓰면 안 된다
+    rep = collect.parse_report(LIVE_NAME, LIVE_HTML.replace("<td>FUK-RDL2</td>", "<td></td>"))
+    r = next(x for x in collect.rows_for_report("AOI-25", rep, str(tmp_path / "Scanresult"))
+             if x["wafer_id"] == "54265662EWE7")
+    assert r["ini_match"] == "NO_WAFER_ID" and r["wafer_start_time"] == ""
+
+
+@pytest.mark.parametrize("raw,expected", [
+    # 30대 전수 샘플에서 새로 나온 표기 — 문구 끝의 'Skipped.' 때문에 정상으로 묻히면 안 된다
+    ("Failed to move wafer from LoadPort A to End-Effector Error: Robot: The wafer could not be "
+     "detected on Hand1 after the GET motion. . Batch Aborted. Skipped.", "WAFER_LOST"),
+    ("Camera Hardware Failure. Failed switch to camera IVP_RANGER, Failed to Set Camera. Batch Aborted.", "HW_ERROR"),
+    ("FAR Model inside recipe is invalid, Please review active model or disable far model "
+     "activation in Global RTP.", "RECIPE_ERROR"),
+    ("Wafer Map Import failed.", "RECIPE_ERROR"),
+    ("Scan 2D: Illegal Lot Name.", "RECIPE_ERROR"),
+    ("Scan 3D Error.", "SCAN_ERROR"),
+    ("Scan 2D Error. Reason: Process Scanned Images Failed.", "SCAN_ERROR"),
+    ("Failed to read wafer id on PAL", "ID_READ_ERROR"),
+    ("Failed to read wafer id. Reading error = **********. Wafer Skipped.", "SKIPPED"),
+    ("Wafer aborted by user.", "USER_ABORT"),
+])
+def test_norm_status_covers_every_wording_seen_on_30_machines(raw, expected):
+    assert collect.norm_status(raw) == expected
