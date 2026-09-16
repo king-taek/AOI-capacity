@@ -47,6 +47,18 @@ def test_home_has_no_previous_day_comparison_or_wafer_count():
     assert "nWafer" not in home and "Wafer <b>" not in home
 
 
+def test_same_wafer_time_is_counted_once():
+    """같은 Wafer 가 여러 Report 에 나와도(재검사) WaferInfo.ini 는 하나뿐 — 시간을 두 번 세면 안 된다."""
+    assert "d.seen[key]" in HTML and "prev.dups++" in HTML
+    assert "시간은 1번만 계산" in HTML
+
+
+def test_status_rules_match_the_python_side():
+    """실장비에 실제로 있는 표기 — 파이썬과 같은 규칙이어야 한다(Scan 2D Error. 등)."""
+    for token in ("scan\\s*(?:2d|3d)?\\s*error", "alignment\\s+error", "wafer\\s+lost", "WAFER_LOST", "ALIGN_ERROR"):
+        assert token in HTML, token
+
+
 def test_scope_notice_is_rendered_from_meta():
     assert "meta.scope" in HTML and "수집 범위" in HTML and "수집 안 함" in HTML
 

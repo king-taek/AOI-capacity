@@ -88,22 +88,25 @@ def parse_dt(s) -> Optional[dt.datetime]:
     return None
 
 
+#: 실장비(AOI-25) Report 에서 실제로 나온 표기를 근거로 만든 순서 — 위에서부터 먼저 맞는 것을 쓴다.
+_STATUS_RULES = [
+    ("SKIPPED", re.compile(r"skip", re.I)),
+    ("ID_READ_ERROR", re.compile(r"failed\s+to\s+read\s+wafer\s+id", re.I)),
+    ("SCAN_ERROR", re.compile(r"scan\s*(?:2d|3d)?\s*error", re.I)),     # 'Scan 2D Error.' · 'Scan Error: …'
+    ("ALIGN_ERROR", re.compile(r"alignment\s+error", re.I)),
+    ("WAFER_LOST", re.compile(r"wafer\s+lost|failed\s+to\s+sense\s+wafer", re.I)),   # 반송·척 감지 실패
+    ("USER_ABORT", re.compile(r"wafer\s+aborted\s+by\s+user", re.I)),
+    ("ABORTED", re.compile(r"abort", re.I)),
+]
+
+
 def norm_status(s) -> str:
-    t = (s or "").strip().lower()
-    if t == "pass":
+    t = (s or "").strip()
+    if t.lower() == "pass":
         return "PASS"
-    if "skip" in t:
-        return "SKIPPED"
-    if "failed to read wafer id" in t:
-        return "ID_READ_ERROR"
-    if "scan error" in t:
-        return "SCAN_ERROR"
-    if "alignment error" in t:
-        return "ALIGN_ERROR"
-    if "wafer aborted by user" in t:
-        return "USER_ABORT"
-    if "abort" in t:
-        return "ABORTED"
+    for code, rx in _STATUS_RULES:
+        if rx.search(t):
+            return code
     return "OTHER" if t else ""
 
 

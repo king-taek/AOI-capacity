@@ -307,7 +307,7 @@ const COLS=["device","report_rank","equipment","process_code","report_lot","lot"
 const MON={jan:0,feb:1,mar:2,apr:3,may:4,jun:5,jul:6,aug:7,sep:8,oct:9,nov:10,dec:11};
 const APP_VERSION="";
 const DAY=86400000;
-const ERR_KO={ID_READ_ERROR:"Wafer ID 인식 실패",SCAN_ERROR:"스캔 오류",ALIGN_ERROR:"정렬 오류",USER_ABORT:"사용자 중단",ABORTED:"중단됨",OTHER:"기타 오류"};
+const ERR_KO={ID_READ_ERROR:"Wafer ID 인식 실패",SCAN_ERROR:"스캔 오류",ALIGN_ERROR:"정렬 오류",WAFER_LOST:"Wafer 반송 실패",USER_ABORT:"사용자 중단",ABORTED:"중단됨",OTHER:"기타 오류"};
 const ERR_TXT={USER_ABORT:"Aborted. Wafer aborted by user.",ABORTED:"Aborted.",SCAN_ERROR:"Scan Error: Scan2d optic is not valid on machine.",ID_READ_ERROR:"Failed to read wafer id. Reading error = . Aborted."};
 
 let rows=[],meta={},devNames=[],D=null,day=null,selDev=null;
@@ -326,8 +326,13 @@ function parseDt(s){if(!s)return null;s=String(s).trim();
   if(m){let h=+m[4];if(m[7]){const pm=m[7].toUpperCase()==="PM";if(pm&&h<12)h+=12;if(!pm&&h===12)h=0;}return new Date(2000+ +m[3],MON[m[2].toLowerCase()],+m[1],h,+m[5],+m[6]);}
   m=s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})\s+(\d{1,2}):(\d{2}):(\d{2})$/);if(m)return new Date(+m[3],+m[1]-1,+m[2],+m[4],+m[5],+m[6]);
   m=s.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})$/);if(m)return new Date(+m[1],+m[2]-1,+m[3],+m[4],+m[5],+m[6]);return null;}
-function normStatus(s){const t=(s||"").trim().toLowerCase();if(t==="pass")return"PASS";if(t.includes("skip"))return"SKIPPED";if(t.includes("failed to read wafer id"))return"ID_READ_ERROR";if(t.includes("scan error"))return"SCAN_ERROR";if(t.includes("alignment error"))return"ALIGN_ERROR";if(t.includes("wafer aborted by user"))return"USER_ABORT";if(t.includes("abort"))return"ABORTED";return t?"OTHER":"";}
-const isErr=n=>["ID_READ_ERROR","SCAN_ERROR","ALIGN_ERROR","USER_ABORT","ABORTED","OTHER"].includes(n);
+/* 파이썬 collect.norm_status 와 같은 순서·같은 규칙(실장비 표기 근거) */
+function normStatus(s){const t=(s||"").trim();if(t.toLowerCase()==="pass")return"PASS";
+  if(/skip/i.test(t))return"SKIPPED";if(/failed\s+to\s+read\s+wafer\s+id/i.test(t))return"ID_READ_ERROR";
+  if(/scan\s*(?:2d|3d)?\s*error/i.test(t))return"SCAN_ERROR";if(/alignment\s+error/i.test(t))return"ALIGN_ERROR";
+  if(/wafer\s+lost|failed\s+to\s+sense\s+wafer/i.test(t))return"WAFER_LOST";
+  if(/wafer\s+aborted\s+by\s+user/i.test(t))return"USER_ABORT";if(/abort/i.test(t))return"ABORTED";return t?"OTHER":"";}
+const isErr=n=>["ID_READ_ERROR","SCAN_ERROR","ALIGN_ERROR","WAFER_LOST","USER_ABORT","ABORTED","OTHER"].includes(n);
 function fmtSec(s){if(s==null||isNaN(s))return"–";s=Math.round(s);const h=Math.floor(s/3600),m=Math.floor(s%3600/60),x=s%60;if(h)return`${h}시간 ${p2(m)}분`;if(m)return`${m}분 ${p2(x)}초`;return`${x}초`;}
 function fmtSecS(s){if(s==null||isNaN(s))return"–";s=Math.round(s);const h=Math.floor(s/3600),m=Math.floor(s%3600/60);if(h)return`${h}h ${p2(m)}m`;return`${m}m`;}
 const hm=d=>`${p2(d.getHours())}:${p2(d.getMinutes())}`;
@@ -388,9 +393,15 @@ function loadDemo(){
 /* ---------- model ---------- */
 function build(){
   devNames=[...new Set(rows.map(r=>r.device))].sort(cmpDev);
-  const M={};for(const n of devNames)M[n]={name:n,segs:[],errNoTime:[],cache:{}};
+  const M={};for(const n of devNames)M[n]={name:n,segs:[],errNoTime:[],cache:{},seen:{}};
+  /* 같은 Wafer 가 여러 Report 에 나오면(원래 검사 + 재검사) WaferInfo.ini 는 마지막 것 하나뿐이라
+     같은 시각이 두 번 붙는다. 시간은 한 번만 세고, 기록이 몇 건이었는지는 남긴다. */
   for(const r of rows){const d=M[r.device];const st=parseDt(r.wafer_start_time),en=parseDt(r.wafer_end_time);
-    if(st&&en&&en>=st)d.segs.push({s:st.getTime(),e:en.getTime(),err:isErr(r.norm_status),r});
+    if(st&&en&&en>=st){
+      const key=`${r.wafer_id}|${st.getTime()}|${en.getTime()}`;const prev=d.seen[key];
+      if(prev){prev.dups++;if(isErr(r.norm_status)){prev.err=true;prev.r=r;}continue;}
+      const g={s:st.getTime(),e:en.getTime(),err:isErr(r.norm_status),r,dups:1};d.seen[key]=g;d.segs.push(g);
+    }
     else if(isErr(r.norm_status)){const b=parseDt(r.batch_start);d.errNoTime.push({t:b?b.getTime():null,r});}}
   for(const d of Object.values(M)){d.segs.sort((a,b)=>a.s-b.s);d.segs.forEach((g,i)=>{const nx=d.segs[i+1];g.stopEnd=g.err&&nx?nx.s:g.err?null:undefined;});
     /* index segments by day for fast per-day lookups */
@@ -506,7 +517,8 @@ function renderDetail(){
   s+="</svg>";$("#detTl").innerHTML=s;
   bindTips($("#detTl"),"rect.seg",el=>{if(el.dataset.l!=null){const L=m.lots[+el.dataset.l];return`<b>Lot ${esc(L.lot)}</b> · ${esc(L.recipe)}<br>${hm(new Date(L.s))} → ${hm(new Date(L.e))} · ${fmtSec((L.e-L.s)/1000)}<br>검사 ${fmtSec(L.run/1000)}${L.err?` · <span style="color:var(--crit-ink)">오류 ${L.err}건</span>`:""}`;}
     const it=m.items[+el.dataset.i],r=it.g.r;if(it.kind==="stop")return`<b>오류 후 정지 (추정)</b> · ${fmtSec((it.e-it.s)/1000)}<br>${hm(new Date(it.s))} → ${hm(new Date(it.e))}<br><span class="k">${esc(r.lot)} / ${esc(r.wafer_id)} 오류 이후 다음 Wafer 시작까지</span>`;
-    return`<b>${esc(r.lot)} / ${esc(r.wafer_id)}</b><br>${hm(new Date(it.g.s))} → ${hm(new Date(it.g.e))} · ${fmtSec((it.g.e-it.g.s)/1000)}<br>${it.kind==="err"?`<span style="color:var(--crit-ink)">${ERR_KO[r.norm_status]||"오류"}</span> · ${esc(r.status)}`:`정상 검사 · ${esc(r.recipe)}`}`;});
+    const dup=it.g.dups>1?`<br><span class="k">같은 시각의 기록 ${it.g.dups}건(다시 검사한 것으로 보입니다) — 시간은 1번만 계산</span>`:"";
+    return`<b>${esc(r.lot)} / ${esc(r.wafer_id)}</b><br>${hm(new Date(it.g.s))} → ${hm(new Date(it.g.e))} · ${fmtSec((it.g.e-it.g.s)/1000)}<br>${it.kind==="err"?`<span style="color:var(--crit-ink)">${ERR_KO[r.norm_status]||"오류"}</span> · ${esc(r.status)}`:`정상 검사 · ${esc(r.recipe)}`}${dup}`;});
   $("#detTl").querySelectorAll("rect.seg").forEach(el=>el.onclick=()=>{if(el.dataset.l!=null)return;const it=m.items[+el.dataset.i];const idx=m.errors.findIndex(e=>e.r===it.g.r);if(idx>=0)hlSeg(idx);});
   const lotTbl=m.lots.length?`<details style="margin:6px 0 10px"><summary style="cursor:pointer;color:var(--accent-2);font-size:13px">Lot ${m.lots.length}개 목록</summary><table class="tbl" style="margin-top:6px"><thead><tr><th>Lot</th><th>Recipe</th><th>시작</th><th>종료</th><th class="r">소요</th><th class="r">검사</th><th class="r">오류</th></tr></thead><tbody>${m.lots.map(L=>`<tr><td class="mono">${esc(L.lot)}</td><td>${esc(L.recipe)}</td><td class="num">${hm(new Date(L.s))}</td><td class="num">${hm(new Date(L.e))}</td><td class="r">${fmtSecS((L.e-L.s)/1000)}</td><td class="r">${fmtSecS(L.run/1000)}</td><td class="r">${L.err?`<span class="chip crit">${L.err}</span>`:0}</td></tr>`).join("")}</tbody></table></details>`:"";
   $("#detErrs").innerHTML=lotTbl+(m.errors.length?`<table class="tbl"><thead><tr><th>시각</th><th>Lot / Wafer</th><th>오류</th><th class="r">정지 시간 (추정)</th><th>장비 메시지</th></tr></thead><tbody>${m.errors.map((e,i)=>`<tr class="click" data-e="${i}" onclick="hlSeg(${i})"><td class="num">${e.t?hm(new Date(e.t)):"–"}${e.noTime?' <span class="chip mute" title="INI가 없어 Batch 시작 시각으로 표시">Batch 시작</span>':""}</td><td class="mono">${esc(e.r.lot)} / ${esc(e.r.wafer_id)}</td><td><span class="chip crit">${ERR_KO[e.r.norm_status]||"오류"}</span></td><td class="r">${e.open?'<span class="chip warn">복구 기록 없음</span>':e.stop!=null?fmtSec(e.stop):"–"}</td><td class="faint">${esc(e.r.status)}</td></tr>`).join("")}</tbody></table><p class="faint" style="font-size:12px;margin-top:8px">정지 시간은 오류 Wafer 종료부터 다음 Wafer 시작까지의 공백으로 추정한 값입니다. 장비 이벤트 로그가 아닙니다.</p>`
