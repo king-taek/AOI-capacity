@@ -80,18 +80,63 @@ def test_old_format_still_uses_filename_when_no_job_setup():
     assert (rep["equipment"], rep["process_code"]) == ("2D@R2-GA285AAB_0859840PD-0A", "6321")
 
 
+def _live_ini(tmp_path, start: str, end: str, wafer: str = "54265662EWE7") -> None:
+    d = tmp_path / "Scanresult" / "TB500_RDL2 - Multi" / "Setup1" / "FUK-RDL2" / wafer
+    d.mkdir(parents=True, exist_ok=True)
+    (d / "WaferInfo.ini").write_text(WAFER_INI.replace("UseLot=KLK-3D", "UseLot=FUK-RDL2")
+                                     .replace("UseWaferID=K625407-01B0", f"UseWaferID={wafer}")
+                                     .replace("WaferStartTime=13-Sep-26 05:31:04 PM", f"WaferStartTime={start}")
+                                     .replace("WaferEndTime=13-Sep-26 05:32:02 PM", f"WaferEndTime={end}"),
+                                     encoding="utf-8")
+
+
 def test_live_format_builds_ini_path_and_reads_times(tmp_path):
-    ini_dir = tmp_path / "Scanresult" / "TB500_RDL2 - Multi" / "Setup1" / "FUK-RDL2" / "54265662EWE7"
-    ini_dir.mkdir(parents=True)
-    (ini_dir / "WaferInfo.ini").write_text(WAFER_INI.replace("UseLot=KLK-3D", "UseLot=FUK-RDL2")
-                                           .replace("UseWaferID=K625407-01B0", "UseWaferID=54265662EWE7"),
-                                           encoding="utf-8")
+    _live_ini(tmp_path, "15-Sep-26 07:30:00 PM", "15-Sep-26 07:44:00 PM")     # 배치 구간 안
     rep = collect.parse_report(LIVE_NAME, LIVE_HTML)
     rows = collect.rows_for_report("AOI-25", rep, str(tmp_path / "Scanresult"))
     by = {r["wafer_id"]: r for r in rows}
     assert by["54265662EWE7"]["ini_match"] == "EXACT"
-    assert by["54265662EWE7"]["wafer_start_time"] == "13-Sep-26 05:31:04 PM"
+    assert by["54265662EWE7"]["wafer_start_time"] == "15-Sep-26 07:30:00 PM"
+    assert by["54265662EWE7"]["batch_end"] == "16-Sep-26 09:17:51 AM"
     assert by["54265684EWA2"]["norm_status"] == "ALIGN_ERROR"     # 실장비에 실제로 있는 상태
+    assert not [r for r in rows if r["kind"] == "batch"]          # 검사된 Wafer 가 있으니 배치 실패가 아니다
+
+
+# ── 덮어써진 INI · 통째로 실패한 배치 (AOI-25 9/14 실물에서 확인한 모습) ──────────
+def test_ini_outside_the_batch_window_is_not_used(tmp_path):
+    """다시 검사하면 INI 가 덮어써져 옛 Report 행에도 '나중 시각' 이 붙는다 — 그 시간은 쓰지 않는다."""
+    _live_ini(tmp_path, "16-Sep-26 02:05:00 PM", "16-Sep-26 02:10:00 PM")     # 배치(~09:17)보다 한참 뒤
+    rep = collect.parse_report(LIVE_NAME, LIVE_HTML)
+    r = next(x for x in collect.rows_for_report("AOI-25", rep, str(tmp_path / "Scanresult"))
+             if x["wafer_id"] == "54265662EWE7")
+    assert r["ini_match"] in ("STALE", "BATCH_FAILED")
+    assert r["wafer_start_time"] == "" and r["wafer_end_time"] == ""
+    assert "덮어써짐" in r["data_issue"]
+
+
+FAILED_BATCH_HTML = LIVE_HTML.replace(
+    "<td>77.5%</td><td>Pass</td>", "<td>-</td><td>Aborted.</td>").replace(
+    "<tr><td>FUK-RDL2</td><td>54265684EWA2</td>", "<tr><td>LoadPort A</td><td>Slot 3</td>")
+
+
+def test_failed_batch_becomes_one_row_with_batch_times(tmp_path):
+    """검사된 Wafer 가 하나도 없는 시도 — Scanresult 에 흔적이 없어 Batch 시각만이 근거다."""
+    rep = collect.parse_report(LIVE_NAME, FAILED_BATCH_HTML)
+    rows = collect.rows_for_report("AOI-25", rep, str(tmp_path / "Scanresult"))
+    batch = [r for r in rows if r["kind"] == "batch"]
+    assert len(batch) == 1
+    b = batch[0]
+    assert (b["wafer_start_time"], b["wafer_end_time"]) == ("15-Sep-26 06:23:14 PM", "16-Sep-26 09:17:51 AM")
+    assert b["norm_status"] == "ABORTED" and b["wafer_id"] == "" and b["lot"] == "FUK-RDL2"
+    # 나머지 행(자리표시 Slot 포함)은 배치 한 건으로 묶여 따로 세지 않는다
+    assert all(r["ini_match"] == "BATCH_FAILED" for r in rows if r["kind"] != "batch")
+
+
+def test_normal_batch_makes_no_batch_row(tmp_path):
+    _live_ini(tmp_path, "15-Sep-26 07:30:00 PM", "15-Sep-26 07:44:00 PM")
+    rep = collect.parse_report(LIVE_NAME, LIVE_HTML)
+    assert not [r for r in collect.rows_for_report("AOI-25", rep, str(tmp_path / "Scanresult"))
+                if r["kind"] == "batch"]
 
 
 def test_read_ini_filters_to_needed_keys(tmp_path):

@@ -55,11 +55,14 @@ INI_KEYS = {
                       "ActiveStation", "ActiveSlot", "FillID", "CarrierID", "UseLot", "UseWaferID"],
     "BatchInfo": ["GlobalLotId", "OperatorId"],
 }
-OUT_COLS = ["device", "lot", "wafer_id", "status", "norm_status", "recipe",
-            "wafer_start_time", "wafer_end_time", "batch_start", "ini_match", "data_issue"]
+#: kind = "" (Wafer 한 장) · "batch" (통째로 실패한 배치 한 건 — Wafer 시각이 하나도 없는 시도)
+OUT_COLS = ["device", "kind", "lot", "wafer_id", "status", "norm_status", "recipe",
+            "wafer_start_time", "wafer_end_time", "batch_start", "batch_end", "ini_match", "data_issue"]
 REPORT_RE = re.compile(r"^(.+?)_(\d{4})_(.+)_(\d{1,2}-[A-Za-z]{3}-\d{2})_\((\d{2}\.\d{2}\.\d{2})\)_BatchReport\.html?$", re.I)
 DT_FORMATS = ["%d-%b-%y %I:%M:%S %p", "%m/%d/%Y %H:%M:%S", "%d-%b-%y %H:%M:%S"]
 CLOCK_SKEW_SEC = 60
+#: INI 시각이 그 Report 의 Batch 구간에서 이만큼 벗어나면 "다른 시도의 INI" 로 본다(시계 오차 여유).
+BATCH_WINDOW_MARGIN_SEC = 600
 
 ProgressFn = Callable[[int, int, str], None]
 LogFn = Callable[[str], None]
@@ -221,13 +224,20 @@ def read_ini(path) -> dict:
 
 
 def rows_for_report(dev_name: str, rep: dict, scan_root: str) -> List[dict]:
+    """Report 한 장 → Wafer 행들(+ 통째로 실패한 배치면 배치 행 하나).
+
+    ★ WaferInfo.ini 는 재검사 때 **같은 경로에 덮어써진다**(실물 확인: AOI-25 9/14 00NSP049XYG7).
+      그래서 옛 시도의 Report 행에도 '나중 시도의 시각' 이 붙는다. 이를 그대로 쓰면 같은 시간이
+      여러 번 계산된다. → INI 시각이 이 Report 의 `Batch Start~End` 밖이면 **이 시도의 것이 아니므로
+      시간을 쓰지 않는다**(`ini_match="STALE"`). 값을 지어내지 않고, 시각을 모른다고 표시한다."""
     rows = []
     s = rep["summary"]
+    b_start, b_end = parse_dt(s.get("Batch Start", "")), parse_dt(s.get("Batch End", ""))
     for w in rep["wafers"]:
-        r = {"device": dev_name, "lot": w["lot"], "wafer_id": w["wafer_id"], "status": w["status"],
+        r = {"device": dev_name, "kind": "", "lot": w["lot"], "wafer_id": w["wafer_id"], "status": w["status"],
              "norm_status": norm_status(w["status"]), "recipe": w["recipe"] or s.get("Recipe", ""),
              "wafer_start_time": "", "wafer_end_time": "", "batch_start": s.get("Batch Start", ""),
-             "ini_match": "", "data_issue": ""}
+             "batch_end": s.get("Batch End", ""), "ini_match": "", "data_issue": ""}
         if re.match(r"^loadport", w["lot"], re.I) or re.match(r"^slot\s*\d+", w["wafer_id"], re.I) or not w["wafer_id"]:
             r["ini_match"], r["data_issue"] = "NO_WAFER_ID", "LoadPort/Slot 행이라 INI 경로를 만들 수 없음"
         else:
@@ -243,6 +253,10 @@ def rows_for_report(dev_name: str, rep: dict, scan_root: str) -> List[dict]:
                     st, en = parse_dt(r["wafer_start_time"]), parse_dt(r["wafer_end_time"])
                     if not (st and en and en >= st):
                         iss.append("Wafer 시작/종료 시각 누락 또는 역전")
+                    elif not _in_batch_window(st, en, b_start, b_end):
+                        r["ini_match"] = "STALE"       # 덮어써진 INI — 이 시도가 아니라 다른 시도의 시각
+                        r["wafer_start_time"] = r["wafer_end_time"] = ""
+                        iss.append("이 배치 시각 밖의 INI(다시 검사하며 덮어써짐) — 시간 미사용")
                     if a.get("UseLot") and a["UseLot"] != w["lot"]:
                         iss.append("Lot 불일치")
                     if a.get("UseWaferID") and a["UseWaferID"] != w["wafer_id"]:
@@ -251,7 +265,51 @@ def rows_for_report(dev_name: str, rep: dict, scan_root: str) -> List[dict]:
                 except Exception as e:  # noqa: BLE001
                     r["ini_match"], r["data_issue"] = "READ_ERROR", f"{type(e).__name__}: {e}"
         rows.append(r)
+    failed = failed_batch_row(dev_name, rep, rows)
+    if failed:
+        rows.append(failed)
     return rows
+
+
+def _in_batch_window(st, en, b_start, b_end) -> bool:
+    """INI 의 Wafer 시각이 이 Report 의 배치 구간 안인가(여유 `BATCH_WINDOW_MARGIN_SEC`)."""
+    if not (b_start and b_end):
+        return True                                   # 배치 시각을 모르면 판단하지 않는다(그대로 쓴다)
+    margin = dt.timedelta(seconds=BATCH_WINDOW_MARGIN_SEC)
+    return (b_start - margin) <= st and en <= (b_end + margin)
+
+
+def failed_batch_row(dev_name: str, rep: dict, rows: List[dict]) -> Optional[dict]:
+    """통째로 실패한 시도를 **배치 한 건**으로 만든다.
+
+    실물(AOI-25 9/14)에서 확인한 모습: 배치가 중단되면 Wafer 를 한 장도 스캔하지 못해 Scanresult 에
+    흔적이 전혀 남지 않고, Report 에는 `LoadPort A / Slot n` 자리표시 행이 20~25줄 생긴다.
+    그래서 ① 시간을 아는 유일한 근거는 Report 의 `Batch Start~End` 이고,
+    ② 오류는 'Slot 행 24건' 이 아니라 '배치 중단 1건' 으로 세는 게 맞다(사용자 확정).
+    정상적으로 일부라도 스캔한 배치는 만들지 않는다."""
+    s = rep["summary"]
+    st, en = parse_dt(s.get("Batch Start", "")), parse_dt(s.get("Batch End", ""))
+    if not (st and en and en >= st):
+        return None
+    if any(r["wafer_start_time"] and r["wafer_end_time"] for r in rows):
+        return None                                   # 한 장이라도 이 배치 안에서 검사됐으면 실패가 아니다
+    if any(norm_status(r["status"]) == "PASS" for r in rows):
+        return None                                   # 정상 통과한 Wafer 가 있으면 실패한 배치가 아니다
+                                                      # (INI 가 지워져 시간만 없는 배치를 오류로 만들지 않는다)
+    errs = [r for r in rows if norm_status(r["status"]) not in ("", "PASS", "SKIPPED")]
+    if not errs:
+        return None
+    real = [r for r in errs if r["ini_match"] != "NO_WAFER_ID"]   # 자리표시(Slot)가 아닌 진짜 Wafer 행
+    lead = (real or errs)[0]
+    for r in rows:                                    # 이 배치의 행들은 배치 한 건으로 묶어 센다(사용자 확정)
+        r["ini_match"] = "BATCH_FAILED"
+    lot = next((r["lot"] for r in rows if r["ini_match"] != "NO_WAFER_ID" and r["lot"]), rep.get("report_lot", ""))
+    return {"device": dev_name, "kind": "batch", "lot": lot, "wafer_id": "",
+            "status": lead["status"], "norm_status": norm_status(lead["status"]),
+            "recipe": lead.get("recipe", ""), "wafer_start_time": s.get("Batch Start", ""),
+            "wafer_end_time": s.get("Batch End", ""), "batch_start": s.get("Batch Start", ""),
+            "batch_end": s.get("Batch End", ""), "ini_match": "BATCH",
+            "data_issue": f"검사된 Wafer 없음 — 배치 시각으로만 표시 (행 {len(rows)}개 중 오류 {len(errs)}개)"}
 
 
 # ----------------------------------------------------------------------------- cache
