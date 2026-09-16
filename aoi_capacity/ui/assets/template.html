@@ -106,8 +106,6 @@ textarea.input{width:100%;min-height:110px;font-family:var(--mono);font-size:12.
 .empty{padding:30px;text-align:center;color:var(--ink-3);font-size:13px}
 .chip{display:inline-flex;align-items:center;gap:4px;padding:1px 8px;border-radius:999px;font-size:11.5px;font-weight:600;white-space:nowrap}
 .chip.crit{background:var(--crit-soft);color:var(--crit-ink)}.chip.redo{background:var(--warn-soft);color:var(--warn)}.chip.rework{background:var(--rework-soft);color:var(--rework)}.chip.mute{background:var(--raise);color:var(--ink-2)}.chip.warn{background:var(--warn-soft);color:var(--warn)}.chip.ok{background:var(--good-soft);color:var(--good)}
-.delta{font-size:12px;font-weight:600;white-space:nowrap}
-.delta.up{color:var(--good)}.delta.dn{color:var(--crit-ink)}.delta.flat{color:var(--ink-3)}
 
 /* summary strip */
 .strip-sum{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:16px}
@@ -151,7 +149,6 @@ textarea.input{width:100%;min-height:110px;font-family:var(--mono);font-size:12.
 .tbl tbody tr.sel{background:var(--accent-soft)}
 .tbl tbody tr.hl{background:var(--accent-soft)}
 .hbar{display:inline-block;height:8px;border-radius:2px;background:var(--run);vertical-align:middle}
-.hbar.prev{background:var(--prev);height:4px}
 .tscroll{overflow:auto;max-height:70vh}
 
 /* detail panel */
@@ -221,8 +218,8 @@ details.adv summary{cursor:pointer;color:var(--accent-2);font-size:13px}
 
 <nav class="side">
   <button class="nav" data-v="home" aria-current="page"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2 7.5L8 2l6 5.5V14H2z"/><path d="M6 14v-4h4v4"/></svg><span>홈<span class="sub">오늘 모든 장비 가동률</span></span></button>
-  <button class="nav" data-v="trend"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2 12l4-5 3 3 5-6"/><path d="M2 14h12"/></svg><span>추이<span class="sub">일 · 주 · 월 · 기간 비교</span></span></button>
-  <button class="nav" data-v="compare"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2 3h10M2 7h7M2 11h12"/></svg><span>장비 비교<span class="sub">기간별 순위와 변화</span></span></button>
+  <button class="nav" data-v="trend"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2 12l4-5 3 3 5-6"/><path d="M2 14h12"/></svg><span>추이<span class="sub">일 · 주 · 월 가동률</span></span></button>
+  <button class="nav" data-v="compare"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2 3h10M2 7h7M2 11h12"/></svg><span>장비 비교<span class="sub">기간별 가동률 순위</span></span></button>
   <button class="nav" data-v="set" style="margin-top:10px"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="8" r="2.2"/><path d="M8 1.5v2M8 12.5v2M1.5 8h2M12.5 8h2M3.4 3.4l1.4 1.4M11.2 11.2l1.4 1.4M3.4 12.6l1.4-1.4M11.2 4.8l1.4-1.4"/></svg><span>설정<span class="sub">장비 · 경로 · 수집</span></span></button>
   <div class="foot" id="footTxt">정확 경로만 확인 · 재귀 검색 없음<br>원본 Report / INI 수정 없음</div>
 </nav>
@@ -268,10 +265,10 @@ details.adv summary{cursor:pointer;color:var(--accent-2);font-size:13px}
   <section class="view" id="v-compare">
     <div class="toolbar">
       <span class="lbl">기간</span><div class="seg" id="cmpSeg"><button data-p="1" aria-pressed="true">선택한 날</button><button data-p="7">최근 7일</button><button data-p="30">최근 30일</button></div>
-      <span class="lbl">정렬</span><div class="seg" id="cmpSort"><button data-s="high" aria-pressed="true">높은 순</button><button data-s="low">낮은 순</button><button data-s="delta">하락 큰 순</button></div>
+      <span class="lbl">정렬</span><div class="seg" id="cmpSort"><button data-s="high" aria-pressed="true">높은 순</button><button data-s="low">낮은 순</button><button data-s="err">오류 많은 순</button></div>
       <div class="sp"></div><span class="faint" style="font-size:12px" id="cmpNote"></span>
     </div>
-    <div class="card"><div class="tscroll" style="max-height:none"><table class="tbl"><thead><tr><th class="r">#</th><th>장비</th><th style="width:42%">이번 기간 <span class="faint">(가는 막대: 이전 기간)</span></th><th class="r">가동률</th><th class="r">이전 기간</th><th class="r">변화</th><th class="r">오류</th><th class="r">정지 시간</th></tr></thead><tbody id="cmpBody"></tbody></table></div></div>
+    <div class="card"><div class="tscroll" style="max-height:none"><table class="tbl"><thead><tr><th class="r">#</th><th>장비</th><th style="width:42%">가동률</th><th class="r">가동률</th><th class="r">오류</th><th class="r">정지 시간</th></tr></thead><tbody id="cmpBody"></tbody></table></div></div>
   </section>
 
   <!-- ================= SETTINGS ================= -->
@@ -361,7 +358,6 @@ function cmpDev(a,b){const x=devSortKey(a),y=devSortKey(b);if(x[0]!==y[0])return
     if(typeof p==="number"&&typeof q==="number")return p-q;return String(p)<String(q)?-1:1;}
   return 0;}
 const pct=v=>v==null||isNaN(v)?"–":v.toFixed(1)+"%";
-function deltaHtml(cur,prev,suffix="p"){if(cur==null||prev==null)return'<span class="delta flat">–</span>';const d=cur-prev;if(Math.abs(d)<0.05)return'<span class="delta flat">± 0.0'+suffix+'</span>';return`<span class="delta ${d>0?"up":"dn"}">${d>0?"▲":"▼"} ${Math.abs(d).toFixed(1)}${suffix}</span>`;}
 
 /* ---------- navigation ---------- */
 function go(v){document.querySelectorAll(".nav").forEach(b=>b.setAttribute("aria-current",b.dataset.v===v?"page":"false"));document.querySelectorAll(".view").forEach(s=>s.classList.toggle("on",s.id==="v-"+v));$("#daynav").style.visibility=v==="set"||v==="trend"?"hidden":"";$(".main").scrollTop=0;if(v==="trend")renderTrend();if(v==="compare")renderCompare();}
@@ -416,13 +412,14 @@ function lotTip(L){
     +`<br>Wafer ${L.parts.length}장 — ${mix||"—"}`
     +`<br>검사 시간 ${fmtSec(L.run/1000)}${L.test?' <span class="chip mute">가동률 제외</span>':""}${list}${openHint(L.r)}`;}
 
-/* Lot 막대를 묶을 때 쓰는 이름 — 구분자 차이(`TTP DIA`·`TTP-DIA`)와 **재작업 표기만** 지운다.
-   ★ `RE`·`RESCAN`(다시 검사)은 지우지 않는다 — 같은 Lot 을 두 번 돌린 것이라 **실가동률을 깎는 원인**이고,
-     한 막대로 합쳐 버리면 그 손실이 보이지 않는다(사용자 확정). 재작업(REWORK)만 같은 Lot 으로 묶는다.
-   `RW` 는 재작업인지 확인 전이라 이름의 일부로 그냥 둔다(D09). 시험 가동(TEST)은 가동률에서 빠지므로 섞지 않는다. */
-const LOT_MARKS=/^REWORK$/i;
-function lotKey(lot,isTest){const t=String(lot||"").split(/[\s_\-]+/).filter(x=>x&&!LOT_MARKS.test(x));
-  return (isTest?"TEST\u0000":"")+t.join(" ").toUpperCase();}
+/* Lot 막대를 묶는 기준 — **Lot 이름을 있는 그대로** 쓴다(사용자 확정).
+   `TTP DIA` 와 `TTP-DIA`, `GUX-PIDS3` 와 `GUX-PIDS3 RE`, `DYD-FS` 와 `DYD-FS REWORK` 는 전부 따로다 —
+   따로 돌린 것이면 따로 보여야 실가동률을 깎은 원인(재스캔·재작업)이 화면에 남는다. */
+const lotKey=(lot,isTest)=>(isTest?"TEST\u0000":"")+String(lot||"");
+/* 같은 Lot 이어도 **중간에 시간이 비면 막대를 나눈다**(사용자 확정).
+   실장비 3일치(같은 Lot 안 연속 Wafer 사이 11,529건)에서 99%가 60초 이내였다 — 그보다 길게 빈 것은
+   Wafer 교체가 아니라 설비가 실제로 쉰 것이므로 한 막대로 이어 붙이지 않는다. */
+const LOT_GAP_SEC=60;
 
 /* ---------- Report 열기 ----------
    상태바를 더블클릭하면 그 구간을 만든 BatchReport(.htm) 를 브라우저 새 탭으로 연다.
@@ -580,7 +577,7 @@ function renderDetail(){
   /* Lot blocks: consecutive wafers of the same lot (gap under 10 min) become one bar */
   const lots=[];const ws=m.items.filter(i=>i.kind!=="stop").sort((p,q)=>p.s-q.s);   /* 시험 구간도 Lot 목록에는 남긴다(검사 시간만 0) */
   for(const it of ws){const key=lotKey(it.g.r.lot,it.g.test);const L=lots[lots.length-1];
-    if(L&&L.key===key&&it.s-L.e<=600000){L.e=Math.max(L.e,it.e);L.n++;L.parts.push(it);
+    if(L&&L.key===key&&it.s-L.e<=LOT_GAP_SEC*1000){L.e=Math.max(L.e,it.e);L.n++;L.parts.push(it);
       L.run+=it.kind==="run"?(it.e-it.s):0;if(it.kind==="err")L.err++;if(it.kind==="test")L.nTest++;
       if(it.g.redo||it.g.dups>1)L.redo=true;if(it.g.rework)L.rework=true;if(it.g.test)L.test=true;
       L.stat[it.g.r.norm_status]=(L.stat[it.g.r.norm_status]||0)+1;}
@@ -648,12 +645,11 @@ function renderTrend(){
   const starts=[];let k=startK;for(let i=0;i<ui.span;i++){starts.unshift(k);k=periodPrev(unit,k);}
   const vals=starts.map(s=>({start:s,keys:periodKeys(unit,s),...fleetAvg(periodKeys(unit,s),devList)}));
   const anchor=ui.cmpAnchor&&starts.includes(ui.cmpAnchor)?ui.cmpAnchor:startK;
-  /* comparison cards */
-  const curKeys=periodKeys(unit,anchor),prevStart=periodPrev(unit,anchor),prevKeys=periodKeys(unit,prevStart);
-  const cur=fleetAvg(curKeys,devList),prev=fleetAvg(prevKeys,devList);
+  /* 선택한 기간 요약 — 전 기간 대비(전주·전월)는 쓰지 않는다(사용자 확정: 지웠다) */
+  const curKeys=periodKeys(unit,anchor);
+  const cur=fleetAvg(curKeys,devList);
   const scopeTxt=ui.trendDev||`전체 ${devNames.length}대 평균`;
-  $("#cmpBox").innerHTML=`<div class="card cur"><div class="k">이번 ${periodName[unit]} · ${periodLabel(unit,anchor)} · ${esc(scopeTxt)}</div><div class="v">${cur.util==null?"–":cur.util.toFixed(1)+"<small>%</small>"} ${deltaHtml(cur.util,prev.util)}</div><div class="row"><span>오류 <b>${cur.nErr}건</b></span><span>오류·정지 <b>${fmtSecS(cur.stop)}</b></span><span>데이터 장비 <b>${cur.n}대</b></span></div></div>
-    <div class="card"><div class="k">이전 ${periodName[unit]} · ${periodLabel(unit,prevStart)}</div><div class="v" style="color:var(--ink-2)">${cur.util!=null||prev.util!=null?(prev.util==null?"–":prev.util.toFixed(1)+"<small>%</small>"):"–"}</div><div class="row"><span>오류 <b>${prev.nErr}건</b></span><span>오류·정지 <b>${fmtSecS(prev.stop)}</b></span><span>데이터 장비 <b>${prev.n}대</b></span></div></div>`;
+  $("#cmpBox").innerHTML=`<div class="card cur"><div class="k">${periodName[unit]} · ${periodLabel(unit,anchor)} · ${esc(scopeTxt)}</div><div class="v">${cur.util==null?"–":cur.util.toFixed(1)+"<small>%</small>"}</div><div class="row"><span>오류 <b>${cur.nErr}건</b></span><span>오류·정지 <b>${fmtSecS(cur.stop)}</b></span><span>데이터 장비 <b>${cur.n}대</b></span></div></div>`;
   $("#trendNote").textContent=unit==="week"?"주는 월요일 시작":unit==="month"?"월은 1일 시작":"";
   /* bar chart */
   const box=$("#trendChart");const W=1200,L=44,R=12,T=16,B=30,H=230;const ph=H-T-B;const n=vals.length;const gw=(W-L-R)/n;const bw=Math.min(gw*0.62,56);const y=v=>T+ph-(v/100)*ph;
@@ -668,19 +664,19 @@ function renderTrend(){
     s+=`<text class="xl ${sel?"sel":""}" x="${gx+gw/2}" y="${H-10}" text-anchor="middle">${lbl}</text>`;});
   if(avg!=null)s+=`<line class="avgline" x1="${L}" x2="${W-R}" y1="${y(avg)}" y2="${y(avg)}"/><text x="${W-R}" y="${y(avg)-4}" text-anchor="end" fill="var(--warn)">평균 ${avg.toFixed(1)}%</text>`;
   s+=`<line class="axis" x1="${L}" x2="${W-R}" y1="${T+ph}" y2="${T+ph}"/></svg>`;box.innerHTML=s;
-  bindTips(box,"rect.dbar",el=>{const v=vals.find(x=>x.start===el.dataset.s);const i=vals.indexOf(v);const pv=i>0?vals[i-1]:null;return`<b>${periodLabel(unit,v.start)}</b><br>가동률 <b>${v.util==null?"데이터 없음":v.util.toFixed(1)+"%"}</b> ${pv?deltaHtml(v.util,pv.util):""}<br>오류 ${v.nErr}건 · 정지 ${fmtSecS(v.stop)} · 장비 ${v.n}대`;});
+  bindTips(box,"rect.dbar",el=>{const v=vals.find(x=>x.start===el.dataset.s);return`<b>${periodLabel(unit,v.start)}</b><br>가동률 <b>${v.util==null?"데이터 없음":v.util.toFixed(1)+"%"}</b><br>오류 ${v.nErr}건 · 정지 ${fmtSecS(v.stop)} · 장비 ${v.n}대`;});
   box.querySelectorAll("rect.dbar").forEach(el=>{const act=()=>{if(unit==="day"){day=el.dataset.s;go("home");renderAll();}else{ui.cmpAnchor=el.dataset.s;renderTrend();}};el.onclick=act;el.onkeydown=e=>{if(e.key==="Enter"||e.key===" "){e.preventDefault();act();}};});
 }
 
 /* ---------- render: device comparison ---------- */
 function renderCompare(){
-  const n=ui.cmpP;const curKeys=rangeKeys(day,n),prevKeys=rangeKeys(addDays(day,-n),n);
-  const list=devNames.map(name=>({name,c:aggMetrics(D[name],curKeys),p:aggMetrics(D[name],prevKeys)}));
+  const n=ui.cmpP;const curKeys=rangeKeys(day,n);      /* 전 기간 대비는 쓰지 않는다(사용자 확정) */
+  const list=devNames.map(name=>({name,c:aggMetrics(D[name],curKeys)}));
   const key=x=>x.c.util==null?-1:x.c.util;
-  list.sort((a,b)=>ui.cmpSort==="high"?key(b)-key(a):ui.cmpSort==="low"?((a.c.util==null?999:a.c.util)-(b.c.util==null?999:b.c.util)):(((a.c.util==null||a.p.util==null)?99:a.c.util-a.p.util)-((b.c.util==null||b.p.util==null)?99:b.c.util-b.p.util)));
-  const f=fleetAvg(curKeys),fp=fleetAvg(prevKeys);
-  $("#cmpNote").textContent=`${n===1?fmtDay(day):curKeys[0].slice(5).replace("-","/")+" ~ "+fmtDay(day)} · 전체 평균 ${pct(f.util)} (이전 ${pct(fp.util)}) · 이전 기간: ${n===1?"전일":"직전 "+n+"일"}`;
-  $("#cmpBody").innerHTML=list.map((x,i)=>`<tr class="click" onclick="selDev='${esc(x.name)}';go('home');renderAll();" title="클릭하면 홈에서 이 장비의 타임라인을 봅니다"><td class="r faint">${i+1}</td><td><b>${esc(x.name)}</b>${x.c.hasData&&(x.c.util<th.util||x.c.nErr>=th.err*n)?' <span class="chip crit">주의</span>':""}</td><td><div style="display:flex;flex-direction:column;gap:2px"><span class="hbar" style="width:${x.c.util==null?0:x.c.util.toFixed(1)}%"></span><span class="hbar prev" style="width:${x.p.util==null?0:x.p.util.toFixed(1)}%"></span></div></td><td class="r"><b>${x.c.util==null?'<span class="faint">데이터 없음</span>':pct(x.c.util)}</b></td><td class="r muted">${pct(x.p.util)}</td><td class="r">${deltaHtml(x.c.util,x.p.util)}</td><td class="r">${x.c.nErr?`<span class="chip crit">${x.c.nErr}</span>`:0}</td><td class="r">${fmtSecS(x.c.stop+x.c.err)}</td></tr>`).join("")||'<tr><td colspan="8" class="empty">데이터 없음</td></tr>';
+  list.sort((a,b)=>ui.cmpSort==="high"?key(b)-key(a):ui.cmpSort==="low"?((a.c.util==null?999:a.c.util)-(b.c.util==null?999:b.c.util)):(b.c.nErr-a.c.nErr)||(key(b)-key(a)));
+  const f=fleetAvg(curKeys);
+  $("#cmpNote").textContent=`${n===1?fmtDay(day):curKeys[0].slice(5).replace("-","/")+" ~ "+fmtDay(day)} · 전체 평균 ${pct(f.util)}`;
+  $("#cmpBody").innerHTML=list.map((x,i)=>`<tr class="click" onclick="selDev='${esc(x.name)}';go('home');renderAll();" title="클릭하면 홈에서 이 장비의 타임라인을 봅니다"><td class="r faint">${i+1}</td><td><b>${esc(x.name)}</b>${x.c.hasData&&(x.c.util<th.util||x.c.nErr>=th.err*n)?' <span class="chip crit">주의</span>':""}</td><td><span class="hbar" style="width:${x.c.util==null?0:x.c.util.toFixed(1)}%"></span></td><td class="r"><b>${x.c.util==null?'<span class="faint">데이터 없음</span>':pct(x.c.util)}</b></td><td class="r">${x.c.nErr?`<span class="chip crit">${x.c.nErr}</span>`:0}</td><td class="r">${fmtSecS(x.c.stop+x.c.err)}</td></tr>`).join("")||'<tr><td colspan="6" class="empty">데이터 없음</td></tr>';
 }
 
 /* ---------- save ---------- */

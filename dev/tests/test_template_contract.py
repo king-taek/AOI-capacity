@@ -148,13 +148,25 @@ def test_a_lot_bar_shows_what_is_mixed_inside_it():
     assert "정상 검사" in HTML and "오류·중단" in HTML   # 무엇이 섞였는지
 
 
-def test_rework_joins_the_same_lot_but_a_rescan_never_does():
-    """사용자 확정: Rework 는 같은 LOT 이면 한 막대. 하지만 **다시 검사(RE)는 따로 둔다** —
-    같은 Lot 을 두 번 돌린 것이라 실가동률을 깎는 원인이고, 합치면 그 손실이 보이지 않는다."""
-    assert "function lotKey(" in HTML and "LOT_MARKS=/^REWORK$/i" in HTML
-    assert "RESCAN" not in HTML.split("const LOT_MARKS=")[1].split("\n")[0]
+def test_lot_bars_split_by_the_exact_name_and_by_any_real_gap():
+    """★ 사용자 확정: 따로 돌린 것이면 따로 보여야 한다.
+
+    `TTP DIA`·`TTP-DIA`, `GUX-PIDS3`·`GUX-PIDS3 RE`, `DYD-FS`·`DYD-FS REWORK` 는 전부 다른 막대다 —
+    재스캔·재작업은 실가동률을 깎은 원인이라 합쳐 버리면 화면에서 사라진다.
+    같은 Lot 이어도 중간에 시간이 비면(60초 초과) 나눈다."""
+    assert "const lotKey=(lot,isTest)=>" in HTML and "String(lot||\"\")" in HTML
+    assert "LOT_MARKS" not in HTML                       # 이름에서 지우는 토큰이 더는 없다
+    assert "const LOT_GAP_SEC=60;" in HTML and "it.s-L.e<=LOT_GAP_SEC*1000" in HTML
     assert "L.key===key" in HTML
     assert 'isTest?"TEST\\u0000":""' in HTML            # 시험 가동만은 섞지 않는다(가동률에서 빠지므로)
+
+
+def test_no_period_over_period_comparison_anywhere():
+    """사용자 확정: 전주·전월 대비는 지웠다. 되살아나면 이 가드가 잡는다."""
+    for gone in ("deltaHtml", "prevKeys", "periodPrev(unit,anchor)", "이전 기간", "이전 주", "이전 월",
+                 "하락 큰 순", "hbar prev", "class=\"delta"):
+        assert gone not in HTML, gone
+    assert "periodPrev" in HTML                          # 추이 막대의 '앞 기간으로 이동' 에는 아직 쓴다
 
 
 def test_denominator_is_a_fixed_day_but_today_stops_at_the_last_scan():
