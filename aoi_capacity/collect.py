@@ -30,7 +30,7 @@ from html.parser import HTMLParser
 from typing import Callable, Dict, List, Optional, Tuple
 
 from . import devices as devices_mod
-from . import i18n, nas_guard
+from . import i18n, nas_guard, scope
 
 _LOG = logging.getLogger("aoi.collect")
 
@@ -45,7 +45,9 @@ DEFAULT_CONFIG: Dict[str, object] = {
     "output_name": "AOI_capacity.html",
     "write_csv": False,
     "cache_file": "",
+    "scope_devices": list(scope.DEFAULT_SCOPE),   # ★ 수집 허용 장비. ["*"] 면 제한 없음
 }
+MAX_READ_RETRY = 3   # 읽기에 실패한 Report 를 몇 번까지 다시 시도하고 커서를 붙잡아 둘지
 INI_KEYS = {
     "Recipe": ["Name"],
     "AutoCycleInfo": ["Machine", "Operator", "WaferStartTime", "WaferEndTime", "BatchStartTime", "OCRID",
@@ -227,7 +229,7 @@ def rows_for_report(dev_name: str, rep: dict, scan_root: str) -> List[dict]:
 
 # ----------------------------------------------------------------------------- cache
 def _load_cache(cfg: dict, full: bool = False, log: Optional[LogFn] = None) -> dict:
-    cache: dict = {"reports": {}, "last_mtime": {}}
+    cache: dict = {"reports": {}, "last_mtime": {}, "failed": {}}
     path = cfg.get("cache_file") or ""
     if full or not path or not os.path.isfile(path):
         return cache
@@ -237,9 +239,57 @@ def _load_cache(cfg: dict, full: bool = False, log: Optional[LogFn] = None) -> d
             cache.update(loaded)
             cache.setdefault("reports", {})
             cache.setdefault("last_mtime", {})
+            cache.setdefault("failed", {})
     except Exception as e:  # noqa: BLE001
         _say(log, f"캐시 읽기 실패, 새로 시작: {e}")
     return cache
+
+
+def _migrate_cursors(cache: dict, devs: List[dict], log: Optional[LogFn] = None) -> None:
+    """옛 캐시의 '표시명' 커서를 '경로' 커서로 옮긴다(표시명이 바뀌어도 이력이 갈라지지 않게).
+
+    옮길 짝을 못 찾은 키는 건드리지 않는다 — 사용자 데이터는 지우지 않는다."""
+    last = cache["last_mtime"]
+    for d in devs:
+        did = str(d["id"])
+        if did in last:
+            continue
+        for alias in [d.get("name"), *(d.get("aliases") or [])]:
+            key = str(alias or "")
+            if key and key in last:
+                last[did] = last.pop(key)
+                _say(log, f"캐시 커서 이관: '{key}' → {d.get('name')} (경로 키)")
+                break
+
+
+def _cache_device(path: str, entry: dict, devs: List[dict]) -> Optional[dict]:
+    """캐시에 있는 Report 하나가 지금 수집 대상 장비 중 어디에 속하는지. 파일시스템을 보지 않는다."""
+    did = entry.get("device_id")
+    for d in devs:
+        if did and str(d["id"]) == str(did):
+            return d
+        if nas_guard.is_under(path, str(d["path"])):
+            return d
+    return None
+
+
+def _rows_from_cache(cache: dict, devs: List[dict], cfg: dict) -> Tuple[List[dict], int]:
+    """출력용 행 — 범위 밖 장비의 캐시는 **지우지 않고 빼기만** 한다.
+
+    표시명이 바뀐 장비의 옛 행은 현재 표시명으로 바꿔 내보낸다(같은 장비가 둘로 갈라지지 않게)."""
+    rows, hidden = [], 0
+    unrestricted = scope.unrestricted(cfg)
+    for path, entry in cache["reports"].items():
+        dev = _cache_device(path, entry, devs)
+        if dev is None and not unrestricted:
+            name = str(entry.get("device") or "")
+            if not scope.is_allowed(cfg, name, scope.path_tail(os.path.dirname(os.path.dirname(path)))):
+                hidden += len(entry.get("rows") or ())
+                continue
+        name = str(dev["name"]) if dev else str(entry.get("device") or "")
+        for r in entry.get("rows") or ():
+            rows.append({**r, "device": name} if name and r.get("device") != name else r)
+    return rows, hidden
 
 
 def _save_cache(cfg: dict, cache: dict) -> None:
@@ -272,7 +322,10 @@ def _check(should_stop: Optional[Callable[[], bool]]) -> None:
 
 
 def _list_new_reports(devs, cache, cfg, backfill, log, progress, on_device, should_stop):
-    """1차 패스: 장비마다 Report 폴더를 한 번 나열(scandir+stat 만)해 읽을 파일을 고른다. NAS 읽기 전용."""
+    """1차 패스: 장비마다 Report 폴더를 한 번 나열(scandir+stat 만)해 읽을 파일을 고른다. NAS 읽기 전용.
+
+    돌려주는 `known` 은 '이미 캐시에 잘 들어 있는 파일들의 수정시각' — 커서를 어디까지 밀어도 되는지
+    계산할 때 쓴다(읽기에 실패한 파일을 커서가 넘어가 버리지 않게)."""
     reports, last = cache["reports"], cache["last_mtime"]
     backfill_since = time.time() - float(cfg["backfill_days"]) * 86400
     plan = []
@@ -280,26 +333,54 @@ def _list_new_reports(devs, cache, cfg, backfill, log, progress, on_device, shou
         _check(should_stop)
         progress(0, 0, i18n.KO.COLLECT_PHASE_LIST_FMT.format(device=d["name"], i=i + 1, n=len(devs)))
         on_device(d["name"], "listing", "")
-        dm = {"name": d["name"], "note": d["path"], "reports": 0, "found": 0, "error": ""}
+        did = str(d["id"])
+        dm = {"name": d["name"], "id": did, "note": d["path"], "reports": 0, "found": 0, "error": ""}
         rep_dir = os.path.join(d["path"], cfg["report_dir"])
         try:
             files = [e for e in nas_guard.scandir(rep_dir) if e.is_file() and e.name.lower().endswith((".htm", ".html"))]
             files.sort(key=lambda e: e.stat().st_mtime, reverse=True)
-            since = backfill_since if (backfill or d["name"] not in last) else float(last[d["name"]]) - CLOCK_SKEW_SEC
-            pick = [e for e in files if e.stat().st_mtime >= since
-                    and not (e.path in reports and abs(reports[e.path]["mtime"] - e.stat().st_mtime) < 1
-                             and reports[e.path].get("device") == d["name"])]
-            newest = max((e.stat().st_mtime for e in files), default=None)
+            since = backfill_since if (backfill or did not in last) else float(last[did]) - CLOCK_SKEW_SEC
+            pick, known = [], []
+            for e in files:
+                m = e.stat().st_mtime
+                if m < since:
+                    continue
+                cached = reports.get(e.path)
+                if cached and abs(float(cached.get("mtime", 0)) - m) < 1 and _is_same_device(cached, e.path, d):
+                    known.append(m)
+                else:
+                    pick.append(e)
             dm["found"], dm["reports"] = len(files), len(pick)
             if pick:
                 _say(log, f"[{d['name']}] Report {len(files)}개 중 새 파일 {len(pick)}개")
-            plan.append((d, dm, pick, newest))
+            plan.append((d, dm, pick, known))
         except OSError as ex:
             dm["error"] = f"{type(ex).__name__}: {ex}"
             _say(log, f"[{d['name']}] {dm['error']}")
             on_device(d["name"], "error", dm["error"])
-            plan.append((d, dm, [], None))
+            plan.append((d, dm, [], []))
     return plan
+
+
+def _is_same_device(cached: dict, path: str, dev: dict) -> bool:
+    cid = cached.get("device_id")
+    if cid:
+        return str(cid) == str(dev["id"])
+    return cached.get("device") == dev["name"] or nas_guard.is_under(path, str(dev["path"]))
+
+
+def _advance_cursor(last: dict, did: str, ok_mtimes, blocked_mtimes) -> None:
+    """커서는 **성공적으로 캐시에 들어간 파일까지만** 전진한다.
+
+    읽기에 실패해 아직 재시도가 남은 파일이 있으면 그 파일보다 앞에서 멈춘다 →
+    다음 증분 수집에서 그 Report 를 다시 만난다(영구 누락 방지)."""
+    cur = float(last.get(did, 0))
+    limit = min(blocked_mtimes) if blocked_mtimes else None
+    usable = [m for m in ok_mtimes if limit is None or m < limit]
+    if usable:
+        last[did] = max(cur, max(usable))
+    elif cur:
+        last[did] = cur
 
 
 def collect(cfg: dict, full: bool = False, backfill: bool = False, *,
@@ -314,34 +395,47 @@ def collect(cfg: dict, full: bool = False, backfill: bool = False, *,
     cache = _load_cache(cfg, full=full, log=log)
     backfill = backfill or full or not cache["reports"]
     devs = devices_mod.resolve_devices(cfg, log)
+    _migrate_cursors(cache, devs, log)
     if backfill:
         _say(log, f"초기 수집: 최근 {cfg['backfill_days']}일 안의 Report 를 전부 읽습니다")
     plan = _list_new_reports(devs, cache, cfg, backfill, log, progress, on_device, should_stop)
 
-    reports, last = cache["reports"], cache["last_mtime"]
+    reports, last, failed = cache["reports"], cache["last_mtime"], cache["failed"]
     total = sum(len(pick) for _, _, pick, _ in plan)
     done, n_new, errors, dev_meta = 0, 0, [], []
     progress(0, total, i18n.KO.COLLECT_PHASE_DEVICES)
-    for d, dm, pick, newest in plan:
+    for d, dm, pick, known in plan:
         if dm["error"]:
             dev_meta.append(dm)
             continue
+        did = str(d["id"])
         scan_root = os.path.join(d["path"], cfg["scan_dir"])
         on_device(d["name"], "parsing", "")
+        ok_mtimes, blocked = list(known), []
         for e in pick:
             _check(should_stop)
             progress(done, total, i18n.KO.COLLECT_PHASE_PARSE_FMT.format(device=d["name"], name=e.name))
+            mtime = e.stat().st_mtime
             try:
                 rep = parse_report(e.name, nas_guard.read_text(e.path))
-                reports[e.path] = {"mtime": e.stat().st_mtime, "device": d["name"],
+                reports[e.path] = {"mtime": mtime, "device": d["name"], "device_id": did,
                                    "rows": rows_for_report(d["name"], rep, scan_root), "seen": time.time()}
+                failed.pop(e.path, None)
+                ok_mtimes.append(mtime)
                 n_new += 1
             except Exception as ex:  # noqa: BLE001
-                errors.append({"device": d["name"], "path": e.path, "error": f"{type(ex).__name__}: {ex}"})
+                tries = int(failed.get(e.path, {}).get("tries", 0)) + 1
+                failed[e.path] = {"mtime": mtime, "tries": tries, "device_id": did,
+                                  "error": f"{type(ex).__name__}: {ex}"}
+                errors.append({"device": d["name"], "path": e.path, "tries": tries,
+                               "error": f"{type(ex).__name__}: {ex}"})
+                # 재시도가 남아 있으면 커서를 이 파일 앞에서 멈춰 다음 수집에 다시 읽는다
+                (blocked if tries < MAX_READ_RETRY else ok_mtimes).append(mtime)
+                if tries >= MAX_READ_RETRY:
+                    _say(log, f"[{d['name']}] {e.name}: {tries}번 실패해 더는 붙잡지 않습니다(오류 목록에는 남습니다)")
             done += 1
         # 커서는 이 장비의 파싱이 끝난 뒤에만 전진 — 중간에 취소되면 다음에 같은 파일을 다시 본다
-        if newest is not None:
-            last[d["name"]] = max(float(last.get(d["name"], 0)), newest)
+        _advance_cursor(last, did, ok_mtimes, blocked)
         on_device(d["name"], "done", "")
         dev_meta.append(dm)
     _check(should_stop)
@@ -356,10 +450,32 @@ def collect(cfg: dict, full: bool = False, backfill: bool = False, *,
 
     for k in [k for k, v in reports.items() if newest_of(v) < cutoff]:
         del reports[k]
+    for k in [k for k, v in failed.items() if dt.datetime.fromtimestamp(float(v.get("mtime", 0))) < cutoff]:
+        del failed[k]
     _save_cache(cfg, cache)
-    rows = [r for v in reports.values() for r in v["rows"]]
+    rows, hidden = _rows_from_cache(cache, devs, cfg)
+    dev_meta.extend(_out_of_scope_meta(cfg, devs))
     _say(log, f"새로 읽은 Report {n_new}개 · 캐시 Report {len(reports)}개 · Wafer 행 {len(rows)} · 오류 {len(errors)}건")
+    if hidden:
+        _say(log, f"수집 범위({scope.describe(cfg)}) 밖 장비의 캐시 {hidden}행은 화면에서 제외했습니다(캐시는 그대로 둡니다)")
     return rows, dev_meta, errors
+
+
+def _out_of_scope_meta(cfg: dict, devs: List[dict]) -> List[dict]:
+    """화면에 '수집 안 함' 으로 보여 줄 장비들. devices.csv 텍스트만 읽고 NAS 에는 접근하지 않는다."""
+    if scope.unrestricted(cfg):
+        return []
+    path = cfg.get("devices_csv") or ""
+    if not path or not os.path.isfile(path):
+        return []
+    try:
+        rows_csv = devices_mod.read_devices_csv(path)
+    except Exception:  # noqa: BLE001 - 목록 표시는 부가 기능이라 실패해도 수집 결과를 막지 않는다
+        return []
+    live = {str(d["name"]) for d in devs}
+    return [{"name": s["name"], "note": s.get("note", ""), "scope": "out",
+             "reports": 0, "found": 0, "error": ""}
+            for s in devices_mod.skipped_by_scope(rows_csv, cfg) if s["name"] and s["name"] not in live]
 
 
 # ----------------------------------------------------------------------------- output
@@ -385,6 +501,7 @@ def write_html(cfg: dict, rows: List[dict], dev_meta: List[dict], errors: List[d
     now = dt.datetime.now()
     meta = {"generated": now.strftime("%Y-%m-%d %H:%M"), "generated_iso": now.isoformat(timespec="seconds"),
             "mode": mode, "devices": dev_meta, "reportErrors": errors, "limit": "",
+            "scope": {"restricted": not scope.unrestricted(cfg), "devices": scope.scope_list(cfg)},
             "elapsed": int((time.time() - started) * 1000), "retention_days": cfg["retention_days"],
             "sha": ver.get("sha", ""), "branch": ver.get("branch", ""), "repo": ver.get("repo", ""),
             "version": (str(ver.get("sha", ""))[:7]) if ver.get("sha") else ""}

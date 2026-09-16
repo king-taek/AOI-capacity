@@ -26,7 +26,9 @@ def test_first_run_reads_everything_and_second_run_reads_nothing(tmp_path, fake_
     assert len(rows) == 9 and not errors
     assert prog[-1][0] == prog[-1][1] > 0                 # 마지막 보고는 (total, total)
     cache = json.loads((tmp_path / "out" / "aoi_cache.json").read_text(encoding="utf-8"))
-    assert set(cache["last_mtime"]) == {"8호기", "9호기", "AOI-10"}
+    # 커서 키는 표시명이 아니라 정규화한 장비 경로다(이름을 바꿔도 이력이 갈라지지 않게)
+    assert len(cache["last_mtime"]) == 3
+    assert {os.path.basename(k) for k in cache["last_mtime"]} == {"AOI-9", "AOI-10", "M-AOI-8"}
 
     rows2, dev_meta2, _, prog2 = _run(cfg)
     assert len(rows2) == 9

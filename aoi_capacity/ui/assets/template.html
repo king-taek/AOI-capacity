@@ -4,8 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>AOI Capacity</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Outfit:wght@500;600;700&family=DM+Sans:wght@400;500;600&display=swap" media="print" onload="this.media='all'">
+<!-- 외부 폰트·스크립트를 부르지 않는다: 이 파일 한 장이 file:// 에서 그대로 동작해야 한다 -->
 <style>
 :root{
   color-scheme:dark;
@@ -14,8 +13,8 @@
   --accent:#4A9EE8; --accent-2:#7EC8F0; --accent-ink:#0F1319; --accent-soft:#0D2A44;
   --run:#4A9EE8; --err:#E85A5A; --off:#243040; --nodata:#182030; --prev:#3A4A60;
   --good:#3DCC8E; --good-soft:#0F2E24; --warn:#E0A82E; --warn-soft:#332608; --crit:#E85A5A; --crit-ink:#F08080; --crit-soft:#3A1818;
-  --display:"Outfit","Segoe UI","Malgun Gothic",system-ui,sans-serif;
-  --sans:"DM Sans","Segoe UI","Malgun Gothic","Apple SD Gothic Neo",system-ui,sans-serif;
+  --display:"Segoe UI","Malgun Gothic","Apple SD Gothic Neo",system-ui,sans-serif;
+  --sans:"Segoe UI","Malgun Gothic","Apple SD Gothic Neo",system-ui,sans-serif;
   --mono:"Cascadia Mono","Consolas",ui-monospace,monospace;
   --shadow:0 2px 6px rgba(0,0,0,.35),0 12px 32px rgba(0,0,0,.35);
   --glow:0 0 0 1px var(--line-2),0 8px 30px rgba(74,158,232,.14);
@@ -139,6 +138,9 @@ textarea.input{width:100%;min-height:110px;font-family:var(--mono);font-size:12.
 .dev .kv{display:flex;gap:12px;font-size:11.5px;color:var(--ink-3)}
 .dev .kv b{color:var(--ink-2);font-weight:600}
 .dev .kv b.err{color:var(--crit-ink)}
+.dev.off{opacity:.55;cursor:default}
+.dev.off:hover{transform:none;box-shadow:none;border-color:var(--line)}
+.tbl tbody tr.off td{color:var(--ink-3)}
 
 /* tables */
 .tbl{width:100%;border-collapse:collapse;font-size:13px}
@@ -246,20 +248,19 @@ details.adv summary{cursor:pointer;color:var(--accent-2);font-size:13px}
 </nav>
 
 <main class="main">
-  <div class="upd" id="upd" hidden></div>
   <!-- ================= HOME ================= -->
   <section class="view on" id="v-home">
     <div class="strip-sum" id="homeSum"></div>
     <div class="toolbar">
       <span class="lbl">정렬</span>
-      <div class="seg" id="sortSeg"><button data-s="low" aria-pressed="true">가동률 낮은 순</button><button data-s="err">오류 먼저</button><button data-s="name">이름순</button></div>
+      <div class="seg" id="sortSeg"><button data-s="name" aria-pressed="true">번호순</button><button data-s="low">가동률 낮은 순</button><button data-s="err">오류 먼저</button></div>
       <span class="lbl">보기</span>
       <div class="seg" id="viewSeg"><button data-m="cards" aria-pressed="true">카드</button><button data-m="table">표</button></div>
       <div class="sp"></div>
       <span class="faint" style="font-size:12px" id="homeBasis"></span>
     </div>
     <div class="cards" id="cards"></div>
-    <div class="card" id="homeTable" hidden><div class="tscroll"><table class="tbl"><thead><tr><th>장비</th><th>가동률</th><th class="r">%</th><th class="r">전일 대비</th><th class="r">검사</th><th class="r">오류</th><th class="r">오류·정지</th><th class="r">Wafer</th></tr></thead><tbody id="homeTbody"></tbody></table></div></div>
+    <div class="card" id="homeTable" hidden><div class="tscroll"><table class="tbl"><thead><tr><th>장비</th><th>가동률</th><th class="r">%</th><th class="r">검사</th><th class="r">오류</th><th class="r">오류·정지</th></tr></thead><tbody id="homeTbody"></tbody></table></div></div>
 
     <div class="card detail" id="detail" hidden>
       <div class="dh">
@@ -346,7 +347,7 @@ const ERR_KO={ID_READ_ERROR:"Wafer ID 인식 실패",SCAN_ERROR:"스캔 오류",
 const ERR_TXT={USER_ABORT:"Aborted. Wafer aborted by user.",ABORTED:"Aborted.",SCAN_ERROR:"Scan Error: Scan2d optic is not valid on machine.",ID_READ_ERROR:"Failed to read wafer id. Reading error = . Aborted."};
 
 let rows=[],meta={},devNames=[],D=null,day=null,selDev=null;
-let ui={group:"",sort:"low",view:"cards",unit:"day",span:14,trendDev:"",cmpP:1,cmpSort:"high",cmpAnchor:null};
+let ui={group:"",sort:"name",view:"cards",unit:"day",span:14,trendDev:"",cmpP:1,cmpSort:"high",cmpAnchor:null};
 let th={util:40,err:3};
 
 /* ---------- utils ---------- */
@@ -374,6 +375,14 @@ const addDays=(k,n)=>{const d=keyDay(k);d.setDate(d.getDate()+n);return dayKey(d
 const todayKey=()=>dayKey(new Date());
 const isToday=k=>k===todayKey();
 const rowDate=r=>parseDt(r.wafer_start_time)||parseDt(r.batch_start);
+/* 장비 순서: AOI-1 … AOI-25 다음에 4F-AOI-01 … (숫자 순서, 사전식 아님) */
+const FLOOR4=/^4F-AOI-/i;
+function devSortKey(n){const s=String(n||"");const t=s.split(/(\d+)/).map(x=>/^\d+$/.test(x)?+x:x.toLowerCase());return[FLOOR4.test(s)?1:0,t];}
+function cmpDev(a,b){const x=devSortKey(a),y=devSortKey(b);if(x[0]!==y[0])return x[0]-y[0];
+  const n=Math.max(x[1].length,y[1].length);for(let i=0;i<n;i++){const p=x[1][i],q=y[1][i];
+    if(p===undefined)return -1;if(q===undefined)return 1;if(p===q)continue;
+    if(typeof p==="number"&&typeof q==="number")return p-q;return String(p)<String(q)?-1:1;}
+  return 0;}
 const pct=v=>v==null||isNaN(v)?"–":v.toFixed(1)+"%";
 function deltaHtml(cur,prev,suffix="p"){if(cur==null||prev==null)return'<span class="delta flat">–</span>';const d=cur-prev;if(Math.abs(d)<0.05)return'<span class="delta flat">± 0.0'+suffix+'</span>';return`<span class="delta ${d>0?"up":"dn"}">${d>0?"▲":"▼"} ${Math.abs(d).toFixed(1)}${suffix}</span>`;}
 
@@ -501,7 +510,7 @@ function loadDemo(){
 
 /* ---------- model ---------- */
 function build(){
-  devNames=[...new Set(rows.map(r=>r.device))].sort((a,b)=>a.localeCompare(b,undefined,{numeric:true}));
+  devNames=[...new Set(rows.map(r=>r.device))].sort(cmpDev);
   const M={};for(const n of devNames)M[n]={name:n,segs:[],errNoTime:[],cache:{}};
   for(const r of rows){const d=M[r.device];const st=parseDt(r.wafer_start_time),en=parseDt(r.wafer_end_time);
     if(st&&en&&en>=st)d.segs.push({s:st.getTime(),e:en.getTime(),err:isErr(r.norm_status),r});
@@ -542,7 +551,8 @@ function init(){D=build();const days=dataDays();day=days[days.length-1]||todayKe
   if((meta.mode==="auto"||(meta.mode==="gui"&&rows.length))&&meta.generated_iso){const age=(Date.now()-new Date(meta.generated_iso))/60000;modeTxt+=age<60?` (${Math.round(age)}분 전)`:` (${(age/60).toFixed(1)}시간 전)`;$("#modePill").classList.toggle("stale",age>120);}
   $("#modeTxt").textContent=modeTxt;$("#modePill").title=meta.mode==="auto"?"Python 수집기가 마지막으로 이 파일을 만든 시각. 2시간 이상 지나면 수집기 상태를 확인하세요.":"";
   $("#modePill").classList.toggle("live",meta.mode==="live"||meta.mode==="auto"||(meta.mode==="gui"&&rows.length>0));
-  $("#footTxt").innerHTML=`정확 경로만 확인 · 재귀 검색 없음<br>원본 Report / INI 수정 없음${meta.version?`<br>v${esc(meta.version)}`:APP_VERSION?`<br>v${APP_VERSION}`:""}`;if(!GUI)checkUpdate();
+  const sc=meta.scope||{};
+  $("#footTxt").innerHTML=`${sc.restricted?`수집 범위 · ${esc((sc.devices||[]).join(", "))}<br>`:""}정확 경로만 확인 · 재귀 검색 없음<br>원본 Report / INI 수정 없음${meta.version?`<br>v${esc(meta.version)}`:APP_VERSION?`<br>v${APP_VERSION}`:""}`;
   $("#trendDev").innerHTML='<option value="">전체 평균</option>'+devNames.map(n=>`<option value="${esc(n)}">${esc(n)}</option>`).join("");
   $("#thUtil").value=th.util;$("#thErr").value=th.err;renderAll();}
 function setDay(k){day=k;renderAll();}
@@ -567,35 +577,42 @@ function renderAll(){
 const isAlert=m=>m.hasData&&(m.util<th.util||m.nErr>=th.err);
 const groups=()=>[...new Set(devNames.map(n=>devGroup[n]).filter(Boolean))];
 const visDevs=()=>ui.group?devNames.filter(n=>devGroup[n]===ui.group):devNames;
-function homeList(){const prevK=addDays(day,-1);return visDevs().map(n=>({n,m:dayMetrics(D[n],day),p:dayMetrics(D[n],prevK)}));}
+function homeList(){return visDevs().map(n=>({n,m:dayMetrics(D[n],day)}));}
+/* 수집 범위 밖이라 이번에 읽지 않은 장비 — 화면에서 '수집 안 함' 으로만 보여 준다(데이터 없음과 구분) */
+function scopeOut(){return(meta.devices||[]).filter(d=>d.scope==="out"&&!devNames.includes(d.name)).sort((a,b)=>cmpDev(a.name,b.name));}
 function renderHome(){
-  const list=homeList();const prevK=addDays(day,-1);const vd=visDevs();
-  const cur=fleetAvg([day],vd),prev=fleetAvg([prevK],vd);
+  const list=homeList();const vd=visDevs();const out=scopeOut();
+  const cur=fleetAvg([day],vd);
   const alerts=list.filter(x=>isAlert(x.m)),nod=list.filter(x=>!x.m.hasData),errs=list.filter(x=>x.m.nErr>0);
   const worst=[...list].filter(x=>x.m.hasData).sort((a,b)=>a.m.util-b.m.util)[0];
-  $("#homeSum").innerHTML=`<div class="card ss hero"><div class="k">평균 가동률 · ${isToday(day)?"현재까지":"하루"}</div><div class="v">${cur.util==null?"–":cur.util.toFixed(1)+"<small>%</small>"}</div><div class="s">전일 ${pct(prev.util)} · ${deltaHtml(cur.util,prev.util)}</div></div>
+  $("#homeSum").innerHTML=`<div class="card ss hero"><div class="k">평균 가동률 · ${isToday(day)?"현재까지":"하루"}</div><div class="v">${cur.util==null?"–":cur.util.toFixed(1)+"<small>%</small>"}</div><div class="s">${isToday(day)?"00:00 ~ 현재":"00:00 ~ 24:00"} · 검사시간 ÷ 경과시간</div></div>
     <div class="card ss"><div class="k">장비</div><div class="v num">${vd.length}<small>대</small></div><div class="s">데이터 있음 ${cur.n}대</div></div>
     <div class="card ss"><div class="k">주의 장비</div><div class="v num" style="color:${alerts.length?"var(--crit-ink)":"inherit"}">${alerts.length}<small>대</small></div><div class="s">가동률 ${th.util}% 미만 또는 오류 ${th.err}건↑</div></div>
     <div class="card ss"><div class="k">오류 발생</div><div class="v num">${errs.length}<small>대</small></div><div class="s">총 ${errs.reduce((a,x)=>a+x.m.nErr,0)}건 · 정지 ${fmtSecS(list.reduce((a,x)=>a+x.m.stop+x.m.err,0))}</div></div>
-    <div class="card ss"><div class="k">최저 장비</div><div class="v" style="font-size:20px">${worst?esc(worst.n):"–"}</div><div class="s">${worst?pct(worst.m.util)+" · "+deltaHtml(worst.m.util,worst.p.hasData?worst.p.util:null):"–"}${nod.length?` · 데이터 없음 ${nod.length}대`:""}</div></div>`;
+    <div class="card ss"><div class="k">최저 장비</div><div class="v" style="font-size:20px">${worst?esc(worst.n):"–"}</div><div class="s">${worst?pct(worst.m.util):"–"}${nod.length?` · 데이터 없음 ${nod.length}대`:""}</div></div>`;
   const key=x=>x.m.hasData?x.m.util:999;
   list.sort((a,b)=>ui.sort==="name"?a.n.localeCompare(b.n,undefined,{numeric:true}):ui.sort==="err"?(b.m.nErr-a.m.nErr)||(key(a)-key(b)):(key(a)-key(b)));
   $("#cards").hidden=ui.view!=="cards";$("#homeTable").hidden=ui.view!=="table";
   if(ui.view==="cards"){
-    $("#cards").innerHTML=list.map(({n,m,p})=>{const st=!m.hasData?'<span class="st none">데이터 없음</span>':m.nErr?`<span class="st bad">오류 ${m.nErr}</span>`:isAlert(m)?'<span class="st bad">주의</span>':'<span class="st ok">정상</span>';
+    $("#cards").innerHTML=list.map(({n,m})=>{const st=!m.hasData?'<span class="st none">데이터 없음</span>':m.nErr?`<span class="st bad">오류 ${m.nErr}</span>`:isAlert(m)?'<span class="st bad">주의</span>':'<span class="st ok">정상</span>';
       return`<div class="card dev ${selDev===n?"sel":""} ${isAlert(m)?"alert":""}" tabindex="0" role="button" aria-pressed="${selDev===n}" onclick="selectDev('${esc(n)}')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();selectDev('${esc(n)}')}" title="클릭하면 타임라인과 오류 목록">
         <div class="hd"><span class="name">${esc(n)}</span>${st}</div>
-        <div class="row1"><div class="big ${m.hasData?"":"none"}">${m.hasData?`${m.util.toFixed(1)}<small>%</small>`:"–"}</div>${deltaHtml(m.hasData?m.util:null,p.hasData?p.util:null)}</div>
+        <div class="row1"><div class="big ${m.hasData?"":"none"}">${m.hasData?`${m.util.toFixed(1)}<small>%</small>`:"–"}</div></div>
         <div class="strip">${m.hasData?`<i style="width:${(m.run/m.denom*100).toFixed(2)}%;background:var(--run)"></i><i style="width:${((m.err+m.stop)/m.denom*100).toFixed(2)}%;background:var(--err)"></i>`:""}</div>
-        <div class="kv"><span>검사 <b>${fmtSecS(m.run)}</b></span><span>정지 <b class="${m.stop?"err":""}">${fmtSecS(m.err+m.stop)}</b></span><span>Wafer <b>${m.nWafer}</b></span></div></div>`;}).join("")||`<div class="card empty">${GUI?"아직 수집한 데이터가 없습니다. '수집' 메뉴에서 '지금 수집'을 누르세요.":"장비 데이터가 없습니다. 설정에서 장비 폴더를 등록하세요."}</div>`;}
+        <div class="kv"><span>검사 <b>${fmtSecS(m.run)}</b></span><span>정지 <b class="${m.stop?"err":""}">${fmtSecS(m.err+m.stop)}</b></span></div></div>`;}).join("")
+      +out.map(d=>`<div class="card dev off" title="${esc(d.note||"")}"><div class="hd"><span class="name">${esc(d.name)}</span><span class="st none">수집 안 함</span></div>
+        <div class="row1"><div class="big none">–</div></div><div class="strip"></div>
+        <div class="kv"><span class="faint">현재 수집 범위가 아닙니다</span></div></div>`).join("")
+      ||`<div class="card empty">${GUI?"아직 수집한 데이터가 없습니다. '수집' 메뉴에서 '지금 수집'을 누르세요.":"수집된 장비 데이터가 없습니다."}</div>`;}
   else{
-    $("#homeTbody").innerHTML=list.map(({n,m,p})=>`<tr class="click ${selDev===n?"sel":""}" onclick="selectDev('${esc(n)}')"><td><b>${esc(n)}</b>${isAlert(m)?' <span class="chip crit">주의</span>':""}${!m.hasData?' <span class="chip mute">데이터 없음</span>':""}</td><td style="width:32%"><span class="hbar" style="width:${m.hasData?m.util.toFixed(1):0}%"></span></td><td class="r"><b>${m.hasData?pct(m.util):"–"}</b></td><td class="r">${deltaHtml(m.hasData?m.util:null,p.hasData?p.util:null)}</td><td class="r">${fmtSecS(m.run)}</td><td class="r">${m.nErr?`<span class="chip crit">${m.nErr}</span>`:0}</td><td class="r">${fmtSecS(m.err+m.stop)}</td><td class="r">${m.nWafer}</td></tr>`).join("");}
+    $("#homeTbody").innerHTML=list.map(({n,m})=>`<tr class="click ${selDev===n?"sel":""}" onclick="selectDev('${esc(n)}')"><td><b>${esc(n)}</b>${isAlert(m)?' <span class="chip crit">주의</span>':""}${!m.hasData?' <span class="chip mute">데이터 없음</span>':""}</td><td style="width:32%"><span class="hbar" style="width:${m.hasData?m.util.toFixed(1):0}%"></span></td><td class="r"><b>${m.hasData?pct(m.util):"–"}</b></td><td class="r">${fmtSecS(m.run)}</td><td class="r">${m.nErr?`<span class="chip crit">${m.nErr}</span>`:0}</td><td class="r">${fmtSecS(m.err+m.stop)}</td></tr>`).join("")
+      +out.map(d=>`<tr class="off"><td><b>${esc(d.name)}</b> <span class="chip mute">수집 안 함</span></td><td colspan="5" class="faint">현재 수집 범위가 아닙니다${d.note?" · "+esc(d.note):""}</td></tr>`).join("");}
 }
 function selectDev(n){selDev=selDev===n?null:n;renderHome();renderDetail();if(selDev)setTimeout(()=>$("#detail").scrollIntoView({behavior:"smooth",block:"nearest"}),50);}
 function renderDetail(){
   const box=$("#detail");if(!selDev||!D[selDev]){box.hidden=true;return;}box.hidden=false;
-  const m=dayMetrics(D[selDev],day);const a=keyDay(day).getTime();const now=Date.now();const p=dayMetrics(D[selDev],addDays(day,-1));
-  $("#detTitle").innerHTML=`${esc(selDev)} <span class="faint" style="font-weight:400;font-size:13px">${fmtDay(day)} · 가동률 ${m.hasData?m.util.toFixed(1)+"%":"–"} ${deltaHtml(m.hasData?m.util:null,p.hasData?p.util:null)} · 검사 ${fmtSecS(m.run)} · 오류·정지 ${fmtSecS(m.err+m.stop)} · Wafer ${m.nWafer}</span>`;
+  const m=dayMetrics(D[selDev],day);const a=keyDay(day).getTime();const now=Date.now();
+  $("#detTitle").innerHTML=`${esc(selDev)} <span class="faint" style="font-weight:400;font-size:13px">${fmtDay(day)} · 가동률 ${m.hasData?m.util.toFixed(1)+"%":"–"} · 검사 ${fmtSecS(m.run)} · 오류·정지 ${fmtSecS(m.err+m.stop)}</span>`;
   const W=1200,L=14,R=14,H=96,barY=16,barH=34;const x=t=>L+(t-a)/DAY*(W-L-R);
   let s=`<svg class="chart" viewBox="0 0 ${W} ${H}" style="height:${H}px" role="img" aria-label="${fmtDay(day)} 타임라인">`;
   s+=`<rect x="${L}" y="${barY}" width="${W-L-R}" height="${barH}" fill="var(--nodata)" rx="3"/>`;
@@ -610,11 +627,11 @@ function renderDetail(){
   m.items.filter(i=>i.kind==="err").forEach(it=>{s+=`<rect class="seg" tabindex="0" data-i="${m.items.indexOf(it)}" x="${x(it.s).toFixed(1)}" y="${barY}" width="${Math.max(2,x(it.e)-x(it.s)).toFixed(1)}" height="${barH}" fill="var(--err)"/>`;});
   if(m.partial)s+=`<line class="now" x1="${x(now).toFixed(1)}" x2="${x(now).toFixed(1)}" y1="${barY-8}" y2="${barY+barH+8}"/><text x="${x(now).toFixed(1)}" y="${barY-10}" text-anchor="middle" fill="var(--accent-2)">지금</text>`;
   s+="</svg>";$("#detTl").innerHTML=s;
-  bindTips($("#detTl"),"rect.seg",el=>{if(el.dataset.l!=null){const L=m.lots[+el.dataset.l];return`<b>Lot ${esc(L.lot)}</b> · ${esc(L.recipe)}<br>${hm(new Date(L.s))} → ${hm(new Date(L.e))} · ${fmtSec((L.e-L.s)/1000)}<br>Wafer ${L.n}장 · 검사 ${fmtSec(L.run/1000)}${L.err?` · <span style="color:var(--crit-ink)">오류 ${L.err}건</span>`:""}`;}
+  bindTips($("#detTl"),"rect.seg",el=>{if(el.dataset.l!=null){const L=m.lots[+el.dataset.l];return`<b>Lot ${esc(L.lot)}</b> · ${esc(L.recipe)}<br>${hm(new Date(L.s))} → ${hm(new Date(L.e))} · ${fmtSec((L.e-L.s)/1000)}<br>검사 ${fmtSec(L.run/1000)}${L.err?` · <span style="color:var(--crit-ink)">오류 ${L.err}건</span>`:""}`;}
     const it=m.items[+el.dataset.i],r=it.g.r;if(it.kind==="stop")return`<b>오류 후 정지 (추정)</b> · ${fmtSec((it.e-it.s)/1000)}<br>${hm(new Date(it.s))} → ${hm(new Date(it.e))}<br><span class="k">${esc(r.lot)} / ${esc(r.wafer_id)} 오류 이후 다음 Wafer 시작까지</span>`;
     return`<b>${esc(r.lot)} / ${esc(r.wafer_id)}</b><br>${hm(new Date(it.g.s))} → ${hm(new Date(it.g.e))} · ${fmtSec((it.g.e-it.g.s)/1000)}<br>${it.kind==="err"?`<span style="color:var(--crit-ink)">${ERR_KO[r.norm_status]||"오류"}</span> · ${esc(r.status)}`:`정상 검사 · ${esc(r.recipe)}`}`;});
   $("#detTl").querySelectorAll("rect.seg").forEach(el=>el.onclick=()=>{if(el.dataset.l!=null)return;const it=m.items[+el.dataset.i];const idx=m.errors.findIndex(e=>e.r===it.g.r);if(idx>=0)hlSeg(idx);});
-  const lotTbl=m.lots.length?`<details style="margin:6px 0 10px"><summary style="cursor:pointer;color:var(--accent-2);font-size:13px">Lot ${m.lots.length}개 목록</summary><table class="tbl" style="margin-top:6px"><thead><tr><th>Lot</th><th>Recipe</th><th>시작</th><th>종료</th><th class="r">소요</th><th class="r">Wafer</th><th class="r">검사</th><th class="r">오류</th></tr></thead><tbody>${m.lots.map(L=>`<tr><td class="mono">${esc(L.lot)}</td><td>${esc(L.recipe)}</td><td class="num">${hm(new Date(L.s))}</td><td class="num">${hm(new Date(L.e))}</td><td class="r">${fmtSecS((L.e-L.s)/1000)}</td><td class="r">${L.n}</td><td class="r">${fmtSecS(L.run/1000)}</td><td class="r">${L.err?`<span class="chip crit">${L.err}</span>`:0}</td></tr>`).join("")}</tbody></table></details>`:"";
+  const lotTbl=m.lots.length?`<details style="margin:6px 0 10px"><summary style="cursor:pointer;color:var(--accent-2);font-size:13px">Lot ${m.lots.length}개 목록</summary><table class="tbl" style="margin-top:6px"><thead><tr><th>Lot</th><th>Recipe</th><th>시작</th><th>종료</th><th class="r">소요</th><th class="r">검사</th><th class="r">오류</th></tr></thead><tbody>${m.lots.map(L=>`<tr><td class="mono">${esc(L.lot)}</td><td>${esc(L.recipe)}</td><td class="num">${hm(new Date(L.s))}</td><td class="num">${hm(new Date(L.e))}</td><td class="r">${fmtSecS((L.e-L.s)/1000)}</td><td class="r">${fmtSecS(L.run/1000)}</td><td class="r">${L.err?`<span class="chip crit">${L.err}</span>`:0}</td></tr>`).join("")}</tbody></table></details>`:"";
   $("#detErrs").innerHTML=lotTbl+(m.errors.length?`<table class="tbl"><thead><tr><th>시각</th><th>Lot / Wafer</th><th>오류</th><th class="r">정지 시간 (추정)</th><th>장비 메시지</th></tr></thead><tbody>${m.errors.map((e,i)=>`<tr class="click" data-e="${i}" onclick="hlSeg(${i})"><td class="num">${e.t?hm(new Date(e.t)):"–"}${e.noTime?' <span class="chip mute" title="INI가 없어 Batch 시작 시각으로 표시">Batch 시작</span>':""}</td><td class="mono">${esc(e.r.lot)} / ${esc(e.r.wafer_id)}</td><td><span class="chip crit">${ERR_KO[e.r.norm_status]||"오류"}</span></td><td class="r">${e.open?'<span class="chip warn">복구 기록 없음</span>':e.stop!=null?fmtSec(e.stop):"–"}</td><td class="faint">${esc(e.r.status)}</td></tr>`).join("")}</tbody></table><p class="faint" style="font-size:12px;margin-top:8px">정지 시간은 오류 Wafer 종료부터 다음 Wafer 시작까지의 공백으로 추정한 값입니다. 장비 이벤트 로그가 아닙니다.</p>`
     :(m.hasData?'<p class="faint" style="font-size:13px;padding:6px 0">이 날은 오류가 없습니다.</p>':'<p class="faint" style="font-size:13px;padding:6px 0">이 날은 데이터가 없습니다.</p>'));
   window._m=m;}
@@ -665,11 +682,6 @@ function renderCompare(){
   $("#cmpNote").textContent=`${n===1?fmtDay(day):curKeys[0].slice(5).replace("-","/")+" ~ "+fmtDay(day)} · 전체 평균 ${pct(f.util)} (이전 ${pct(fp.util)}) · 이전 기간: ${n===1?"전일":"직전 "+n+"일"}`;
   $("#cmpBody").innerHTML=list.map((x,i)=>`<tr class="click" onclick="selDev='${esc(x.name)}';go('home');renderAll();" title="클릭하면 홈에서 이 장비의 타임라인을 봅니다"><td class="r faint">${i+1}</td><td><b>${esc(x.name)}</b>${x.c.hasData&&(x.c.util<th.util||x.c.nErr>=th.err*n)?' <span class="chip crit">주의</span>':""}</td><td><div style="display:flex;flex-direction:column;gap:2px"><span class="hbar" style="width:${x.c.util==null?0:x.c.util.toFixed(1)}%"></span><span class="hbar prev" style="width:${x.p.util==null?0:x.p.util.toFixed(1)}%"></span></div></td><td class="r"><b>${x.c.util==null?'<span class="faint">데이터 없음</span>':pct(x.c.util)}</b></td><td class="r muted">${pct(x.p.util)}</td><td class="r">${deltaHtml(x.c.util,x.p.util)}</td><td class="r">${x.c.nErr?`<span class="chip crit">${x.c.nErr}</span>`:0}</td><td class="r">${fmtSecS(x.c.stop+x.c.err)}</td></tr>`).join("")||'<tr><td colspan="8" class="empty">데이터 없음</td></tr>';
 }
-
-/* ---------- GitHub update notice (silent when offline; only for collector-generated files) ---------- */
-let _updChecked=false;
-async function checkUpdate(){if(_updChecked||!meta.sha)return;_updChecked=true;try{const repo=meta.repo||"king-taek/AOI-capacity";let branch=meta.branch;if(!branch){const r0=await fetch(`https://api.github.com/repos/${repo}`,{cache:"no-store"});branch=(await r0.json()).default_branch||"main";}
-  const r=await fetch(`https://api.github.com/repos/${repo}/commits/${branch}`,{cache:"no-store"});if(!r.ok)return;const d=await r.json();if(d.sha&&d.sha!==meta.sha){const msg=((d.commit||{}).message||"").split("\n")[0];const el=$("#upd");el.hidden=false;el.innerHTML=`GitHub에 새 버전이 있습니다 (${esc(d.sha.slice(0,7))}${msg?" · "+esc(msg):""}). 수집기가 다음 실행 때 자동으로 갱신합니다.`;}}catch(e){}}
 
 /* ---------- save ---------- */
 async function writeOut(name,blob,accept){

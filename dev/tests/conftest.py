@@ -155,7 +155,10 @@ def make_cfg(tmp_path, csv_path, **over):
     import copy
     cfg = copy.deepcopy(collect.DEFAULT_CONFIG)
     out = tmp_path / "out"
+    # 엔진 자체를 보는 테스트는 "수집 범위 제한 없음"을 명시한다.
+    # 기본값(AOI-25 만)은 dev/tests/test_scope_isolation.py 가 따로 검증한다.
     cfg.update({"devices_csv": str(csv_path), "cache_file": str(out / "aoi_cache.json"),
-                "output_dir": str(out), "backfill_days": 3650, "retention_days": 3650})
+                "output_dir": str(out), "backfill_days": 3650, "retention_days": 3650,
+                "scope_devices": ["*"]})
     cfg.update(over)
     return cfg

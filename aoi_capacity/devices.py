@@ -1,9 +1,18 @@
-"""장비 목록 — devices.csv 읽기/쓰기와 장비 폴더 판정.
+"""장비 목록 — devices.csv 읽기/쓰기, 장비 폴더 판정, 표시명·정렬.
 
 CSV 열: 장비명, NAS경로, 폴더, 사용, 메모  (영문 헤더도 인식, 헤더가 없으면 이 순서로 본다)
 - 폴더 비움  → NAS경로 자체가 장비 폴더(안에 Report 폴더)
 - 폴더 "*"   → NAS경로 안에서 Report 폴더가 있는 하위 폴더를 모두 자동 등록(재귀 없음, 한 단계)
 - 사용 N/0/아니오 → 건너뜀
+
+장비 하나는 네 가지를 분리해 들고 다닌다(이름을 바꿔도 이력이 갈라지지 않게):
+    id       정규화한 원본 경로 — 캐시 커서·집계의 안정 키. 절대 표시명이 아니다.
+    path     실제 NAS 경로(읽기 전용, 폴더명을 바꾸지 않는다)
+    name     표시명 — `AOI-25`, `4F-AOI-01` 로 정리한 이름
+    aliases  예전 표시명 후보 — 캐시 커서를 새 키로 옮길 때만 쓴다
+
+★ 수집 허용 범위(`scope.py`) 는 **파일을 만지기 전에** 적용한다. 범위 밖 행은 `os.path.isdir` 조차
+  부르지 않고 건너뛴다. 회귀 가드: dev/tests/test_scope_isolation.py
 
 NAS 는 읽기만 한다(`nas_guard.read_bytes/scandir`, `os.path.isdir`). CSV 쓰기는 이 PC 의 데이터 폴더에만.
 """
@@ -15,7 +24,7 @@ import os
 import re
 from typing import Callable, Dict, List, Optional
 
-from . import nas_guard
+from . import nas_guard, scope
 
 _LOG = logging.getLogger("aoi.devices")
 
@@ -30,6 +39,13 @@ CSV_ALIASES = {
 _OFF_VALUES = ("N", "NO", "0", "FALSE", "X", "아니오", "OFF")
 AUTO = "*"
 
+#: 표시명 정리 — "1~7 AOI-1", "I: AOI-1", "AOI_01" 어느 쪽이든 끝의 AOI 번호를 뽑는다.
+_AOI_RE = re.compile(r"AOI[\s_-]*0*(\d+)\s*$", re.I)
+#: 4층 장비 판정 — 행 이름·메모·공유 이름에 "4층" 또는 "4F" 가 있으면.
+_FLOOR4_RE = re.compile(r"(?:^|[^0-9A-Za-z])(?:4\s*층|4F)(?:[^0-9A-Za-z]|$)", re.I)
+FLOOR4_PREFIX = "4F-AOI-"
+NORMAL_PREFIX = "AOI-"
+
 LogFn = Callable[[str], None]
 
 
@@ -39,6 +55,34 @@ def _log(log: Optional[LogFn], msg: str) -> None:
         log(msg)
 
 
+# ----------------------------------------------------------------------------- 표시명 · 정렬
+def is_floor4(*hints) -> bool:
+    return any(_FLOOR4_RE.search(str(h or "")) for h in hints)
+
+
+def display_name(folder: str, *hints) -> str:
+    """폴더명(+ 행 이름·메모 힌트)에서 표시명을 만든다. 폴더명 자체는 바꾸지 않는다.
+
+    `AOI-1` → `AOI-1` · `1~7 AOI-1` → `AOI-1` · 4층의 `AOI-1` → `4F-AOI-01`
+    AOI 번호를 못 찾으면 원래 이름을 그대로 쓴다(사용자가 직접 붙인 이름)."""
+    raw = str(folder or "").strip()
+    m = _AOI_RE.search(raw)
+    if not m:
+        return raw
+    n = int(m.group(1))
+    return f"{FLOOR4_PREFIX}{n:02d}" if is_floor4(raw, *hints) else f"{NORMAL_PREFIX}{n}"
+
+
+def _natural(text: str) -> list:
+    return [int(t) if t.isdigit() else t.lower() for t in re.split(r"(\d+)", str(text))]
+
+
+def sort_key(name: str) -> tuple:
+    """홈 기본 순서 — AOI-1 … AOI-25 다음에 4F-AOI-01 … 4F-AOI-05. 사전식(AOI-1, AOI-10, AOI-2)이 아니다."""
+    return (1 if str(name).upper().startswith(FLOOR4_PREFIX) else 0, _natural(name))
+
+
+# ----------------------------------------------------------------------------- CSV
 def read_devices_csv(path) -> List[Dict[str, object]]:
     """UTF-8(BOM 유무) 또는 한글 Excel 의 cp949 CSV 를 읽어 [{name, root, sub, on, memo}] 로 돌려준다."""
     raw = nas_guard.read_bytes(path)
@@ -95,6 +139,7 @@ def write_devices_csv(path, rows: List[Dict[str, object]], roots=None) -> None:
     os.replace(tmp, path)
 
 
+# ----------------------------------------------------------------------------- 폴더 판정
 def _norm_root(root: str) -> str:
     root = str(root).strip()
     return root.rstrip("\\/") + os.sep if re.fullmatch(r"[A-Za-z]:\\?", root) else root
@@ -104,17 +149,29 @@ def _has_report(path: str, cfg: dict) -> bool:
     return os.path.isdir(os.path.join(path, cfg["report_dir"]))
 
 
-def _discover_under(root: str, cfg: dict, log: Optional[LogFn] = None) -> List[Dict[str, str]]:
+def _entry(folder: str, path: str, *hints) -> Dict[str, object]:
+    """장비 하나 — 표시명/경로/안정 키/예전 이름 후보."""
+    return {"name": display_name(folder, *hints), "path": path, "id": device_id(path),
+            "aliases": [a for a in (folder, *[str(h) for h in hints if h]) if a]}
+
+
+def device_id(path) -> str:
+    """캐시 커서·집계의 안정 키 — 정규화한 경로. 표시명을 바꿔도 변하지 않는다."""
+    return nas_guard.normalize(path)
+
+
+def _discover_under(root: str, cfg: dict, log: Optional[LogFn] = None, hint: str = "") -> List[Dict[str, object]]:
     """root 자체가 장비 폴더면 그것 하나, 아니면 root 바로 아래에서 Report 폴더가 있는 폴더들(한 단계, 재귀 없음)."""
     if not os.path.isdir(root):
         return []
     if _has_report(root, cfg):
-        return [{"name": os.path.basename(root.rstrip("\\/")) or root, "path": root}]
+        folder = os.path.basename(root.rstrip("\\/")) or root
+        return [_entry(folder, root, hint)]
     out = []
     try:
         for e in nas_guard.scandir(root):
             if e.is_dir() and _has_report(e.path, cfg):
-                out.append({"name": e.name, "path": e.path})
+                out.append(_entry(e.name, e.path, hint))
     except OSError as ex:
         _log(log, f"[건너뜀] {root}: {ex}")
     return out
@@ -127,54 +184,95 @@ def _share_label(path: str) -> str:
     return os.path.basename(stripped) or stripped or parent
 
 
-def _dedupe_sort(devs: List[Dict[str, str]]) -> List[Dict[str, str]]:
+def _dedupe_sort(devs: List[Dict[str, object]]) -> List[Dict[str, object]]:
     seen, uniq = set(), []  # 같은 폴더가 두 번(명시 행 + * 행) 나오면 먼저 적힌 행이 이긴다
     for d in devs:
-        key = os.path.normcase(os.path.normpath(d["path"]))
+        key = os.path.normcase(os.path.normpath(str(d["path"])))
         if key in seen:
             continue
         seen.add(key)
         uniq.append(d)
     names: Dict[str, int] = {}
     for d in uniq:
-        names[d["name"]] = names.get(d["name"], 0) + 1
+        names[str(d["name"])] = names.get(str(d["name"]), 0) + 1
     for d in uniq:  # 공유가 다른 동명 폴더는 부모 폴더(공유·드라이브) 이름을 앞에 붙여 구분
-        if names[d["name"]] > 1:
-            d["name"] = f"{_share_label(d['path'])} {d['name']}"
-    uniq.sort(key=lambda d: [int(t) if t.isdigit() else t.lower() for t in re.split(r"(\d+)", d["name"])])
+        if names[str(d["name"])] > 1:
+            plain = str(d["name"])
+            d["name"] = f"{_share_label(str(d['path']))} {plain}"
+            d.setdefault("aliases", [])
+            d["aliases"] = list(d["aliases"]) + [plain]
+    uniq.sort(key=lambda d: sort_key(str(d["name"])))
     return uniq
 
 
-def devices_from_rows(rows: List[Dict[str, object]], cfg: dict, log: Optional[LogFn] = None) -> List[Dict[str, str]]:
-    """CSV 행을 실제 장비 폴더 목록 [{name, path}] 로 푼다. 접근할 수 없는 행은 로그에 남기고 건너뛴다."""
-    devs: List[Dict[str, str]] = []
+# ----------------------------------------------------------------------------- 장비 목록 풀기
+def devices_from_rows(rows: List[Dict[str, object]], cfg: dict, log: Optional[LogFn] = None) -> List[Dict[str, object]]:
+    """CSV 행을 실제 장비 폴더 목록으로 푼다. 접근할 수 없는 행은 로그에 남기고 건너뛴다.
+
+    ★ 수집 허용 범위 밖 행은 파일시스템을 건드리기 전에 걸러낸다."""
+    devs: List[Dict[str, object]] = []
     for row in rows:
         if not row.get("on", True):
             continue
         root = _norm_root(str(row.get("root", "")))
         sub = str(row.get("sub", "")).strip()
         label = str(row.get("name") or sub or root)
+        hint = f"{row.get('name', '')} {row.get('memo', '')}"
         if sub in (AUTO, "auto", "AUTO"):
-            found = _discover_under(root, cfg, log)
+            if not scope.allows_auto_row(cfg):
+                _log(log, f"[범위 밖] {label}: 자동 탐색(*) 은 수집 범위({scope.describe(cfg)}) 제한 중 건너뜁니다")
+                continue
+            found = _discover_under(root, cfg, log, hint)
             if not found:
                 _log(log, f"[건너뜀] {label}: NAS 접근 불가 또는 장비 폴더 없음 ({root})")
             devs.extend(found)
+            continue
+        if not scope.allows_row(cfg, row):
+            _log(log, f"[범위 밖] {label}: 현재 수집 범위({scope.describe(cfg)}) 가 아니라 접근하지 않습니다")
             continue
         path = os.path.join(root, sub) if sub else root
         if not _has_report(path, cfg):
             _log(log, f"[건너뜀] {label}: Report 폴더 없음/접근 불가 ({path})")
             continue
-        devs.append({"name": str(row.get("name") or sub or os.path.basename(path.rstrip("\\/")) or path), "path": path})
+        folder = sub or os.path.basename(path.rstrip("\\/")) or path
+        d = _entry(folder, path, hint)
+        if row.get("name") and not _AOI_RE.search(str(row["name"])):
+            d["name"] = str(row["name"])          # 사용자가 붙인 이름은 그대로 존중한다
+        d["aliases"] = [a for a in [folder, str(row.get("name") or ""), d["name"]] if a]
+        devs.append(d)
     return _dedupe_sort(devs)
 
 
-def devices_from_csv(cfg: dict, log: Optional[LogFn] = None) -> List[Dict[str, str]]:
+def skipped_by_scope(rows: List[Dict[str, object]], cfg: dict) -> List[Dict[str, object]]:
+    """수집하지 않는(범위 밖) 장비 이름 — 화면에 '수집 안 함' 으로 보여 주기 위한 목록. NAS 접근 없음."""
+    out = []
+    for row in rows:
+        if not row.get("on", True):
+            continue
+        sub = str(row.get("sub", "")).strip()
+        auto = sub in (AUTO, "auto", "AUTO")
+        if auto and scope.allows_auto_row(cfg):
+            continue
+        if not auto and scope.allows_row(cfg, row):
+            continue
+        folder = sub if not auto else ""
+        name = display_name(folder or str(row.get("name") or ""), row.get("name"), row.get("memo"))
+        out.append({"name": name or str(row.get("name") or ""), "note": str(row.get("memo") or ""),
+                    "auto": auto})
+    out.sort(key=lambda d: sort_key(str(d["name"])))
+    return out
+
+
+def devices_from_csv(cfg: dict, log: Optional[LogFn] = None) -> List[Dict[str, object]]:
     return devices_from_rows(read_devices_csv(cfg["devices_csv"]), cfg, log)
 
 
-def discover_devices(cfg: dict, log: Optional[LogFn] = None) -> List[Dict[str, str]]:
-    """devices.csv 가 없을 때의 폴백: nas_roots 각각을 * 로 본다."""
-    devs: List[Dict[str, str]] = []
+def discover_devices(cfg: dict, log: Optional[LogFn] = None) -> List[Dict[str, object]]:
+    """devices.csv 가 없을 때의 폴백: nas_roots 각각을 * 로 본다. 범위 제한 중에는 자동 탐색을 하지 않는다."""
+    devs: List[Dict[str, object]] = []
+    if not scope.allows_auto_row(cfg):
+        _log(log, f"[범위 밖] 수집 범위({scope.describe(cfg)}) 제한 중이라 NAS 자동 탐색을 하지 않습니다")
+        return devs
     for root in cfg.get("nas_roots") or []:
         root = _norm_root(root)
         found = _discover_under(root, cfg, log)
@@ -184,29 +282,37 @@ def discover_devices(cfg: dict, log: Optional[LogFn] = None) -> List[Dict[str, s
     return _dedupe_sort(devs)
 
 
-def resolve_devices(cfg: dict, log: Optional[LogFn] = None) -> List[Dict[str, str]]:
+def resolve_devices(cfg: dict, log: Optional[LogFn] = None) -> List[Dict[str, object]]:
     """설정에 맞는 장비 목록. devices.csv 가 있으면 그것, 없으면 nas_roots 자동 탐색."""
+    if not scope.unrestricted(cfg):
+        _log(log, f"수집 범위: {scope.describe(cfg)} (다른 장비에는 접근하지 않습니다)")
     path = cfg.get("devices_csv") or ""
     if path and os.path.isfile(path):
         devs = devices_from_csv(cfg, log)
-        _log(log, f"devices.csv 기준 장비 {len(devs)}대: {', '.join(d['name'] for d in devs)}")
+        _log(log, f"devices.csv 기준 장비 {len(devs)}대: {', '.join(str(d['name']) for d in devs)}")
         return devs
     _log(log, f"devices.csv 가 없어 nas_roots 를 자동 탐색합니다 ({path or '경로 미지정'})")
     devs = discover_devices(cfg, log)
-    _log(log, f"장비 {len(devs)}대 발견: {', '.join(d['name'] for d in devs)}")
+    _log(log, f"장비 {len(devs)}대 발견: {', '.join(str(d['name']) for d in devs)}")
     return devs
 
 
 def check_rows(rows: List[Dict[str, object]], cfg: dict) -> List[Dict[str, object]]:
-    """UI 의 '연결 확인': 행마다 상태 문자열 키를 돌려준다(ok / auto:<n> / no_report / unreachable)."""
+    """UI 의 '연결 확인': 행마다 상태 문자열 키를 돌려준다(ok / auto:<n> / no_report / unreachable / out_of_scope).
+
+    ★ 범위 밖 행은 연결 확인에서도 접근하지 않는다 — 상태만 out_of_scope 로 알려 준다."""
     out = []
     for row in rows:
-        root = _norm_root(str(row.get("root", "")))
         sub = str(row.get("sub", "")).strip()
+        auto = sub in (AUTO, "auto", "AUTO")
+        if (auto and not scope.allows_auto_row(cfg)) or (not auto and not scope.allows_row(cfg, row)):
+            out.append({**row, "status": "out_of_scope"})
+            continue
+        root = _norm_root(str(row.get("root", "")))
         if not os.path.isdir(root):
             out.append({**row, "status": "unreachable"})
             continue
-        if sub in (AUTO, "auto", "AUTO"):
+        if auto:
             n = len(_discover_under(root, cfg))
             out.append({**row, "status": f"auto:{n}" if n else "no_report"})
             continue

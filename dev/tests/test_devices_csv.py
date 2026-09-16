@@ -6,7 +6,9 @@ from conftest import make_cfg, make_device
 
 
 def _cfg():
-    return {"report_dir": "Report", "scan_dir": "Scanresult"}
+    # 장비 해석 엔진 자체를 보는 테스트 → 수집 범위 제한 없음을 명시한다.
+    # 기본값(AOI-25 만)의 격리는 test_scope_isolation.py 가 검증한다.
+    return {"report_dir": "Report", "scan_dir": "Scanresult", "scope_devices": ["*"]}
 
 
 def test_read_csv_cp949_and_utf8_and_aliases(tmp_path):

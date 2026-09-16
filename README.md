@@ -11,7 +11,7 @@ Camtek AOI 장비의 NAS `Report/*_BatchReport.htm` 과 `Scanresult/.../WaferInf
 
 | 메뉴 | 내용 |
 |---|---|
-| 홈 | 선택한 날짜의 모든 장비 가동률 카드/표. 카드 클릭 → Lot 단위 24시간 타임라인 + 오류 목록 |
+| 홈 | 선택한 날짜의 모든 장비 가동률 카드/표(기본 순서: AOI-1…AOI-25 → 4F-AOI-01…). 카드 클릭 → Lot 단위 24시간 타임라인 + 오류 목록 |
 | 추이 | 일 · 주 · 월 막대, 이번 기간 vs 이전 기간 비교 |
 | 장비 비교 | 선택한 날 · 최근 7일 · 최근 30일 기준 장비 순위와 변화 |
 | 장비 목록 | `devices.csv` 편집(행 추가/삭제, 폴더 찾아보기, `*` 자동, CSV 가져오기/내보내기, 연결 확인) |
@@ -29,6 +29,12 @@ Camtek AOI 장비의 NAS `Report/*_BatchReport.htm` 과 `Scanresult/.../WaferInf
 4. '장비 목록' 에서 NAS 경로와 장비 폴더를 적고 저장한 뒤, '수집' 에서 **지금 수집**을 누릅니다.
 
 자세한 안내는 zip 안의 `설치방법.txt` 에 있습니다.
+
+## 수집 범위 (현재 AOI-25 한 대)
+
+현장 검증 중이라 **수집·연결 확인은 `Y:\AOI-25` 한 대만** 합니다(`aoi_capacity/scope.py`). 다른 장비 폴더에는 목록 조회조차 하지
+않으며, 화면에는 "수집 안 함" 으로 표시됩니다. `devices.csv` 의 다른 장비 행과 이전에 모아 둔 캐시는 **지우지 않고** 그대로 두며,
+범위를 넓히면 그대로 살아납니다(`prefs.json` 의 `scope_devices`, `["*"]` 이면 제한 없음).
 
 ## 장비 목록 (devices.csv)
 
@@ -60,7 +66,7 @@ Camtek AOI 장비의 NAS `Report/*_BatchReport.htm` 과 `Scanresult/.../WaferInf
 | `prefs.json` | 설정 |
 | `devices.csv` | 장비 목록 |
 | `aoi_cache.json` | 수집 캐시(장비별 마지막 수정시각 커서 포함) |
-| `AOI_capacity.html` | 결과 화면(브라우저로 열어도 됨) |
+| `AOI_capacity.html` | 결과 화면 — **파일을 더블클릭하면 브라우저에서 그대로 열립니다**(Python·서버 불필요, 외부 요청 없음). 새 데이터는 수집을 다시 실행한 뒤 새로고침 |
 | `app.log`, `collect.log` | 로그 |
 
 결과 폴더를 바꿀 수는 있지만 NAS 경로 아래로는 지정할 수 없습니다.

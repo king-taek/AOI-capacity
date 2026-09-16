@@ -272,7 +272,7 @@ class MainWindow(QMainWindow):
             return
         self._finish_collect(token)
         m, s = divmod(int(result.elapsed), 60)
-        toast = i18n.KO.COLLECT_DONE_TOAST_FMT.format(devices=result.devices, rows=result.rows, elapsed=f"{m:02d}:{s:02d}")
+        toast = i18n.KO.COLLECT_DONE_TOAST_FMT.format(devices=result.devices, elapsed=f"{m:02d}:{s:02d}")
         self.collect_page.set_status(toast)
         self.collect_page.append_log(toast)
         self.dashboard.reload_after_collect()

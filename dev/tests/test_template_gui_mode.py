@@ -27,8 +27,13 @@ def test_app_callable_js_entry_points_exist():
         assert fn in HTML
 
 
-def test_no_update_check_or_folder_api_in_gui_mode():
-    assert "if(!GUI)checkUpdate()" in HTML
+def test_no_network_use_at_all():
+    """★ 더블클릭해서 여는 정적 파일 — 바깥으로 나가는 요청이 한 건도 없어야 한다."""
+    for bad in ("fetch(", "api.github.com", "fonts.googleapis.com", "XMLHttpRequest", "<script src=", "<link rel=\"stylesheet\""):
+        assert bad not in HTML, bad
+
+
+def test_browser_only_chrome_still_gated_by_gui_flag():
     assert "if(!GUI){" in HTML and "loadNas();renderDevs();restoreHandles();" in HTML
 
 

@@ -15,7 +15,8 @@ from ..widgets.buttons import make_button
 
 COLS = ("name", "root", "sub", "on", "memo", "status")
 HEADERS = (i18n.KO.DEV_COL_NAME, i18n.KO.DEV_COL_ROOT, i18n.KO.DEV_COL_SUB, i18n.KO.DEV_COL_ON, i18n.KO.DEV_COL_MEMO, i18n.KO.DEV_COL_STATUS)
-_STATUS_TEXT = {"ok": i18n.KO.DEV_STATUS_OK, "no_report": i18n.KO.DEV_STATUS_NO_REPORT, "unreachable": i18n.KO.DEV_STATUS_UNREACHABLE}
+_STATUS_TEXT = {"ok": i18n.KO.DEV_STATUS_OK, "no_report": i18n.KO.DEV_STATUS_NO_REPORT,
+                "unreachable": i18n.KO.DEV_STATUS_UNREACHABLE, "out_of_scope": i18n.KO.DEV_STATUS_OUT_OF_SCOPE}
 
 
 class _CheckWorker(QThread):
@@ -259,7 +260,8 @@ class DevicesPage(QWidget):
             self._table.item(r, 5).setText(i18n.KO.DEV_STATUS_CHECKING)
         self._check_token += 1
         p = prefs.load()
-        w = _CheckWorker(self._check_token, rows, {"report_dir": p.report_dir or "Report", "scan_dir": p.scan_dir or "Scanresult"}, self)
+        # 수집 범위(scope)까지 들어간 cfg 를 그대로 쓴다 — 범위 밖 행은 연결 확인도 하지 않는다
+        w = _CheckWorker(self._check_token, rows, prefs.to_collect_cfg(p), self)
         w.result.connect(self._on_checked)
         self._checker = w
         w.start()

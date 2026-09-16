@@ -12,8 +12,9 @@ import dataclasses
 import json
 import os
 from dataclasses import dataclass, field
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
+from .. import scope as _scope
 from . import paths
 
 PREFS_VERSION = 1
@@ -36,6 +37,7 @@ class Prefs:
     window_maximized: bool = False
     last_view: str = "home"
     auto_collect_minutes: int = 0     # 예약: 0 = 자동 수집 안 함(현재 UI 노출 없음)
+    scope_devices: List[str] = field(default_factory=lambda: list(_scope.DEFAULT_SCOPE))  # ★ 수집 허용 장비
     prefs_version: int = PREFS_VERSION
     extra: Dict[str, Any] = field(default_factory=dict)
 
@@ -115,5 +117,6 @@ def to_collect_cfg(p: Prefs) -> Dict[str, Any]:
         "output_name": "AOI_capacity.html",
         "write_csv": bool(p.write_csv),
         "cache_file": str(paths.cache_file()),
+        "scope_devices": list(p.scope_devices or _scope.DEFAULT_SCOPE),
     })
     return cfg
