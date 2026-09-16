@@ -59,7 +59,10 @@ INI_KEYS = {
 OUT_COLS = ["device", "kind", "lot", "wafer_id", "status", "norm_status", "recipe",
             "wafer_start_time", "wafer_end_time", "batch_start", "batch_end", "ini_match", "data_issue"]
 REPORT_RE = re.compile(r"^(.+?)_(\d{4})_(.+)_(\d{1,2}-[A-Za-z]{3}-\d{2})_\((\d{2}\.\d{2}\.\d{2})\)_BatchReport\.html?$", re.I)
-DT_FORMATS = ["%d-%b-%y %I:%M:%S %p", "%m/%d/%Y %H:%M:%S", "%d-%b-%y %H:%M:%S"]
+#: 장비마다 다르다 — AOI-8·25 는 `13-Sep-26 01:03:29 PM`, AOI-1 은 `9/16/2026 1:54:03 PM`,
+#: INI 의 BatchStartTime 은 `09/10/2026 18:50:08`(24시간제).
+DT_FORMATS = ["%d-%b-%y %I:%M:%S %p", "%m/%d/%Y %I:%M:%S %p", "%m/%d/%Y %H:%M:%S",
+              "%d-%b-%y %H:%M:%S"]
 CLOCK_SKEW_SEC = 60
 #: INI 시각이 그 Report 의 Batch 구간에서 이만큼 벗어나면 "다른 시도의 INI" 로 본다(시계 오차 여유).
 BATCH_WINDOW_MARGIN_SEC = 600

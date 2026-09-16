@@ -211,9 +211,11 @@ def pick_samples(infos, days: int, max_reports: int):
 
 def copy_ini_for(info, scan_root: Path, out_dir: Path, max_ini: int, lines: list, seen=None) -> int:
     """Report 에서 계산한 **정확한** Lot 폴더 하나만 나열해 WaferInfo.ini 를 복사한다(재귀 검색 없음)."""
-    job, setup = info.get("job", ""), info.get("setup", "")
+    # Job/Setup 이 있으면 그것이 정답이고, 없으면(AOI-1 처럼 옛 형식) 파일명 규칙으로 돌아간다
+    job = info.get("job", "") or info.get("equipment", "")
+    setup = info.get("setup", "") if info.get("job") else info.get("process", "")
     if not job:
-        return 0                                   # Job/Setup 을 못 읽은 Report 는 경로를 만들 수 없다
+        return 0                                   # 어느 쪽으로도 경로를 만들 수 없다
     lot_dir = scan_root / job / setup / info["lot"] if setup else scan_root / job / info["lot"]
     if seen is not None:
         if str(lot_dir) in seen:

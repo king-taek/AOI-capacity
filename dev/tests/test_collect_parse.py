@@ -9,9 +9,12 @@ from aoi_capacity import collect
 from conftest import REPORT_HTML, REPORT_NAME, WAFER_INI, make_device
 
 
-def test_parse_dt_three_formats():
+def test_parse_dt_every_format_seen_on_real_machines():
+    """장비마다 표기가 다르다 — AOI-8·25 는 `13-Sep-26 …`, AOI-1 은 `9/16/2026 1:54:03 PM`."""
     assert collect.parse_dt("13-Sep-26 05:31:04 PM") == dt.datetime(2026, 9, 13, 17, 31, 4)
-    assert collect.parse_dt("09/13/2026 17:25:14") == dt.datetime(2026, 9, 13, 17, 25, 14)
+    assert collect.parse_dt("9/16/2026 1:54:03 PM") == dt.datetime(2026, 9, 16, 13, 54, 3)     # AOI-1
+    assert collect.parse_dt("9/16/2026 11:54:03 AM") == dt.datetime(2026, 9, 16, 11, 54, 3)
+    assert collect.parse_dt("09/13/2026 17:25:14") == dt.datetime(2026, 9, 13, 17, 25, 14)     # INI BatchStartTime
     assert collect.parse_dt("16-Apr-26 02:00:31") == dt.datetime(2026, 4, 16, 2, 0, 31)
     assert collect.parse_dt("") is None and collect.parse_dt("garbage") is None
 
@@ -137,6 +140,32 @@ def test_normal_batch_makes_no_batch_row(tmp_path):
     rep = collect.parse_report(LIVE_NAME, LIVE_HTML)
     assert not [r for r in collect.rows_for_report("AOI-25", rep, str(tmp_path / "Scanresult"))
                 if r["kind"] == "batch"]
+
+
+OLD_NAME = "2D@RE-GA276IPB_0858128PD-0C_6412_KFD_26-Sep-16_(03.38.04)_BatchReport.htm"
+OLD_HTML = """<html><body>
+<table><tr><td>Batch Start</td><td>9/16/2026 1:54:03 PM</td><td>Batch End</td><td>9/16/2026 3:38:47 PM</td></tr>
+<tr><td>Wafers Scanned</td><td>1</td><td>User</td><td>MAINT</td></tr></table>
+<table><tr><th>Lot</th><th>Wafer ID</th><th>Pass/Fail</th><th>Recipe(s)</th></tr>
+<tr><td>KFD</td><td>K617531-25A</td><td>Pass</td><td>2D</td></tr></table></body></html>"""
+
+
+def test_old_machine_format_without_job_setup_still_works(tmp_path):
+    """AOI-1 은 Report 에 Job/Setup 이 없고 시각이 슬래시·12시간제다 — 파일명 규칙으로 끝까지 돌아야 한다."""
+    rep = collect.parse_report(OLD_NAME, OLD_HTML)
+    assert "Job/Setup" not in rep["summary"]
+    assert (rep["equipment"], rep["process_code"]) == ("2D@RE-GA276IPB_0858128PD-0C", "6412")
+    ini_dir = tmp_path / "Scanresult" / "2D@RE-GA276IPB_0858128PD-0C" / "6412" / "KFD" / "K617531-25A"
+    ini_dir.mkdir(parents=True)
+    (ini_dir / "WaferInfo.ini").write_text(WAFER_INI.replace("UseLot=KLK-3D", "UseLot=KFD")
+                                           .replace("UseWaferID=K625407-01B0", "UseWaferID=K617531-25A")
+                                           .replace("13-Sep-26 05:31:04 PM", "9/16/2026 2:10:00 PM")
+                                           .replace("13-Sep-26 05:32:02 PM", "9/16/2026 2:25:00 PM"),
+                                           encoding="utf-8")
+    r = collect.rows_for_report("AOI-1", rep, str(tmp_path / "Scanresult"))[0]
+    assert r["ini_match"] == "EXACT"                      # 배치 구간(13:54~15:38) 안이라 시간을 쓴다
+    assert collect.parse_dt(r["wafer_start_time"]) == dt.datetime(2026, 9, 16, 14, 10)
+    assert collect.parse_dt(r["batch_end"]) == dt.datetime(2026, 9, 16, 15, 38, 47)
 
 
 def test_read_ini_filters_to_needed_keys(tmp_path):

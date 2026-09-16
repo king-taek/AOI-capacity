@@ -59,6 +59,11 @@ def test_status_rules_match_the_python_side():
         assert token in HTML, token
 
 
+def test_parses_every_date_format_seen_on_real_machines():
+    """AOI-1 의 `9/16/2026 1:54:03 PM` 도 읽어야 한다(파이썬 DT_FORMATS 와 짝)."""
+    assert "(AM|PM)?" in HTML and "\\/(\\d{1,2})\\/" in HTML
+
+
 def test_scope_notice_is_rendered_from_meta():
     assert "meta.scope" in HTML and "수집 범위" in HTML and "수집 안 함" in HTML
 
