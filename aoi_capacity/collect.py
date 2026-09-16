@@ -25,7 +25,9 @@ import json
 import logging
 import os
 import re
+import threading
 import time
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from html.parser import HTMLParser
 from typing import Callable, Dict, List, Optional, Tuple
@@ -34,6 +36,12 @@ from . import devices as devices_mod
 from . import i18n, nas_guard, scope
 
 _LOG = logging.getLogger("aoi.collect")
+
+#: NAS 읽기는 **기다리는 시간이 대부분**이다(SMB 왕복 지연). Report 하나마다 본문 1회 + Wafer 마다
+#: INI 존재 확인·읽기가 붙어 3일치 30대면 왕복이 수만 번이다. 한 줄로 읽으면 그 지연이 전부 더해지므로
+#: 여러 개를 동시에 읽는다. 읽기만 하니 순서가 바뀌어도 결과는 같다(합치는 일은 메인 스레드가 한다).
+#: 0·1 이면 예전처럼 한 줄로 읽는다. 너무 키우면 NAS 가 되레 느려져 8 로 둔다.
+READ_WORKERS = 8
 
 DEFAULT_CONFIG: Dict[str, object] = {
     "devices_csv": "",
@@ -47,6 +55,7 @@ DEFAULT_CONFIG: Dict[str, object] = {
     "write_csv": False,
     "cache_file": "",
     "scope_devices": list(scope.DEFAULT_SCOPE),   # ★ 수집 허용 장비. ["*"] 면 제한 없음
+    "read_workers": READ_WORKERS,                 # NAS 를 동시에 몇 개씩 읽을지(1 = 한 줄로)
 }
 MAX_READ_RETRY = 3   # 읽기에 실패한 Report 를 몇 번까지 다시 시도하고 커서를 붙잡아 둘지
 INI_KEYS = {
@@ -463,17 +472,45 @@ def _check(should_stop: Optional[Callable[[], bool]]) -> None:
         raise CollectCancelled()
 
 
+def _workers(cfg: dict, n_tasks: int) -> int:
+    """동시에 몇 개를 읽을지. 설정이 1 이하면 한 줄로 읽는다(예전 동작)."""
+    try:
+        want = int(cfg.get("read_workers", READ_WORKERS) or 1)
+    except (TypeError, ValueError):
+        want = READ_WORKERS
+    return max(1, min(want, max(1, n_tasks)))
+
+
+def _run(cfg: dict, tasks, fn, should_stop) -> list:
+    """작업들을 동시에(또는 한 줄로) 돌리고 **입력 순서 그대로** 결과를 돌려준다.
+
+    ★ 여기서 하는 일은 NAS **읽기**뿐이다. 캐시·행을 합치는 일은 부르는 쪽(메인 스레드)이 한다 —
+      스레드가 공유 dict 를 고치지 않으니 순서가 바뀌어도 결과가 달라지지 않는다."""
+    tasks = list(tasks)
+    if not tasks:
+        return []
+    n = _workers(cfg, len(tasks))
+    if n == 1:
+        return [fn(t) for t in tasks]
+    with ThreadPoolExecutor(max_workers=n, thread_name_prefix="aoi-read") as pool:
+        out = list(pool.map(fn, tasks))
+    _check(should_stop)                      # 취소는 각 작업 안에서도 보지만, 끝나고 한 번 더 본다
+    return out
+
+
 def _list_new_reports(devs, cache, cfg, backfill, log, progress, on_device, should_stop):
     """1차 패스: 장비마다 Report 폴더를 한 번 나열(scandir+stat 만)해 읽을 파일을 고른다. NAS 읽기 전용.
+
+    장비 30대를 한 줄로 나열하면 SMB 왕복 지연이 30번 더해진다 — 동시에 나열한다(`read_workers`).
 
     돌려주는 `known` 은 '이미 캐시에 잘 들어 있는 파일들의 수정시각' — 커서를 어디까지 밀어도 되는지
     계산할 때 쓴다(읽기에 실패한 파일을 커서가 넘어가 버리지 않게)."""
     reports, last = cache["reports"], cache["last_mtime"]
     backfill_since = time.time() - float(cfg["backfill_days"]) * 86400
-    plan = []
-    for i, d in enumerate(devs):
+    done = _Counter()
+
+    def one(d):
         _check(should_stop)
-        progress(0, 0, i18n.KO.COLLECT_PHASE_LIST_FMT.format(device=d["name"], i=i + 1, n=len(devs)))
         on_device(d["name"], "listing", "")
         did = str(d["id"])
         dm = {"name": d["name"], "id": did, "note": d["path"], "reports": 0, "found": 0, "error": "",
@@ -494,15 +531,34 @@ def _list_new_reports(devs, cache, cfg, backfill, log, progress, on_device, shou
                 else:
                     pick.append(e)
             dm["found"], dm["reports"] = len(files), len(pick)
-            if pick:
-                _say(log, f"[{d['name']}] Report {len(files)}개 중 새 파일 {len(pick)}개")
-            plan.append((d, dm, pick, known))
+            out = (d, dm, pick, known)
         except OSError as ex:
             dm["error"] = f"{type(ex).__name__}: {ex}"
-            _say(log, f"[{d['name']}] {dm['error']}")
             on_device(d["name"], "error", dm["error"])
-            plan.append((d, dm, [], []))
+            out = (d, dm, [], [])
+        i = done.bump()
+        progress(i, len(devs), i18n.KO.COLLECT_PHASE_LIST_FMT.format(device=d["name"], i=i, n=len(devs)))
+        return out
+
+    plan = _run(cfg, devs, one, should_stop)
+    for d, dm, pick, _known in plan:              # 로그는 장비 순서대로 한 번에(스레드에서 섞이지 않게)
+        if dm["error"]:
+            _say(log, f"[{d['name']}] {dm['error']}")
+        elif pick:
+            _say(log, f"[{d['name']}] Report {dm['found']}개 중 새 파일 {len(pick)}개")
     return plan
+
+
+class _Counter:
+    """스레드 여러 개가 같이 세는 진행 카운터."""
+
+    def __init__(self) -> None:
+        self._n, self._lock = 0, threading.Lock()
+
+    def bump(self, k: int = 1) -> int:
+        with self._lock:
+            self._n += k
+            return self._n
 
 
 def _is_same_device(cached: dict, path: str, dev: dict) -> bool:
@@ -545,40 +601,66 @@ def collect(cfg: dict, full: bool = False, backfill: bool = False, *,
 
     reports, last, failed = cache["reports"], cache["last_mtime"], cache["failed"]
     total = sum(len(pick) for _, _, pick, _ in plan)
-    done, n_new, errors, dev_meta = 0, 0, [], []
+    n_new, errors, dev_meta = 0, [], []
     progress(0, total, i18n.KO.COLLECT_PHASE_DEVICES)
-    for d, dm, pick, known in plan:
+
+    # ── 2차 패스: Report 를 읽어 행으로 바꾼다. NAS 왕복 지연이 대부분이라 **여러 개를 동시에 읽는다**.
+    #    Report 하나가 한 작업이라 장비마다 양이 달라도 알아서 고르게 나뉜다.
+    #    스레드는 **읽기만** 하고(공유 dict 를 고치지 않는다), 캐시에 넣는 일은 아래 메인 스레드가 순서대로 한다.
+    done, left, left_lock = _Counter(), {}, threading.Lock()
+    jobs = []
+    for d, dm, pick, _known in plan:
+        if dm["error"] or not pick:
+            continue
+        left[str(d["id"])] = len(pick)
+        on_device(d["name"], "parsing", "")
+        scan_root = os.path.join(d["path"], str(d.get("scan_dir") or cfg["scan_dir"]))
+        jobs.extend((d, dm, e, scan_root) for e in pick)
+
+    def read_one(job):
+        d, _dm, e, scan_root = job
+        _check(should_stop)
+        mtime = e.stat().st_mtime
+        try:
+            rep = parse_report(e.name, nas_guard.read_text(e.path))
+            out = (job, mtime, rows_for_report(d["name"], rep, scan_root), None)
+        except CollectCancelled:
+            raise
+        except Exception as ex:  # noqa: BLE001
+            out = (job, mtime, None, f"{type(ex).__name__}: {ex}")
+        progress(done.bump(), total, i18n.KO.COLLECT_PHASE_PARSE_FMT.format(device=d["name"], name=e.name))
+        with left_lock:                       # 여러 스레드가 같이 줄이므로 잠그고 센다
+            n = left.get(str(d["id"]))
+            n = left[str(d["id"])] = (n - 1) if n is not None else None
+        if n == 0:
+            on_device(d["name"], "done", "")   # 이 장비 몫을 다 읽었다 — 화면에서 먼저 초록으로
+        return out
+
+    by_dev: Dict[str, dict] = {str(d["id"]): {"ok": list(known), "blocked": []}
+                               for d, dm, _pick, known in plan if not dm["error"]}
+    for (d, _dm, e, _scan), mtime, rows_of, err in _run(cfg, jobs, read_one, should_stop):
+        did = str(d["id"])
+        if err is None:
+            reports[e.path] = {"mtime": mtime, "device": d["name"], "device_id": did,
+                               "rows": rows_of, "seen": time.time()}
+            failed.pop(e.path, None)
+            by_dev[did]["ok"].append(mtime)
+            n_new += 1
+            continue
+        tries = int(failed.get(e.path, {}).get("tries", 0)) + 1
+        failed[e.path] = {"mtime": mtime, "tries": tries, "device_id": did, "error": err}
+        errors.append({"device": d["name"], "path": e.path, "tries": tries, "error": err})
+        # 재시도가 남아 있으면 커서를 이 파일 앞에서 멈춰 다음 수집에 다시 읽는다
+        by_dev[did]["blocked" if tries < MAX_READ_RETRY else "ok"].append(mtime)
+        if tries >= MAX_READ_RETRY:
+            _say(log, f"[{d['name']}] {e.name}: {tries}번 실패해 더는 붙잡지 않습니다(오류 목록에는 남습니다)")
+    for d, dm, _pick, _known in plan:
         if dm["error"]:
             dev_meta.append(dm)
             continue
-        did = str(d["id"])
-        scan_root = os.path.join(d["path"], str(d.get("scan_dir") or cfg["scan_dir"]))
-        on_device(d["name"], "parsing", "")
-        ok_mtimes, blocked = list(known), []
-        for e in pick:
-            _check(should_stop)
-            progress(done, total, i18n.KO.COLLECT_PHASE_PARSE_FMT.format(device=d["name"], name=e.name))
-            mtime = e.stat().st_mtime
-            try:
-                rep = parse_report(e.name, nas_guard.read_text(e.path))
-                reports[e.path] = {"mtime": mtime, "device": d["name"], "device_id": did,
-                                   "rows": rows_for_report(d["name"], rep, scan_root), "seen": time.time()}
-                failed.pop(e.path, None)
-                ok_mtimes.append(mtime)
-                n_new += 1
-            except Exception as ex:  # noqa: BLE001
-                tries = int(failed.get(e.path, {}).get("tries", 0)) + 1
-                failed[e.path] = {"mtime": mtime, "tries": tries, "device_id": did,
-                                  "error": f"{type(ex).__name__}: {ex}"}
-                errors.append({"device": d["name"], "path": e.path, "tries": tries,
-                               "error": f"{type(ex).__name__}: {ex}"})
-                # 재시도가 남아 있으면 커서를 이 파일 앞에서 멈춰 다음 수집에 다시 읽는다
-                (blocked if tries < MAX_READ_RETRY else ok_mtimes).append(mtime)
-                if tries >= MAX_READ_RETRY:
-                    _say(log, f"[{d['name']}] {e.name}: {tries}번 실패해 더는 붙잡지 않습니다(오류 목록에는 남습니다)")
-            done += 1
         # 커서는 이 장비의 파싱이 끝난 뒤에만 전진 — 중간에 취소되면 다음에 같은 파일을 다시 본다
-        _advance_cursor(last, did, ok_mtimes, blocked)
+        cur = by_dev[str(d["id"])]
+        _advance_cursor(last, str(d["id"]), cur["ok"], cur["blocked"])
         on_device(d["name"], "done", "")
         dev_meta.append(dm)
     _check(should_stop)

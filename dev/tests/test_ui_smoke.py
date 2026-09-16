@@ -157,3 +157,13 @@ def test_collect_range_is_editable_and_saved(window, styled_qapp):
     window.settings_page._retention.setValue(120)
     _pump(styled_qapp)
     assert prefs.load().retention_days == 120
+
+
+def test_read_concurrency_is_editable_and_saved(window, styled_qapp):
+    """NAS 가 동시 읽기를 못 견디면 낮출 수 있어야 한다(1 = 예전처럼 한 줄로)."""
+    from aoi_capacity.utils import prefs
+
+    window.settings_page._workers.setValue(4)
+    _pump(styled_qapp)
+    assert prefs.load().read_workers == 4
+    assert prefs.to_collect_cfg(prefs.load())["read_workers"] == 4

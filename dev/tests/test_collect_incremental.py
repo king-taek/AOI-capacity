@@ -118,3 +118,51 @@ def test_on_device_callback_reports_states(tmp_path, fake_nas):
     seen = []
     collect.collect(cfg, on_device=lambda n, s, d: seen.append((n, s)))
     assert ("9호기", "listing") in seen and ("9호기", "parsing") in seen and ("9호기", "done") in seen
+
+
+# ── 동시에 읽기(NAS 왕복 지연이 대부분이라 여러 개를 함께 읽는다) ──────────────
+def _fingerprint(rows):
+    import hashlib
+    import json as _json
+    blob = _json.dumps(sorted(_json.dumps(r, sort_keys=True, ensure_ascii=False) for r in rows),
+                       ensure_ascii=False)
+    return hashlib.sha256(blob.encode()).hexdigest()
+
+
+@pytest.mark.parametrize("workers", [1, 2, 8, 32])
+def test_reading_in_parallel_gives_exactly_the_same_result(tmp_path, fake_nas, workers):
+    """★ 동시에 읽어도 결과가 달라지면 안 된다 — 스레드는 읽기만 하고, 합치는 일은 메인 스레드가 한다."""
+    nas, csv_path = fake_nas
+    base = make_cfg(tmp_path / "one", csv_path, read_workers=1)
+    want_rows, want_meta, want_err = collect.collect(base)
+    cfg = make_cfg(tmp_path / f"p{workers}", csv_path, read_workers=workers)
+    rows, meta, errs = collect.collect(cfg)
+    assert _fingerprint(rows) == _fingerprint(want_rows)
+    assert [d["name"] for d in meta] == [d["name"] for d in want_meta]     # 장비 순서도 그대로
+    assert len(errs) == len(want_err)
+    one = json.loads((tmp_path / "one" / "out" / "aoi_cache.json").read_text(encoding="utf-8"))
+    many = json.loads((tmp_path / f"p{workers}" / "out" / "aoi_cache.json").read_text(encoding="utf-8"))
+    assert one["last_mtime"] == many["last_mtime"]                         # 커서까지 같아야 한다
+
+
+def test_cancel_still_works_while_reading_in_parallel(tmp_path, fake_nas):
+    nas, csv_path = fake_nas
+    cfg = make_cfg(tmp_path, csv_path, read_workers=8)
+    calls = {"n": 0}
+
+    def stop():
+        calls["n"] += 1
+        return calls["n"] > 2
+
+    with pytest.raises(collect.CollectCancelled):
+        collect.collect(cfg, should_stop=stop)
+    assert not (tmp_path / "out" / "aoi_cache.json").exists()
+
+
+@pytest.mark.parametrize("given,n_tasks,expected", [
+    (8, 100, 8), (8, 3, 3), (1, 100, 1), (0, 100, 1), (None, 100, collect.READ_WORKERS),
+    ("이상한값", 100, collect.READ_WORKERS), (64, 100, 64),
+])
+def test_worker_count_is_clamped_to_the_work_there_is(given, n_tasks, expected):
+    cfg = {} if given is None else {"read_workers": given}
+    assert collect._workers(cfg, n_tasks) == expected

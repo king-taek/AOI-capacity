@@ -142,8 +142,11 @@ SET_BACKFILL_DAYS = "처음 볼 때 최근"
 SET_BACKFILL_SUFFIX = " 일치"
 SET_RETENTION_DAYS = "화면에 남기는 기간"
 SET_RETENTION_SUFFIX = " 일"
+SET_READ_WORKERS = "동시에 읽기"
+SET_READ_WORKERS_SUFFIX = " 개씩"
 SET_COLLECT_RANGE_HELP = ("처음 보는 장비는 이 기간 안의 Report 를 전부 읽습니다. 그다음부터는 새 Report 만 읽습니다. "
-                          "기간을 늘리면 첫 수집이 그만큼 오래 걸립니다.")
+                          "기간을 늘리면 첫 수집이 그만큼 오래 걸립니다.\n"
+                          "NAS 읽기는 기다리는 시간이 대부분이라 여러 개를 동시에 읽습니다. NAS 가 되레 느려지면 숫자를 낮추세요(1 = 한 줄로).")
 SET_DATA_DIR = "데이터 폴더"
 SET_VERSION = "버전"
 SET_VERSION_UNKNOWN = "미상 (개발 실행)"

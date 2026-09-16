@@ -23,6 +23,7 @@ PREFS_VERSION = 3
 @dataclass
 class Prefs:
     backfill_days: int = 30
+    read_workers: int = 8
     retention_days: int = 90
     output_dir: str = ""              # 비우면 data_root()
     write_csv: bool = False
@@ -116,6 +117,7 @@ def to_collect_cfg(p: Prefs) -> Dict[str, Any]:
         "report_dir": p.report_dir or "Report",
         "scan_dir": p.scan_dir or "Scanresult",
         "backfill_days": int(p.backfill_days),
+        "read_workers": int(p.read_workers),
         "retention_days": int(p.retention_days),
         "output_dir": str(paths.output_dir(p.output_dir)),
         "output_name": "AOI_capacity.html",

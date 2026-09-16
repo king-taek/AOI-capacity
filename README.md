@@ -11,6 +11,8 @@ Camtek AOI 장비의 NAS `Report/*_BatchReport.htm` 과 `Scanresult/.../WaferInf
 > 개발 진척도·확정된 결정·남은 일은 [`진행상황.md`](진행상황.md) 에 있습니다(커밋마다 갱신). 작업 규칙은 [`CLAUDE.md`](CLAUDE.md).
 
 결과 HTML 한 장에 데이터·스타일·스크립트가 모두 들어 있어 **인터넷도 로컬 서버도 필요 없습니다**(외부 요청 0).
+데이터는 그 HTML 안에 박혀 있습니다 — 옆의 파일을 읽어오는 게 아닙니다(`file://` 페이지는 브라우저가 `fetch` 를 막습니다).
+그래서 수집할 때마다 HTML 을 통째로 다시 씁니다(30대·3일치 1 MB·0.2초, 90일치 29 MB·1.7초).
 새 데이터를 보려면 수집 프로그램에서 '지금 수집' 을 누른 뒤, 열어 둔 화면을 새로고침(F5)하세요. 자동 주기 수집은 없습니다.
 설정·장비 목록·수집 캐시·결과 HTML 은 모두 그 PC 의 `%LOCALAPPDATA%\AOI_Capacity` 에만 저장됩니다.
 
@@ -141,10 +143,28 @@ git 작업 폴더에서 실행 중이면 자동 적용을 하지 않습니다(`g
 
 새 버전 배포는 기본 브랜치에 푸시하기만 하면 됩니다. `requirements.txt` 를 바꾸는 변경은 사용자 PC 의 첫 업데이트에서 패키지 설치가 필요하니 주의하세요.
 
-## 헤드리스 수집 (선택)
+## 창 없이 수집 (콘솔)
 
-자동 주기 수집은 없습니다(수동 실행만). 작업 스케줄러 등에서 창 없이 수집하려면 `scripts/run_collect.bat`(→ `python -m aoi_capacity.cli`) 을 씁니다. GUI 와 같은 데이터 폴더를 쓰며,
+GUI 를 띄우지 않고 같은 수집을 돌릴 수 있습니다. **설정·장비 목록·캐시·결과 HTML 이 GUI 와 완전히 같습니다.**
+
+```
+python -m aoi_capacity.cli            # 진행률이 콘솔에 찍힙니다
+python -m aoi_capacity.cli --backfill # 수집 기간(backfill_days) 안의 Report 를 전부 다시
+python -m aoi_capacity.cli --full     # 캐시를 버리고 처음부터
+```
+
+작업 스케줄러처럼 화면 없이 돌릴 때는 `scripts/run_collect.bat` (로그를 `%LOCALAPPDATA%\AOI_Capacity\collect.log` 에 남깁니다).
 `--config` 로 `docs/config.example.json` 형식의 설정 파일을 줄 수도 있습니다.
+
+> `scripts/collect_sample.py` 는 **조사용 샘플 도구**라 대시보드를 만들지 않습니다 — Report 몇 장과 INI 를 zip 으로 모아 줄 뿐입니다.
+> 수집은 위의 CLI 나 GUI 로 하세요.
+
+### 수집이 오래 걸릴 때
+
+NAS 읽기는 **기다리는 시간이 대부분**입니다(Report 한 장마다 왕복 1회 + Wafer 마다 INI 확인·읽기).
+그래서 여러 개를 동시에 읽습니다 — 설정 → 수집 기간 → **동시에 읽기**(기본 8개씩).
+NAS 가 되레 느려지면 숫자를 낮추고(1 = 예전처럼 한 줄로), 여유가 있으면 16 정도까지 올려 보세요.
+그래도 느리면 **수집 기간**을 줄이는 게 가장 큽니다 — 읽을 Report 수가 그만큼 줄어듭니다.
 
 ## 개발
 
