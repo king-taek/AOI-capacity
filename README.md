@@ -69,10 +69,18 @@ Camtek AOI 장비의 NAS `Report/*_BatchReport.htm` 과 `Scanresult/.../WaferInf
     scripts\make_sample.bat                       :: Y:\AOI-25, 최근 1일치
     scripts\make_sample.bat --days 3 --scan 300   :: 더 넓게
 
-## 수집 범위 (현재 AOI-25 한 대)
+## 수집 범위 (현재 4대)
 
-현장 검증 중이라 **수집·연결 확인은 `Y:\AOI-25` 한 대만** 합니다(`aoi_capacity/scope.py`). 다른 장비 폴더에는 목록 조회조차 하지
-않으며, 화면에는 "수집 안 함" 으로 표시됩니다. `devices.csv` 의 다른 장비 행과 이전에 모아 둔 캐시는 **지우지 않고** 그대로 두며,
+현장 검증 중이라 **수집·연결 확인은 아래 4대만** 합니다(`aoi_capacity/scope.py`).
+
+| 장비 | 경로 |
+|---|---|
+| AOI-1 | `X:\AOI-1` |
+| AOI-8 | `M:\AOI-8` |
+| AOI-9 | `M:\AOI-9` |
+| AOI-25 | `Y:\AOI-25` |
+
+같은 공유에 나란히 있는 다른 장비 폴더(예: `M:\AOI-10`)에는 목록 조회조차 하지 않으며, 화면에는 "수집 안 함" 으로 표시됩니다. `devices.csv` 의 다른 장비 행과 이전에 모아 둔 캐시는 **지우지 않고** 그대로 두며,
 범위를 넓히면 그대로 살아납니다(`prefs.json` 의 `scope_devices`, `["*"]` 이면 제한 없음).
 
 ## 장비 목록 (devices.csv)

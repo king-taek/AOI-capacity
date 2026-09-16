@@ -22,21 +22,23 @@ from aoi_capacity import collect, devices, scope
 from conftest import make_cfg, make_device
 
 
-# ── 가짜 NAS: 허용(AOI-25) 한 대 + 건드리면 안 되는 이웃들 ─────────────────
+#: 현장 테스트 대상 4대(X:\AOI-1 · M:\AOI-8 · M:\AOI-9 · Y:\AOI-25)를 흉내 낸다.
+ALLOWED = [("X", "AOI-1"), ("M", "AOI-8"), ("M", "AOI-9"), ("Y", "AOI-25")]
+#: 같은 공유에 나란히 있지만 건드리면 안 되는 이웃들
+BLOCKED = [("X", "AOI-2"), ("M", "AOI-10"), ("Y", "AOI-24"), ("I", "AOI-3")]
+
+
+# ── 가짜 NAS: 허용 4대 + 같은 공유의 이웃들 ──────────────────────────────
 @pytest.fixture
 def scoped_nas(tmp_path):
     nas = tmp_path / "nas"
-    make_device(nas / "Y", "AOI-25")          # 허용
-    make_device(nas / "Y", "AOI-24")          # 같은 공유의 이웃 — 접근 금지
-    make_device(nas / "X", "AOI-1")           # 다른 공유 — 접근 금지
-    make_device(nas / "I", "AOI-3")           # 4층 자동탐색(*) 대상 — 접근 금지
+    for share, name in ALLOWED + BLOCKED:
+        make_device(nas / share, name)
     csv_path = tmp_path / "devices.csv"
     csv_path.write_text(
         "장비명,NAS경로,폴더,사용,메모\n"
-        f"AOI-1,{nas / 'X'},AOI-1,Y,Camtek 1~7\n"
-        f"AOI-24,{nas / 'Y'},AOI-24,Y,Camtek 24~25\n"
-        f"AOI-25,{nas / 'Y'},AOI-25,Y,Camtek 24~25\n"
-        f"4층,{nas / 'I'},*,Y,Camtek 4층 · 폴더 * = 자동 등록\n",
+        + "".join(f"{name},{nas / share},{name},Y,Camtek\n" for share, name in ALLOWED + BLOCKED if name != "AOI-3")
+        + f"4층,{nas / 'I'},*,Y,Camtek 4층 · 폴더 * = 자동 등록\n",
         encoding="utf-8-sig")
     return nas, csv_path
 
@@ -44,18 +46,21 @@ def scoped_nas(tmp_path):
 class Tripwire:
     """가짜 NAS 안에서 허용 폴더(그리고 그 상위) 밖을 건드리면 기록한다."""
 
-    def __init__(self, nas: Path, allowed: Path):
+    def __init__(self, nas: Path, allowed):
         self.nas = os.path.abspath(str(nas))
-        self.allowed = os.path.abspath(str(allowed))
+        self.allowed = [os.path.abspath(str(a)) for a in allowed]
         self.hits = []
 
     def _ok(self, path) -> bool:
         p = os.path.abspath(str(path))
         if not (p == self.nas or p.startswith(self.nas + os.sep)):
             return True                                    # NAS 밖(캐시·출력·임시폴더)은 관심 없음
-        if p == self.allowed or p.startswith(self.allowed + os.sep):
-            return True                                    # 허용 장비 폴더 안
-        return self.allowed.startswith(p + os.sep)         # 허용 장비의 상위 폴더(공유 루트)
+        for a in self.allowed:
+            if p == a or p.startswith(a + os.sep):
+                return True                                # 허용 장비 폴더 안
+            if a.startswith(p + os.sep):
+                return True                                # 허용 장비의 상위 폴더(공유 루트)
+        return False
 
     def check(self, api: str, path):
         if not self._ok(path):
@@ -65,7 +70,7 @@ class Tripwire:
 @pytest.fixture
 def tripwire(monkeypatch, scoped_nas):
     nas, _ = scoped_nas
-    tw = Tripwire(nas, nas / "Y" / "AOI-25")
+    tw = Tripwire(nas, [nas / share / name for share, name in ALLOWED])
     real = {"scandir": os.scandir, "stat": os.stat, "isdir": os.path.isdir,
             "isfile": os.path.isfile, "exists": os.path.exists, "open": builtins.open,
             "listdir": os.listdir}
@@ -94,16 +99,31 @@ def _cfg(tmp_path, csv_path, **over):
 
 
 # ── 1. 기본값 ────────────────────────────────────────────────────────────
-def test_default_scope_is_aoi25_everywhere():
-    assert collect.DEFAULT_CONFIG["scope_devices"] == ["AOI-25"]
-    assert scope.scope_list({}) == ["AOI-25"] and not scope.unrestricted({})
-    assert scope.scope_list({"scope_devices": []}) == ["AOI-25"]      # 빈 목록은 '전부 금지' 가 아니다
+SCOPE = ["AOI-1", "AOI-8", "AOI-9", "AOI-25"]
+
+
+def test_default_scope_is_the_four_test_devices_everywhere():
+    assert collect.DEFAULT_CONFIG["scope_devices"] == SCOPE
+    assert scope.scope_list({}) == SCOPE and not scope.unrestricted({})
+    assert scope.scope_list({"scope_devices": []}) == SCOPE      # 빈 목록은 '전부 금지' 가 아니다
     from aoi_capacity.utils import prefs
-    assert prefs.to_collect_cfg(prefs.Prefs())["scope_devices"] == ["AOI-25"]
+    assert prefs.to_collect_cfg(prefs.Prefs())["scope_devices"] == SCOPE
+
+
+def test_saved_old_default_scope_is_migrated_but_user_choice_is_kept(tmp_path):
+    """이미 저장된 설정: 옛 기본값(AOI-25 한 대)만 새 목록으로 옮기고, 직접 고른 값은 그대로 둔다."""
+    from aoi_capacity.utils import prefs
+    moved = prefs.migrate(prefs.Prefs(scope_devices=["AOI-25"], prefs_version=1))
+    assert moved.scope_devices == SCOPE and moved.prefs_version == prefs.PREFS_VERSION
+    mine = prefs.migrate(prefs.Prefs(scope_devices=["AOI-7"], prefs_version=1))
+    assert mine.scope_devices == ["AOI-7"]                    # 사용자가 고른 값은 건드리지 않는다
+    wide = prefs.migrate(prefs.Prefs(scope_devices=["*"], prefs_version=1))
+    assert wide.scope_devices == ["*"]
 
 
 @pytest.mark.parametrize("name,expected", [
-    ("AOI-25", True), ("aoi 25", True), ("AOI_25", True),
+    ("AOI-25", True), ("aoi 25", True), ("AOI_25", True), ("AOI-1", True), ("AOI-8", True), ("AOI-9", True),
+    ("AOI-10", False),          # ★ AOI-1 과 헷갈리면 안 된다
     ("AOI-24", False), ("AOI-2", False), ("AOI-255", False), ("4F-AOI-01", False), ("", False),
 ])
 def test_is_allowed_matches_by_name_only(name, expected):
@@ -115,7 +135,7 @@ def test_resolve_devices_touches_only_aoi25(tmp_path, scoped_nas, tripwire):
     nas, csv_path = scoped_nas
     logs = []
     devs = devices.resolve_devices(_cfg(tmp_path, csv_path), logs.append)
-    assert [d["name"] for d in devs] == ["AOI-25"]
+    assert [d["name"] for d in devs] == ["AOI-1", "AOI-8", "AOI-9", "AOI-25"]   # 번호순
     assert not tripwire.hits, tripwire.hits
     assert any("범위 밖" in l and "4층" in l for l in logs)     # * 행은 나열도 하지 않고 건너뛴다
 
@@ -124,13 +144,15 @@ def test_check_rows_reports_out_of_scope_without_touching(tmp_path, scoped_nas, 
     nas, csv_path = scoped_nas
     rows = devices.read_devices_csv(csv_path)
     st = {r["name"]: r["status"] for r in devices.check_rows(rows, _cfg(tmp_path, csv_path))}
-    assert st == {"AOI-1": "out_of_scope", "AOI-24": "out_of_scope", "AOI-25": "ok", "4층": "out_of_scope"}
+    assert st == {"AOI-1": "ok", "AOI-8": "ok", "AOI-9": "ok", "AOI-25": "ok",
+                  "AOI-2": "out_of_scope", "AOI-10": "out_of_scope", "AOI-24": "out_of_scope",
+                  "4층": "out_of_scope"}
     assert not tripwire.hits, tripwire.hits
 
 
 def test_missing_csv_does_not_fall_back_to_scanning_the_nas(tmp_path, scoped_nas, tripwire):
     nas, _ = scoped_nas
-    cfg = _cfg(tmp_path, tmp_path / "none.csv", nas_roots=[str(nas / "X"), str(nas / "Y")])
+    cfg = _cfg(tmp_path, tmp_path / "none.csv", nas_roots=[str(nas / "X"), str(nas / "Y"), str(nas / "M")])
     assert devices.resolve_devices(cfg) == []
     assert not tripwire.hits, tripwire.hits
 
@@ -142,9 +164,9 @@ def test_collect_entry_points_stay_in_scope(tmp_path, scoped_nas, tripwire, kw):
     cfg = _cfg(tmp_path, csv_path)
     rows, dev_meta, errors = collect.collect(cfg, **kw)
     assert not tripwire.hits, tripwire.hits
-    assert rows and {r["device"] for r in rows} == {"AOI-25"}
-    assert [d["name"] for d in dev_meta if d.get("scope") != "out"] == ["AOI-25"]
-    assert {d["name"] for d in dev_meta if d.get("scope") == "out"} == {"AOI-1", "AOI-24", "4층"}
+    assert rows and {r["device"] for r in rows} == {"AOI-1", "AOI-8", "AOI-9", "AOI-25"}
+    assert [d["name"] for d in dev_meta if d.get("scope") != "out"] == ["AOI-1", "AOI-8", "AOI-9", "AOI-25"]
+    assert {d["name"] for d in dev_meta if d.get("scope") == "out"} == {"AOI-2", "AOI-10", "AOI-24", "4층"}
     collect.collect(cfg)                                   # 증분 실행도 같은 범위
     assert not tripwire.hits, tripwire.hits
 
@@ -161,7 +183,7 @@ def test_cli_run_stays_in_scope(tmp_path, scoped_nas, tripwire, monkeypatch):
     data = _embedded(out / "AOI_capacity.html")
     assert data["meta"]["scope"]["restricted"] is True
     dev_col = data["cols"].index("device")
-    assert {r[dev_col] for r in data["rows"]} == {"AOI-25"}
+    assert {r[dev_col] for r in data["rows"]} == {"AOI-1", "AOI-8", "AOI-9", "AOI-25"}
 
 
 def _embedded(html_path) -> dict:
@@ -176,8 +198,15 @@ def test_html_carries_scope_and_skipped_devices(tmp_path, scoped_nas):
     rows, dev_meta, errors = collect.collect(cfg)
     target = collect.write_html(cfg, rows, dev_meta, errors, 0.0, mode="gui")
     data = _embedded(target)
-    assert data["meta"]["scope"] == {"restricted": True, "devices": ["AOI-25"]}
-    assert {d["name"] for d in data["meta"]["devices"] if d.get("scope") == "out"} == {"AOI-1", "AOI-24", "4층"}
+    assert data["meta"]["scope"] == {"restricted": True, "devices": SCOPE}
+    assert {d["name"] for d in data["meta"]["devices"] if d.get("scope") == "out"} == {"AOI-2", "AOI-10", "AOI-24", "4층"}
+
+
+def _cursor_of(cache: dict, device_folder: str):
+    """여러 장비가 범위 안이므로 커서는 장비 경로로 골라 본다."""
+    hits = [v for k, v in cache["last_mtime"].items() if k.rstrip("\\/").endswith(device_folder.lower())
+            or device_folder.lower() in k.lower()]
+    return hits[0] if hits else None
 
 
 # ── 4. 기존 캐시 · 이름 변경 ─────────────────────────────────────────────
@@ -185,27 +214,28 @@ def test_other_device_cache_is_kept_but_excluded_from_output(tmp_path, scoped_na
     nas, csv_path = scoped_nas
     wide = make_cfg(tmp_path, csv_path, scope_devices=["*"])
     rows_all, _, _ = collect.collect(wide)                 # 예전(제한 없음) 실행으로 캐시를 만든다
-    assert {r["device"] for r in rows_all} == {"AOI-1", "AOI-24", "AOI-25", "4F-AOI-03"}
+    assert {"AOI-2", "AOI-10", "AOI-24", "4F-AOI-03"} <= {r["device"] for r in rows_all}
 
     rows, _, _ = collect.collect(_cfg(tmp_path, csv_path))
-    assert {r["device"] for r in rows} == {"AOI-25"}       # 화면에는 AOI-25 만
+    assert {r["device"] for r in rows} == {"AOI-1", "AOI-8", "AOI-9", "AOI-25"}   # 범위 밖은 화면에서 빠진다
     cache = json.loads((tmp_path / "out" / "aoi_cache.json").read_text(encoding="utf-8"))
-    assert any("AOI-24" in k for k in cache["reports"])    # ★ 다른 장비 캐시는 지우지 않는다
-    assert any("AOI-1" in k for k in cache["reports"])
+    for gone in ("AOI-24", "AOI-2", "AOI-10", "AOI-3"):    # ★ 다른 장비 캐시는 지우지 않는다
+        assert any(f"{gone}{os.sep}" in k for k in cache["reports"]), gone
 
 
 def test_display_rename_keeps_one_device_and_one_cursor(tmp_path, scoped_nas):
     nas, csv_path = scoped_nas
     cfg = _cfg(tmp_path, csv_path)
     rows, _, _ = collect.collect(cfg)
-    assert {r["device"] for r in rows} == {"AOI-25"}
+    assert "AOI-25" in {r["device"] for r in rows}
     before = json.loads((tmp_path / "out" / "aoi_cache.json").read_text(encoding="utf-8"))["last_mtime"]
 
     csv_path.write_text(csv_path.read_text(encoding="utf-8-sig").replace("AOI-25,", "25호기,", 1), encoding="utf-8-sig")
     rows2, dev_meta2, _ = collect.collect(cfg)
     after = json.loads((tmp_path / "out" / "aoi_cache.json").read_text(encoding="utf-8"))["last_mtime"]
     assert list(before) == list(after)                     # 커서 키는 경로라 이름을 바꿔도 그대로
-    assert {r["device"] for r in rows2} == {"25호기"}       # 옛 행도 새 표시명으로 나온다(둘로 갈라지지 않음)
+    names2 = {r["device"] for r in rows2}
+    assert "25호기" in names2 and "AOI-25" not in names2    # 옛 행도 새 표시명으로(둘로 갈라지지 않음)
     assert all(d["reports"] == 0 for d in dev_meta2 if d.get("scope") != "out")   # 다시 읽지 않는다
 
 
@@ -215,16 +245,18 @@ def test_legacy_name_cursor_is_migrated_not_duplicated(tmp_path, scoped_nas):
     collect.collect(cfg)
     cache_file = tmp_path / "out" / "aoi_cache.json"
     cache = json.loads(cache_file.read_text(encoding="utf-8"))
-    cache["last_mtime"] = {"AOI-25": list(cache["last_mtime"].values())[0]}       # 옛 형식(표시명 키)으로 되돌린다
+    n_before = len(cache["last_mtime"])
+    old_key = next(k for k in cache["last_mtime"] if k.rstrip("\\/").lower().endswith("aoi-25"))
+    cache["last_mtime"]["AOI-25"] = cache["last_mtime"].pop(old_key)              # 옛 형식(표시명 키)으로 되돌린다
     for entry in cache["reports"].values():
         entry.pop("device_id", None)
     cache_file.write_text(json.dumps(cache), encoding="utf-8")
 
     rows, dev_meta, _ = collect.collect(cfg)
     migrated = json.loads(cache_file.read_text(encoding="utf-8"))["last_mtime"]
-    assert len(migrated) == 1 and "AOI-25" not in migrated                        # 경로 키로 이관
+    assert len(migrated) == n_before and "AOI-25" not in migrated                 # 경로 키로 이관(개수 그대로)
     assert all(d["reports"] == 0 for d in dev_meta if d.get("scope") != "out")     # 커서가 살아 있어 재수집 없음
-    assert {r["device"] for r in rows} == {"AOI-25"}
+    assert "AOI-25" in {r["device"] for r in rows}
 
 
 # ── 5. 읽기 실패한 Report 는 커서에 묻히지 않는다 ────────────────────────
@@ -249,16 +281,16 @@ def test_failed_report_blocks_cursor_and_is_retried(tmp_path, scoped_nas, monkey
     rows, _, errors = collect.collect(cfg)
     assert len(errors) == 1 and errors[0]["tries"] == 1
     cache = json.loads((tmp_path / "out" / "aoi_cache.json").read_text(encoding="utf-8"))
-    cursors = list(cache["last_mtime"].values())
+    cur = _cursor_of(cache, "AOI-25")
     # ★ 커서가 실패 파일을 넘어가지 않았다(넘어갔다면 그 Report 는 영영 다시 읽히지 않는다)
-    assert not cursors or cursors[0] < bad.stat().st_mtime
+    assert cur is None or cur < bad.stat().st_mtime
     assert any("BROKEN" in k for k in cache["failed"])
 
     boom["on"] = False                                      # 다음 수집에서 다시 읽힌다
     rows2, dev_meta2, errors2 = collect.collect(cfg)
     assert not errors2 and len(rows2) > len(rows)
     cache2 = json.loads((tmp_path / "out" / "aoi_cache.json").read_text(encoding="utf-8"))
-    assert not cache2["failed"] and list(cache2["last_mtime"].values())[0] >= good.stat().st_mtime
+    assert not cache2["failed"] and _cursor_of(cache2, "AOI-25") >= good.stat().st_mtime
 
 
 def test_permanently_broken_report_stops_blocking_after_retries(tmp_path, scoped_nas, monkeypatch):
@@ -276,7 +308,7 @@ def test_permanently_broken_report_stops_blocking_after_retries(tmp_path, scoped
         _, _, errors = collect.collect(cfg)
         assert len(errors) == 1
     cache = json.loads((tmp_path / "out" / "aoi_cache.json").read_text(encoding="utf-8"))
-    assert list(cache["last_mtime"].values())[0] >= good.stat().st_mtime   # 커서가 다시 전진한다
+    assert _cursor_of(cache, "AOI-25") >= good.stat().st_mtime            # 커서가 다시 전진한다
     assert cache["failed"][str(bad)]["tries"] == collect.MAX_READ_RETRY    # 오류 기록은 남는다
 
 

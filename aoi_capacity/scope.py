@@ -17,8 +17,11 @@ import os
 import re
 from typing import Dict, Iterable, List, Sequence
 
-#: 현재 현장 검증 대상. 바꿀 때는 README 와 dev/tests/test_scope_isolation.py 를 함께 본다.
-DEFAULT_SCOPE: List[str] = ["AOI-25"]
+#: 현재 현장 검증 대상. 바꿀 때는 README·CLAUDE.md 와 dev/tests/test_scope_isolation.py,
+#: 그리고 prefs.migrate(이미 저장된 설정을 새 기본값으로 옮긴다)를 함께 본다.
+DEFAULT_SCOPE: List[str] = ["AOI-1", "AOI-8", "AOI-9", "AOI-25"]
+#: 지금까지 기본값이었던 목록들 — 사용자가 직접 고르지 않고 그대로 둔 설정만 새 기본값으로 옮긴다.
+PAST_DEFAULTS: List[List[str]] = [["AOI-25"]]
 ANY = "*"
 CFG_KEY = "scope_devices"
 
