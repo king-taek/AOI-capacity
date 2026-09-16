@@ -1,5 +1,4 @@
 # AOI Capacity 런타임 의존성. 변경은 자동 업데이트가 통째로 실패할 수 있는 지점 — 작업 요약에 반드시 표시.
 PyQt6>=6.6
-PyQt6-WebEngine>=6.6
 # 회사 SSL 검사 프록시에서도 자동 업데이트가 되도록 OS 신뢰 저장소 사용(py3.10+).
 truststore>=0.8 ; python_version >= "3.10"

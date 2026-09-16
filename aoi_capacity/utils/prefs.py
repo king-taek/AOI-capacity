@@ -31,12 +31,10 @@ class Prefs:
     threshold_util: int = 40          # 주의 장비: 가동률 미만
     threshold_err: int = 3            # 주의 장비: 오류 건수 이상
     color_mode: str = "dark"          # dark | light
-    web_software_render: bool = False
     window_width: int = 0
     window_height: int = 0
     window_maximized: bool = False
-    last_view: str = "home"
-    auto_collect_minutes: int = 0     # 예약: 0 = 자동 수집 안 함(현재 UI 노출 없음)
+    last_view: str = "collect"
     scope_devices: List[str] = field(default_factory=lambda: list(_scope.DEFAULT_SCOPE))  # ★ 수집 허용 장비
     prefs_version: int = PREFS_VERSION
     extra: Dict[str, Any] = field(default_factory=dict)

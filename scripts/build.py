@@ -148,7 +148,7 @@ def verify_checks(out: Path, lite: bool = False) -> List[Tuple[bool, str]]:
         missing = impl.missing_packages(out, app / "requirements.txt")
         checks.append((not missing, "all required packages in bundle site-packages"
                        + (f" (missing: {', '.join(missing[:5])})" if missing else "")))
-        checks.append((sp_mb > 150, f"site-packages {sp_mb:.0f} MB (> 150 MB expected with PyQt6+WebEngine)"))
+        checks.append((sp_mb > 60, f"site-packages {sp_mb:.0f} MB (> 60 MB expected with PyQt6)"))
     for bat in ("run_aoi.bat", "run_aoi_debug.bat"):
         checks.append(((out / bat).is_file(), bat))
     return checks
@@ -157,7 +157,7 @@ def verify_checks(out: Path, lite: bool = False) -> List[Tuple[bool, str]]:
 def import_probe_cmd(out: Path) -> List[str]:
     app = out / "app"
     src = ("import sys; sys.path.insert(0, r'%s');"
-           "import PyQt6.QtWidgets, PyQt6.QtWebEngineWidgets;"
+           "import PyQt6.QtWidgets;"
            "from aoi_capacity.utils import updater, paths, bootstrap;"
            "assert updater.DEFAULT_BRANCH" % str(app))
     return [str(out / "python" / "python.exe"), "-s", "-c", src]

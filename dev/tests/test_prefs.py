@@ -10,7 +10,8 @@ from aoi_capacity.utils import paths, prefs
 def test_defaults_when_missing():
     p = prefs.load()
     assert p.backfill_days == 30 and p.retention_days == 90 and p.color_mode == "dark"
-    assert p.output_dir == "" and p.auto_collect_minutes == 0
+    assert p.output_dir == "" and p.last_view == "collect"      # 수집 전용 — 자동 주기 수집 설정은 없다
+    assert not hasattr(p, "auto_collect_minutes")
 
 
 def test_unknown_keys_ignored_and_roundtrip():

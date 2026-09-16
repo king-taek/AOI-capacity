@@ -1,7 +1,10 @@
-"""메인 창 — 좌측 NavBar | QStackedWidget(대시보드 · 장비 목록 · 수집 · 설정).
+"""메인 창 — 좌측 NavBar | QStackedWidget(장비 목록 · 수집 · 설정).
+
+★ 이 프로그램은 **수집 전용**이다. 결과 화면은 앱 안에 없다 — 수집이 만든 HTML 한 장을 사용자가
+  더블클릭해서 본다(QtWebEngine·로컬 서버 없음). 수집 페이지의 '결과 화면 열기' 는 편의 버튼일 뿐이다.
 
 - 수집은 `CollectorWorker`(QThread) 로 돌리고 창 위에 `LoadingOverlay` 를 덮는다. 시그널마다 토큰을 비교해
-  옛 실행의 늦은 신호는 버린다. 완료되면 대시보드(HTML)를 다시 읽고, 취소·실패 시 이전 결과는 그대로다.
+  옛 실행의 늦은 신호는 버린다. 취소·실패 시 이전 결과는 그대로다. 자동 주기 수집은 없다(수동 실행만).
 - 업데이트 확인은 `utils.updater` 를 지연 import 한다(M4 에서 추가). 모듈이 없어도 앱은 정상 동작한다.
 - 테스트(conftest)는 `_check_for_update_async` 를 클래스 수준에서 막는다.
 """
@@ -18,11 +21,10 @@ from PyQt6.QtGui import QIcon
 from PyQt6.QtWidgets import QApplication, QHBoxLayout, QMainWindow, QStackedWidget, QVBoxLayout, QWidget
 
 from .. import devices, i18n
-from ..utils import paths, prefs
+from ..utils import paths, prefs, results
 from ..workers.collector import CollectorWorker, CollectResult
 from . import theme
 from .pages.collect_page import CollectPage
-from .pages.dashboard_page import VIEWS, DashboardPage
 from .pages.devices_page import DevicesPage
 from .pages.settings_page import SettingsPage
 from .widgets import sheets
@@ -105,12 +107,11 @@ class MainWindow(QMainWindow):
         root.addWidget(self.nav)
         root.addWidget(page_wrap, 1)
 
-        self.dashboard = DashboardPage(self.stack)
         self.devices_page = DevicesPage(self.stack)
         self.collect_page = CollectPage(self.stack)
         self.settings_page = SettingsPage(self.stack)
-        self._pages = {"dashboard": self.dashboard, "devices": self.devices_page,
-                       "collect": self.collect_page, "settings": self.settings_page}
+        self._pages = {"devices": self.devices_page, "collect": self.collect_page,
+                       "settings": self.settings_page}
         for w in self._pages.values():
             self.stack.addWidget(w)
 
@@ -120,18 +121,12 @@ class MainWindow(QMainWindow):
         self._status_timer = QTimer(self)
         self._status_timer.setSingleShot(True)
         self._status_timer.timeout.connect(self._refresh_last_collect)
-        self._collect_timer = QTimer(self)    # 예약: 자동 수집(prefs.auto_collect_minutes>0 일 때만 시작)
-        self._collect_timer.timeout.connect(lambda: self._start_collect(False, False))
-
         self._wire()
-        self.dashboard.load()
         self._refresh_last_collect()
         p = prefs.load()
-        self.nav.set_current(p.last_view if p.last_view in self.nav.keys() else "home")
-        if p.last_view in self.nav.keys():
-            self._on_nav(p.last_view)
-        if int(p.auto_collect_minutes) > 0:
-            self._collect_timer.start(int(p.auto_collect_minutes) * 60_000)
+        start = p.last_view if p.last_view in self.nav.keys() else "collect"
+        self.nav.set_current(start)
+        self._on_nav(start)
         QTimer.singleShot(400, self._check_for_update_async)
 
     # ── 배선 ──
@@ -145,17 +140,13 @@ class MainWindow(QMainWindow):
         self.devices_page.error.connect(lambda t, b: sheets.error(self, t, b))
         self.devices_page.message.connect(self.flash_status)
         self.settings_page.theme_changed.connect(self._on_theme)
-        self.settings_page.thresholds_changed.connect(self.dashboard.set_thresholds)
         self.settings_page.update_check_requested.connect(lambda: self._check_for_update_async(manual=True))
 
     # ── 내비게이션 ──
     def _on_nav(self, key: str) -> None:
         if self.stack.currentWidget() is self.devices_page and key != "devices":
             self._confirm_devices_dirty()
-        if key in VIEWS:
-            self.stack.setCurrentWidget(self.dashboard)
-            self.dashboard.show_view(key)
-        elif key in self._pages:
+        if key in self._pages:
             self.stack.setCurrentWidget(self._pages[key])
         prefs.patch(last_view=key)
 
@@ -170,13 +161,13 @@ class MainWindow(QMainWindow):
 
     # ── 상태줄(내비 하단) ──
     def _refresh_last_collect(self) -> None:
-        html = paths.output_html(prefs.load().output_dir)
-        try:
-            ts = html.stat().st_mtime
+        ts = results.last_collect_time()
+        if ts:
             when = time.strftime("%m-%d %H:%M", time.localtime(ts))
             self.nav.set_status(i18n.KO.NAV_LAST_COLLECT_FMT.format(when=when))
-        except OSError:
+        else:
             self.nav.set_status(i18n.KO.NAV_LAST_COLLECT_NEVER)
+        self.collect_page.refresh_result()
 
     def flash_status(self, text: str) -> None:
         self.nav.set_status(text)
@@ -187,7 +178,6 @@ class MainWindow(QMainWindow):
         app = QApplication.instance()
         if app is not None:
             theme.apply_to_app(app, mode)
-        self.dashboard.set_theme(mode)
         self.overlay.update()
 
     # ── 수집 ──
@@ -275,7 +265,6 @@ class MainWindow(QMainWindow):
         toast = i18n.KO.COLLECT_DONE_TOAST_FMT.format(devices=result.devices, elapsed=f"{m:02d}:{s:02d}")
         self.collect_page.set_status(toast)
         self.collect_page.append_log(toast)
-        self.dashboard.reload_after_collect()
         self._refresh_last_collect()
         bad = result.bad_devices
         if bad or result.errors:

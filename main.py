@@ -67,10 +67,6 @@ def _ensure_deps_installed(logger: logging.Logger) -> bool:
 
 
 def _apply_env(p: prefs.Prefs) -> None:
-    if p.web_software_render:
-        flags = os.environ.get("QTWEBENGINE_CHROMIUM_FLAGS", "")
-        if "--disable-gpu" not in flags:
-            os.environ["QTWEBENGINE_CHROMIUM_FLAGS"] = (flags + " --disable-gpu").strip()
     os.environ.setdefault("QT_ENABLE_HIGHDPI_SCALING", "1")
 
 

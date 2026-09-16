@@ -1,4 +1,6 @@
-"""설정 · 정보 — 표시(테마, 주의 기준), 화면 엔진, 데이터 폴더, 버전·업데이트, NAS 안내."""
+"""설정 · 정보 — 표시(테마), 주의 기준, 데이터 폴더, 버전·업데이트, NAS 안내.
+
+주의 기준은 결과 HTML 을 만들 때 함께 들어간다(화면에서도 바꿀 수 있다)."""
 from __future__ import annotations
 
 from typing import Optional
@@ -63,9 +65,6 @@ class SettingsPage(QWidget):
         g.addWidget(self._th_err, 1, 3)
         g.setColumnStretch(4, 1)
         cl.addLayout(g)
-        self._soft = QCheckBox(i18n.KO.SET_SOFTWARE_RENDER, card)
-        self._soft.setChecked(bool(p.web_software_render))
-        cl.addWidget(self._soft)
         lay.addWidget(card)
 
         # 데이터
@@ -104,7 +103,6 @@ class SettingsPage(QWidget):
         self._dark.toggled.connect(self._on_theme)
         self._th_util.valueChanged.connect(self._on_th)
         self._th_err.valueChanged.connect(self._on_th)
-        self._soft.toggled.connect(lambda on: prefs.patch(web_software_render=bool(on)))
         b_open.clicked.connect(lambda: QDesktopServices.openUrl(QUrl.fromLocalFile(str(paths.data_root()))))
         b_log.clicked.connect(lambda: QDesktopServices.openUrl(QUrl.fromLocalFile(str(paths.log_file()))))
         b_upd.clicked.connect(self.update_check_requested.emit)

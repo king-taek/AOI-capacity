@@ -187,7 +187,7 @@ def run_build(repo_root: Path, py_url: str, run: Optional[Callable] = None, log:
         log("[FAILED] pip self-upgrade failed (network/proxy).")
         return 1
     if install_deps:
-        log("       installing dependencies (PyQt6 + WebEngine — takes a while) ...")
+        log("       installing dependencies (PyQt6 — takes a while) ...")
         if run(_isolated(ppy, "-m", "pip", "install", "-r", repo_root / "requirements.txt")) != 0:
             log("[FAILED] dependency install failed (requirements.txt). See the last pip error above.")
             return 1

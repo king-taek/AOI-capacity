@@ -1,14 +1,18 @@
-"""수집 페이지 — '지금 수집' 버튼, 수집 기간 설정, 로그. 실제 실행은 MainWindow 가 워커로 한다."""
+"""수집 페이지 — '지금 수집' 버튼, 수집 기간 설정, 결과 HTML 안내, 로그. 실제 실행은 MainWindow 가 워커로 한다.
+
+결과 화면은 이 프로그램 안에 없다. 수집이 만든 HTML 한 장을 사용자가 더블클릭해서 본다
+('결과 화면 열기' 버튼은 그 파일을 기본 브라우저로 띄워 주는 편의 기능일 뿐이다)."""
 from __future__ import annotations
 
 from typing import Optional
 
-from PyQt6.QtCore import pyqtSignal
+from PyQt6.QtCore import Qt, QUrl, pyqtSignal
+from PyQt6.QtGui import QDesktopServices
 from PyQt6.QtWidgets import (QCheckBox, QFileDialog, QFrame, QGridLayout, QHBoxLayout, QLabel, QLineEdit,
                              QPlainTextEdit, QSpinBox, QVBoxLayout, QWidget)
 
 from ... import collect, i18n, nas_guard
-from ...utils import paths, prefs
+from ...utils import paths, prefs, results
 from ..widgets.buttons import make_button
 
 MAX_LOG_LINES = 1000
@@ -95,6 +99,33 @@ class CollectPage(QWidget):
         g.setColumnStretch(1, 1)
         lay.addWidget(card)
 
+        # 결과 화면(HTML 한 장) — 더블클릭이 기본, 버튼은 편의
+        rcard = QFrame(self)
+        rcard.setProperty("role", "card")
+        rl = QVBoxLayout(rcard)
+        rl.setContentsMargins(18, 14, 18, 14)
+        rl.setSpacing(8)
+        rt = QLabel(i18n.KO.COLLECT_RESULT_TITLE, rcard)
+        rt.setProperty("role", "cardTitle")
+        self._result = QLabel("", rcard)
+        self._result.setProperty("role", "mono")
+        self._result.setWordWrap(True)
+        self._result.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
+        hint = QLabel(i18n.KO.COLLECT_RESULT_HINT, rcard)
+        hint.setProperty("role", "help")
+        hint.setWordWrap(True)
+        rrow = QHBoxLayout()
+        self._b_open = make_button(i18n.KO.BTN_OPEN_RESULT, "primary", rcard)
+        self._b_folder = make_button(i18n.KO.BTN_OPEN_RESULT_FOLDER, "ghost", rcard)
+        rrow.addWidget(self._b_open)
+        rrow.addWidget(self._b_folder)
+        rrow.addStretch(1)
+        rl.addWidget(rt)
+        rl.addWidget(self._result)
+        rl.addWidget(hint)
+        rl.addLayout(rrow)
+        lay.addWidget(rcard)
+
         # 로그
         lt = QLabel(i18n.KO.COLLECT_LOG_TITLE, self)
         lt.setProperty("role", "eyebrow")
@@ -105,6 +136,9 @@ class CollectPage(QWidget):
         lay.addWidget(lt)
         lay.addWidget(self._log, 1)
 
+        self._b_open.clicked.connect(self._open_result)
+        self._b_folder.clicked.connect(lambda: QDesktopServices.openUrl(
+            QUrl.fromLocalFile(str(paths.output_dir(prefs.load().output_dir)))))
         self._b_run.clicked.connect(self._on_run)
         self._b_stop.clicked.connect(self.stop_requested.emit)
         self._b_out.clicked.connect(self._browse_out)
@@ -115,8 +149,20 @@ class CollectPage(QWidget):
         self._opt_backfill.toggled.connect(lambda _x: self.refresh_plan())
         self._opt_full.toggled.connect(lambda _x: self.refresh_plan())
         self.refresh_plan()
+        self.refresh_result()
 
     # ── 공개 API ──
+    def refresh_result(self) -> None:
+        """결과 파일 경로와 버튼 상태를 갱신한다(수집 직후·설정 변경 후)."""
+        path = results.html_path()
+        have = path.is_file()
+        self._result.setText(str(path) if have else i18n.KO.COLLECT_RESULT_NONE)
+        self._b_open.setEnabled(have)
+        self._b_folder.setEnabled(True)
+
+    def _open_result(self) -> None:
+        QDesktopServices.openUrl(QUrl.fromLocalFile(str(results.ensure_html())))
+
     def refresh_plan(self) -> None:
         p = prefs.load()
         cfg = prefs.to_collect_cfg(p)

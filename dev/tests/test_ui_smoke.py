@@ -1,4 +1,4 @@
-"""MainWindow 스모크 — 오프스크린. WebEngine 없이(AOI_NO_WEBENGINE=1) 내비 전환·수집 흐름·시작 부수효과 억제."""
+"""MainWindow 스모크 — 오프스크린. 수집 전용 창(수집 · 장비 목록 · 설정)의 내비 전환·수집 흐름·결과 파일 안내."""
 from __future__ import annotations
 
 import time
@@ -20,11 +20,14 @@ def _pump(app, secs=0.05):
 @pytest.fixture
 def window(styled_qapp, fake_nas):
     from aoi_capacity import devices
-    from aoi_capacity.utils import paths
+    from aoi_capacity.utils import paths, prefs
 
     nas, csv_path = fake_nas
     rows = devices.read_devices_csv(csv_path)
     devices.write_devices_csv(paths.devices_csv_path(), rows)
+    # 가짜 NAS 장비는 AOI-25 가 아니다 — 창 동작 자체를 보는 테스트라 범위 제한을 푼다.
+    # 기본값(AOI-25)에서 범위 밖 장비만 있을 때의 동작은 test_collect_refuses_out_of_scope_devices 가 본다.
+    prefs.patch(scope_devices=["*"])
     from aoi_capacity.ui.main_window import MainWindow
 
     w = MainWindow()
@@ -43,13 +46,19 @@ def test_startup_update_check_is_suppressed_in_tests(window, styled_qapp):
 def test_nav_switches_pages_and_remembers_last_view(window, styled_qapp):
     from aoi_capacity.utils import prefs
 
-    for key, page in (("devices", window.devices_page), ("collect", window.collect_page),
-                      ("settings", window.settings_page), ("trend", window.dashboard), ("home", window.dashboard)):
+    for key, page in (("devices", window.devices_page), ("settings", window.settings_page),
+                      ("collect", window.collect_page)):
         window.nav.set_current(key)
         _pump(styled_qapp)
         assert window.stack.currentWidget() is page
         assert prefs.load().last_view == key
-    assert window.dashboard._view == "home"
+
+
+def test_no_embedded_dashboard_viewer(window):
+    """★ 결과 화면은 앱 안에 없다 — 생성된 HTML 파일을 사용자가 직접 연다."""
+    assert not hasattr(window, "dashboard")
+    assert set(window._pages) == {"collect", "devices", "settings"}
+    assert [k for k in window.nav.keys()] == ["collect", "devices", "settings"]
 
 
 def test_collect_flow_writes_html_and_updates_status(window, styled_qapp):
@@ -69,6 +78,21 @@ def test_collect_flow_writes_html_and_updates_status(window, styled_qapp):
     assert window.nav._status.text().startswith(i18n.KO.NAV_LAST_COLLECT_FMT.split("{")[0])
     assert "수집 완료" in window.collect_page._status.text()
     assert window.collect_page._b_run.isEnabled()
+    # 결과 카드가 방금 만든 HTML 경로를 가리키고 '결과 화면 열기' 가 살아난다
+    assert window.collect_page._result.text() == str(paths.output_html(""))
+    assert window.collect_page._b_open.isEnabled()
+
+
+def test_collect_refuses_out_of_scope_devices(window, styled_qapp, monkeypatch):
+    """★ 수집 범위 밖 장비뿐이면 조용히 훑지 않고 안내하고 멈춘다(기본 범위 = AOI-25)."""
+    from aoi_capacity.ui import main_window as mw
+    from aoi_capacity.utils import prefs
+
+    prefs.patch(scope_devices=["AOI-25"])
+    warned = []
+    monkeypatch.setattr(mw.sheets, "warn", lambda *a: warned.append(a))
+    window._start_collect(False, False)
+    assert warned and not window.is_collecting()
 
 
 def test_collect_refuses_without_devices(window, styled_qapp, monkeypatch):
@@ -91,16 +115,23 @@ def test_stale_token_signals_are_ignored(window, styled_qapp):
     window.overlay.hide_overlay()
 
 
-def test_build_url_query(tmp_path):
-    from aoi_capacity.ui.pages.dashboard_page import build_url
-    from aoi_capacity.utils import prefs
+def test_result_card_before_any_collect(window, styled_qapp):
+    from aoi_capacity import i18n
+    from aoi_capacity.utils import paths
 
-    html = tmp_path / "AOI_capacity.html"
-    html.write_text("x", encoding="utf-8")
-    p = prefs.Prefs(color_mode="light", threshold_util=55, threshold_err=9)
-    q = build_url(html, "compare", p).query()
-    assert "gui=1" in q and "theme=light" in q and "view=compare" in q and "th_util=55" in q and "th_err=9" in q
-    assert "view=home" in build_url(html, "bogus", p).query()
+    if paths.output_html("").exists():
+        paths.output_html("").unlink()
+    window.collect_page.refresh_result()
+    _pump(styled_qapp)
+    assert window.collect_page._result.text() == i18n.KO.COLLECT_RESULT_NONE
+    assert not window.collect_page._b_open.isEnabled()
+
+
+def test_ensure_html_creates_openable_file_without_collecting(tmp_path):
+    from aoi_capacity.utils import results
+
+    path = results.ensure_html()
+    assert path.is_file() and "__DATA__" not in path.read_text(encoding="utf-8")
 
 
 def test_theme_switch_reapplies_stylesheet(window, styled_qapp):

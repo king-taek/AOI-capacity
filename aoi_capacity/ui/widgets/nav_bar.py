@@ -46,15 +46,13 @@ class NavItem(QFrame):
         super().mouseReleaseEvent(ev)
 
 
+# 수집 전용 프로그램 — 결과 화면(홈·추이·비교)은 생성된 HTML 파일 쪽에 있다.
 NAV_ITEMS: Tuple[Tuple[str, str, str], ...] = (
-    ("home", i18n.KO.NAV_HOME, i18n.KO.NAV_HOME_SUB),
-    ("trend", i18n.KO.NAV_TREND, i18n.KO.NAV_TREND_SUB),
-    ("compare", i18n.KO.NAV_COMPARE, i18n.KO.NAV_COMPARE_SUB),
-    ("devices", i18n.KO.NAV_DEVICES, i18n.KO.NAV_DEVICES_SUB),
     ("collect", i18n.KO.NAV_COLLECT, i18n.KO.NAV_COLLECT_SUB),
+    ("devices", i18n.KO.NAV_DEVICES, i18n.KO.NAV_DEVICES_SUB),
     ("settings", i18n.KO.NAV_SETTINGS, i18n.KO.NAV_SETTINGS_SUB),
 )
-_GAP_BEFORE = {"devices"}  # 분석 메뉴와 관리 메뉴 사이 여백
+_GAP_BEFORE = {"settings"}  # 실행 메뉴와 설정 사이 여백
 
 
 class NavBar(QWidget):

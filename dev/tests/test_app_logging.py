@@ -24,9 +24,12 @@ def test_ensure_deps_is_noop_in_dev_tree(monkeypatch):
     assert app_main._ensure_deps_installed(logging.getLogger("aoi")) is True
 
 
-def test_software_render_flag_sets_env(monkeypatch):
+def test_apply_env_sets_hidpi_and_no_webengine_flags(monkeypatch):
+    """QtWebEngine 은 더 이상 쓰지 않는다 — 관련 환경변수를 건드리지 않는다."""
     from aoi_capacity.utils import prefs
 
+    env = app_main._apply_env.__globals__["os"].environ
     monkeypatch.delenv("QTWEBENGINE_CHROMIUM_FLAGS", raising=False)
-    app_main._apply_env(prefs.Prefs(web_software_render=True))
-    assert "--disable-gpu" in app_main._apply_env.__globals__["os"].environ["QTWEBENGINE_CHROMIUM_FLAGS"]
+    app_main._apply_env(prefs.Prefs())
+    assert env["QT_ENABLE_HIGHDPI_SCALING"] == "1"
+    assert "QTWEBENGINE_CHROMIUM_FLAGS" not in env
