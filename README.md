@@ -48,6 +48,16 @@ Camtek AOI 장비의 NAS `Report/*_BatchReport.htm` 과 `Scanresult/.../WaferInf
 
 자세한 안내는 zip 안의 `설치방법.txt` 에 있습니다.
 
+## 최신 코드 받기
+
+`scripts\update_code.bat` 을 더블클릭하거나 `python scripts\update_code.py` 를 실행하면 이 폴더가 지정한 브랜치의
+최신 내용으로 맞춰집니다. **받을 브랜치는 `scripts\update_code.py` 맨 위의 `BRANCH = "..."` 한 줄**입니다.
+
+- `.git` 이 있는 폴더 → `git fetch` + 빨리감기 병합. 커밋하지 않은 변경이 있으면 멈추고 알려 줍니다.
+- GitHub zip 을 푼 폴더 → 브랜치 zip 을 받아 **바뀐 파일만** 덮어씁니다. 원본은 `_backup_날짜시각\` 에 남고,
+  이 폴더에만 있는 파일은 지우지 않습니다.
+- `--check` 를 붙이면 무엇이 새로 왔는지 보기만 합니다.
+
 ## 샘플 보내기 (개발용)
 
 재스캔(RE · SRD) 표기와 Scan error 뒤 재스캔 흐름을 정확히 구현하려면 실물 파일이 필요합니다.
