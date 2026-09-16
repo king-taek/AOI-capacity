@@ -184,7 +184,7 @@ class MainWindow(QMainWindow):
     def is_collecting(self) -> bool:
         return self._worker is not None and self._worker.isRunning()
 
-    def _start_collect(self, full: bool = False, backfill: bool = False) -> None:
+    def _start_collect(self, full: bool = False, backfill: bool = False, recover: bool = False) -> None:
         if self.is_collecting():
             sheets.warn(self, i18n.KO.COLLECT_BUSY_TITLE, i18n.KO.COLLECT_BUSY_BODY)
             return
@@ -197,7 +197,7 @@ class MainWindow(QMainWindow):
             return
         self._collect_token += 1
         tok = self._collect_token
-        w = CollectorWorker(tok, cfg, full=full, backfill=backfill)
+        w = CollectorWorker(tok, cfg, full=full, backfill=backfill, recover=recover)
         s = w.signals
         s.progress.connect(self._on_collect_progress)
         s.device.connect(self._on_collect_device)
@@ -210,7 +210,7 @@ class MainWindow(QMainWindow):
         self.collect_page.set_running(True)
         self.overlay.show_overlay(i18n.KO.LOADING_COLLECT_TITLE, cancelable=True)
         self.overlay.set_devices(names)
-        log.info("collect start token=%s full=%s backfill=%s devices=%s", tok, full, backfill, len(names))
+        log.info("collect start token=%s full=%s backfill=%s recover=%s devices=%s", tok, full, backfill, recover, len(names))
         w.start()
 
     @staticmethod
@@ -266,10 +266,16 @@ class MainWindow(QMainWindow):
         self.collect_page.set_status(toast)
         self.collect_page.append_log(toast)
         self._refresh_last_collect()
-        bad = result.bad_devices
-        if bad or result.errors:
-            sheets.warn(self, i18n.KO.COLLECT_DONE_WITH_ERRORS_TITLE,
-                        i18n.KO.COLLECT_DONE_WITH_ERRORS_FMT.format(bad_devices=len(bad), bad_reports=len(result.errors)))
+        unreachable, partial = result.unreachable_devices, result.partial_devices
+        if unreachable or partial or result.errors:
+            lines = []
+            if unreachable:
+                lines.append(i18n.KO.COLLECT_DONE_UNREACHABLE_FMT.format(n=len(unreachable), names=", ".join(unreachable)))
+            if partial:
+                lines.append(i18n.KO.COLLECT_DONE_PARTIAL_FMT.format(n=len(partial), names=", ".join(partial),
+                                                                     reports=len(result.errors)))
+            lines.append(i18n.KO.COLLECT_DONE_SEE_LOG)
+            sheets.warn(self, i18n.KO.COLLECT_DONE_WITH_ERRORS_TITLE, "\n".join(lines))
 
     def _on_collect_failed(self, token: int, message: str) -> None:
         if not self._is_current(token):

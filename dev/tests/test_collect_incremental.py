@@ -166,3 +166,116 @@ def test_cancel_still_works_while_reading_in_parallel(tmp_path, fake_nas):
 def test_worker_count_is_clamped_to_the_work_there_is(given, n_tasks, expected):
     cfg = {} if given is None else {"read_workers": given}
     assert collect._workers(cfg, n_tasks) == expected
+
+
+# ── 옛 캐시 되살리기: 분류 규칙 재계산(NAS 접근 0) 과 누락 복구(INI 못 찾은 Report 만) ──────────
+def _count_nas_reads(monkeypatch):
+    """가짜 NAS 에서 실제로 연 파일 수 — Report(.htm) 와 INI 를 따로 센다."""
+    from aoi_capacity import nas_guard
+    seen = {"htm": 0, "ini": 0}
+    orig = nas_guard.read_text
+
+    def spy(path, *a, **k):
+        low = str(path).lower()
+        if low.endswith((".htm", ".html")):
+            seen["htm"] += 1
+        elif low.endswith(".ini"):
+            seen["ini"] += 1
+        return orig(path, *a, **k)
+
+    monkeypatch.setattr(collect.nas_guard, "read_text", spy)
+    return seen
+
+
+def test_parser_version_bump_reclassifies_cached_rows_without_touching_the_nas(tmp_path, fake_nas, monkeypatch):
+    """★ 실장비: 파서를 고쳐도(acaa6ce) 캐시는 Report mtime 만 보고 옛 행을 그대로 내보냈다(상태 재분류 93건).
+    규칙 번호가 다르면 캐시를 읽을 때 원문(status·lot)에서 다시 계산한다 — NAS 는 한 번도 읽지 않는다."""
+    nas, csv_path = fake_nas
+    cfg = make_cfg(tmp_path, csv_path)
+    _run(cfg)
+    cache_path = tmp_path / "out" / "aoi_cache.json"
+    cache = json.loads(cache_path.read_text(encoding="utf-8"))
+    assert cache["parser_version"] == collect.PARSER_VERSION
+    # 옛 규칙으로 저장된 캐시를 흉내 낸다: 번호를 낮추고 한 행의 분류를 틀리게 둔다
+    cache["parser_version"] = 1
+    entry = next(iter(cache["reports"].values()))
+    victim = next(r for r in entry["rows"] if r["status"] == "Pass")
+    victim["norm_status"], victim["scan_type"] = "OTHER", "TEST"
+    cache_path.write_text(json.dumps(cache, ensure_ascii=False), encoding="utf-8")
+
+    seen = _count_nas_reads(monkeypatch)
+    rows, _, _, _ = _run(cfg)
+    assert seen == {"htm": 0, "ini": 0}                                     # 캐시만으로 고쳤다
+    fixed = [r for r in rows if r["wafer_id"] == victim["wafer_id"] and r["device"] == victim["device"]]
+    assert fixed and all(r["norm_status"] == "PASS" and r["scan_type"] == "" for r in fixed)
+    assert json.loads(cache_path.read_text(encoding="utf-8"))["parser_version"] == collect.PARSER_VERSION
+
+
+def test_recover_rereads_only_reports_whose_ini_was_missing(tmp_path, fake_nas, monkeypatch):
+    """★ INI 를 못 찾은 행은 다음 수집에서도 그대로 얼어 있었다(Report mtime 이 그대로라서). `recover` 는
+    그런 행이 있는 Report 만 다시 읽고, 행이 전부 확인된 Report 는 건드리지 않는다."""
+    from conftest import REPORT_HTML
+
+    nas, csv_path = fake_nas
+    # 9호기에 '전부 확인되는' Report 를 하나 더 둔다(99Z9·LoadPort 행이 없는 것) — 복구가 건드리면 안 되는 파일
+    import re
+    clean = re.sub(r"<tr><td>(KLK-3D</td><td>K625407-99Z9|LoadPort A).*?</tr>", "", REPORT_HTML)
+    (nas / "X" / "AOI-9" / "Report" / "2D@R2-GA285AAB_0859840PD-0A_6321_KLK-3D_26-Sep-13_(07.00.00)_BatchReport.htm").write_text(clean, encoding="utf-8")
+    ini = nas / "X" / "AOI-10" / "Scanresult" / "2D@R2-GA285AAB_0859840PD-0A" / "6321" / "KLK-3D" / "K625407-01B0" / "WaferInfo.ini"
+    keep = ini.read_text(encoding="utf-8")
+    ini.unlink()                                                             # AOI-10 은 첫 수집 때 INI 가 없다
+    cfg = make_cfg(tmp_path, csv_path)
+    rows, _, _, _ = _run(cfg)
+    nf = lambda rs: sorted((r["device"], r["wafer_id"]) for r in rs if r["ini_match"] == "NOT_FOUND")  # noqa: E731
+    # 99Z9 는 어느 장비에도 INI 가 없는 오류 Wafer(픽스처) — AOI-10 만 01B0 까지 못 찾았다
+    assert nf(rows) == [("8호기", "K625407-99Z9"), ("9호기", "K625407-99Z9"), ("AOI-10", "K625407-01B0"), ("AOI-10", "K625407-99Z9")]
+    assert collect.plan_run(cfg, recover=True).recover_reports == 3          # 깨끗한 Report 하나는 대상이 아니다
+    assert collect.plan_run(cfg).recover_reports == 0
+
+    ini.write_text(keep, encoding="utf-8")                                   # 나중에 INI 가 생겼다(또는 파서를 고쳤다)
+    rows, _, _, _ = _run(cfg)                                                # 평소 수집: 여전히 얼어 있다(현행 유지)
+    assert ("AOI-10", "K625407-01B0") in nf(rows)
+
+    seen = _count_nas_reads(monkeypatch)
+    rows, dev_meta, errors, _ = _run(cfg, recover=True)
+    assert seen["htm"] == 3 and not errors                                   # 복구 대상 3개만 다시 읽었다(4개 중)
+    assert nf(rows) == [("8호기", "K625407-99Z9"), ("9호기", "K625407-99Z9"), ("AOI-10", "K625407-99Z9")]
+    assert [r["ini_match"] for r in rows if r["device"] == "AOI-10" and r["wafer_id"] == "K625407-01B0"] == ["EXACT"]
+    assert {d["name"]: d.get("recovered", 0) for d in dev_meta} == {"8호기": 1, "9호기": 1, "AOI-10": 1}
+    assert len(rows) == 10                                                   # 9 + 깨끗한 Report 1행 — 복구로 행이 겹쳐 붙지 않는다
+    assert collect.plan_run(cfg, recover=True).recover_reports == 3          # 99Z9 는 영영 없으니 대상으로 남는다
+
+
+@pytest.mark.parametrize("ini_match, expected", [
+    ("NOT_FOUND", True), ("READ_ERROR", True),
+    ("STALE", False), ("NO_WAFER_ID", False), ("BATCH_FAILED", False), ("BATCH", False), ("EXACT", False),
+])
+def test_recover_targets_only_ini_states_that_can_come_back(ini_match, expected):
+    """STALE 은 다른 시도가 덮어쓴 INI 라 다시 읽어도 안 돌아오고, 자리표시·실패한 배치는 경로가 없다 —
+    그런 걸 재시도 대상에 넣으면 NAS 왕복만 늘고 오류 수가 부풀려진다."""
+    assert collect._needs_recovery({"rows": [{"ini_match": "EXACT"}, {"ini_match": ini_match}]}) is expected
+
+
+def test_device_whose_reports_all_fail_is_partial_not_done(tmp_path, fake_nas, monkeypatch):
+    """★ '읽기가 끝났다' 와 '성공했다' 는 다르다 — Report 가 전부 깨진 장비를 초록(완료)으로 칠하면 안 된다."""
+    nas, csv_path = fake_nas
+    cfg = make_cfg(tmp_path, csv_path)
+    orig = collect.parse_report
+
+    def broken(name, text):
+        if "AOI-10" in text or name.startswith("BROKEN"):
+            raise ValueError("깨진 Report")
+        return orig(name, text)
+
+    rep_dir = nas / "X" / "AOI-10" / "Report"
+    for rep in rep_dir.glob("*.htm"):
+        rep.rename(rep_dir / ("BROKEN_" + rep.name))
+    monkeypatch.setattr(collect, "parse_report", broken)
+    seen = []
+    rows, dev_meta, errors, _ = _run(cfg, on_device=lambda n, s, d: seen.append((n, s)))
+    assert ("AOI-10", "partial") in seen and ("AOI-10", "done") not in seen
+    assert ("9호기", "done") in seen and ("9호기", "partial") not in seen
+    by = {d["name"]: d for d in dev_meta}
+    assert by["AOI-10"]["read_errors"] == 1 and by["AOI-10"]["status"] == collect.DEV_PARTIAL
+    assert by["9호기"]["read_errors"] == 0 and by["9호기"]["status"] == collect.DEV_OK and by["9호기"]["rows"] == 3
+    assert len(errors) == 1 and errors[0]["device"] == "AOI-10"

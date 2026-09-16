@@ -19,7 +19,7 @@ MAX_LOG_LINES = 1000
 
 
 class CollectPage(QWidget):
-    collect_requested = pyqtSignal(bool, bool)   # full, backfill
+    collect_requested = pyqtSignal(bool, bool, bool)   # full, backfill, recover
     stop_requested = pyqtSignal()
     error = pyqtSignal(str, str)
 
@@ -54,9 +54,11 @@ class CollectPage(QWidget):
         row.addWidget(self._status, 1)
         self._opt_backfill = QCheckBox(i18n.KO.COLLECT_OPT_BACKFILL, top)
         self._opt_full = QCheckBox(i18n.KO.COLLECT_OPT_FULL, top)
+        self._opt_recover = QCheckBox(i18n.KO.COLLECT_OPT_RECOVER, top)
         opts = QHBoxLayout()
         opts.addWidget(self._opt_backfill)
         opts.addWidget(self._opt_full)
+        opts.addWidget(self._opt_recover)
         opts.addStretch(1)
         tl.addWidget(self._plan)
         tl.addLayout(row)
@@ -148,6 +150,7 @@ class CollectPage(QWidget):
         self._out.editingFinished.connect(self._apply_out)
         self._opt_backfill.toggled.connect(lambda _x: self.refresh_plan())
         self._opt_full.toggled.connect(lambda _x: self.refresh_plan())
+        self._opt_recover.toggled.connect(lambda _x: self.refresh_plan())
         self.refresh_plan()
         self.refresh_result()
 
@@ -167,7 +170,8 @@ class CollectPage(QWidget):
         p = prefs.load()
         cfg = prefs.to_collect_cfg(p)
         try:
-            plan = collect.plan_run(cfg, full=self._opt_full.isChecked(), backfill=self._opt_backfill.isChecked())
+            plan = collect.plan_run(cfg, full=self._opt_full.isChecked(), backfill=self._opt_backfill.isChecked(),
+                                    recover=self._opt_recover.isChecked())
         except Exception:  # noqa: BLE001
             self._plan.setText("")
             return
@@ -177,6 +181,9 @@ class CollectPage(QWidget):
             text = i18n.KO.COLLECT_PLAN_BACKFILL_FMT.format(days=plan.backfill_days)
         elif plan.first_run:
             text = i18n.KO.COLLECT_PLAN_FIRST_FMT.format(days=plan.backfill_days)
+        elif self._opt_recover.isChecked():
+            text = (i18n.KO.COLLECT_PLAN_RECOVER_FMT.format(n=plan.recover_reports) if plan.recover_reports
+                    else i18n.KO.COLLECT_PLAN_RECOVER_NONE)
         else:
             text = i18n.KO.COLLECT_PLAN_INCR_FMT.format(n=plan.known_devices)
         self._plan.setText(text)
@@ -186,12 +193,14 @@ class CollectPage(QWidget):
         self._b_run.setEnabled(not running)
         self._b_stop.setVisible(running)
         self._b_stop.setEnabled(running)
-        for w in (self._opt_backfill, self._opt_full, self._backfill, self._retention, self._out, self._b_out, self._csv):
+        for w in (self._opt_backfill, self._opt_full, self._opt_recover, self._backfill, self._retention, self._out,
+                  self._b_out, self._csv):
             w.setEnabled(not running)
         self._status.setText(i18n.KO.COLLECT_RUNNING if running else i18n.KO.COLLECT_IDLE)
         if not running:
             self._opt_backfill.setChecked(False)
             self._opt_full.setChecked(False)
+            self._opt_recover.setChecked(False)
             self.refresh_plan()
 
     def set_status(self, text: str) -> None:
@@ -201,12 +210,12 @@ class CollectPage(QWidget):
         self._log.appendPlainText(line)
 
     def options(self) -> tuple:
-        return self._opt_full.isChecked(), self._opt_backfill.isChecked()
+        return self._opt_full.isChecked(), self._opt_backfill.isChecked(), self._opt_recover.isChecked()
 
     # ── 내부 ──
     def _on_run(self) -> None:
-        full, backfill = self.options()
-        self.collect_requested.emit(full, backfill)
+        full, backfill, recover = self.options()
+        self.collect_requested.emit(full, backfill, recover)
 
     def _browse_out(self) -> None:
         chosen = QFileDialog.getExistingDirectory(self, i18n.KO.COLLECT_OUTPUT_DIR, self._out.text() or str(paths.data_root()))

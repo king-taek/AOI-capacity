@@ -219,3 +219,12 @@ def test_readme_and_settings_help_follow_the_confirmed_rules():
         assert bad not in readme, bad
         assert bad not in ko.SET_UTIL_DEFINITION, bad
     assert "마지막 스캔" in readme and "마지막 스캔" in ko.SET_UTIL_DEFINITION
+
+
+def test_home_distinguishes_unreachable_and_partial_devices_from_no_data():
+    """수집기가 적어 준 장비별 수집 상태(`meta.devices[].status`)를 홈 카드·표가 보여 준다 —
+    '데이터 없음' 은 실제 미가동일 수도, 수집이 안 된 것일 수도 있어 구분 없이 두면 안 된다."""
+    assert 'if(d.status)devStatus[d.name]=' in HTML
+    assert 'status==="unreachable"' in HTML and "수집 실패" in HTML
+    assert 'status==="partial"' in HTML and "일부 누락" in HTML
+    assert ".st.warn{" in HTML

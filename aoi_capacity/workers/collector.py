@@ -27,7 +27,17 @@ class CollectResult:
 
     @property
     def bad_devices(self) -> List[dict]:
+        """접근하지 못한 장비(목록 조회 실패)."""
         return [d for d in self.dev_meta if d.get("error")]
+
+    @property
+    def unreachable_devices(self) -> List[str]:
+        return [str(d["name"]) for d in self.bad_devices]
+
+    @property
+    def partial_devices(self) -> List[str]:
+        """접근은 됐지만 Report 일부를 읽지 못한 장비 — '완료' 로 뭉개면 안 된다."""
+        return [str(d["name"]) for d in self.dev_meta if not d.get("error") and d.get("read_errors")]
 
 
 class CollectorSignals(QObject):
@@ -40,12 +50,14 @@ class CollectorSignals(QObject):
 
 
 class CollectorWorker(QThread):
-    def __init__(self, token: int, cfg: dict, *, full: bool = False, backfill: bool = False, parent=None):
+    def __init__(self, token: int, cfg: dict, *, full: bool = False, backfill: bool = False, recover: bool = False,
+                 parent=None):
         super().__init__(parent)
         self.token = token
         self.cfg = cfg
         self.full = full
         self.backfill = backfill
+        self.recover = recover
         self.signals = CollectorSignals()
         self._stop = threading.Event()
 
@@ -60,7 +72,7 @@ class CollectorWorker(QThread):
         started = time.time()
         try:
             rows, dev_meta, errors = collect.collect(
-                self.cfg, self.full, self.backfill,
+                self.cfg, self.full, self.backfill, recover=self.recover,
                 progress=lambda d, t, p: self.signals.progress.emit(tok, int(d), int(t), str(p)),
                 log=lambda m: self.signals.log.emit(tok, str(m)),
                 should_stop=self._stop.is_set,

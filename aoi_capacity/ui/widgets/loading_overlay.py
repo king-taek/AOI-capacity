@@ -24,7 +24,8 @@ from ... import i18n
 from .. import theme
 from .buttons import make_button
 
-STATES = ("wait", "listing", "parsing", "done", "error", "skipped")
+#: partial = 접근은 됐지만 Report 일부를 읽지 못함 — '완료(초록)' 와 구분한다
+STATES = ("wait", "listing", "parsing", "done", "partial", "error", "skipped")
 
 
 def _c(key: str) -> QColor:
@@ -96,7 +97,7 @@ class DeviceStrip(QWidget):
         gap = 3 if n <= 40 else 2
         cell = max(3.0, (self.width() - gap * (n - 1)) / n)
         colors = {"wait": _c("nodata"), "listing": _c("accent"), "parsing": _c("accent"),
-                  "done": _c("good"), "error": _c("crit"), "skipped": _c("line_2")}
+                  "done": _c("good"), "partial": _c("warn"), "error": _c("crit"), "skipped": _c("line_2")}
         x = 0.0
         for name in self._names:
             st = self._state.get(name, "wait")
@@ -326,5 +327,6 @@ class LoadingOverlay(QWidget):
             sw(col["nodata"], i18n.KO.LOADING_LEGEND_WAIT, c["wait"]),
             sw(col["accent"], i18n.KO.LOADING_LEGEND_READ, c["listing"] + c["parsing"]),
             sw(col["good"], i18n.KO.LOADING_LEGEND_DONE, c["done"]),
+            sw(col["warn"], i18n.KO.LOADING_LEGEND_PARTIAL, c["partial"]),
             sw(col["crit"], i18n.KO.LOADING_LEGEND_ERR, c["error"]),
         ]))

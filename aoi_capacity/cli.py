@@ -67,6 +67,7 @@ def main(argv=None) -> int:
     ap.add_argument("--config", default=os.path.join(os.getcwd(), "config.json"))
     ap.add_argument("--full", action="store_true", help="캐시를 무시하고 처음부터 다시 읽음")
     ap.add_argument("--backfill", action="store_true", help="최근 backfill_days 안의 Report 를 전부 다시 읽음")
+    ap.add_argument("--recover", action="store_true", help="INI 를 못 찾았던 Report 만 다시 읽음(누락 복구)")
     ap.add_argument("--update", action="store_true", help="시작 전에 GitHub 최신 커밋으로 자기 갱신(선택)")
     args = ap.parse_args(argv)
 
@@ -94,12 +95,15 @@ def main(argv=None) -> int:
     started = time.time()
     cfg = load_config(args.config)
     paths.ensure_user_files()
-    rows, dev_meta, errors = collect.collect(cfg, full=args.full, backfill=args.backfill,
+    rows, dev_meta, errors = collect.collect(cfg, full=args.full, backfill=args.backfill, recover=args.recover,
                                              progress=_progress_printer(), log=_print)
     collect.write_html(cfg, rows, dev_meta, errors, started, mode="auto", log=_print)
     bad = [d for d in dev_meta if d.get("error")]
     if bad:
         _print("접근 실패 장비: " + ", ".join(f"{d['name']} ({d['error']})" for d in bad))
+    partial = [d for d in dev_meta if not d.get("error") and d.get("read_errors")]
+    if partial:
+        _print("일부 Report 를 읽지 못한 장비: " + ", ".join(f"{d['name']} ({d['read_errors']}개)" for d in partial))
     _print(f"완료 · {time.time() - started:.1f}초")
     return 0
 

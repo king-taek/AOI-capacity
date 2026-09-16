@@ -64,6 +64,16 @@ INI_KEYS = {
                       "ActiveStation", "ActiveSlot", "FillID", "CarrierID", "UseLot", "UseWaferID"],
     "BatchInfo": ["GlobalLotId", "OperatorId"],
 }
+#: ★ 행을 만드는 규칙(`_STATUS_RULES`·`scan_type`·`_is_placeholder`·`_job_setup_by_table_lot`·`rows_for_report`)을
+#: 바꾸면 올린다. 캐시는 Report 의 수정시각만 보고 재파싱을 건너뛰므로, 이 번호가 다르면 캐시를 읽을 때
+#: `norm_status`·`scan_type` 을 원문(status·lot)에서 **NAS 접근 없이** 다시 계산한다(`_rederive_rows`).
+#: INI 경로가 바뀌는 수정(빈 job 되찾기 등)은 Report 를 다시 읽어야 하므로 '누락 복구'(`recover`)가 따로 있다.
+PARSER_VERSION = 2
+#: 누락 복구가 다시 읽는 대상 — INI 를 못 찾았거나 읽다 실패한 행이 있는 Report 만.
+#: STALE(다른 시도가 덮어쓴 INI)은 다시 읽어도 되돌아오지 않고, NO_WAFER_ID(자리표시)·BATCH_FAILED 는 경로 자체가 없다.
+RECOVERABLE_INI = ("NOT_FOUND", "READ_ERROR")
+#: 장비별 수집 상태(`dev_meta[].status`) — 화면이 '데이터 없음' 과 '수집 실패' 를 구분해 보여 주는 근거.
+DEV_OK, DEV_NO_DATA, DEV_PARTIAL, DEV_UNREACHABLE = "ok", "no_data", "partial", "unreachable"
 #: kind = "" (Wafer 한 장) · "batch" (통째로 실패한 배치 한 건 — Wafer 시각이 하나도 없는 시도)
 OUT_COLS = ["device", "kind", "job", "setup", "lot", "wafer_id", "status", "norm_status", "scan_type", "recipe",
             "wafer_start_time", "wafer_end_time", "batch_start", "batch_end", "report", "ini_match", "data_issue"]
@@ -93,6 +103,7 @@ class RunPlan:
     first_run: bool
     known_devices: int
     backfill_days: int
+    recover_reports: int = 0   # 누락 복구를 켜면 다시 읽을 Report 수(캐시만 보고 센다)
 
 
 # ----------------------------------------------------------------------------- helpers
@@ -428,7 +439,31 @@ def _load_cache(cfg: dict, full: bool = False, log: Optional[LogFn] = None) -> d
             cache.setdefault("failed", {})
     except Exception as e:  # noqa: BLE001
         _say(log, f"캐시 읽기 실패, 새로 시작: {e}")
+    if cache.get("parser_version") != PARSER_VERSION:
+        n = _rederive_rows(cache)
+        if n:
+            _say(log, f"분류 규칙이 바뀌어 캐시 행 {n}개의 상태·검사 종류를 다시 계산했습니다(NAS 는 읽지 않음)")
     return cache
+
+
+def _rederive_rows(cache: dict) -> int:
+    """캐시에 든 행의 `norm_status`·`scan_type` 을 지금 규칙으로 다시 계산한다. 원문(status·lot)만 쓰므로 NAS 접근이 없다.
+
+    돌려주는 값은 값이 바뀐 행 수. 캐시의 `parser_version` 을 지금 번호로 맞춘다."""
+    changed = 0
+    for entry in cache.get("reports", {}).values():
+        for r in entry.get("rows") or ():
+            ns, st = norm_status(r.get("status", "")), scan_type(r.get("lot", ""))
+            if r.get("norm_status") != ns or r.get("scan_type") != st:
+                r["norm_status"], r["scan_type"] = ns, st
+                changed += 1
+    cache["parser_version"] = PARSER_VERSION
+    return changed
+
+
+def _needs_recovery(entry: dict) -> bool:
+    """누락 복구 대상인가 — INI 를 못 찾았거나 읽다 실패한 행이 하나라도 있는 Report."""
+    return any(r.get("ini_match") in RECOVERABLE_INI for r in entry.get("rows") or ())
 
 
 def _migrate_cursors(cache: dict, devs: List[dict], log: Optional[LogFn] = None) -> None:
@@ -482,17 +517,20 @@ def _save_cache(cfg: dict, cache: dict) -> None:
     nas_guard.check_cfg(cfg)  # ★ NAS 아래에는 절대 쓰지 않는다
     path = cfg["cache_file"]
     os.makedirs(os.path.dirname(os.path.abspath(path)), exist_ok=True)
+    cache["parser_version"] = PARSER_VERSION
     tmp = path + ".tmp"
     with open(tmp, "w", encoding="utf-8") as f:
         json.dump(cache, f, ensure_ascii=False)
     os.replace(tmp, path)
 
 
-def plan_run(cfg: dict, full: bool = False, backfill: bool = False) -> RunPlan:
+def plan_run(cfg: dict, full: bool = False, backfill: bool = False, recover: bool = False) -> RunPlan:
     """UI 안내용 — 캐시만 보고 이번 실행이 어떤 성격인지 알려준다(NAS 접근 없음)."""
     cache = _load_cache(cfg, full=full)
     first = full or backfill or not cache.get("reports")
-    return RunPlan(first_run=first, known_devices=len(cache.get("last_mtime", {})), backfill_days=int(cfg["backfill_days"]))
+    n_rec = sum(1 for e in cache.get("reports", {}).values() if _needs_recovery(e)) if recover and not full else 0
+    return RunPlan(first_run=first, known_devices=len(cache.get("last_mtime", {})), backfill_days=int(cfg["backfill_days"]),
+                   recover_reports=n_rec)
 
 
 # ----------------------------------------------------------------------------- collect
@@ -533,7 +571,7 @@ def _run(cfg: dict, tasks, fn, should_stop) -> list:
     return out
 
 
-def _list_new_reports(devs, cache, cfg, backfill, log, progress, on_device, should_stop):
+def _list_new_reports(devs, cache, cfg, backfill, log, progress, on_device, should_stop, recover=False):
     """1차 패스: 장비마다 Report 폴더를 한 번 나열(scandir+stat 만)해 읽을 파일을 고른다. NAS 읽기 전용.
 
     장비 30대를 한 줄로 나열하면 SMB 왕복 지연이 30번 더해진다 — 동시에 나열한다(`read_workers`).
@@ -549,12 +587,13 @@ def _list_new_reports(devs, cache, cfg, backfill, log, progress, on_device, shou
         on_device(d["name"], "listing", "")
         did = str(d["id"])
         dm = {"name": d["name"], "id": did, "note": d["path"], "reports": 0, "found": 0, "error": "",
-              "report_dir": str(d.get("report_dir") or cfg["report_dir"])}
+              "report_dir": str(d.get("report_dir") or cfg["report_dir"]), "recovered": 0, "read_errors": 0}
         rep_dir = os.path.join(d["path"], str(d.get("report_dir") or cfg["report_dir"]))
         try:
             files = [e for e in nas_guard.scandir(rep_dir) if e.is_file() and e.name.lower().endswith((".htm", ".html"))]
             files.sort(key=lambda e: e.stat().st_mtime, reverse=True)
-            since = backfill_since if (backfill or did not in last) else float(last[did]) - CLOCK_SKEW_SEC
+            # 누락 복구는 커서와 무관하게 backfill 창 전체를 다시 훑되, 다시 읽는 건 복구 대상뿐이다(아래)
+            since = backfill_since if (backfill or recover or did not in last) else float(last[did]) - CLOCK_SKEW_SEC
             pick, known = [], []
             for e in files:
                 m = e.stat().st_mtime
@@ -562,7 +601,11 @@ def _list_new_reports(devs, cache, cfg, backfill, log, progress, on_device, shou
                     continue
                 cached = reports.get(e.path)
                 if cached and abs(float(cached.get("mtime", 0)) - m) < 1 and _is_same_device(cached, e.path, d):
-                    known.append(m)
+                    if recover and _needs_recovery(cached):
+                        dm["recovered"] += 1
+                        pick.append(e)
+                    else:
+                        known.append(m)
                 else:
                     pick.append(e)
             dm["found"], dm["reports"] = len(files), len(pick)
@@ -580,7 +623,8 @@ def _list_new_reports(devs, cache, cfg, backfill, log, progress, on_device, shou
         if dm["error"]:
             _say(log, f"[{d['name']}] {dm['error']}")
         elif pick:
-            _say(log, f"[{d['name']}] Report {dm['found']}개 중 새 파일 {len(pick)}개")
+            rec = f" (누락 복구 {dm['recovered']}개 포함)" if dm.get("recovered") else ""
+            _say(log, f"[{d['name']}] Report {dm['found']}개 중 새 파일 {len(pick)}개{rec}")
     return plan
 
 
@@ -617,11 +661,14 @@ def _advance_cursor(last: dict, did: str, ok_mtimes, blocked_mtimes) -> None:
         last[did] = cur
 
 
-def collect(cfg: dict, full: bool = False, backfill: bool = False, *,
+def collect(cfg: dict, full: bool = False, backfill: bool = False, *, recover: bool = False,
             progress: Optional[ProgressFn] = None, log: Optional[LogFn] = None,
             should_stop: Optional[Callable[[], bool]] = None,
             on_device: Optional[DeviceFn] = None) -> Tuple[List[dict], List[dict], List[dict]]:
-    """NAS 를 읽어 (rows, dev_meta, errors) 를 돌려주고 캐시를 갱신한다. HTML 은 `write_html` 이 따로 쓴다."""
+    """NAS 를 읽어 (rows, dev_meta, errors) 를 돌려주고 캐시를 갱신한다. HTML 은 `write_html` 이 따로 쓴다.
+
+    `recover` 는 INI 를 못 찾았던 Report(`RECOVERABLE_INI`)만 수정시각과 상관없이 다시 읽는다 — 파서를 고친 뒤
+    옛 캐시를 되살리는 길. 나머지 캐시 Report 는 평소처럼 건너뛴다."""
     progress = progress or (lambda d, t, p: None)
     on_device = on_device or (lambda n, s, d: None)
     nas_guard.check_cfg(cfg)  # 출력·캐시가 NAS 아래면 시작조차 하지 않는다
@@ -632,7 +679,9 @@ def collect(cfg: dict, full: bool = False, backfill: bool = False, *,
     _migrate_cursors(cache, devs, log)
     if backfill:
         _say(log, f"초기 수집: 최근 {cfg['backfill_days']}일 안의 Report 를 전부 읽습니다")
-    plan = _list_new_reports(devs, cache, cfg, backfill, log, progress, on_device, should_stop)
+    elif recover:
+        _say(log, f"누락 복구: 최근 {cfg['backfill_days']}일 안에서 INI 를 못 찾았던 Report 만 다시 읽습니다")
+    plan = _list_new_reports(devs, cache, cfg, backfill, log, progress, on_device, should_stop, recover=recover)
 
     reports, last, failed = cache["reports"], cache["last_mtime"], cache["failed"]
     total = sum(len(pick) for _, _, pick, _ in plan)
@@ -642,7 +691,7 @@ def collect(cfg: dict, full: bool = False, backfill: bool = False, *,
     # ── 2차 패스: Report 를 읽어 행으로 바꾼다. NAS 왕복 지연이 대부분이라 **여러 개를 동시에 읽는다**.
     #    Report 하나가 한 작업이라 장비마다 양이 달라도 알아서 고르게 나뉜다.
     #    스레드는 **읽기만** 하고(공유 dict 를 고치지 않는다), 캐시에 넣는 일은 아래 메인 스레드가 순서대로 한다.
-    done, left, left_lock = _Counter(), {}, threading.Lock()
+    done, left, left_lock, bad_in = _Counter(), {}, threading.Lock(), {}
     jobs = []
     for d, dm, pick, _known in plan:
         if dm["error"] or not pick:
@@ -667,8 +716,11 @@ def collect(cfg: dict, full: bool = False, backfill: bool = False, *,
         with left_lock:                       # 여러 스레드가 같이 줄이므로 잠그고 센다
             n = left.get(str(d["id"]))
             n = left[str(d["id"])] = (n - 1) if n is not None else None
-        if n == 0:
-            on_device(d["name"], "done", "")   # 이 장비 몫을 다 읽었다 — 화면에서 먼저 초록으로
+            if out[3] is not None:
+                bad_in[str(d["id"])] = bad_in.get(str(d["id"]), 0) + 1
+            failed_any = bad_in.get(str(d["id"]), 0) > 0
+        if n == 0:                            # 이 장비 몫을 다 읽었다 — 실패가 섞였으면 초록이 아니라 '일부 실패'
+            on_device(d["name"], "partial" if failed_any else "done", "")
         return out
 
     by_dev: Dict[str, dict] = {str(d["id"]): {"ok": list(known), "blocked": []}
@@ -677,7 +729,7 @@ def collect(cfg: dict, full: bool = False, backfill: bool = False, *,
         did = str(d["id"])
         if err is None:
             reports[e.path] = {"mtime": mtime, "device": d["name"], "device_id": did,
-                               "rows": rows_of, "seen": time.time()}
+                               "rows": rows_of, "seen": time.time(), "parser_version": PARSER_VERSION}
             failed.pop(e.path, None)
             by_dev[did]["ok"].append(mtime)
             n_new += 1
@@ -685,6 +737,7 @@ def collect(cfg: dict, full: bool = False, backfill: bool = False, *,
         tries = int(failed.get(e.path, {}).get("tries", 0)) + 1
         failed[e.path] = {"mtime": mtime, "tries": tries, "device_id": did, "error": err}
         errors.append({"device": d["name"], "path": e.path, "tries": tries, "error": err})
+        _dm["read_errors"] += 1
         # 재시도가 남아 있으면 커서를 이 파일 앞에서 멈춰 다음 수집에 다시 읽는다
         by_dev[did]["blocked" if tries < MAX_READ_RETRY else "ok"].append(mtime)
         if tries >= MAX_READ_RETRY:
@@ -696,7 +749,7 @@ def collect(cfg: dict, full: bool = False, backfill: bool = False, *,
         # 커서는 이 장비의 파싱이 끝난 뒤에만 전진 — 중간에 취소되면 다음에 같은 파일을 다시 본다
         cur = by_dev[str(d["id"])]
         _advance_cursor(last, str(d["id"]), cur["ok"], cur["blocked"])
-        on_device(d["name"], "done", "")
+        on_device(d["name"], "partial" if dm["read_errors"] else "done", "")
         dev_meta.append(dm)
     _check(should_stop)
 
@@ -714,11 +767,25 @@ def collect(cfg: dict, full: bool = False, backfill: bool = False, *,
         del failed[k]
     _save_cache(cfg, cache)
     rows, hidden = _rows_from_cache(cache, devs, cfg)
+    _mark_device_status(dev_meta, rows)
     dev_meta.extend(_out_of_scope_meta(cfg, devs))
     _say(log, f"새로 읽은 Report {n_new}개 · 캐시 Report {len(reports)}개 · Wafer 행 {len(rows)} · 오류 {len(errors)}건")
     if hidden:
         _say(log, f"수집 범위({scope.describe(cfg)}) 밖 장비의 캐시 {hidden}행은 화면에서 제외했습니다(캐시는 그대로 둡니다)")
     return rows, dev_meta, errors
+
+
+def _mark_device_status(dev_meta: List[dict], rows: List[dict]) -> None:
+    """장비마다 '접근 못 함 / 일부 Report 실패 / 데이터 없음 / 정상' 을 적는다 — 화면과 완료 안내가 구분해 보여 준다.
+
+    '읽기가 끝났다' 와 '성공했다' 는 다르다: Report 가 전부 깨진 장비를 초록으로 칠하면 안 된다."""
+    n_rows: Dict[str, int] = {}
+    for r in rows:
+        n_rows[str(r.get("device"))] = n_rows.get(str(r.get("device")), 0) + 1
+    for dm in dev_meta:
+        dm["rows"] = n_rows.get(str(dm["name"]), 0)
+        dm["status"] = (DEV_UNREACHABLE if dm.get("error") else DEV_PARTIAL if dm.get("read_errors")
+                        else DEV_NO_DATA if not dm["rows"] else DEV_OK)
 
 
 def _out_of_scope_meta(cfg: dict, devs: List[dict]) -> List[dict]:

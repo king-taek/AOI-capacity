@@ -126,7 +126,7 @@ textarea.input{width:100%;min-height:110px;font-family:var(--mono);font-size:12.
 .dev .hd{display:flex;align-items:center;justify-content:space-between;gap:6px}
 .dev .name{font-family:var(--display);font-size:14.5px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .dev .st{font-size:10.5px;font-weight:600;padding:1px 7px;border-radius:999px;white-space:nowrap}
-.st.ok{background:var(--good-soft);color:var(--good)}.st.bad{background:var(--crit-soft);color:var(--crit-ink)}.st.none{background:var(--raise);color:var(--ink-3)}
+.st.ok{background:var(--good-soft);color:var(--good)}.st.bad{background:var(--crit-soft);color:var(--crit-ink)}.st.none{background:var(--raise);color:var(--ink-3)}.st.warn{background:var(--warn-soft);color:var(--warn)}
 .dev .row1{display:flex;align-items:baseline;justify-content:space-between;gap:6px}
 .dev .big{font-family:var(--display);font-size:30px;font-weight:700;letter-spacing:-.04em;line-height:1}
 .dev .big small{font-size:14px;font-weight:500;color:var(--ink-3);margin-left:1px}
@@ -377,6 +377,9 @@ function segBind(id,attr,cb){document.querySelectorAll(`#${id} button`).forEach(
 
 /* 장비 그룹(있으면 홈 필터에 쓴다) — 수집기가 meta.devices 에 넣어 준다 */
 let devGroup={};
+/* 수집기가 적어 준 장비별 수집 상태(unreachable · partial · no_data · ok) — '데이터 없음' 과 '수집 실패' 는 다르다 */
+let devStatus={};
+const collectChip=n=>{const s=devStatus[n];if(!s)return"";if(s.status==="unreachable")return`<span class="st bad" title="${esc(s.error)}">수집 실패</span>`;if(s.status==="partial")return`<span class="st warn" title="읽지 못한 Report ${s.readErrors}개 — 수집 로그 참조">일부 누락</span>`;return"";};
 /* 수집기가 준 열 목록과 풀 열(collect.OUT_COLS · POOLED_COLS) — 저장할 때 같은 계약으로 다시 접는다 */
 let embCols=[],embPooled=[];
 
@@ -395,7 +398,7 @@ function loadDemo(){
         const ns=code?codes[code]:"PASS";rows.push({device:dvName,lot,wafer_id:`${lot.slice(0,3).toUpperCase()}${String(off).padStart(2,"0")}-${p2(wi)}`,recipe:rec,norm_status:ns,status:code?ERR_TXT[ns]:"Pass",wafer_start_time:iso(s),wafer_end_time:iso(e),batch_start:"",ini_match:"EXACT",data_issue:""});}}}
     meta={generated:new Date().toLocaleString("ko-KR"),mode:"demo",devices:emb.devs.map(d=>({name:dupe[d.name]>1?`${shortNas(d.nas)} ${d.name}`:d.name,nas:d.nas,note:d.path}))};
   }
-  devGroup={};(meta.devices||[]).forEach(d=>{if(d.nas)devGroup[d.name]=d.nas;});
+  devGroup={};devStatus={};(meta.devices||[]).forEach(d=>{if(d.nas)devGroup[d.name]=d.nas;if(d.status)devStatus[d.name]={status:d.status,error:d.error||"",readErrors:d.read_errors||0};});
   log(meta.mode==="demo"?`데모 데이터: 장비 ${new Set(rows.map(r=>r.device)).size}대, 최근 5주 분량을 실제 검사 패턴으로 재구성한 예시입니다.`:"저장된 수집 결과를 불러왔습니다.");init();}
 
 /* Lot 막대 툴팁 — 한 막대 안에 섞여 있는 것을 **종합**해서 보여 준다(사용자 확정).
@@ -552,7 +555,7 @@ function renderHome(){
   list.sort((a,b)=>ui.sort==="name"?cmpDev(a.n,b.n):ui.sort==="err"?(b.m.nErr-a.m.nErr)||(key(a)-key(b)):(key(a)-key(b)));
   $("#cards").hidden=ui.view!=="cards";$("#homeTable").hidden=ui.view!=="table";
   if(ui.view==="cards"){
-    $("#cards").innerHTML=list.map(({n,m})=>{const st=!m.hasData?'<span class="st none">데이터 없음</span>':m.nErr?`<span class="st bad">오류 ${m.nErr}</span>`:isAlert(m)?'<span class="st bad">주의</span>':'<span class="st ok">정상</span>';
+    $("#cards").innerHTML=list.map(({n,m})=>{const st=collectChip(n)+(!m.hasData?'<span class="st none">데이터 없음</span>':m.nErr?`<span class="st bad">오류 ${m.nErr}</span>`:isAlert(m)?'<span class="st bad">주의</span>':'<span class="st ok">정상</span>');
       return`<div class="card dev ${selDev===n?"sel":""} ${isAlert(m)?"alert":""}" tabindex="0" role="button" aria-pressed="${selDev===n}" onclick="selectDev('${esc(n)}')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();selectDev('${esc(n)}')}" title="클릭하면 타임라인과 오류 목록">
         <div class="hd"><span class="name">${esc(n)}</span>${st}</div>
         <div class="row1"><div class="big ${m.hasData?"":"none"}">${m.hasData?`${m.util.toFixed(1)}<small>%</small>`:"–"}</div></div>
@@ -563,7 +566,7 @@ function renderHome(){
         <div class="kv"><span class="faint">현재 수집 범위가 아닙니다</span></div></div>`).join("")
       ||`<div class="card empty">아직 수집한 데이터가 없습니다. AOI Capacity 수집 프로그램에서 '지금 수집' 을 누른 뒤 이 화면을 새로고침하세요.</div>`;}
   else{
-    $("#homeTbody").innerHTML=list.map(({n,m})=>`<tr class="click ${selDev===n?"sel":""}" onclick="selectDev('${esc(n)}')"><td><b>${esc(n)}</b>${isAlert(m)?' <span class="chip crit">주의</span>':""}${!m.hasData?' <span class="chip mute">데이터 없음</span>':""}</td><td style="width:32%"><span class="hbar" style="width:${m.hasData?m.util.toFixed(1):0}%"></span></td><td class="r"><b>${m.hasData?pct(m.util):"–"}</b></td><td class="r">${fmtSecS(m.run)}</td><td class="r">${m.nErr?`<span class="chip crit">${m.nErr}</span>`:0}</td><td class="r">${fmtSecS(m.err+m.stop)}</td></tr>`).join("")
+    $("#homeTbody").innerHTML=list.map(({n,m})=>`<tr class="click ${selDev===n?"sel":""}" onclick="selectDev('${esc(n)}')"><td><b>${esc(n)}</b>${collectChip(n)?" "+collectChip(n):""}${isAlert(m)?' <span class="chip crit">주의</span>':""}${!m.hasData?' <span class="chip mute">데이터 없음</span>':""}</td><td style="width:32%"><span class="hbar" style="width:${m.hasData?m.util.toFixed(1):0}%"></span></td><td class="r"><b>${m.hasData?pct(m.util):"–"}</b></td><td class="r">${fmtSecS(m.run)}</td><td class="r">${m.nErr?`<span class="chip crit">${m.nErr}</span>`:0}</td><td class="r">${fmtSecS(m.err+m.stop)}</td></tr>`).join("")
       +out.map(d=>`<tr class="off"><td><b>${esc(d.name)}</b> <span class="chip mute">수집 안 함</span></td><td colspan="5" class="faint">현재 수집 범위가 아닙니다${d.note?" · "+esc(d.note):""}</td></tr>`).join("");}
 }
 function selectDev(n){selDev=selDev===n?null:n;renderHome();renderDetail();if(selDev)setTimeout(()=>$("#detail").scrollIntoView({behavior:"smooth",block:"nearest"}),50);}
