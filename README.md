@@ -66,8 +66,13 @@ Camtek AOI 장비의 NAS `Report/*_BatchReport.htm` 과 `Scanresult/.../WaferInf
 해당 Lot 폴더의 `WaferInfo.ini` 와 폴더 목록(수정시각 포함) · 요약(Lot 접미사 통계)이 들어갑니다.
 보내기 전에 `요약.txt` 로 내용을 확인하세요.
 
-    scripts\make_sample.bat                       :: Y:\AOI-25, 최근 1일치
-    scripts\make_sample.bat --days 3 --scan 300   :: 더 넓게
+    scripts\make_sample.bat --all                 :: 전 장비(30대) → zip 한 장  ★
+    scripts\make_sample.bat                       :: 한 대만(기본 Y:\AOI-25)
+    scripts\make_sample.bat --root X:\AOI-1 --days 3
+
+`--all` 은 `scripts\collect_sample.py` 위쪽 `DEVICE_ROOTS` 의 장비를 차례로 훑습니다(경로가 바뀌면 그 목록만 고치세요).
+접근할 수 없는 장비는 건너뛰고 계속하며, 맨 위 `요약.txt` 에 장비별 한 줄 표(Report 수 · 폴더 이름 · Job/Setup 유무 ·
+읽지 못한 시각 · Lot 표기)가 들어갑니다. Report 안의 로고 이미지는 용량 때문에 빼고 담습니다(`--keep-images` 로 유지).
 
 ## 수집 범위 (현재 4대)
 

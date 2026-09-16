@@ -140,6 +140,62 @@ def test_list_mode_shows_immediate_children(tmp_path, nas, capsys):
     assert sampler.main(["--list", "--root", str(tmp_path / "없음")]) == 2
 
 
+# ── 전 장비 훑기(--all / --roots) ────────────────────────────────────────
+def test_device_roots_are_listed_near_the_top_of_the_file():
+    """장비 경로는 사용자가 직접 고치는 값이라 파일 위쪽에 있어야 한다."""
+    head = (_ROOT / "scripts" / "collect_sample.py").read_text(encoding="utf-8").split("\n")[:60]
+    assert any(l.startswith("DEVICE_ROOTS = [") for l in head)
+    assert len(sampler.DEVICE_ROOTS) >= 25                      # 1~25호기 + 4층
+    assert any("4F-AOI" in r for r in sampler.DEVICE_ROOTS)
+
+
+def test_sweep_makes_one_zip_and_keeps_going_past_unreachable_devices(tmp_path, nas, capsys):
+    (tmp_path / "빈장비").mkdir()                                # Report 폴더가 없는 장비
+    out = tmp_path / "desktop"
+    rc = sampler.main(["--roots", str(nas), str(tmp_path / "빈장비"), str(tmp_path / "없는장비"),
+                       "--out", str(out)])
+    assert rc == 0
+    folder = next(p for p in out.iterdir() if p.is_dir())
+    assert (folder / "AOI-25" / "Report").is_dir()               # 성공한 장비는 제 폴더에
+    assert not (folder / "빈장비").exists() or not list((folder / "빈장비").rglob("*.htm"))
+    top = (folder / "요약.txt").read_text(encoding="utf-8")
+    assert "장비 3대 중 1대 성공" in top and "건너뜀" in top       # 막힌 장비도 표에 남는다
+    assert len(list(out.glob("*.zip"))) == 1                     # zip 은 한 장
+
+
+def test_sweep_summary_json_carries_per_device_facts(tmp_path, nas):
+    out = tmp_path / "desktop"
+    assert sampler.main(["--roots", str(nas), "--out", str(out)]) == 0
+    folder = next(p for p in out.iterdir() if p.is_dir())
+    import json
+    facts = json.loads((folder / "요약.json").read_text(encoding="utf-8"))
+    f = facts[0]
+    assert f["ok"] and f["name"] == "AOI-25"
+    for key in ("reports", "report_dir", "has_job_setup", "batch_time_shapes", "batch_time_unparsed",
+                "lot_marks", "status_flags", "ini_found"):
+        assert key in f, key
+    assert f["lot_marks"].get("RESCAN")                          # 픽스처의 'TUK RE'
+    assert f["batch_time_unparsed"] == 0
+
+
+def test_reports_are_copied_without_the_embedded_logo(tmp_path, nas):
+    big = "x" * 4000
+    rep = next((nas / "Report").glob("*BatchReport.htm"))
+    rep.write_text(rep.read_text(encoding="utf-8").replace("<html>",
+                   f'<html><img src="data:image/png;base64,{big}">'), encoding="utf-8")
+    out = tmp_path / "d"
+    assert sampler.main(["--root", str(nas), "--out", str(out)]) == 0
+    folder = next(p for p in out.iterdir() if p.is_dir())
+    copied = (folder / "Report" / rep.name).read_text(encoding="utf-8")
+    assert big not in copied and 'src=""' in copied              # 로고만 빠지고 내용은 그대로
+    assert "Pass" in copied
+
+    out2 = tmp_path / "d2"
+    assert sampler.main(["--root", str(nas), "--out", str(out2), "--keep-images"]) == 0
+    folder2 = next(p for p in out2.iterdir() if p.is_dir())
+    assert big in (folder2 / "Report" / rep.name).read_text(encoding="utf-8")
+
+
 @pytest.mark.parametrize("given,expected_tail", [("Y:", "Y:" + os.sep), ("Y:" + os.sep, "Y:" + os.sep),
                                                  ('"Y:' + os.sep + 'AOI-25"', "AOI-25")])
 def test_norm_root_fixes_bare_drive_letter(given, expected_tail):
