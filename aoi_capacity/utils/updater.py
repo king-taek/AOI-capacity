@@ -34,7 +34,7 @@ from . import paths
 
 DEFAULT_REPO = "king-taek/AOI-capacity"
 # 자동 업데이트 기준은 저장소의 GitHub 기본 브랜치다. 이름은 api 로 동적 조회하고, 실패하면 아래 상수를 폴백으로 쓴다.
-DEFAULT_BRANCH = "claude/multiple-device-network-addresses-t0ea7o"
+DEFAULT_BRANCH = "main"
 _API_REPO = "https://api.github.com/repos/{repo}"
 _API = "https://api.github.com/repos/{repo}/commits/{branch}"
 _ATOM = "https://github.com/{repo}/commits/{branch}.atom"      # api.github.com 만 막힌 사내망 폴백

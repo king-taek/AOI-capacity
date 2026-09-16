@@ -128,7 +128,7 @@ def test_ssl_contexts():
 
 
 def test_default_branch_constant_matches_remote_default():
-    assert updater.DEFAULT_BRANCH == "claude/multiple-device-network-addresses-t0ea7o"
+    assert updater.DEFAULT_BRANCH == "main"
     assert updater.DEFAULT_REPO == "king-taek/AOI-capacity"
 
 
