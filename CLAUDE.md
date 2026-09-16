@@ -97,8 +97,10 @@ Camtek AOI 장비의 BatchReport/WaferInfo.ini 를 읽어 장비별 가동률을
 - **Lot 막대는 하나로 두되 안을 조각별 색으로 칠한다**(사용자 확정). 통째로 파랗게 칠하면 섞여 있는 오류가
   묻힌다(실물: 9/15 AOI-8 NTM — 배치가 통째로 중단된 시도가 파란 막대 안에 숨어 있었다).
   툴팁(`lotTip`)이 Wafer 몇 장 중 정상·다시 검사·재작업·오류·시험이 각각 몇인지 종합해 준다.
-  막대를 묶는 기준은 `lotKey` — 구분자 차이(`TTP DIA`·`TTP-DIA`)와 `RE`·`RESCAN`·`REWORK`·`RW` 토큰을 지운
-  이름이 같으면 한 막대다(사용자 확정: "Rework 도 같은 LOT 이면 하나의 막대"). 시험 가동만은 섞지 않는다.
+  막대를 묶는 기준은 `lotKey` — 구분자 차이(`TTP DIA`·`TTP-DIA`)와 **`REWORK` 토큰만** 지운 이름이 같으면 한 막대다
+  (사용자 확정: "Rework 도 같은 LOT 이면 하나의 막대"). ★ **`RE`·`RESCAN` 은 지우지 않는다** — 같은 Lot 을 두 번
+  돌린 것이라 실가동률을 깎는 원인이고, 한 막대로 합치면 그 손실이 보이지 않는다(사용자 확정).
+  `RW` 는 재작업인지 확인 전이라 이름의 일부로 둔다. 시험 가동만은 섞지 않는다.
 - 결과 HTML 의 위치·생성은 `utils/results.py` 한 곳에서만 묻는다(`html_path` · `ensure_html` · `last_collect_time`).
 - 장비는 `id`(정규화 경로, 캐시 커서·집계 키) · `path` · `name`(표시명 `AOI-25` · `4F-AOI-01`) · `aliases`(옛 표시명) 로 나눠 다룬다.
   표시명을 바꿔도 이력이 갈라지지 않는다. 홈 정렬은 `devices.sort_key`(= template 의 `cmpDev`) — AOI-1…AOI-25 뒤에 4F-AOI-01….

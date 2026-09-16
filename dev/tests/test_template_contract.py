@@ -148,9 +148,11 @@ def test_a_lot_bar_shows_what_is_mixed_inside_it():
     assert "정상 검사" in HTML and "오류·중단" in HTML   # 무엇이 섞였는지
 
 
-def test_rework_of_the_same_lot_joins_one_bar():
-    """사용자 확정: Rework 도 같은 LOT 이면 한 막대. 구분자 차이(`TTP DIA`·`TTP-DIA`)도 같은 Lot 으로 본다."""
-    assert "function lotKey(" in HTML and "LOT_MARKS=/^(RE|RESCAN|REWORK|RW)$/i" in HTML
+def test_rework_joins_the_same_lot_but_a_rescan_never_does():
+    """사용자 확정: Rework 는 같은 LOT 이면 한 막대. 하지만 **다시 검사(RE)는 따로 둔다** —
+    같은 Lot 을 두 번 돌린 것이라 실가동률을 깎는 원인이고, 합치면 그 손실이 보이지 않는다."""
+    assert "function lotKey(" in HTML and "LOT_MARKS=/^REWORK$/i" in HTML
+    assert "RESCAN" not in HTML.split("const LOT_MARKS=")[1].split("\n")[0]
     assert "L.key===key" in HTML
     assert 'isTest?"TEST\\u0000":""' in HTML            # 시험 가동만은 섞지 않는다(가동률에서 빠지므로)
 
