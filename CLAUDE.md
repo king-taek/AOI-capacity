@@ -44,8 +44,11 @@ Camtek AOI 장비의 BatchReport/WaferInfo.ini 를 읽어 장비별 가동률을
   git 폴더면 fetch+ff-only(더티면 중단), zip 폴더면 바뀐 파일만 덮어쓰고 `_backup_…` 을 남긴다(가드: `test_update_code.py`).
 - 현장 샘플 수집 도구는 `scripts/collect_sample.py`(+`make_sample.bat`) — 표준 라이브러리만 쓰고 NAS 는 읽기만 하며
   Lot 폴더만 정확 경로로 나열한다(가드: `test_collect_sample.py`). 배포본에도 들어간다(`_UPDATE_KEEP_ONLY`).
+- Lot 이름의 작업 표기는 `collect.scan_type` 이 읽는다: `RE`·`RESCAN` → RESCAN(노랑), `REWORK` → REWORK(보라).
+  토큰이 통째로 맞을 때만 걸린다(`RETURN`·`REX` 제외). **`SRD`·`DIA`·`3D`·`EDGE`·`BUMP` 는 검사 종류라 정상**이다(사용자 확정).
+  `RW`(AOI-1 13건·AOI-8 31건)는 재작업 줄임말로 보이지만 확인 전이라 넣지 않았다. 둘 다 가동률에는 포함한다.
 - 행 데이터 계약(`collect.OUT_COLS`): `kind`("" = Wafer 한 장 · "batch" = 통째로 실패한 시도), `batch_end`,
-  `ini_match`(EXACT · NOT_FOUND · NO_WAFER_ID · READ_ERROR · STALE · BATCH_FAILED · BATCH).
+  `scan_type`("" · RESCAN · REWORK), `ini_match`(EXACT · NOT_FOUND · NO_WAFER_ID · READ_ERROR · STALE · BATCH_FAILED · BATCH).
   상태 분류는 `collect._STATUS_RULES` 와 template 의 `normStatus` 가 같은 순서를 쓴다(실장비 표기 근거:
   Pass · Skipped. · Aborted. · Alignment Error. · Scan 2D Error. · Wafer lost… · Aborted. Wafer aborted by user.).
 - 결과 HTML 의 위치·생성은 `utils/results.py` 한 곳에서만 묻는다(`html_path` · `ensure_html` · `last_collect_time`).

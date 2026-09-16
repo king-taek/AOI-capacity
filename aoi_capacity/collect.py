@@ -56,7 +56,7 @@ INI_KEYS = {
     "BatchInfo": ["GlobalLotId", "OperatorId"],
 }
 #: kind = "" (Wafer 한 장) · "batch" (통째로 실패한 배치 한 건 — Wafer 시각이 하나도 없는 시도)
-OUT_COLS = ["device", "kind", "lot", "wafer_id", "status", "norm_status", "recipe",
+OUT_COLS = ["device", "kind", "lot", "wafer_id", "status", "norm_status", "scan_type", "recipe",
             "wafer_start_time", "wafer_end_time", "batch_start", "batch_end", "ini_match", "data_issue"]
 REPORT_RE = re.compile(r"^(.+?)_(\d{4})_(.+)_(\d{1,2}-[A-Za-z]{3}-\d{2})_\((\d{2}\.\d{2}\.\d{2})\)_BatchReport\.html?$", re.I)
 #: 장비마다 다르다 — AOI-8·25 는 `13-Sep-26 01:03:29 PM`, AOI-1 은 `9/16/2026 1:54:03 PM`,
@@ -104,6 +104,20 @@ _STATUS_RULES = [
     ("USER_ABORT", re.compile(r"wafer\s+aborted\s+by\s+user", re.I)),
     ("ABORTED", re.compile(r"abort", re.I)),
 ]
+
+
+#: Lot 이름 끝에 붙는 작업 표기 — 실물 근거(AOI-1 Report 2011개 · AOI-8 4784개):
+#:   다시 검사 `MDH-RE` · `XXC 2D 3D RE` · `KFP 3D RESCAN`     재작업 `FVC REWORK` · `KDG-Rework-0831`
+#: 3D · 2D · DIA · SRD · EDGE · BUMP TOP 등은 **검사 종류**라 정상으로 본다(사용자 확정).
+#: `RW`(AOI-1 13건 · AOI-8 31건)는 재작업 줄임말로 보이지만 확인 전이라 넣지 않는다.
+_LOT_MARKS = {"RE": "RESCAN", "RESCAN": "RESCAN", "REWORK": "REWORK"}
+
+
+def scan_type(lot) -> str:
+    """Lot 이름에서 작업 표기를 읽는다. 토큰이 통째로 맞을 때만 — `RETURN`·`REX` 는 걸리지 않는다."""
+    found = {_LOT_MARKS[t] for t in (x.upper() for x in re.split(r"[\s_\-]+", str(lot or "")) if x)
+             if t in _LOT_MARKS}
+    return "RESCAN" if "RESCAN" in found else ("REWORK" if found else "")
 
 
 def norm_status(s) -> str:
@@ -238,7 +252,8 @@ def rows_for_report(dev_name: str, rep: dict, scan_root: str) -> List[dict]:
     b_start, b_end = parse_dt(s.get("Batch Start", "")), parse_dt(s.get("Batch End", ""))
     for w in rep["wafers"]:
         r = {"device": dev_name, "kind": "", "lot": w["lot"], "wafer_id": w["wafer_id"], "status": w["status"],
-             "norm_status": norm_status(w["status"]), "recipe": w["recipe"] or s.get("Recipe", ""),
+             "norm_status": norm_status(w["status"]), "scan_type": scan_type(w["lot"]),
+             "recipe": w["recipe"] or s.get("Recipe", ""),
              "wafer_start_time": "", "wafer_end_time": "", "batch_start": s.get("Batch Start", ""),
              "batch_end": s.get("Batch End", ""), "ini_match": "", "data_issue": ""}
         if re.match(r"^loadport", w["lot"], re.I) or re.match(r"^slot\s*\d+", w["wafer_id"], re.I) or not w["wafer_id"]:
@@ -308,7 +323,7 @@ def failed_batch_row(dev_name: str, rep: dict, rows: List[dict]) -> Optional[dic
         r["ini_match"] = "BATCH_FAILED"
     lot = next((r["lot"] for r in rows if r["ini_match"] != "NO_WAFER_ID" and r["lot"]), rep.get("report_lot", ""))
     return {"device": dev_name, "kind": "batch", "lot": lot, "wafer_id": "",
-            "status": lead["status"], "norm_status": norm_status(lead["status"]),
+            "status": lead["status"], "norm_status": norm_status(lead["status"]), "scan_type": scan_type(lot),
             "recipe": lead.get("recipe", ""), "wafer_start_time": s.get("Batch Start", ""),
             "wafer_end_time": s.get("Batch End", ""), "batch_start": s.get("Batch Start", ""),
             "batch_end": s.get("Batch End", ""), "ini_match": "BATCH",

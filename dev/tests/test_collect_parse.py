@@ -168,6 +168,29 @@ def test_old_machine_format_without_job_setup_still_works(tmp_path):
     assert collect.parse_dt(r["batch_end"]) == dt.datetime(2026, 9, 16, 15, 38, 47)
 
 
+# ── Lot 이름의 작업 표기 (AOI-1 Report 2011개 · AOI-8 4784개 실물 근거) ──────────
+@pytest.mark.parametrize("lot,expected", [
+    ("MDH-RE", "RESCAN"), ("XXC RE", "RESCAN"), ("XXC 2D 3D RE", "RESCAN"),
+    ("TUY FVI MERGE RE 3D", "RESCAN"), ("KFP 3D RESCAN", "RESCAN"), ("KTF-RESCAN", "RESCAN"),
+    ("FVC REWORK", "REWORK"), ("KDG-Rework-0831", "REWORK"), ("UVG TPDV REWORK", "REWORK"),
+    # 검사 종류는 정상이다(사용자 확정) — SRD·DIA·3D·EDGE·BUMP
+    ("EDGE SRD", ""), ("XAC DIA", ""), ("KLN-3D", ""), ("FSV-BUMP", ""), ("UAX 3D DUMMY", ""),
+    # 토큰이 통째로 맞을 때만 — 이름 안에 RE 가 들어갔다고 걸리면 안 된다
+    ("LVT RETURN 3D FVI MERGE", ""), ("REX", ""), ("KFD", ""), ("", ""),
+])
+def test_scan_type_reads_lot_marks(lot, expected):
+    assert collect.scan_type(lot) == expected
+
+
+def test_scan_type_prefers_rescan_when_both_marks_appear():
+    assert collect.scan_type("XXX REWORK RE") == "RESCAN"
+
+
+def test_rows_carry_scan_type(tmp_path):
+    rep = collect.parse_report(LIVE_NAME, LIVE_HTML.replace("FUK-RDL2", "FUK-RDL2 RE"))
+    assert all(r["scan_type"] == "RESCAN" for r in collect.rows_for_report("AOI-8", rep, str(tmp_path)))
+
+
 def test_read_ini_filters_to_needed_keys(tmp_path):
     p = tmp_path / "WaferInfo.ini"
     p.write_text(WAFER_INI, encoding="utf-8")

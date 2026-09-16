@@ -64,6 +64,12 @@ def test_parses_every_date_format_seen_on_real_machines():
     assert "(AM|PM)?" in HTML and "\\/(\\d{1,2})\\/" in HTML
 
 
+def test_rescan_and_rework_are_shown_apart():
+    """Lot 이름의 RE 는 노랑, REWORK 는 보라 — 둘 다 정상 가동으로 세고 색으로만 구분한다."""
+    assert 'r.scan_type==="RESCAN"' in HTML and 'r.scan_type==="REWORK"' in HTML
+    assert "--rework:" in HTML and "다시 검사 (RE)" in HTML and "재작업 (REWORK)" in HTML
+
+
 def test_scope_notice_is_rendered_from_meta():
     assert "meta.scope" in HTML and "수집 범위" in HTML and "수집 안 함" in HTML
 
