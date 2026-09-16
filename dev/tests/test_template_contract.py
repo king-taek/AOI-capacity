@@ -240,12 +240,12 @@ def test_timeline_has_a_pointer_hit_layer_with_a_max_distance():
     """★ 실측: 막대의 반응 영역이 그려진 폭과 같아 1440px 창에서 최소 1.9px 였다. 시각 막대는 그대로 두고
     맨 위의 투명 층이 가장 가까운 막대를 고른다 — 최대 거리 밖은 잡지 않고, 겹치면 좁은 쪽이 이긴다."""
     assert "const HIT_MAX_PX=6;" in HTML and "function bindHitLayer(" in HTML
-    assert '<rect class="hit"' in HTML and "bindHitLayer($(\"#detTl svg\"),m)" in HTML
+    assert '<rect class="hit"' in HTML and 'bindHitLayer(root.querySelector("svg"),m)' in HTML
     assert "(p.x1-p.x0)-(q.x1-q.x0)" in HTML                    # 겹치면 폭이 좁은 막대 우선
     assert "겹친 막대 ${list.length}개 · Tab 으로 전환" in HTML
     # hit 영역을 넓혀도 실제 막대 폭·시간 길이는 바꾸지 않는다
-    assert "const w=Math.max(2,x(L.e)-x(L.s));" in HTML
-    assert 'width="${Math.max(2,x(e2)-x(it.s)).toFixed(1)}"' in HTML
+    assert "const[xs,w]=clipX(Lt.s,Lt.e,2);" in HTML                # Lot 막대 최소 2단위
+    assert "const[xs,w]=clipX(it.s,e2,2);" in HTML                    # 오류+정지 막대 최소 2단위
 
 
 def test_tooltip_is_clamped_on_all_four_sides():
@@ -301,3 +301,16 @@ def test_screen_copy_is_short_but_keeps_the_qualifiers():
     assert 'gen+" 수집"' in HTML                                # 9/16 21:01 수집
     for keep in ("정지(추정)", "가동률 제외", "수집 안 함", "시간 미확인"):
         assert keep in HTML, keep
+
+
+def test_zoom_band_reuses_day_metrics_and_draws_nothing_new():
+    """★ 확대 타임라인은 같은 dayMetrics 결과를 잘라 다시 그릴 뿐이다 — 숫자·Lot 경계·60초 분할이 바뀌면 안 된다."""
+    body = HTML[HTML.index("function renderDetail("):HTML.index("function hlSeg(")]
+    assert body.count("dayMetrics(") == 1                                   # 상세 화면에서 집계는 한 번
+    assert "drawBand(m,a,a+DAY," in body                                    # 개요
+    assert "drawBand(m,z.s,z.e," in HTML                                    # 확대 — 같은 m
+    assert "function drawBand(m,t0,t1,o)" in HTML and "function wireSegs(" in HTML
+    assert 'id="zoomTl"' in HTML and "function bindZoomDrag(" in HTML
+    assert "const ZOOM_MIN=10*60e3,ZOOM_MAX=6*3.6e6;" in HTML
+    assert "Math.max(a,Math.min(s0,e0)),e1=Math.min(a+DAY,Math.max(s0,e0))" in HTML   # 그날 안으로 자른다
+    assert "createElementNS" not in HTML                                     # 네임스페이스 URL 조차 담지 않는다
