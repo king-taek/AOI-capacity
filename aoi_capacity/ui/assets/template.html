@@ -75,7 +75,11 @@ button{font:inherit;color:inherit}
 .view{display:none;max-width:1360px;margin:0 auto}
 .view.on{display:block;animation:silk-in .15s var(--silk)}
 @keyframes silk-in{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
-@media (max-width:820px){.app{grid-template-columns:1fr}.side{display:none}.brand{width:auto}.daynav .d{min-width:0;font-size:15px}.main{padding:14px}}
+/* 좁은 창: 사이드바 대신 상단 4탭 — 어떤 창 폭에서도 네 화면에 갈 수 있다. 타임라인은 축소 대신 가로 스크롤(막대 높이 유지). */
+.tabs{display:none;grid-column:1/-1;gap:4px;padding:6px 10px;border-bottom:1px solid var(--line);background:var(--surface)}
+.tabs .nav{width:auto;flex:1;justify-content:center;padding:8px 6px;font-size:13px}.tabs .nav .sub{display:none}.tabs .nav svg{width:15px;height:15px}
+@media (max-width:820px){.app{grid-template-columns:1fr;grid-template-rows:60px auto 1fr}.side{display:none}.tabs{display:flex}.brand{width:auto}.daynav .d{min-width:0;font-size:15px}.main{padding:14px}
+  #detTl{overflow-x:auto}#detTl .chart{min-width:900px}}
 
 /* controls */
 .btn{display:inline-flex;align-items:center;gap:7px;padding:7px 12px;border-radius:8px;border:1px solid var(--line-2);background:var(--surface);cursor:pointer;font-weight:500;font-size:13px;white-space:nowrap}
@@ -158,6 +162,13 @@ textarea.input{width:100%;min-height:110px;font-family:var(--mono);font-size:12.
 .detail .dh h2{display:flex;align-items:center;gap:10px}
 .detail .db{padding:16px 20px}
 .errs{margin-top:8px}
+/* 고정 상세 — hover 에서 뺀 원문·파일명·INI 상태·Report 목록을 여기서 본다(클릭 또는 Enter 로 고정, ESC 로 닫기) */
+.segd{margin:10px 0 4px;padding:12px 14px;border:1px solid var(--line-2);border-radius:10px;background:var(--surface-2)}
+.segd .hd{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:8px}.segd .hd b{font-size:14px}
+.segd .grid{display:grid;grid-template-columns:max-content 1fr;gap:5px 14px;font-size:12.5px;align-items:baseline}.segd .grid .k{color:var(--ink-3)}
+.segd code{font-family:var(--mono);font-size:12px;white-space:pre-wrap;word-break:break-all;color:var(--ink)}
+.segd .plist{max-height:170px;overflow:auto;font-family:var(--mono);font-size:12px;line-height:1.6;border-top:1px solid var(--line);margin-top:4px;padding-top:4px}
+.btn.small{padding:3px 8px;font-size:12px}.tbl td .btn.small{margin:-3px 0}
 
 /* charts */
 .chart{width:100%;display:block;overflow:visible}
@@ -217,12 +228,15 @@ details.adv summary{cursor:pointer;color:var(--accent-2);font-size:13px}
   <div class="grow"></div>
   <button class="btn icon ghost" id="btnTheme" title="밝은/어두운 테마" onclick="toggleTheme()"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M13 9.5A5.5 5.5 0 016.5 3a5.5 5.5 0 100 10 5.5 5.5 0 006.5-3.5z"/></svg></button>
 </header>
+<nav class="tabs" id="tabs" aria-label="화면 이동">
+  <button class="nav" data-v="home">홈</button><button class="nav" data-v="trend">추이</button><button class="nav" data-v="compare">장비 비교</button><button class="nav" data-v="set">설정</button>
+</nav>
 
 <nav class="side">
   <button class="nav" data-v="home" aria-current="page"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2 7.5L8 2l6 5.5V14H2z"/><path d="M6 14v-4h4v4"/></svg><span>홈<span class="sub">오늘 모든 장비 가동률</span></span></button>
   <button class="nav" data-v="trend"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2 12l4-5 3 3 5-6"/><path d="M2 14h12"/></svg><span>추이<span class="sub">일 · 주 · 월 가동률</span></span></button>
   <button class="nav" data-v="compare"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2 3h10M2 7h7M2 11h12"/></svg><span>장비 비교<span class="sub">기간별 가동률 순위</span></span></button>
-  <button class="nav" data-v="set" style="margin-top:10px"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="8" r="2.2"/><path d="M8 1.5v2M8 12.5v2M1.5 8h2M12.5 8h2M3.4 3.4l1.4 1.4M11.2 11.2l1.4 1.4M3.4 12.6l1.4-1.4M11.2 4.8l1.4-1.4"/></svg><span>설정<span class="sub">장비 · 경로 · 수집</span></span></button>
+  <button class="nav" data-v="set" style="margin-top:10px"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="8" r="2.2"/><path d="M8 1.5v2M8 12.5v2M1.5 8h2M12.5 8h2M3.4 3.4l1.4 1.4M11.2 11.2l1.4 1.4M3.4 12.6l1.4-1.4M11.2 4.8l1.4-1.4"/></svg><span>설정<span class="sub">표시 · 보관</span></span></button>
   <div class="foot" id="footTxt">정확 경로만 확인 · 재귀 검색 없음<br>원본 Report / INI 수정 없음</div>
 </nav>
 
@@ -244,10 +258,10 @@ details.adv summary{cursor:pointer;color:var(--accent-2);font-size:13px}
     <div class="card detail" id="detail" hidden>
       <div class="dh">
         <h2 id="detTitle"></h2>
-        <div class="legend"><span><i class="sw" style="background:var(--run)"></i>Lot 검사 (막대 하나 = Lot 하나)</span><span><i class="sw" style="background:var(--warn)"></i>다시 검사 (RE)</span><span><i class="sw" style="background:var(--rework)"></i>재작업 (REWORK)</span><span><i class="sw" style="background:var(--err)"></i>오류·중단 + 그 뒤 정지 (한 막대)</span><span><i class="sw" style="background:var(--prev)"></i>시험 가동 (TEST · 가동률 제외)</span><span><i class="sw" style="background:var(--off)"></i>미가동</span><span class="faint" style="margin-left:auto">막대를 <b>더블클릭</b>하면 그 BatchReport 파일이 열립니다</span></div>
+        <div class="legend"><span title="막대 하나 = Lot 하나. 같은 Lot 이어도 60초 넘게 비면 나뉩니다"><i class="sw" style="background:var(--run)"></i>검사</span><span title="Lot 이름에 RE · RESCAN — 가동률에 포함"><i class="sw" style="background:var(--warn)"></i>재검사</span><span title="Lot 이름에 REWORK — 가동률에 포함"><i class="sw" style="background:var(--rework)"></i>재작업</span><span title="오류 발생부터 다음 Wafer 시작까지를 막대 하나로 잇습니다. 정지 시간은 그 공백으로 추정한 값입니다"><i class="sw" style="background:var(--err)"></i>오류 · 정지(추정)</span><span title="Lot 이름에 TEST — 분모(24시간)에는 들어가고 실가동에서만 뺍니다"><i class="sw" style="background:var(--prev)"></i>시험 (가동률 제외)</span><span><i class="sw" style="background:var(--off)"></i>미가동</span><span class="faint" style="margin-left:auto">클릭: 상세 · 더블클릭: Report 열기</span></div>
         <button class="btn ghost" onclick="selectDev(null)" aria-label="닫기">닫기 ✕</button>
       </div>
-      <div class="db"><div id="detTl"></div><div class="errs" id="detErrs"></div></div>
+      <div class="db"><div id="detTl"></div><div class="segd" id="segDetail" hidden></div><div class="errs" id="detErrs"></div></div>
     </div>
   </section>
 
@@ -276,9 +290,9 @@ details.adv summary{cursor:pointer;color:var(--accent-2);font-size:13px}
   <!-- ================= SETTINGS ================= -->
   <section class="view set" id="v-set">
     <div class="card">
-      <h2>새 데이터 수집</h2>
-      <p class="help">이 파일은 <b>수집한 시점의 데이터를 담고 있는 한 장짜리 화면</b>입니다. 브라우저는 NAS 를 직접 읽지 않습니다.
-        새 데이터를 보려면 PC 의 <b>AOI Capacity</b> 수집 프로그램에서 ‘지금 수집’ 을 누른 뒤, 이 화면을 새로고침(F5)하세요.</p>
+      <h2>새 데이터</h2>
+      <p class="help">수집 프로그램에서 ‘지금 수집’ 을 누른 뒤 이 화면을 새로고침(F5)하세요.</p>
+      <details class="adv"><summary>왜 새로고침이 필요한가</summary><p class="help">이 파일은 수집한 시점의 데이터를 담은 한 장짜리 화면입니다. 브라우저는 NAS 를 읽지 않으며, 수집은 PC 의 AOI Capacity 수집 프로그램만 합니다.</p></details>
     </div>
     <div class="card">
       <h2>이상 판정 기준</h2>
@@ -286,9 +300,9 @@ details.adv summary{cursor:pointer;color:var(--accent-2);font-size:13px}
       <div class="row"><label class="row" style="font-size:13px;color:var(--ink-2)">가동률 <input class="input num" id="thUtil" type="number" value="40" min="0" max="100" style="width:64px" onchange="saveTh();renderAll()"> % 미만</label><label class="row" style="font-size:13px;color:var(--ink-2)">또는 오류 <input class="input num" id="thErr" type="number" value="3" min="0" style="width:56px" onchange="saveTh();renderAll()"> 건 이상</label></div>
     </div>
     <div class="card">
-      <h2>결과 보관</h2>
-      <p class="help">지금 보고 있는 내용을 날짜가 붙은 HTML 파일로 따로 저장해 둘 수 있습니다(원본 파일은 그대로 둡니다).</p>
-      <div class="row"><button class="btn" onclick="saveHtml()">HTML로 저장</button></div>
+      <h2>사본 저장</h2>
+      <p class="help">지금 화면을 날짜가 붙은 HTML 한 장으로 따로 저장합니다. 원본 파일은 그대로 둡니다.</p>
+      <div class="row"><button class="btn" onclick="saveHtml()">사본 저장</button></div>
     </div>
     <div class="card" id="timingCard" hidden>
       <h2>수집 시간</h2>
@@ -424,7 +438,7 @@ function lotTip(L){
     +`<br>${hm(new Date(L.s))} → ${hm(new Date(L.e))} · ${fmtSec((L.e-L.s)/1000)} · 검사 ${fmtSec(L.run/1000)}${L.test?' <span class="chip mute">가동률 제외</span>':""}`
     +`<br>Wafer ${nWafer}장${nBatch?` · 배치 ${nBatch}건`:""} — ${mix||"—"}`+tipHint();}
 /* 툴팁 맨 아래 한 줄 — 무엇을 더 할 수 있는지만 짧게 */
-const tipHint=()=>'<br><span class="k">더블클릭: Report 열기</span>';
+const tipHint=()=>'<br><span class="k">클릭: 상세 · 더블클릭: Report 열기</span>';
 const lotKey=(lot,isTest)=>(isTest?"TEST\u0000":"")+String(lot||"");
 /* 같은 Lot 이어도 **중간에 시간이 비면 막대를 나눈다**(사용자 확정).
    실장비 3일치(같은 Lot 안 연속 Wafer 사이 11,529건)에서 99%가 60초 이내였다 — 그보다 길게 빈 것은
@@ -507,9 +521,10 @@ const periodName={day:"일",week:"주",month:"월"};
 /* ---------- init / day nav ---------- */
 function init(){D=build();const days=dataDays();day=days[days.length-1]||todayKey();selDev=null;ui.cmpAnchor=null;
   $("#dayPick").min=days[0]||"";$("#dayPick").max=todayKey()>day?todayKey():day;
-  let modeTxt=meta.mode==="live"?"실제 수집 · "+meta.generated:meta.mode==="saved"?"저장된 결과 · "+meta.generated:meta.mode==="auto"?"자동 수집 · "+meta.generated:meta.mode==="gui"?(rows.length?"마지막 수집 · "+meta.generated:"아직 수집한 적 없음"):"데모 데이터 · 장비 "+devNames.length+"대";
+  const gen=String(meta.generated||"").replace(/^\d{4}-0?(\d+)-0?(\d+)\s+/,"$1/$2 ");   /* 2026-09-16 21:01 → 9/16 21:01 */
+  let modeTxt=meta.mode==="live"?gen+" 수집":meta.mode==="saved"?gen+" 수집 · 사본":meta.mode==="auto"?gen+" 수집":meta.mode==="gui"?(rows.length?gen+" 수집":"아직 수집한 적 없음"):"데모 데이터 · 장비 "+devNames.length+"대";
   if((meta.mode==="auto"||(meta.mode==="gui"&&rows.length))&&meta.generated_iso){const age=(Date.now()-new Date(meta.generated_iso))/60000;modeTxt+=age<60?` (${Math.round(age)}분 전)`:` (${(age/60).toFixed(1)}시간 전)`;$("#modePill").classList.toggle("stale",age>120);}
-  $("#modeTxt").textContent=modeTxt;$("#modePill").title=meta.mode==="auto"?"Python 수집기가 마지막으로 이 파일을 만든 시각. 2시간 이상 지나면 수집기 상태를 확인하세요.":"";
+  $("#modeTxt").textContent=modeTxt;$("#modePill").title="수집 프로그램이 이 파일을 만든 시각"+(meta.timing&&meta.timing.total_ms?` · 수집에 ${fmtSec(Math.round(meta.timing.total_ms/1000))}`:"");
   $("#modePill").classList.toggle("live",meta.mode==="live"||meta.mode==="auto"||(meta.mode==="gui"&&rows.length>0));
   const sc=meta.scope||{};
   $("#footTxt").innerHTML=`${sc.restricted?`수집 범위 · ${esc((sc.devices||[]).join(", "))}<br>`:""}정확 경로만 확인 · 재귀 검색 없음<br>원본 Report / INI 수정 없음${meta.version?`<br>v${esc(meta.version)}`:APP_VERSION?`<br>v${APP_VERSION}`:""}`;
@@ -531,7 +546,7 @@ segBind("unitSeg","u",v=>{ui.unit=v;ui.span={day:14,week:8,month:6}[v];ui.cmpAnc
 segBind("cmpSeg","p",v=>{ui.cmpP=+v;renderCompare();});
 segBind("cmpSort","s",v=>{ui.cmpSort=v;renderCompare();});
 $("#trendDev").onchange=()=>{ui.trendDev=$("#trendDev").value;renderTrend();};
-document.addEventListener("keydown",e=>{if(e.target.tagName==="INPUT"||e.target.tagName==="SELECT"||e.target.tagName==="TEXTAREA")return;if(!$("#v-home").classList.contains("on"))return;if(e.key==="Tab"&&hitCycle&&hitCycle()){e.preventDefault();return;}if(e.key==="ArrowLeft")stepDay(-1);if(e.key==="ArrowRight")stepDay(1);if(e.key==="Escape")selectDev(null);});
+document.addEventListener("keydown",e=>{if(e.target.tagName==="INPUT"||e.target.tagName==="SELECT"||e.target.tagName==="TEXTAREA")return;if(!$("#v-home").classList.contains("on"))return;if(e.key==="Tab"&&hitCycle&&hitCycle()){e.preventDefault();return;}if(e.key==="ArrowLeft")stepDay(-1);if(e.key==="ArrowRight")stepDay(1);if(e.key==="Escape"){const sd=$("#segDetail");if(sd&&!sd.hidden)closeSeg();else selectDev(null);}});
 
 /* ---------- render: home ---------- */
 function renderAll(){
@@ -668,15 +683,49 @@ function renderDetail(){
   bindTips($("#detTl"),"rect.seg",el=>segTip(m,el));
   const rowOf=el=>el.dataset.l!=null?m.lots[+el.dataset.l].r:m.items[+el.dataset.i].g.r;
   $("#detTl").querySelectorAll("rect.seg").forEach(el=>{
-    el.onclick=()=>{if(el.dataset.l!=null)return;const it=m.items[+el.dataset.i];const idx=m.errors.findIndex(e=>e.r===it.g.r);if(idx>=0)hlSeg(idx);};
+    /* 클릭(또는 Enter) = 상세 고정, 더블클릭 = Report 열기(사용자 확정 D15). 오류는 아래 표의 행도 함께 강조한다. */
+    el.onclick=()=>{pinEl(el);if(el.dataset.l==null){const it=m.items[+el.dataset.i];const idx=m.errors.findIndex(e=>e.r===it.g.r);if(idx>=0)hlSeg(idx);}};
     el.ondblclick=ev=>{ev.preventDefault();openReport(rowOf(el));};
-    el.onkeydown=ev=>{if(ev.key==="Enter"){ev.preventDefault();openReport(rowOf(el));}};
+    el.onkeydown=ev=>{if(ev.key==="Enter"){ev.preventDefault();el.onclick();}};
     el.dataset.open=reportUrl(rowOf(el))?"1":"";});
   bindHitLayer($("#detTl svg"),m);
-  const lotTbl=m.lots.length?`<details style="margin:6px 0 10px"><summary style="cursor:pointer;color:var(--accent-2);font-size:13px">Lot ${m.lots.length}개 목록</summary><table class="tbl" style="margin-top:6px"><thead><tr><th>Lot</th><th>표기</th><th>Recipe</th><th>시작</th><th>종료</th><th class="r">소요</th><th class="r">검사</th><th class="r">오류</th></tr></thead><tbody>${m.lots.map((L,i)=>`<tr class="click" ondblclick="openReport(window._m.lots[${i}].r)" title="더블클릭: Report 열기"><td class="mono">${esc(L.lot)}</td><td>${L.test?'<span class="chip mute">시험 · 제외</span>':L.redo?'<span class="chip redo">다시 검사</span>':L.rework?'<span class="chip rework">재작업</span>':""}</td><td>${esc(L.recipe)}</td><td class="num">${hm(new Date(L.s))}</td><td class="num">${hm(new Date(L.e))}</td><td class="r">${fmtSecS((L.e-L.s)/1000)}</td><td class="r">${fmtSecS(L.run/1000)}</td><td class="r">${L.err?`<span class="chip crit">${L.err}</span>`:0}</td></tr>`).join("")}</tbody></table></details>`:"";
-  $("#detErrs").innerHTML=lotTbl+(m.errors.length?`<table class="tbl"><thead><tr><th>시각</th><th>Lot / Wafer</th><th>오류</th><th class="r">정지 시간 (추정)</th><th>장비 메시지</th></tr></thead><tbody>${m.errors.map((e,i)=>`<tr class="click" data-e="${i}" onclick="hlSeg(${i})" ondblclick="openReport(window._m.errors[${i}].r)" title="더블클릭: Report 열기"><td class="num">${e.t?hm(new Date(e.t)):"–"}${e.noTime?' <span class="chip mute" title="INI가 없어 Batch 시작 시각으로 표시">Batch 시작</span>':""}</td><td class="mono">${escLot(e.r)}${e.r.kind==="batch"?' <span class="chip crit">배치 전체</span>':" / "+esc(e.r.wafer_id)}</td><td><span class="chip crit">${ERR_KO[e.r.norm_status]||"오류"}</span>${e.r.kind==="batch"?' <span class="chip mute">검사 전 중단</span>':""}</td><td class="r">${e.open?'<span class="chip warn">복구 기록 없음</span>':e.stop!=null?fmtSec(e.stop):"–"}</td><td class="faint">${esc(e.r.status)}</td></tr>`).join("")}</tbody></table><p class="faint" style="font-size:12px;margin-top:8px">정지 시간은 오류 Wafer 종료부터 다음 Wafer 시작까지의 공백으로 추정한 값입니다. 장비 이벤트 로그가 아닙니다. 타임라인에서는 오류 구간과 그 뒤 정지를 빨간 막대 하나로 이어 그립니다.</p>`
+  /* 표 — 행 클릭 = 상세 고정, 더블클릭 = Report 열기. 'Report 열기' 버튼은 행 클릭과 겹치지 않게 따로 둔다. */
+  const openBtn=expr=>`<button class="btn small" onclick="event.stopPropagation();openReport(${expr})">Report 열기</button>`;
+  const cut=(t,n)=>{t=String(t||"");return t.length>n?esc(t.slice(0,n-1))+"…":esc(t);};
+  const lotTbl=m.lots.length?`<details style="margin:6px 0 10px"><summary style="cursor:pointer;color:var(--accent-2);font-size:13px">Lot ${m.lots.length}개 목록</summary><table class="tbl" style="margin-top:6px"><thead><tr><th>Lot</th><th>표기</th><th>Recipe</th><th>시작</th><th>종료</th><th class="r">소요</th><th class="r">검사</th><th class="r">오류</th><th>원본</th></tr></thead><tbody>${m.lots.map((L,i)=>{const nr=reportsOf(L.parts).length;return`<tr class="click" onclick="pinLot(${i})" ondblclick="openReport(window._m.lots[${i}].r)" title="클릭: 상세 · 더블클릭: Report 열기"><td class="mono">${esc(L.lot)}</td><td>${L.test?'<span class="chip mute">시험 · 제외</span>':L.redo?'<span class="chip redo">재검사</span>':L.rework?'<span class="chip rework">재작업</span>':""}</td><td>${esc(L.recipe)}</td><td class="num">${hm(new Date(L.s))}</td><td class="num">${hm(new Date(L.e))}</td><td class="r">${fmtSecS((L.e-L.s)/1000)}</td><td class="r">${fmtSecS(L.run/1000)}</td><td class="r">${L.err?`<span class="chip crit">${L.err}</span>`:0}</td><td>${nr>1?`<span class="chip mute" title="Report ${nr}개 — 상세에서 고릅니다">원본 ${nr}개</span>`:openBtn(`window._m.lots[${i}].r`)}</td></tr>`;}).join("")}</tbody></table></details>`:"";
+  $("#detErrs").innerHTML=lotTbl+(m.errors.length?`<table class="tbl"><thead><tr><th>시각</th><th>Lot / Wafer</th><th>오류</th><th class="r">정지(추정)</th><th>장비 메시지</th><th>원본</th></tr></thead><tbody>${m.errors.map((e,i)=>`<tr class="click" data-e="${i}" onclick="hlSeg(${i});pinErr(${i})" ondblclick="openReport(window._m.errors[${i}].r)" title="클릭: 상세 · 더블클릭: Report 열기"><td class="num">${e.t?hm(new Date(e.t)):"–"}${e.noTime?' <span class="chip mute" title="Wafer 시각이 없어 Batch 시작 시각입니다">시간 미확인</span>':""}</td><td class="mono">${escLot(e.r)}${e.r.kind==="batch"?' <span class="chip crit">배치 전체</span>':" / "+esc(e.r.wafer_id)}</td><td><span class="chip crit">${ERR_KO[e.r.norm_status]||"오류"}</span>${e.r.kind==="batch"?' <span class="chip mute">검사 전 중단</span>':""}</td><td class="r">${e.open?'<span class="chip warn">복구 기록 없음</span>':e.stop!=null?fmtSec(e.stop):"–"}</td><td class="faint" title="${esc(e.r.status)}">${cut(e.r.status,40)}</td><td>${openBtn(`window._m.errors[${i}].r`)}</td></tr>`).join("")}</tbody></table><p class="faint" style="font-size:12px;margin-top:8px">정지(추정) = 오류 Wafer 종료부터 다음 Wafer 시작까지의 공백. 장비 이벤트 로그가 아닙니다.</p>`
     :(m.hasData?'<p class="faint" style="font-size:13px;padding:6px 0">이 날은 오류가 없습니다.</p>':'<p class="faint" style="font-size:13px;padding:6px 0">이 날은 데이터가 없습니다.</p>'));
-  window._m=m;}
+  closeSeg();window._m=m;}
+
+/* ---------- 고정 상세(클릭·Enter) ----------
+   hover 에서 뺀 것들 — 원문 메시지·파일명·INI 확인 상태·Report 목록·복사 — 를 여기서 본다. 툴팁과 달리 버튼이 있다. */
+const INI_KO={EXACT:"시각 확인됨",NOT_FOUND:"시간 미확인 · INI 없음",STALE:"시간 미확인 · INI 가 다시 검사로 덮어써짐",READ_ERROR:"시간 미확인 · INI 읽기 실패",
+  NO_WAFER_ID:"자리표시 행(LoadPort/Slot)",BATCH_FAILED:"실패한 배치의 행 — 배치 1건으로 셈",BATCH:"검사된 Wafer 없음 · Batch 시각으로 표시"};
+const reportsOf=parts=>{const seen=new Set(),out=[];for(const p of parts){const r=p.g.r;if(r.report&&!seen.has(r.report)){seen.add(r.report);out.push(r);}}return out;};
+const kindKo=g=>g.test?"시험":g.err?ERR_KO[g.r.norm_status]||"오류":(g.redo||g.dups>1)?"재검사":g.rework?"재작업":"정상 검사";
+function copyText(t){const done=()=>toast("복사했습니다");try{navigator.clipboard.writeText(t).then(done,()=>fallback());}catch(e){fallback();}
+  function fallback(){const ta=document.createElement("textarea");ta.value=t;document.body.appendChild(ta);ta.select();try{document.execCommand("copy");done();}catch(e){}ta.remove();}}
+function closeSeg(){const box=$("#segDetail");if(box){box.hidden=true;box.innerHTML="";}}
+function pinEl(el){const m=window._m;if(!m)return;if(el.dataset.l!=null)pinSeg({L:m.lots[+el.dataset.l]});else pinSeg({it:m.items[+el.dataset.i]});}
+function pinLot(i){pinSeg({L:window._m.lots[i]});}
+function pinErr(i){const m=window._m,e=m.errors[i];const it=m.items.find(x=>x.g.r===e.r&&x.kind!=="stop");pinSeg(it?{it}:{r:e.r,t:e.t});}
+function pinSeg(sel){const m=window._m,box=$("#segDetail");if(!m||!box)return;const rows=[];const add=(k,v)=>{if(v)rows.push(`<div class="k">${k}</div><div>${v}</div>`);};
+  let title="",reps=[];
+  if(sel.L){const L=sel.L;const nBatch=L.parts.filter(p=>p.g.batch).length,nWafer=L.parts.length-nBatch;title=`Lot ${esc(L.lot)}${L.test?' <span class="chip mute">시험 · 가동률 제외</span>':""}`;reps=reportsOf(L.parts);
+    add("시각",`${hm(new Date(L.s))} → ${hm(new Date(L.e))} · ${fmtSec((L.e-L.s)/1000)}`);add("검사 시간",fmtSec(L.run/1000));add("Recipe",esc(L.recipe));
+    add("구성",`Wafer ${nWafer}장${nBatch?` · 배치 ${nBatch}건`:""}`);
+    const list=L.parts.map(p=>`${hm(new Date(p.s))} ${esc(p.g.r.wafer_id||"(배치)")} · ${kindKo(p.g)}${p.g.err?` · <span class="faint">${esc(p.g.r.status)}</span>`:""}`).join("<br>");
+    add("Wafer 목록",`<div class="plist">${list}</div>`);}
+  else{const r=sel.it?sel.it.g.r:sel.r,g=sel.it?sel.it.g:null;reps=r.report?[r]:[];
+    title=`${g&&g.err?`<span style="color:var(--crit-ink)">${ERR_KO[r.norm_status]||"오류"}</span> · `:""}${r.kind==="batch"?"배치 중단 · ":""}${escLot(r)}${r.kind==="batch"?"":" / "+esc(r.wafer_id)}`;
+    if(g){add("시각",`${hm(new Date(g.s))} → ${hm(new Date(g.e))} · ${fmtSec((g.e-g.s)/1000)}`);add("분류",kindKo(g)+(g.dups>1?` · 기록 ${g.dups}건 (시간은 1번만 계산)`:""));
+      if(g.err){const st=m.items.find(i=>i.kind==="stop"&&i.g===g);add("정지(추정)",st?`${fmtSec((st.e-st.s)/1000)} — ${hm(new Date(st.s))} → ${hm(new Date(st.e))} 다음 Wafer 시작까지`:"복구 기록 없음 — 이 뒤로 검사된 Wafer 가 없습니다");}}
+    else add("시각",sel.t?`${hm(new Date(sel.t))} (Batch 시작) · Wafer 시각 없음`:"시간 미확인");
+    add("Recipe",esc(r.recipe));if(isErr(r.norm_status))add("장비 메시지",`<code>${esc(r.status)}</code> <button class="btn small" onclick="copyText(this.previousElementSibling.textContent)">복사</button>`);
+    add("INI 확인",INI_KO[r.ini_match]||esc(r.ini_match||""));if(r.data_issue&&r.ini_match!=="EXACT")add("비고",esc(r.data_issue));}
+  m._pin={reports:reps};
+  add(reps.length>1?`Report ${reps.length}개`:"Report",reps.length?reps.map((r,i)=>`${reportUrl(r)?`<button class="btn small" onclick="openReport(window._m._pin.reports[${i}])">Report 열기</button> `:""}<span class="mono faint">${esc(r.report)}</span>`).join("<br>"):'<span class="faint">Report 파일 이름이 없습니다</span>');
+  box.innerHTML=`<div class="hd"><b>${title}</b><button class="btn ghost small" onclick="closeSeg()" aria-label="닫기">닫기 ✕</button></div><div class="grid">${rows.join("")}</div>`;box.hidden=false;}
 function hlSeg(i){const m=window._m;const e=m.errors[i];$("#detErrs").querySelectorAll("tr.hl").forEach(t=>t.classList.remove("hl"));const tr=$("#detErrs").querySelector(`tr[data-e="${i}"]`);if(tr){tr.classList.add("hl");tr.scrollIntoView({block:"nearest"});}$("#detTl").querySelectorAll("rect.hl").forEach(t=>t.classList.remove("hl"));const idx=m.items.findIndex(it=>it.g.r===e.r&&it.kind!=="stop");if(idx>=0)$("#detTl").querySelector(`rect[data-i="${idx}"]`).classList.add("hl");}
 
 /* ---------- render: trend (day / week / month + period comparison) ---------- */

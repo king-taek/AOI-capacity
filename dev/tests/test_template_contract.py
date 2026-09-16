@@ -42,7 +42,7 @@ def test_entry_points_the_app_and_user_need():
 
 
 def test_home_has_no_previous_day_comparison_or_wafer_count():
-    home = HTML[HTML.index("/* ---------- render: home ---------- */"):HTML.index("/* ---------- render: trend")]
+    home = HTML[HTML.index("/* ---------- render: home ---------- */"):HTML.index("function selectDev(")]
     assert "deltaHtml(" not in home and "전일" not in home
     assert "nWafer" not in home and "Wafer <b>" not in home
 
@@ -67,7 +67,8 @@ def test_parses_every_date_format_seen_on_real_machines():
 def test_rescan_and_rework_are_shown_apart():
     """Lot 이름의 RE 는 노랑, REWORK 는 보라 — 둘 다 정상 가동으로 세고 색으로만 구분한다."""
     assert 'r.scan_type==="RESCAN"' in HTML and 'r.scan_type==="REWORK"' in HTML
-    assert "--rework:" in HTML and "다시 검사 (RE)" in HTML and "재작업 (REWORK)" in HTML
+    assert "--rework:" in HTML and ">재검사</span>" in HTML and ">재작업</span>" in HTML   # 범례는 짧게, 뜻은 title 에
+    assert 'title="Lot 이름에 RE · RESCAN — 가동률에 포함"' in HTML and 'title="Lot 이름에 REWORK — 가동률에 포함"' in HTML
 
 
 def test_scope_notice_is_rendered_from_meta():
@@ -112,7 +113,7 @@ def test_test_lots_are_excluded_from_the_utilisation_numbers():
     assert 'test:r.scan_type==="TEST"' in HTML            # 구간에 표시가 붙고
     assert 'if(g.test){' in HTML and 'm.nTest++' in HTML   # run/err/stop 어디에도 더하지 않는다
     assert '시험 가동 ${m.nTest}건 제외' in HTML            # 몇 건을 뺐는지 밝힌다
-    assert "시험 가동 (TEST · 가동률 제외)" in HTML         # 범례에도 있다
+    assert "시험 (가동률 제외)" in HTML                     # 범례에도 한정어가 남는다
 
 
 def test_report_opens_on_double_click_without_any_request_from_the_page():
@@ -136,7 +137,7 @@ def test_error_and_the_stop_after_it_are_drawn_as_one_bar():
     assert "오류 발생 <b>${hm(new Date(it.g.s))}</b> · 오류 구간" in HTML
     assert "그 뒤 정지(추정) ${fmtSec((st.e-st.s)/1000)}" in HTML
     assert "합계 ${fmtSec((st.e-it.g.s)/1000)}" in HTML
-    assert "오류·중단 + 그 뒤 정지 (한 막대)" in HTML
+    assert "오류 · 정지(추정)" in HTML                    # 범례 — '추정' 한정어를 지우지 않는다
 
 
 def test_a_lot_bar_shows_what_is_mixed_inside_it():
@@ -145,7 +146,7 @@ def test_a_lot_bar_shows_what_is_mixed_inside_it():
     assert "function lotTip(" in HTML and 'class="part"' in HTML
     assert 'const mark=it=>it.kind==="test"?"var(--prev)":it.kind==="err"?"var(--err)"' in HTML
     assert "Wafer ${nWafer}장" in HTML and "배치 ${nBatch}건" in HTML   # Wafer 장수와 통째로 실패한 시도는 따로
-    assert "정상 검사" in HTML and "오류·중단" in HTML   # 무엇이 섞였는지
+    assert '["정상",' in HTML and '["오류",L.err' in HTML   # 무엇이 섞였는지
 
 
 def test_lot_bars_split_by_the_exact_name_and_by_any_real_gap():
@@ -264,3 +265,39 @@ def test_hover_does_not_move_the_target():
     assert "translateY(-2px)" not in css and "translateY(-1px)" not in css and "translateX(2px)" not in css
     assert "animation:silk-in .15s" in css and ".12s var(--silk)" in css
     assert 'const smooth=()=>matchMedia("(prefers-reduced-motion: reduce)")' in HTML
+
+
+def test_single_click_pins_a_detail_panel_and_double_click_still_opens_the_report():
+    """hover 는 짧게, 원문·파일명·INI 상태·Report 목록은 클릭(또는 Enter)으로 고정한 상세에서 본다.
+    더블클릭으로 Report 를 여는 계약(D15)은 그대로다."""
+    assert 'id="segDetail"' in HTML and "function pinSeg(" in HTML and "function closeSeg(" in HTML
+    assert "el.onclick=()=>{pinEl(el);" in HTML and 'if(ev.key==="Enter"){ev.preventDefault();el.onclick();}' in HTML
+    assert "el.ondblclick=ev=>{ev.preventDefault();openReport(rowOf(el));};" in HTML
+    assert "Report 열기</button>" in HTML and "function copyText(" in HTML
+    assert "INI_KO={EXACT:" in HTML and "시간 미확인 · INI 가 다시 검사로 덮어써짐" in HTML   # 시각 누락의 원인을 말한다
+    assert 'if(sd&&!sd.hidden)closeSeg();else selectDev(null);' in HTML                   # ESC 는 상세부터 닫는다
+
+
+def test_multi_report_lot_lists_every_report():
+    """Lot 막대 하나에 Report 가 둘 이상이면(실데이터 7개) 대표 하나만 몰래 열지 않고 목록으로 고르게 한다."""
+    assert "const reportsOf=parts=>" in HTML and "원본 ${nr}개" in HTML
+    assert "window._m._pin.reports[${i}]" in HTML
+
+
+def test_narrow_windows_keep_a_way_to_every_page():
+    """820px 미만에서 사이드바가 사라지면 추이·비교·설정에 갈 길이 없었다(실측). 상단 4탭이 대신한다."""
+    assert '<nav class="tabs" id="tabs"' in HTML
+    tabs = HTML[HTML.index('<nav class="tabs"'):HTML.index("</nav>", HTML.index('<nav class="tabs"'))]
+    assert all(f'data-v="{v}"' in tabs for v in ("home", "trend", "compare", "set"))
+    css = HTML[:HTML.index("</style>")]
+    assert ".tabs{display:none;" in css and ".tabs{display:flex}" in css
+    assert "#detTl .chart{min-width:900px}" in css          # 타임라인은 축소 대신 가로 스크롤
+
+
+def test_screen_copy_is_short_but_keeps_the_qualifiers():
+    assert ">사본 저장</button>" in HTML and "HTML로 저장" not in HTML
+    assert '<span class="sub">표시 · 보관</span>' in HTML
+    assert "수집 프로그램에서 ‘지금 수집’ 을 누른 뒤 이 화면을 새로고침(F5)하세요." in HTML
+    assert 'gen+" 수집"' in HTML                                # 9/16 21:01 수집
+    for keep in ("정지(추정)", "가동률 제외", "수집 안 함", "시간 미확인"):
+        assert keep in HTML, keep
