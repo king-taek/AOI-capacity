@@ -17,7 +17,7 @@ from typing import Any, Dict, List, Optional
 from .. import scope as _scope
 from . import paths
 
-PREFS_VERSION = 2
+PREFS_VERSION = 3
 
 
 @dataclass
@@ -56,8 +56,9 @@ def migrate(p: Prefs) -> Prefs:
     """버전 간 기본값 이동 — **옛 기본값 그대로인 값만** 새 기본값으로 옮긴다(사용자가 고른 값은 보존).
 
     v2: 수집 범위가 AOI-25 한 대에서 AOI-1 · AOI-8 · AOI-9 · AOI-25 로 늘었다.
-        옛 기본값(["AOI-25"])을 그대로 쓰고 있던 설정만 새 목록으로 바꾼다."""
-    if p.prefs_version < 2 and list(p.scope_devices or []) in _scope.PAST_DEFAULTS:
+    v3: 4대 현장 테스트를 마치고 30대 전부로 늘었다(사용자 확정).
+        어느 쪽이든 **옛 기본값 그대로인 설정만** 새 목록으로 바꾼다 — `_scope.PAST_DEFAULTS` 참조."""
+    if p.prefs_version < PREFS_VERSION and list(p.scope_devices or []) in _scope.PAST_DEFAULTS:
         p.scope_devices = list(_scope.DEFAULT_SCOPE)
     if p.prefs_version < PREFS_VERSION:
         p.prefs_version = PREFS_VERSION

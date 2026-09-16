@@ -102,3 +102,14 @@ def test_home_cards_sort_with_cmp_dev_not_alphabetically():
     """★ 사전식으로 정렬하면 `4F-AOI-01` 이 `AOI-1` 앞으로 온다 — 홈 정렬은 devices.sort_key 와 같아야 한다."""
     assert "localeCompare" not in HTML
     assert 'ui.sort==="name"?cmpDev(a.n,b.n)' in HTML
+
+
+def test_test_lots_are_excluded_from_the_utilisation_numbers():
+    """★ 사용자 확정: Lot 이름이 TEST 인 시험 가동은 가동률에 넣지 않는다 — 다만 화면에서 사라지지도 않는다."""
+    from aoi_capacity import collect
+
+    assert collect.scan_type("GVG-RDL3 TEST") == "TEST" and collect.EXCLUDED_SCAN_TYPES == ("TEST",)
+    assert 'test:r.scan_type==="TEST"' in HTML            # 구간에 표시가 붙고
+    assert 'if(g.test){' in HTML and 'm.nTest++' in HTML   # run/err/stop 어디에도 더하지 않는다
+    assert '시험 가동 ${m.nTest}건 제외' in HTML            # 몇 건을 뺐는지 밝힌다
+    assert "시험 가동 (TEST · 가동률 제외)" in HTML         # 범례에도 있다

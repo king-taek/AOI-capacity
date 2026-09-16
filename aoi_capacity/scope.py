@@ -1,4 +1,4 @@
-"""수집 허용 장비 범위(scope) — 지금은 현장 테스트 4대(`DEFAULT_SCOPE`).
+"""수집 허용 장비 범위(scope) — 지금은 30대 전부(`DEFAULT_SCOPE`).
 
 ★ 절대 규칙: 허용 목록 밖 장비에는 **파일 접근을 하지 않는다**(scandir / stat / isdir / isfile / open).
   그래서 게이트는 "파일을 만지기 전" 단계인 `devices.py` 에 걸리고, 수집 루프·CLI·백필·예약 실행·
@@ -17,11 +17,14 @@ import os
 import re
 from typing import Dict, Iterable, List, Sequence
 
-#: 현재 현장 검증 대상. 바꿀 때는 README·CLAUDE.md 와 dev/tests/test_scope_isolation.py,
-#: 그리고 prefs.migrate(이미 저장된 설정을 새 기본값으로 옮긴다)를 함께 본다.
-DEFAULT_SCOPE: List[str] = ["AOI-1", "AOI-8", "AOI-9", "AOI-25"]
+#: 현재 수집 대상 — 30대 전부(사용자 확정). 4대(AOI-1·8·9·25) 현장 테스트를 마치고 넓혔다.
+#: 바꿀 때는 README·CLAUDE.md 와 dev/tests/test_scope_isolation.py, 그리고
+#: prefs.migrate(이미 저장된 설정을 새 기본값으로 옮긴다)를 함께 본다.
+DEFAULT_SCOPE: List[str] = (
+    [f"AOI-{i}" for i in range(1, 26)] + [f"4F-AOI-{i:02d}" for i in range(1, 6)]
+)
 #: 지금까지 기본값이었던 목록들 — 사용자가 직접 고르지 않고 그대로 둔 설정만 새 기본값으로 옮긴다.
-PAST_DEFAULTS: List[List[str]] = [["AOI-25"]]
+PAST_DEFAULTS: List[List[str]] = [["AOI-25"], ["AOI-1", "AOI-8", "AOI-9", "AOI-25"]]
 ANY = "*"
 CFG_KEY = "scope_devices"
 

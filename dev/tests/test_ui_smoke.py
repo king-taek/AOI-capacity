@@ -144,3 +144,16 @@ def test_theme_switch_reapplies_stylesheet(window, styled_qapp):
     window.settings_page._dark.setChecked(True)
     _pump(styled_qapp)
     assert theme.color_mode() == "dark"
+
+
+def test_collect_range_is_editable_and_saved(window, styled_qapp):
+    """새로 넣은 장비를 며칠치부터 읽을지 — 설정에서 바꿀 수 있어야 한다(30대 확대 후 필요)."""
+    from aoi_capacity.utils import prefs
+
+    window.settings_page._backfill.setValue(3)
+    _pump(styled_qapp)
+    assert prefs.load().backfill_days == 3
+    assert prefs.to_collect_cfg(prefs.load())["backfill_days"] == 3
+    window.settings_page._retention.setValue(120)
+    _pump(styled_qapp)
+    assert prefs.load().retention_days == 120

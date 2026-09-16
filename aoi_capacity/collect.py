@@ -114,18 +114,26 @@ _STATUS_RULES = [
 ]
 
 
-#: Lot 이름 끝에 붙는 작업 표기 — 실물 근거(AOI-1 Report 2011개 · AOI-8 4784개):
+#: Lot 이름 끝에 붙는 작업 표기 — 실물 근거(AOI-1 Report 2011개 · AOI-8 4784개 · 30대 전수 55,717개):
 #:   다시 검사 `MDH-RE` · `XXC 2D 3D RE` · `KFP 3D RESCAN`     재작업 `FVC REWORK` · `KDG-Rework-0831`
-#: 3D · 2D · DIA · SRD · EDGE · BUMP TOP 등은 **검사 종류**라 정상으로 본다(사용자 확정).
-#: `RW`(AOI-1 13건 · AOI-8 31건)는 재작업 줄임말로 보이지만 확인 전이라 넣지 않는다.
-_LOT_MARKS = {"RE": "RESCAN", "RESCAN": "RESCAN", "REWORK": "REWORK"}
+#:   시험 가동 `TEST` · `GVG-RDL3 TEST` · `GFX-TEST`  → 가동률에서 **뺀다**(사용자 확정)
+#: 3D · 2D · DIA · SRD · EDGE · BUMP TOP · PIDS3/5/7/9 · RDL2/3/4 등은 **검사 종류**라 정상으로 본다(사용자 확정).
+#: `RW` 도 정상으로 둔다(사용자 확정 — 재작업인지 확실하지 않다).
+_LOT_MARKS = {"TEST": "TEST", "RE": "RESCAN", "RESCAN": "RESCAN", "REWORK": "REWORK"}
+#: 가동률(분자·분모) 계산에서 빼는 표기. 화면에는 '제외' 로 남겨 사라지지 않게 한다.
+EXCLUDED_SCAN_TYPES = ("TEST",)
 
 
 def scan_type(lot) -> str:
-    """Lot 이름에서 작업 표기를 읽는다. 토큰이 통째로 맞을 때만 — `RETURN`·`REX` 는 걸리지 않는다."""
+    """Lot 이름에서 작업 표기를 읽는다. 토큰이 통째로 맞을 때만 — `RETURN`·`REX` 는 걸리지 않는다.
+
+    겹치면 **TEST → RESCAN → REWORK** 순. 시험 가동은 가동률에서 빼는 쪽이 세므로 먼저 본다."""
     found = {_LOT_MARKS[t] for t in (x.upper() for x in re.split(r"[\s_\-]+", str(lot or "")) if x)
              if t in _LOT_MARKS}
-    return "RESCAN" if "RESCAN" in found else ("REWORK" if found else "")
+    for mark in ("TEST", "RESCAN"):
+        if mark in found:
+            return mark
+    return "REWORK" if found else ""
 
 
 def norm_status(s) -> str:

@@ -92,29 +92,35 @@ def tripwire(monkeypatch, scoped_nas):
     return tw
 
 
-def _cfg(tmp_path, csv_path, **over):
-    cfg = make_cfg(tmp_path, csv_path, **over)
-    cfg.pop("scope_devices", None)          # 기본값(AOI-25)을 그대로 쓴다
-    return cfg
-
-
-# ── 1. 기본값 ────────────────────────────────────────────────────────────
+#: 게이트 자체를 시험하는 목록 — 기본값이 아니라 **직접 지정한 제한**이다.
+#: (기본값은 지금 30대 전부라서, 그것으로는 '막히는지' 를 볼 수 없다.)
 SCOPE = ["AOI-1", "AOI-8", "AOI-9", "AOI-25"]
 
 
-def test_default_scope_is_the_four_test_devices_everywhere():
-    assert collect.DEFAULT_CONFIG["scope_devices"] == SCOPE
-    assert scope.scope_list({}) == SCOPE and not scope.unrestricted({})
-    assert scope.scope_list({"scope_devices": []}) == SCOPE      # 빈 목록은 '전부 금지' 가 아니다
-    from aoi_capacity.utils import prefs
-    assert prefs.to_collect_cfg(prefs.Prefs())["scope_devices"] == SCOPE
+def _cfg(tmp_path, csv_path, **over):
+    over.setdefault("scope_devices", list(SCOPE))
+    return make_cfg(tmp_path, csv_path, **over)
 
 
-def test_saved_old_default_scope_is_migrated_but_user_choice_is_kept(tmp_path):
-    """이미 저장된 설정: 옛 기본값(AOI-25 한 대)만 새 목록으로 옮기고, 직접 고른 값은 그대로 둔다."""
+# ── 1. 기본값 ────────────────────────────────────────────────────────────
+def test_default_scope_is_every_real_machine():
+    """사용자 확정: 4대 현장 테스트를 마치고 30대 전부를 본다. `*`(제한 없음)와는 여전히 다르다."""
+    all30 = [f"AOI-{i}" for i in range(1, 26)] + [f"4F-AOI-{i:02d}" for i in range(1, 6)]
+    assert scope.DEFAULT_SCOPE == all30
+    assert collect.DEFAULT_CONFIG["scope_devices"] == all30
+    assert scope.scope_list({}) == all30 and not scope.unrestricted({})
+    assert scope.scope_list({"scope_devices": []}) == all30      # 빈 목록은 '전부 금지' 가 아니다
     from aoi_capacity.utils import prefs
-    moved = prefs.migrate(prefs.Prefs(scope_devices=["AOI-25"], prefs_version=1))
-    assert moved.scope_devices == SCOPE and moved.prefs_version == prefs.PREFS_VERSION
+    assert prefs.to_collect_cfg(prefs.Prefs())["scope_devices"] == all30
+    assert not scope.is_allowed({}, "AOI-26") and not scope.is_allowed({}, "4F-AOI-06")
+
+
+@pytest.mark.parametrize("old", [["AOI-25"], ["AOI-1", "AOI-8", "AOI-9", "AOI-25"]])
+def test_saved_old_default_scope_is_migrated_but_user_choice_is_kept(old):
+    """이미 저장된 설정: **옛 기본값 그대로인 것만** 새 목록으로 옮기고, 직접 고른 값은 그대로 둔다."""
+    from aoi_capacity.utils import prefs
+    moved = prefs.migrate(prefs.Prefs(scope_devices=list(old), prefs_version=1))
+    assert moved.scope_devices == list(scope.DEFAULT_SCOPE) and moved.prefs_version == prefs.PREFS_VERSION
     mine = prefs.migrate(prefs.Prefs(scope_devices=["AOI-7"], prefs_version=1))
     assert mine.scope_devices == ["AOI-7"]                    # 사용자가 고른 값은 건드리지 않는다
     wide = prefs.migrate(prefs.Prefs(scope_devices=["*"], prefs_version=1))
@@ -127,7 +133,7 @@ def test_saved_old_default_scope_is_migrated_but_user_choice_is_kept(tmp_path):
     ("AOI-24", False), ("AOI-2", False), ("AOI-255", False), ("4F-AOI-01", False), ("", False),
 ])
 def test_is_allowed_matches_by_name_only(name, expected):
-    assert scope.is_allowed({}, name) is expected
+    assert scope.is_allowed({"scope_devices": list(SCOPE)}, name) is expected
 
 
 # ── 2. 장비 해석 · 연결 확인 ─────────────────────────────────────────────
@@ -177,7 +183,8 @@ def test_cli_run_stays_in_scope(tmp_path, scoped_nas, tripwire, monkeypatch):
     out = tmp_path / "out"
     conf = tmp_path / "config.json"
     conf.write_text(json.dumps({"devices_csv": str(csv_path), "cache_file": str(out / "c.json"),
-                                "output_dir": str(out), "backfill_days": 3650}), encoding="utf-8")
+                                "output_dir": str(out), "backfill_days": 3650,
+                                "scope_devices": list(SCOPE)}), encoding="utf-8")
     assert cli.main(["--config", str(conf)]) == 0
     assert not tripwire.hits, tripwire.hits
     data = _embedded(out / "AOI_capacity.html")
@@ -329,3 +336,18 @@ def test_display_name_rules(folder, hint, expected):
 def test_home_order_is_numeric_then_floor4():
     names = ["4F-AOI-05", "AOI-10", "AOI-2", "4F-AOI-01", "AOI-25", "AOI-1"]
     assert sorted(names, key=devices.sort_key) == ["AOI-1", "AOI-2", "AOI-10", "AOI-25", "4F-AOI-01", "4F-AOI-05"]
+
+
+# ── 5. 기본 장비 목록이 수집 범위와 어긋나면 안 된다 ─────────────────────
+def test_default_device_list_is_entirely_inside_the_scope():
+    """★ 실제로 겪은 문제: 기본 목록의 `4층 / I:\\ / *` 행은 자동 탐색이라 범위 제한 중 **통째로 건너뛰어**
+    4F 장비 5대가 한 번도 수집되지 않았다. 기본 목록의 모든 행은 범위 안이고 `*` 가 아니어야 한다."""
+    from aoi_capacity.utils import paths
+
+    rows = devices.read_devices_csv(paths.default_devices_csv())
+    assert rows, "기본 장비 목록이 비었다"
+    for row in rows:
+        assert str(row.get("sub", "")).strip() != devices.AUTO, f"자동 탐색 행이 남아 있다: {row}"
+        assert scope.allows_row({}, row), f"기본 목록인데 수집 범위 밖: {row}"
+    names = {scope.key(r["name"]) for r in rows}
+    assert names == {scope.key(n) for n in scope.DEFAULT_SCOPE}, "기본 목록과 수집 범위가 서로 다르다"
