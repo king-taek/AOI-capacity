@@ -79,6 +79,14 @@ Camtek AOI 장비의 BatchReport/WaferInfo.ini 를 읽어 장비별 가동률을
   FAR Model…/Illegal Lot Name./Wafer Map Import failed.(RECIPE_ERROR) · Failed to move wafer…(WAFER_LOST).
   ★ 순서가 곧 의미다: 반송 실패 문구는 `… Batch Aborted. Skipped.` 로 끝나 `skip` 규칙 **위**에 있어야 한다
   (아래에 두면 오류가 '건너뜀'(정상)으로 묻힌다).
+- **중단(Abort)은 Error 가 아니다**(사용자 확정 D35). `Aborted.` · `Wafer aborted by user.`(=`ABORTED`·`USER_ABORT`)는
+  사람이 세운 것이라 설비 Error 로 세지 않는다 — 화면의 `isErr` 에서 빼고 **Error 건수·빨간 막대·그 뒤 '정지(추정)' 에 넣지 않는다**.
+  사라지지도 않는다: '중단' 이라는 제 이름·제 색(회청색 교차 빗금)으로 타임라인·Lot 표·가동률 저하 사유에 남고,
+  **분모에는 들어가되 실가동(분자)에서는 빠진다**(Test 와 같은 자리 — 스캔이 끝나지 않아 양산 결과가 없다).
+  통째로 중단된 배치(`kind="batch"`)도 같다(D05 의 '시간은 세고 분자에서 제외' 는 그대로, 라벨만 Error → 중단).
+  ★ 반송 실패는 문구가 `… Batch Aborted. Skipped.` 라 `abort` 에 걸릴 수 있는데, `WAFER_LOST` 규칙이 **위**에 있어 Error 로 남는다.
+  앞선 시도가 중단이면 다음 시도는 중복스캔이 아니라 **재스캔**이다(결과를 내지 못해 다시 돌린 것).
+  회귀 가드: `test_abort_is_not_counted_as_an_error` · `test_dashboard_js.py` 의 중단 5건.
 - `LoadPort A` · `Slot n` 은 Lot·Wafer 가 아니라 자리표시다(`collect._is_placeholder`). Lot 이 비면
   `os.path.join` 에서 그 칸이 사라져 **다른 Lot 의 INI** 를 가리키므로 경로를 아예 만들지 않는다.
   배치 행의 Lot 도 자리표시를 거른 뒤 고른다 — 못 고르면 빈칸으로 두고 화면이 `(Lot 확인 불가)` 라 적는다.
@@ -104,7 +112,7 @@ Camtek AOI 장비의 BatchReport/WaferInfo.ini 를 읽어 장비별 가동률을
   파랗게 칠해지면 안 된다. 근거: 실장비 3일치에서 같은 Lot 안 연속 Wafer 사이 11,529건 중 95%가 52초,
   99%가 1,068초 — 60초면 Wafer 교체(20~30초)는 붙이고 실제 멈춤은 가른다(9/15 기준 막대 358→477개).
 - **화면 용어·색·패턴의 단일 출처는 template 의 `DISPLAY_META`** 다(사용자 확정 D30): 가동 · 중복스캔(청록 사선) · 재스캔(노랑) ·
-  Rework(보라) · Error(빨강) · Test(분홍 점무늬) · 미가동. 범례·툴팁·막대·표·상세가 전부 여기서 읽는다. 옛말(검사·재검사·재작업·오류·시험)을
+  Rework(보라) · Error(빨강) · 중단(회청색 교차 빗금) · Test(분홍 점무늬) · 미가동. 범례·툴팁·막대·표·상세가 전부 여기서 읽는다. 옛말(검사·재검사·재작업·오류·시험)을
   화면 JS 에 다시 쓰지 않는다(가드: `test_rescan_and_rework_are_shown_apart`). 원본 상태 문구·Lot 이름·Report 파일명은 바꾸지 않는다.
 - **데이터 중복과 실제 반복은 다르다**(사용자 확정 D31·D32, template `build`·`materialIndex`):
   ① 같은 원본 행이 두 번(`rawDups`) → 한 번, ② 서로 다른 Report 가 같은 INI 시각을 참조(`refs`) → 시간 한 번·이력 보존·**재스캔으로 단정하지 않음**,
@@ -114,10 +122,10 @@ Camtek AOI 장비의 BatchReport/WaferInfo.ini 를 읽어 장비별 가동률을
   시각이 겹치거나 같은 시작이면 **보류**(임의 순서로 정하지 않는다). 첫 시도는 '확인된 첫 기록' 이고 소급해서 바꾸지 않는다.
   LoadPort/Slot·실패 배치 행은 후보가 아니다. 시각 없는(STALE) 앞선 시도는 Batch 구간으로 선후만 보고 시간은 지어내지 않는다.
   분류 규칙이 바뀌면 `CLASS_VERSION` 을 올린다 — 저장하지 않고 열 때마다 원천 행에서 다시 계산한다(저장 열 계약은 그대로 17열).
-- **시간 분할 U+T+E+S+R = D** 는 같은 장비·같은 날 안에서 우선순위(Error > 가동 > Test > 정지)로 **한 번만** 배정하고 겹친 초를 `overlap` 에 적는다
+- **시간 분할 U+T+A+E+S+R = D**(A = 중단)는 같은 장비·같은 날 안에서 우선순위(Error > 가동 > 중단 > Test > 정지)로 **한 번만** 배정하고 겹친 초를 `overlap` 에 적는다
   (`max(0,…)` 로 숨기지 않는다). 건수는 **시작한 날에 한 번**(자정을 넘는 구간은 시간만 나눈다). 복구 기록 없는 마지막 Error 의 정지(추정)는
   **관측 종료(로드한 데이터의 마지막 시각)까지만** — 다음 날로 늘리지 않고, 정지 확정으로 표현하지 않는다.
-- 홈의 **가동률 저하 사유** 차트(`renderLoss`)는 같은 `dayMetrics` 를 Error 구간·Error 후 정지(추정)·Test·미가동(사유 미확인)으로 나눈다.
+- 홈의 **가동률 저하 사유** 차트(`renderLoss`)는 같은 `dayMetrics` 를 Error 구간·Error 후 정지(추정)·중단·Test·미가동(사유 미확인)으로 나눈다.
   %p 기여 = 100/N × Σ(L/D) 라 합이 100 − 평균 가동률이다(가드 `test_t24…`). 중복스캔·재스캔·Rework 는 가동시간의 부분집합이라 저하 사유에 넣지 않는다
   (별도 '반복 가동' 카드). 사유는 관측 분류이지 물리적 원인이 아니다 — 인력·자재·보전 같은 원인을 지어내지 않는다.
 - **장비 상세 패널은 하나뿐이고 클릭한 장비 버튼 바로 아래에 붙는다**(사용자 확정 D34): 렌더 전 `#detPark` 로 빼 두었다가 선택한 장비의

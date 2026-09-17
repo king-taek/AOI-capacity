@@ -158,7 +158,7 @@ SET_VERSION = "버전"
 SET_VERSION_UNKNOWN = "미상 (개발 실행)"
 SET_NAS_NOTICE = "이 프로그램은 NAS 의 Report 와 WaferInfo.ini 를 읽기만 하며, NAS 에는 어떤 파일도 만들거나 바꾸지 않습니다."
 SET_UTIL_DEFINITION = ("가동률 = 가동시간(WaferStartTime~WaferEndTime 합) ÷ 24시간. 오늘은 00:00 부터 그날 마지막 스캔까지로 나눕니다. "
-                       "오류 Wafer 종료부터 다음 Wafer 시작까지의 공백을 '정지(추정)' 로 봅니다.")
+                       "Error Wafer 종료부터 다음 Wafer 시작까지의 공백을 '정지(추정)' 로 봅니다. 중단(Aborted)은 Error 로 세지 않고 실가동에서도 뺍니다.")
 
 # ── NAS 안전장치 ───────────────────────────────────────────────────────
 NAS_WRITE_REFUSED_FMT = "NAS 원본 폴더 안에는 파일을 쓸 수 없습니다: {path}  (NAS: {root})"

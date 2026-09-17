@@ -134,7 +134,7 @@ def test_t10_same_lot_but_different_wafer_is_not_linked():
 def test_t11_placeholders_and_batch_rows_are_not_material_candidates():
     rows = [w("AOI-8", "Slot 3", "09:00", "09:05", lot="LoadPort A", status="Skipped.", ini_match="NO_WAFER_ID"),
             w("AOI-8", "Slot 3", "10:00", "10:05", lot="LoadPort A", status="Skipped.", ini_match="NO_WAFER_ID"),
-            w("AOI-8", "", "11:00", "11:02", lot="LOT-A", status="Aborted.", kind="batch", ini_match="BATCH")]
+            w("AOI-8", "", "11:00", "11:02", lot="LOT-A", status="Alignment Error.", kind="batch", ini_match="BATCH")]
     res = run(rows)
     assert res["attempts"] == []
     assert res["per"]["AOI-8"][DAY]["nErr"] == 1                       # 배치 1건
@@ -248,7 +248,7 @@ def test_t24_loss_pp_sum_equals_100_minus_average_even_when_denominators_differ(
 
 # ── T25: 가동 없는 날·Test 만 있는 날·분모 0 — NaN/Infinity 없음 ────────────────────────────
 def test_t25_no_nan_for_test_only_days_and_empty_devices():
-    res = run([w("AOI-8", "W1", "09:00", "09:05", lot="X TEST", scan_type="TEST"), w("AOI-9", "W2", "09:00", "09:05", status="Aborted.", kind="batch", ini_match="BATCH")])
+    res = run([w("AOI-8", "W1", "09:00", "09:05", lot="X TEST", scan_type="TEST"), w("AOI-9", "W2", "09:00", "09:05", status="Alignment Error.", kind="batch", ini_match="BATCH")])
     m8, m9 = res["per"]["AOI-8"][DAY], res["per"]["AOI-9"][DAY]
     assert m8["hasData"] is True and m8["util"] == 0 and m8["test"] == 300
     assert m9["nErr"] == 1 and m9["util"] == 0
@@ -270,4 +270,50 @@ def test_repeat_time_is_a_subset_of_run_time_and_never_a_loss():
         assert m["dup"] + m["rescan"] + m["rework"] <= m["run"]
         assert m["run"] + m["err"] + m["stop"] + m["test"] + m["off"] == m["denom"]
     L = res["loss"][0]
-    assert [r[0] for r in L["rows"]] == ["err", "stop", "testRun", "off"]     # 반복 가동은 저하 사유가 아니다
+    assert [r[0] for r in L["rows"]] == ["err", "stop", "abortRun", "testRun", "off"]   # 반복 가동은 저하 사유가 아니다
+
+
+# ── 중단(Abort)은 Error 가 아니다 (사용자 확정 D35) ───────────────────────────────────────────
+def test_abort_is_not_an_error_and_starts_no_estimated_stop():
+    """`Aborted.` · `Wafer aborted by user.` 는 사람이 세운 것이다 — Error 건수에 넣지 않고,
+    그 뒤 공백을 'Error 후 정지(추정)' 로 돌리지도 않는다. 스캔이 끝나지 않았으므로 실가동(분자)에도 넣지 않는다."""
+    res = run([w("AOI-8", "W1", "09:00", "09:05", status="Aborted."), w("AOI-8", "W2", "12:00", "12:05")])
+    m = res["per"]["AOI-8"][DAY]
+    assert m["nErr"] == 0 and m["err"] == 0                      # Error 로 세지 않는다
+    assert m["nAbort"] == 1 and m["abort"] == 300                # '중단' 으로 따로 센다
+    assert m["run"] == 300                                       # 중단된 스캔은 실가동이 아니다(W2 만)
+    assert m["stop"] == 0                                        # 그 뒤 2시간 55분을 '정지(추정)' 로 돌리지 않는다
+    assert m["off"] == 86400 - 600                               # 사라지지는 않는다 — 미가동으로 남는다
+    assert m["run"] + m["err"] + m["stop"] + m["test"] + m["abort"] + m["off"] == m["denom"]
+
+
+def test_user_abort_is_also_not_an_error_but_wafer_lost_still_is():
+    """★ 반송 실패는 문구가 `… Batch Aborted. Skipped.` 로 끝난다 — abort 를 뺀다고 이것까지 빠지면 안 된다."""
+    res = run([w("AOI-8", "W1", "09:00", "09:05", status="Aborted. Wafer aborted by user."),
+               w("AOI-8", "W2", "10:00", "10:05", status="Failed to move wafer to station. Batch Aborted. Skipped.")])
+    m = res["per"]["AOI-8"][DAY]
+    assert m["nAbort"] == 1 and m["nErr"] == 1                   # 중단 1건 · Error(반송 실패) 1건
+    assert m["err"] == 300
+
+
+def test_an_attempt_after_an_abort_is_a_rescan_not_a_duplicate():
+    """앞선 시도가 끝나지 못했으면(Error 또는 중단) 다시 돌린 것은 중복스캔이 아니라 재스캔이다."""
+    res = run([w("AOI-8", "W1", "09:00", "09:05", status="Aborted."), w("AOI-8", "W1", "09:10", "09:15")])
+    a = att(res, "AOI-8", "W1", "AOI-8_LOT-A_09:10_BatchReport.htm")
+    assert a["rel"] == "SAME_DEVICE_RESCAN" and a["disp"] == "RESCAN"
+    assert res["per"]["AOI-8"][DAY]["rescan"] == 300
+
+
+def test_abort_appears_as_its_own_loss_reason():
+    res = run([w("AOI-8", "W1", "09:00", "09:05", status="Aborted.")])
+    L = res["loss"][0]
+    assert [r[0] for r in L["rows"]] == ["err", "stop", "abortRun", "testRun", "off"]
+    assert dict((r[0], r[1]) for r in L["rows"])["abortRun"] == 300
+    assert abs(L["ppSum"] + L["util"] - 100) < 1e-6              # 사유 %p 합은 여전히 100 − 평균
+
+
+def test_batch_level_abort_is_counted_as_a_stop_not_an_error():
+    """통째로 중단된 배치도 Error 가 아니다(D05 의 '시간은 세고 분자에서 제외' 는 그대로)."""
+    res = run([w("AOI-8", "", "11:00", "11:02", lot="LOT-A", status="Aborted.", kind="batch", ini_match="BATCH")])
+    m = res["per"]["AOI-8"][DAY]
+    assert m["nErr"] == 0 and m["nAbort"] == 1 and m["abort"] == 120 and m["run"] == 0

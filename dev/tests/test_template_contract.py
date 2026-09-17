@@ -102,11 +102,19 @@ def test_status_classification_matches_the_python_side():
     assert js_codes[0] == "PASS" and 't?"OTHER":""' in body
     assert js_codes[1:] == [c for c, _ in collect._STATUS_RULES]
 
-    err_codes = [c for c, _ in collect._STATUS_RULES if c != "SKIPPED"]
+    # ★ 중단(Abort)은 Error 가 아니다(사용자 확정 D35) — isErr 에서 빼되 이름·색은 남는다.
+    #   건너뜀(SKIPPED)도 예전부터 Error 가 아니다. 그 둘을 뺀 나머지는 전부 Error 여야 한다.
+    not_err = {"SKIPPED", "USER_ABORT", "ABORTED"}
+    err_codes = [c for c, _ in collect._STATUS_RULES if c not in not_err]
     is_err = HTML[HTML.index("const isErr="):].split("\n")[0]
     for code in err_codes:
         assert f'"{code}"' in is_err, f"isErr 에 {code} 없음"
-        assert re.search(rf"\b{code}:", HTML), f"ERR_KO 에 {code} 한국어 이름 없음"
+    for code in ("USER_ABORT", "ABORTED"):
+        assert f'"{code}"' not in is_err, f"{code} 가 아직 Error 로 세어진다"
+    assert 'const ABORT_CODES=["USER_ABORT","ABORTED"];' in HTML
+    for code, _ in collect._STATUS_RULES:
+        if code != "SKIPPED":
+            assert re.search(rf"\b{code}:", HTML), f"ERR_KO 에 {code} 한국어 이름 없음"
 
 
 def test_home_cards_sort_with_cmp_dev_not_alphabetically():
@@ -154,7 +162,7 @@ def test_a_lot_bar_shows_what_is_mixed_inside_it():
     """★ 한 Lot 에 정상·오류·건너뜀이 섞였는데 통째로 파랗게 칠하면 '다 잘 된 것' 처럼 보인다
     (실물: 9/15 AOI-8 NTM). 막대는 하나로 두되 안을 조각별 색으로 칠하고, 툴팁이 종합해 준다."""
     assert "function lotTip(" in HTML and 'class="part"' in HTML
-    assert 'const mark=it=>it.kind==="test"?fillOf("TEST"):it.kind==="err"?"var(--err)":fillOf(it.g.disp);' in HTML
+    assert 'const mark=it=>it.kind==="test"?fillOf("TEST"):it.kind==="abort"?fillOf("ABORT"):it.kind==="err"?"var(--err)":fillOf(it.g.disp);' in HTML
     assert "Wafer ${nWafer}장" in HTML and "배치 ${nBatch}건" in HTML   # Wafer 장수와 통째로 실패한 시도는 따로
     assert '["정상",cnt("RUN")' in HTML and '["중복스캔",cnt("DUP")' in HTML and '["Error",L.err' in HTML   # 무엇이 섞였는지
     # 반복 시도 조각은 포인터 후보다 — 짧아도 직접 고른다. 폭은 시간 비례 그대로(clipX 최소 1.5 단위)
@@ -193,10 +201,10 @@ def test_denominator_is_a_fixed_day_but_today_stops_at_the_last_scan():
 def test_test_lots_count_in_the_denominator_but_not_in_the_numerator():
     """사용자 확정: 시험 가동은 양산이 아니라 실가동(분자)에서 빼되, 분모(24시간)에서는 빼지 않는다."""
     assert "m.util=denom>0?m.run/denom*100:0;" in HTML          # 분자는 run 만
-    assert "m.hasData=m.nWafer>0||m.nErr>0||m.nTest>0;" in HTML  # 시험만 돈 날도 '데이터 없음' 이 아니다
+    assert "m.hasData=m.nWafer>0||m.nErr>0||m.nTest>0||m.nAbort>0;" in HTML  # Test·중단만 있는 날도 '데이터 없음' 이 아니다
     assert 'else if(it.kind==="test")m.testRun+=u;' in HTML       # 미가동으로도 세지 않는다
     # ★ 시간 분할 U+T+E+S+R=D — 겹침은 우선순위로 한 번만 배정하고 overlap 에 적는다(max(0,…) 로 숨기지 않는다)
-    assert "const PRI={err:0,run:1,test:2,stop:3};" in HTML and "m.overlap=Math.max(0,raw-covered);" in HTML
+    assert "const PRI={err:0,run:1,abort:2,test:3,stop:4};" in HTML and "m.overlap=Math.max(0,raw-covered);" in HTML
     assert "m.off=Math.max(0,denom-covered);" in HTML
 
 
@@ -375,3 +383,19 @@ def test_terminology_registry_is_used_in_settings_and_saved_copies_keep_columns(
     assert 'id="ruleCard"' in HTML and "function renderRules(" in HTML
     assert "embCols=emb.cols.slice()" in HTML                       # 저장 계약은 그대로(파생 필드는 저장하지 않고 다시 계산)
     assert "classification" not in HTML.lower() or "CLASS_VERSION" in HTML
+
+
+def test_abort_is_not_counted_as_an_error(): 
+    """★ 사용자 확정(D35): `Aborted.` · `Wafer aborted by user.` 는 사람이 세운 것이라 Error 가 아니다.
+    Error 건수·빨간 막대에서 빼고 그 뒤 공백을 '정지(추정)' 로 돌리지 않되, '중단' 이라는 제 이름·색으로 남는다
+    (분모에는 들어가고 실가동 분자에서는 빠진다 — Test 와 같은 자리)."""
+    assert 'ABORT:{label:"중단"' in HTML and "--abort:" in HTML and HTML.count("--abort:") == 2
+    assert "const isAbort=n=>ABORT_CODES.includes(n);" in HTML
+    assert "if(g.abort){if(c){if(starts(g.s)){m.nAbort++;" in HTML        # 건수는 '중단' 으로
+    assert 'else if(it.kind==="abort")m.abortRun+=u;' in HTML              # 시간은 제 통에
+    assert 'if(g.abort)return"ABORT";' in HTML                             # 표시 분류
+    assert '{id:"abortRun",label:"중단(Abort)"' in HTML                    # 가동률 저하 사유에 제 행으로
+    assert "const PRI={err:0,run:1,abort:2,test:3,stop:4};" in HTML
+    # 반송 실패(`… Batch Aborted. Skipped.`)는 WAFER_LOST 로 먼저 걸러져 Error 로 남는다
+    body = HTML[HTML.index("function normStatus"):HTML.index("const ABORT_CODES=")]
+    assert body.index("WAFER_LOST") < body.index('return"ABORTED"')
