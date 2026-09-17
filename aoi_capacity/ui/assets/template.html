@@ -869,12 +869,13 @@ function bindHitLayer(svg,m){const hit=svg.querySelector("rect.hit");if(!hit)ret
      서로 다른 Lot 이 겹칠 때만 좁은 쪽이 이긴다(작은 막대가 넓은 막대에 묻히지 않게). */
   /* 후보 = Lot 막대 · Error(+정지) 막대 · 반복 시도 조각(중복스캔·재스캔·Rework — 짧아도 직접 고를 수 있어야 한다).
      겹치면 좁은 쪽이 먼저(시도 조각 → 그 Lot), 같은 대상이면 Error 가 먼저. 폭·시간 길이는 바꾸지 않는다. */
-  const segs=[...svg.querySelectorAll("rect.seg")].map(el=>({el,x0:+el.getAttribute("x"),x1:+el.getAttribute("x")+ +el.getAttribute("width"),err:el.dataset.l==null&&!el.classList.contains("part"),
+  const segs=[...svg.querySelectorAll("rect.seg")].map(el=>({el,x0:+el.getAttribute("x"),x1:+el.getAttribute("x")+ +el.getAttribute("width"),err:el.dataset.l==null&&!el.classList.contains("part"),part:el.classList.contains("part")?1:0,
     i:el.dataset.i!=null?+el.dataset.i:null,parts:el.dataset.l!=null?new Set(m.lots[+el.dataset.l].parts.map(p=>m.items.indexOf(p))):null}));
   let cur=null,cands=[],pick=0;
   const scale=()=>svg.getScreenCTM().a||1;
   const toX=ev=>{const pt=svg.createSVGPoint();pt.x=ev.clientX;pt.y=ev.clientY;return pt.matrixTransform(svg.getScreenCTM().inverse()).x;};
-  const choose=sx=>{const k=scale();const inside=segs.filter(t=>sx>=t.x0&&sx<=t.x1).sort((p,q)=>(p.x1-p.x0)-(q.x1-q.x0)||(q.err-p.err));
+  /* 폭이 같으면(Wafer 한 장짜리 Lot = 그 조각) 더 구체적인 시도 조각을 먼저 — 실측: 첨부 AOI-8 9/16 에서 3건이 Lot 로 잡혔다 */
+  const choose=sx=>{const k=scale();const inside=segs.filter(t=>sx>=t.x0&&sx<=t.x1).sort((p,q)=>(p.x1-p.x0)-(q.x1-q.x0)||(q.part-p.part)||(q.err-p.err));
     if(inside.length){const e=inside.find(t=>t.err&&inside.some(o=>o.parts&&o.parts.has(t.i)));return e?[e,...inside.filter(t=>t!==e)]:inside;}
     let best=null,bd=HIT_MAX_PX;for(const t of segs){const d=(sx<t.x0?t.x0-sx:sx-t.x1)*k;if(d<=bd){bd=d;best=t;}}return best?[best]:[];};
   const apply=(list,i)=>{const nxt=list[i]?list[i].el:null;if(nxt===cur&&list.length===cands.length)return;
