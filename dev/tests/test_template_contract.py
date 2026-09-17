@@ -49,8 +49,11 @@ def test_home_has_no_previous_day_comparison_or_wafer_count():
 
 def test_same_wafer_time_is_counted_once():
     """같은 Wafer 가 여러 Report 에 나와도(재검사) WaferInfo.ini 는 하나뿐 — 시간을 두 번 세면 안 된다."""
-    assert "d.seen[key]" in HTML and "prev.dups++" in HTML
+    assert "d.seen[key]" in HTML and "prev.refs++" in HTML
     assert "시간은 1번만 계산" in HTML
+    # ★ 데이터 중복(같은 원본 행·같은 시각 참조)과 실제 반복(시각이 다른 시도)은 다르다 — 같은 시각 참조를 재스캔으로 단정하지 않는다
+    assert "d.raw[rawKey]" in HTML and "rawDups" in HTML
+    assert "g.dups>1" not in HTML and "dups<2" not in HTML
 
 
 def test_status_rules_match_the_python_side():
@@ -67,8 +70,15 @@ def test_parses_every_date_format_seen_on_real_machines():
 def test_rescan_and_rework_are_shown_apart():
     """Lot 이름의 RE 는 노랑, REWORK 는 보라 — 둘 다 정상 가동으로 세고 색으로만 구분한다."""
     assert 'r.scan_type==="RESCAN"' in HTML and 'r.scan_type==="REWORK"' in HTML
-    assert "--rework:" in HTML and ">재검사</span>" in HTML and ">재작업</span>" in HTML   # 범례는 짧게, 뜻은 title 에
-    assert 'title="Lot 이름에 RE · RESCAN — 가동률에 포함"' in HTML and 'title="Lot 이름에 REWORK — 가동률에 포함"' in HTML
+    assert "--rework:" in HTML and "--dup:" in HTML and "--test:" in HTML          # 의미별 색 토큰(다크·라이트 둘 다)
+    assert HTML.count("--dup:") == 2 and HTML.count("--test:") == 2
+    # 용어(사용자 확정 U02): 검사→가동, 재검사→재스캔, 재작업→Rework, 오류→Error, 시험→Test. 단일 출처 = DISPLAY_META
+    assert "const DISPLAY_META={" in HTML and "function legendHtml(" in HTML
+    for t, label in (("RUN", "가동"), ("DUP", "중복스캔"), ("RESCAN", "재스캔"), ("REWORK", "Rework"), ("ERROR", "Error"), ("TEST", "Test"), ("OFF", "미가동")):
+        assert f'{t}:{{label:"{label}"' in HTML, t
+    js = HTML[HTML.index("<script>", HTML.index("__DATA__")):]
+    for old in (">재검사<", ">재작업<", "정상 검사", "검사시간", "시험 가동", "오류 발생", "오류·정지", "오류 먼저", "오류 많은 순"):
+        assert old not in js, old
 
 
 def test_scope_notice_is_rendered_from_meta():
@@ -112,8 +122,8 @@ def test_test_lots_are_excluded_from_the_utilisation_numbers():
     assert collect.scan_type("GVG-RDL3 TEST") == "TEST" and collect.EXCLUDED_SCAN_TYPES == ("TEST",)
     assert 'test:r.scan_type==="TEST"' in HTML            # 구간에 표시가 붙고
     assert 'if(g.test){' in HTML and 'm.nTest++' in HTML   # run/err/stop 어디에도 더하지 않는다
-    assert '시험 가동 ${m.nTest}건 제외' in HTML            # 몇 건을 뺐는지 밝힌다
-    assert "시험 (가동률 제외)" in HTML                     # 범례에도 한정어가 남는다
+    assert 'Test ${m.nTest}건 제외' in HTML                 # 몇 건을 뺐는지 밝힌다
+    assert '" (가동률 제외)"' in HTML                        # 범례에도 한정어가 남는다(legendHtml)
 
 
 def test_report_opens_on_double_click_without_any_request_from_the_page():
@@ -134,19 +144,21 @@ def test_error_and_the_stop_after_it_are_drawn_as_one_bar():
     assert "const stopOf=g=>m.items.find(" in HTML
     assert "errIt.forEach(it=>{const sp=stopOf(it.g),e2=sp?Math.max(it.e,sp.e):it.e;" in HTML
     # 한 막대로 그리되 툴팁에서는 언제·무슨 오류·얼마나 기다렸는지를 나눠 적는다(사용자 확정)
-    assert "오류 발생 <b>${hm(new Date(it.g.s))}</b> · 오류 구간" in HTML
+    assert "Error 발생 <b>${hm(new Date(it.g.s))}</b> · Error 구간" in HTML
     assert "그 뒤 정지(추정) ${fmtSec((st.e-st.s)/1000)}" in HTML
     assert "합계 ${fmtSec((st.e-it.g.s)/1000)}" in HTML
-    assert "오류 · 정지(추정)" in HTML                    # 범례 — '추정' 한정어를 지우지 않는다
+    assert '" · 정지(추정)"' in HTML                      # 범례 — '추정' 한정어를 지우지 않는다(legendHtml 의 Error 항목)
 
 
 def test_a_lot_bar_shows_what_is_mixed_inside_it():
     """★ 한 Lot 에 정상·오류·건너뜀이 섞였는데 통째로 파랗게 칠하면 '다 잘 된 것' 처럼 보인다
     (실물: 9/15 AOI-8 NTM). 막대는 하나로 두되 안을 조각별 색으로 칠하고, 툴팁이 종합해 준다."""
     assert "function lotTip(" in HTML and 'class="part"' in HTML
-    assert 'const mark=it=>it.kind==="test"?"var(--prev)":it.kind==="err"?"var(--err)"' in HTML
+    assert 'const mark=it=>it.kind==="test"?fillOf("TEST"):it.kind==="err"?"var(--err)":fillOf(it.g.disp);' in HTML
     assert "Wafer ${nWafer}장" in HTML and "배치 ${nBatch}건" in HTML   # Wafer 장수와 통째로 실패한 시도는 따로
-    assert '["정상",' in HTML and '["오류",L.err' in HTML   # 무엇이 섞였는지
+    assert '["정상",cnt("RUN")' in HTML and '["중복스캔",cnt("DUP")' in HTML and '["Error",L.err' in HTML   # 무엇이 섞였는지
+    # 반복 시도 조각은 포인터 후보다 — 짧아도 직접 고른다. 폭은 시간 비례 그대로(clipX 최소 1.5 단위)
+    assert 'if(isRep(it))s+=`<rect class="seg part" tabindex="0" data-i=' in HTML
 
 
 def test_lot_bars_split_by_the_exact_name_and_by_any_real_gap():
@@ -182,7 +194,10 @@ def test_test_lots_count_in_the_denominator_but_not_in_the_numerator():
     """사용자 확정: 시험 가동은 양산이 아니라 실가동(분자)에서 빼되, 분모(24시간)에서는 빼지 않는다."""
     assert "m.util=denom>0?m.run/denom*100:0;" in HTML          # 분자는 run 만
     assert "m.hasData=m.nWafer>0||m.nErr>0||m.nTest>0;" in HTML  # 시험만 돈 날도 '데이터 없음' 이 아니다
-    assert "m.testRun+=(c[1]-c[0])/1000" in HTML                # 미가동으로도 세지 않는다
+    assert 'else if(it.kind==="test")m.testRun+=u;' in HTML       # 미가동으로도 세지 않는다
+    # ★ 시간 분할 U+T+E+S+R=D — 겹침은 우선순위로 한 번만 배정하고 overlap 에 적는다(max(0,…) 로 숨기지 않는다)
+    assert "const PRI={err:0,run:1,test:2,stop:3};" in HTML and "m.overlap=Math.max(0,raw-covered);" in HTML
+    assert "m.off=Math.max(0,denom-covered);" in HTML
 
 
 def test_embedded_string_pool_is_unfolded_on_load():
@@ -242,7 +257,9 @@ def test_timeline_has_a_pointer_hit_layer_with_a_max_distance():
     assert "const HIT_MAX_PX=6;" in HTML and "function bindHitLayer(" in HTML
     assert '<rect class="hit"' in HTML and 'bindHitLayer(root.querySelector("svg"),m)' in HTML
     assert "(p.x1-p.x0)-(q.x1-q.x0)" in HTML                    # 겹치면 폭이 좁은 막대 우선
-    assert "겹친 막대 ${list.length}개 · Tab 으로 전환" in HTML
+    assert "겹친 막대 ${list.length}개 · ↑↓ 로 전환" in HTML        # Tab 은 표준 포커스 이동에 남긴다
+    assert 'e.key==="Tab"&&hitCycle' not in HTML
+    assert "const pickAt=ev=>{const list=choose(toX(ev));" in HTML   # 클릭은 클릭 좌표에서 다시 고른다(stale 선택 방지)
     # hit 영역을 넓혀도 실제 막대 폭·시간 길이는 바꾸지 않는다
     assert "const[xs,w]=clipX(Lt.s,Lt.e,2);" in HTML                # Lot 막대 최소 2단위
     assert "const[xs,w]=clipX(it.s,e2,2);" in HTML                    # 오류+정지 막대 최소 2단위
@@ -275,7 +292,7 @@ def test_single_click_pins_a_detail_panel_and_double_click_still_opens_the_repor
     assert "el.ondblclick=ev=>{ev.preventDefault();openReport(rowOf(el));};" in HTML
     assert "Report 열기</button>" in HTML and "function copyText(" in HTML
     assert "INI_KO={EXACT:" in HTML and "시간 미확인 · INI 가 다시 검사로 덮어써짐" in HTML   # 시각 누락의 원인을 말한다
-    assert 'if(sd&&!sd.hidden)closeSeg();else selectDev(null);' in HTML                   # ESC 는 상세부터 닫는다
+    assert 'if(sd&&!sd.hidden)closeSeg();else if(selDev)selectDev(null);else if(ui.loss!=null)setLoss(null);' in HTML   # ESC 는 상세부터 닫는다
 
 
 def test_multi_report_lot_lists_every_report():
@@ -314,3 +331,47 @@ def test_zoom_band_reuses_day_metrics_and_draws_nothing_new():
     assert "const ZOOM_MIN=10*60e3,ZOOM_MAX=6*3.6e6;" in HTML
     assert "Math.max(a,Math.min(s0,e0)),e1=Math.min(a+DAY,Math.max(s0,e0))" in HTML   # 그날 안으로 자른다
     assert "createElementNS" not in HTML                                     # 네임스페이스 URL 조차 담지 않는다
+
+
+def test_detail_panel_mounts_right_under_the_selected_device():
+    """★ 사용자 확정(U05): 상세는 장비 목록 맨 아래가 아니라 **클릭한 장비 버튼 바로 아래**. 패널은 하나뿐이고
+    선택한 장비의 자리(.dmount)로 옮겨 붙는다 — 카드는 .ditem 이 한 줄 전체로 넓어지고, 표는 바로 다음 행이다."""
+    assert 'id="detPark" hidden' in HTML and "function parkDetail(" in HTML and "function mountDetail(" in HTML
+    assert '<div class="dmount" id="${devId(n)}-mount"></div>' in HTML
+    assert '<tr class="detrow"><td colspan="${nCol}">' in HTML
+    assert ".ditem.open{display:block;grid-column:1/-1}" in HTML and "grid-auto-flow" not in HTML
+    assert '<button class="card dev ' in HTML and 'aria-expanded="${selDev===n}" aria-controls="detail"' in HTML
+    assert 'if(ui.view==="cards")$("#homeTbody").innerHTML="";else $("#cards").innerHTML="";' in HTML   # 숨은 쪽에 같은 id 를 남기지 않는다
+    assert "[hidden]{display:none!important}" in HTML
+    assert "onclick=\"selectDev('" not in HTML                   # 장비 이름을 인라인 onclick 에 끼워 넣지 않는다
+
+
+def test_cross_device_material_history_is_global_and_explained():
+    """★ 사용자 확정(U01·U03): 같은 자재를 이어서 다시 스캔하면 중복스캔, 다른 장비에서 다시 스캔하면 재스캔.
+    관계는 조회 날짜·장비 필터와 무관하게 로드한 전체 행에서 한 번 계산하고, 판정 근거와 신뢰도를 남긴다."""
+    assert "function materialIndex(" in HTML and "M._index=materialIndex(attempts);" in HTML
+    assert "const materialKey=r=>`${normLot(r.lot)}|${String(r.wafer_id||\"\").trim()}`;" in HTML
+    assert 'const MARK_TOKENS=new Set(["RE","RESCAN","REWORK","TEST"]);' in HTML
+    for rel in ("FIRST_OBSERVED", "SAME_DEVICE_REPEAT", "SAME_DEVICE_RESCAN", "CROSS_DEVICE_RESCAN", "TOKEN_RESCAN", "UNRESOLVED"):
+        assert f"{rel}:" in HTML, rel
+    assert 'a.conf=p.pk===a.pk?"confirmed":"inferred";' in HTML   # Recipe 가 다르면 확정이 아니라 추정(실물 BS / BS_1)
+    assert "function dispOf(g)" in HTML and "const CLASS_VERSION=" in HTML
+    assert "function historyHtml(" in HTML and 'add("판정 근거"' in HTML and 'add("앞선 시도"' in HTML
+
+
+def test_loss_reason_chart_reuses_day_metrics_and_sums_to_the_average():
+    """★ 사용자 확정(U04): 가동률 저하 사유 차트 → 사유 상세 → 장비별 기여 → 이벤트 → 장비 상세로 이동·복귀.
+    사유 %p 는 평균 정의(100/N × Σ L/D)라 합이 100 − 평균 가동률이다. 반복 가동은 저하 사유에 넣지 않는다."""
+    assert 'id="lossCard"' in HTML and "function lossCalc(" in HTML and "function renderLossDetail(" in HTML
+    assert "100/N*withData.reduce(" in HTML
+    assert '{id:"err",' in HTML and '{id:"stop",' in HTML and '{id:"testRun",' in HTML and '{id:"off",label:"미가동 · 사유 미확인"' in HTML
+    assert "min-height:44px" in HTML and 'aria-pressed="${ui.loss===i}"' in HTML
+    assert "function lossBack(" in HTML and 'id="detBack"' in HTML
+    assert 'id="repCard"' in HTML and "저하 사유에 다시 더하지 않습니다" in HTML
+    assert "const LOSS_PAGE=50;" in HTML                          # 이벤트가 많으면 나눠 그린다
+
+
+def test_terminology_registry_is_used_in_settings_and_saved_copies_keep_columns():
+    assert 'id="ruleCard"' in HTML and "function renderRules(" in HTML
+    assert "embCols=emb.cols.slice()" in HTML                       # 저장 계약은 그대로(파생 필드는 저장하지 않고 다시 계산)
+    assert "classification" not in HTML.lower() or "CLASS_VERSION" in HTML

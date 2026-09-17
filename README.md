@@ -1,6 +1,6 @@
 # AOI Capacity — AOI 장비 가동률
 
-Camtek AOI 장비의 NAS `Report/*_BatchReport.htm` 과 `Scanresult/.../WaferInfo.ini` 를 읽어 장비별 가동률(검사 / 오류 / 미가동)을
+Camtek AOI 장비의 NAS `Report/*_BatchReport.htm` 과 `Scanresult/.../WaferInfo.ini` 를 읽어 장비별 가동률(가동 / Error / 미가동)을
 내는 프로그램입니다. 두 조각으로 나뉩니다.
 
 | | 하는 일 |
@@ -38,8 +38,8 @@ Camtek AOI 장비의 NAS `Report/*_BatchReport.htm` 과 `Scanresult/.../WaferInf
 | 장비 비교 | 선택한 날 · 최근 7일 · 최근 30일 기준 장비 순위 |
 | 설정 | 주의 장비 기준, HTML 로 저장. 바꾼 값은 **그 브라우저에만** 저장되며 원본 파일이나 수집 설정에는 반영되지 않습니다 |
 
-가동률 = 검사시간(WaferStartTime~WaferEndTime 합) ÷ 24시간. 오늘은 00:00 부터 그날 마지막 스캔까지로 나눕니다(아직 오지 않은 시간을 미가동으로 세지 않기 위해).
-Lot 이름에 `TEST` 가 있는 시험 가동은 분모에는 들어가고 실가동(분자)에서만 뺍니다.
+가동률 = 가동시간(WaferStartTime~WaferEndTime 합) ÷ 24시간. 오늘은 00:00 부터 그날 마지막 스캔까지로 나눕니다(아직 오지 않은 시간을 미가동으로 세지 않기 위해).
+Lot 이름에 `TEST` 가 있는 Test 가동은 분모에는 들어가고 실가동(분자)에서만 뺍니다. 같은 자재를 이어서 다시 스캔한 것(중복스캔)과 Error 뒤·다른 장비에서 다시 스캔한 것(재스캔)도 가동시간에 들어가며, 화면이 색·패턴으로만 구분합니다.
 오류 Wafer 종료부터 다음 Wafer 시작까지의 공백은 '정지(추정)' 으로 봅니다(장비 이벤트 로그가 아닙니다).
 
 ## 설치 (사용자)
