@@ -405,3 +405,27 @@ def test_abort_is_an_error_only_when_its_report_has_no_pass():
     # 반송 실패(`… Batch Aborted. Skipped.`)는 원인 WAFER_LOST 가 있어 언제나 Error — 원인 규칙이 결과 규칙보다 먼저
     body = HTML[HTML.index("const CAUSE_RULES="):HTML.index("const ABORT_OUTCOMES=")]
     assert body.index("WAFER_LOST") < body.index('["ABORTED"')
+
+
+def test_error_analysis_view_contract():
+    """★ Error 분석(phase 8): 세 탭은 같은 canonical 사건 집합의 groupBy 만 바꾼다. 필터는 조회 상태 하나(EQ)에 있고,
+    Job 검색은 문자 그대로(정규식·코드 실행 없음), null=전체·[]=선택 없음, 이후 공백은 장비 전체 이력, 서랍은 draft 적용/취소."""
+    assert 'id="v-errors"' in HTML and "function occurrenceIndex(" in HTML and "function errorQuery(" in HTML and "const DEFAULT_Q=" in HTML
+    assert 'data-g="period"' in HTML and 'data-g="device"' in HTML and 'data-g="job"' in HTML
+    assert "function renderErrors(" in HTML and "function renderErrDetail(" in HTML and "function openDrawer(" in HTML and "function closeDrawer(" in HTML
+    js = HTML[HTML.index("function renderErrFilters("):HTML.index("function renderErrors(")]
+    assert "new RegExp" not in js and "eval(" not in js and ".includes(s)" in js                 # 검색은 리터럴
+    assert "const inSet=(v,set)=>set==null||set.includes(v);" in HTML                          # null=전체, []=선택 없음
+    assert "MTTR" in HTML and "MTTR 이 아닙니다" in HTML                                        # 이름을 잘못 붙이지 않는다
+    assert "function validateView(" in HTML and "schema_version" in HTML and "function storageOk(" in HTML   # 설정 JSON 검증 · 저장소 폴백
+    assert 'data-v="errors"' in HTML and '<details class="more">' in HTML                        # 좁은 창: Error 분석은 직접, 나머지는 더보기
+    body = HTML[HTML.index("function occurrenceIndex("):HTML.index("const DEFAULT_Q=")]
+    assert "stopEnd" in body and "obsEnd" in body                                                 # 이후 공백 = 장비 이력의 다음 가동까지(관측 종료 cap)
+    assert "const CMP_COLS=[" in HTML and 'id="hitInfo"' in HTML                                 # V04 열 선택 · V07 겹침 후보 안내
+
+
+def test_quality_view_contract():
+    assert 'id="v-quality"' in HTML and "const QUAL_META=[" in HTML and "function renderQuality(" in HTML
+    for rid in ("NOT_FOUND", "READ_ERROR", "STALE", "NOT_OWNER", "AMBIGUOUS", "SLOT", "BATCH", "UNMAPPED", "NOJOB"):
+        assert f'{{id:"{rid}"' in HTML, rid
+    assert 'id="detBackQ"' in HTML and 'id="detBackE"' in HTML                                   # 돌아오기(필터 유지)

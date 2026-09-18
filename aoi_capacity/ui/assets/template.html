@@ -153,6 +153,25 @@ button.ss{text-align:left;font:inherit;cursor:pointer;width:100%}button.ss:hover
 /* 긴 원문(V03): 목록에서는 첫 줄만, 펼치면 전체. Job 은 2줄까지 */
 details.msgx summary{cursor:pointer;color:var(--accent-2);list-style:none;white-space:normal}details.msgx code{display:block;white-space:pre-wrap;word-break:break-all;font-family:var(--mono);font-size:12px;margin-top:4px}
 .job2{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;white-space:normal;max-width:280px;line-height:1.35}
+/* Error 분석(A01~A09): 필터 줄 · 선택 목록(details) · 탭 · 차트 · 표 · 근거 상세 */
+.efilt{padding:10px 14px;margin-bottom:12px;display:flex;flex-wrap:wrap;gap:8px 14px;align-items:center}
+.pick{position:relative}.pick>summary{list-style:none;cursor:pointer;display:inline-flex;align-items:center;gap:6px;padding:6px 10px;border:1px solid var(--line-2);border-radius:8px;background:var(--surface);font-size:13px}
+.pick>summary::-webkit-details-marker{display:none}.pick[open]>summary{border-color:var(--accent)}
+.pick .pp{position:absolute;z-index:20;top:calc(100% + 4px);left:0;min-width:300px;max-width:min(560px,90vw);background:var(--raise);border:1px solid var(--line-2);border-radius:10px;box-shadow:var(--shadow);padding:10px}
+.pick .pl{max-height:300px;overflow:auto;margin-top:6px;font-size:13px}.pick .pl label{display:flex;gap:8px;align-items:center;padding:3px 4px;border-radius:6px;cursor:pointer}.pick .pl label:hover{background:var(--surface-2)}
+.pick .pl label span.j{white-space:normal;word-break:break-all}.pick .pl label small{margin-left:auto;color:var(--ink-3);white-space:nowrap}
+.pick .pb{display:flex;gap:6px;flex-wrap:wrap;margin-top:6px}
+.echips{display:flex;flex-wrap:wrap;gap:6px;font-size:12px}
+.tbl th.sortable{cursor:pointer}.tbl th.sortable:hover{color:var(--ink)}
+.tbl.dense td,.tbl.dense th{padding:4px 8px}
+.cmpt th:nth-child(2),.cmpt td:nth-child(2){position:sticky;left:0;background:var(--surface);z-index:2}.cmpt th:nth-child(2){z-index:3}
+.tbl tbody tr.click:focus-visible{outline:2px solid var(--accent-2);outline-offset:-2px}
+.drawer{position:fixed;inset:0;z-index:70;display:flex;justify-content:flex-end;background:rgba(0,0,0,.35)}.drawer[hidden]{display:none}
+.drawer .dpanel{width:min(440px,100vw);height:100%;overflow:auto;background:var(--surface);border-left:1px solid var(--line-2);padding:16px 18px;display:flex;flex-direction:column;gap:12px}
+.drawer h3{font-size:12.5px;font-weight:600;color:var(--ink-3);text-transform:uppercase;letter-spacing:.04em;margin:6px 0 2px}
+.drawer label.opt{display:flex;gap:8px;align-items:center;font-size:13px;padding:3px 0}
+.tabs details.more{position:relative}.tabs details.more>summary{list-style:none;cursor:pointer;padding:8px 10px;font-size:13px;color:var(--ink-2)}.tabs details.more .mm{position:absolute;right:0;top:100%;z-index:30;background:var(--raise);border:1px solid var(--line-2);border-radius:10px;box-shadow:var(--shadow);padding:6px;display:flex;flex-direction:column;min-width:140px}
+.tabs details.more .mm .nav{width:100%;justify-content:flex-start}
 .ss.hero{background:linear-gradient(135deg,var(--surface),var(--surface-2))}
 .ss.hero .v{background:linear-gradient(135deg,var(--ink) 30%,var(--accent-2));-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent}
 
@@ -271,11 +290,12 @@ details.adv summary{cursor:pointer;color:var(--accent-2);font-size:13px}
   <button class="btn icon ghost" id="btnTheme" title="밝은/어두운 테마" onclick="toggleTheme()"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M13 9.5A5.5 5.5 0 016.5 3a5.5 5.5 0 100 10 5.5 5.5 0 006.5-3.5z"/></svg></button>
 </header>
 <nav class="tabs" id="tabs" aria-label="화면 이동">
-  <button class="nav" data-v="home">홈</button><button class="nav" data-v="trend">추이</button><button class="nav" data-v="compare">장비 비교</button><button class="nav" data-v="quality">품질</button><button class="nav" data-v="set">설정</button>
+  <button class="nav" data-v="home">홈</button><button class="nav" data-v="errors">Error 분석</button><details class="more"><summary>더보기 ▾</summary><div class="mm"><button class="nav" data-v="trend">추이</button><button class="nav" data-v="compare">장비 비교</button><button class="nav" data-v="quality">데이터 품질</button><button class="nav" data-v="set">설정</button></div></details>
 </nav>
 
 <nav class="side">
   <button class="nav" data-v="home" aria-current="page"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2 7.5L8 2l6 5.5V14H2z"/><path d="M6 14v-4h4v4"/></svg><span>홈<span class="sub">오늘 모든 장비 가동률</span></span></button>
+  <button class="nav" data-v="errors"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M8 2l6 11H2z"/><path d="M8 6.5v3M8 11.5v.5"/></svg><span>Error 분석<span class="sub">기간별 · 장비별 · Job별</span></span></button>
   <button class="nav" data-v="trend"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2 12l4-5 3 3 5-6"/><path d="M2 14h12"/></svg><span>추이<span class="sub">일 · 주 · 월 가동률</span></span></button>
   <button class="nav" data-v="compare"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2 3h10M2 7h7M2 11h12"/></svg><span>장비 비교<span class="sub">기간별 가동률 순위</span></span></button>
   <button class="nav" data-v="quality"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="8" r="6"/><path d="M8 5v3.5M8 11v.5"/></svg><span>데이터 품질<span class="sub">시간 근거 · 미확인 목록</span></span></button>
@@ -307,9 +327,10 @@ details.adv summary{cursor:pointer;color:var(--accent-2);font-size:13px}
     <div class="card detail" id="detail" hidden role="region" aria-label="장비 상세">
       <div class="dh">
         <h2 id="detTitle"></h2>
-        <div class="legend" id="detLegend"></div>
+        <div class="legend" id="detLegend"></div><span class="faint" id="hitInfo" style="font-size:12px" aria-live="polite"></span>
         <button class="btn ghost" id="detBack" onclick="lossBack()" hidden>← 사유 분석으로</button>
         <button class="btn ghost" id="detBackQ" onclick="ui.backQual=false;go('quality')" hidden>← 품질 목록으로</button>
+        <button class="btn ghost" id="detBackE" onclick="ui.backErr=false;go('errors')" hidden>← Error 분석으로</button>
         <button class="btn ghost" onclick="selectDev(null)" aria-label="닫기">닫기 ✕</button>
       </div>
       <div class="db"><div id="detTl"></div><div class="zoom" id="zoomTl" hidden></div><div class="segd" id="segDetail" hidden></div><div class="errs" id="detErrs"></div></div>
@@ -336,8 +357,27 @@ details.adv summary{cursor:pointer;color:var(--accent-2);font-size:13px}
       <span class="lbl">정렬</span><div class="seg" id="cmpSort"><button data-s="high" aria-pressed="true">높은 순</button><button data-s="low">낮은 순</button><button data-s="err">Error 많은 순</button></div>
       <div class="sp"></div><span class="faint" style="font-size:12px" id="cmpNote"></span>
     </div>
-    <div class="card"><div class="tscroll" style="max-height:none"><table class="tbl"><thead><tr><th class="r">#</th><th>장비</th><th style="width:36%">가동률</th><th class="r">가동률</th><th class="r">반복 가동</th><th class="r">Error</th><th class="r">Error·정지</th></tr></thead><tbody id="cmpBody"></tbody></table></div></div>
+    <div class="toolbar" style="margin-top:-6px"><details class="pick" id="cmpCols"><summary>열 선택 ▾</summary><div class="pp" id="cmpColsBody"></div></details><span class="faint" style="font-size:12px">기본 6개 이내 · 헤더와 장비명 열 고정 · 무자료는 '데이터 없음', 0% 는 0%</span></div>
+    <div class="card"><div class="tscroll" style="max-height:70vh"><table class="tbl cmpt" id="cmpTable"><thead id="cmpHead"></thead><tbody id="cmpBody"></tbody></table></div></div>
   </section>
+
+  <!-- ================= ERROR ANALYSIS (기간별 · 장비별 · Job별) ================= -->
+  <section class="view" id="v-errors">
+    <div class="rline" id="rangeLine3"></div>
+    <div class="card efilt" id="errFilters"></div>
+    <div class="strip-sum" id="errSum"></div>
+    <div class="toolbar">
+      <span class="lbl">보기</span><div class="seg" id="errTabs"><button data-g="period" aria-pressed="true">기간별</button><button data-g="device">장비별</button><button data-g="job">Job별</button></div>
+      <span class="lbl" id="errBucketLbl">단위</span><div class="seg" id="errBucket"><button data-b="day" aria-pressed="true">일</button><button data-b="week">주(월요일 시작)</button><button data-b="month">월</button></div>
+      <span class="lbl">지표</span><div class="seg" id="errMetric"><button data-m="events" aria-pressed="true">Error 사건 수</button><button data-m="rate">Wafer 시도 1,000회당 Error</button><button data-m="time">확인된 구간 시간</button></div>
+      <div class="sp"></div><button class="btn" id="errAdv" onclick="openDrawer()">세부 설정</button>
+    </div>
+    <div class="card" style="padding:14px 18px 6px"><div id="errChart"></div><p class="faint" id="errChartNote" style="font-size:12px;margin-top:4px"></p></div>
+    <div class="card" style="margin-top:12px"><div class="tscroll" style="max-height:none"><table class="tbl" id="errTable"><thead id="errHead"></thead><tbody id="errBody"></tbody></table></div></div>
+    <div class="card" id="errDetail" hidden style="margin-top:12px"></div>
+    <p class="faint" style="font-size:12px;margin-top:10px">사건 = 원인 코드가 있거나(D43) 정상 스캔이 없는 Report 의 중단(D41). 시간 미확인 사건은 Batch 시작일에 귀속하며 시간은 —. 이후 공백은 장비 전체 이력에서 다음 가동까지의 간격(관측 종료까지만, D44) — MTTR 이 아닙니다. Wafer 시도 1,000회당 Error 의 분모는 물리적 Wafer 시도(TEST 제외)이며 Slot·배치 사건은 분자에 넣지 않습니다.</p>
+  </section>
+  <div class="drawer" id="drawer" hidden role="dialog" aria-label="세부 설정"><div class="dpanel" id="drawerBody"></div></div>
 
   <!-- ================= DATA QUALITY (시간 근거·미확인 목록) ================= -->
   <section class="view" id="v-quality">
@@ -418,7 +458,7 @@ const chipOf=(t,txt)=>`<span class="chip ${DM(t).chip}">${txt||DM(t).label}</spa
 const REL_KO={FIRST_OBSERVED:"확인된 첫 기록",SAME_DEVICE_REPEAT:"같은 장비 반복",SAME_DEVICE_RESCAN:"같은 장비 재스캔",CROSS_DEVICE_RESCAN:"다른 장비 재스캔",TOKEN_RESCAN:"Lot 표기 RE(이전 기록 미확인)",UNRESOLVED:"판정 보류"};
 const CONF_KO={confirmed:"확정",inferred:"추정",unresolved:"보류",user_confirmed:"사용자 확인"};
 /* ★ 분류 규칙 번호 — 규칙이 바뀌면 올린다. 저장된 값이 아니라 열 때마다 같은 원천 행에서 다시 계산한다. */
-const CLASS_VERSION=8;
+const CLASS_VERSION=9;
 
 let rows=[],meta={},devNames=[],D=null,day=null,selDev=null;
 let ui={group:"",sort:"name",view:"cards",unit:"day",span:14,trendDev:"",cmpP:1,cmpSort:"high",cmpAnchor:null,loss:null,lossMode:"pp",lossPage:0,rep:null,back:null};
@@ -561,7 +601,7 @@ function cmpDev(a,b){const x=devSortKey(a),y=devSortKey(b);if(x[0]!==y[0])return
 const pct=v=>v==null||isNaN(v)?"—":v.toFixed(1)+"%";
 
 /* ---------- navigation ---------- */
-function go(v){document.querySelectorAll(".nav").forEach(b=>b.setAttribute("aria-current",b.dataset.v===v?"page":"false"));document.querySelectorAll(".view").forEach(s=>s.classList.toggle("on",s.id==="v-"+v));$("#daynav").style.visibility=v==="set"||v==="trend"||v==="quality"?"hidden":"";$(".main").scrollTop=0;if(v==="trend")renderTrend();if(v==="compare")renderCompare();if(v==="quality")renderQuality();}
+function go(v){document.querySelectorAll(".nav").forEach(b=>b.setAttribute("aria-current",b.dataset.v===v?"page":"false"));document.querySelectorAll(".view").forEach(s=>s.classList.toggle("on",s.id==="v-"+v));$("#daynav").style.visibility=v==="set"||v==="trend"||v==="quality"||v==="errors"?"hidden":"";$(".main").scrollTop=0;document.querySelectorAll(".tabs details.more").forEach(d=>d.open=false);if(v==="trend")renderTrend();if(v==="compare")renderCompare();if(v==="quality")renderQuality();if(v==="errors")renderErrors();}
 document.querySelectorAll(".nav").forEach(b=>b.addEventListener("click",()=>go(b.dataset.v)));
 function setTheme(m){const r=document.documentElement;r.dataset.theme=m==="light"?"light":"dark";try{localStorage.setItem("aoi.theme",r.dataset.theme);}catch(e){}}
 function toggleTheme(){setTheme(document.documentElement.dataset.theme==="light"?"dark":"light");}
@@ -584,14 +624,14 @@ let devGroup={};
 let devStatus={};
 const collectChip=n=>{const s=devStatus[n];if(!s)return"";if(s.status==="unreachable")return`<span class="st bad" title="${esc(s.error)}">수집 실패</span>`;if(s.status==="partial")return`<span class="st warn" title="읽지 못한 Report ${s.readErrors}개 — 수집 로그 참조">일부 누락</span>`;return"";};
 /* 수집기가 준 열 목록과 풀 열(collect.OUT_COLS · POOLED_COLS) — 저장할 때 같은 계약으로 다시 접는다 */
-let embCols=[],embPooled=[];
+let embCols=[],embPooled=[],embRowCount=0;
 
 /* ---------- demo / embedded ---------- */
 function loadDemo(){
   const emb=JSON.parse($("#embedded").textContent);
   /* 되풀이되는 열은 문자열 풀 번호로 접혀 온다(collect._embed_rows) — 여기서 되돌린다 */
   if(emb.cols){const P=emb.pool||null,F=new Set(emb.pooled||[]);embCols=emb.cols.slice();embPooled=[...F];
-    rows=emb.rows.map(a=>{const o={};emb.cols.forEach((c,i)=>o[c]=P&&F.has(c)?(P[a[i]]??""):a[i]);return o;});meta=emb.meta||{generated:"",mode:"saved"};}
+    rows=emb.rows.map(a=>{const o={};emb.cols.forEach((c,i)=>o[c]=P&&F.has(c)?(P[a[i]]??""):a[i]);return o;});embRowCount=rows.length;meta=emb.meta||{generated:"",mode:"saved"};}
   else{ /* compact demo: days are offsets from today, segments delta-encoded; expanded relative to the real current date */
     rows=[];const now=Date.now();const t0=keyDay(todayKey()).getTime();const codes={2:"USER_ABORT",3:"ABORTED",4:"SCAN_ERROR",5:"ID_READ_ERROR"};
     const iso=t=>{const d=new Date(t);return`${d.getFullYear()}-${p2(d.getMonth()+1)}-${p2(d.getDate())}T${p2(d.getHours())}:${p2(d.getMinutes())}:${p2(d.getSeconds())}`;};
@@ -816,7 +856,10 @@ function attFilter(a,q,range){if(a.day<range[0]||a.day>range[1])return false;if(
 const bucketOf=(k,b)=>b==="week"?weekStart(k):b==="month"?monthStart(k):k;
 /* 집계 — rows: groupBy 별 행(사건 수·구성·Wafer 분자/분모·측정 구간·추정 공백·시간 미확인·장비 수·대표 원인). 원인 필터는 분자에만(분모는 기간·장비·Job 의 전체 적격 시도). */
 function errorQuery(q){const O=D&&D._occ;if(!O)return{rows:[],occ:[],att:[],range:null};const range=queryRange(q);if(!range)return{rows:[],occ:[],att:[],range:null};
-  const occ=O.list.filter(o=>occFilter(o,q,range));const att=O.attempts.filter(a=>attFilter(a,q,range));
+  /* 필터 결과는 조건 키로 캐시(탭·지표·정렬만 바꾸면 다시 거르지 않는다 — 15만 시도) */
+  const fk=JSON.stringify([range,q.devices,q.jobs,q.includeUnknownJob,q.causes,q.kinds,q.timeBasis,q.includeTest]);O.cache=O.cache||new Map();let F=O.cache.get(fk);
+  if(!F){F={occ:O.list.filter(o=>occFilter(o,q,range)),att:O.attempts.filter(a=>attFilter(a,q,range))};if(O.cache.size>24)O.cache.delete(O.cache.keys().next().value);O.cache.set(fk,F);}
+  const occ=F.occ,att=F.att;
   const keyOf=q.groupBy==="device"?(x=>x.device):q.groupBy==="job"?(x=>x.job||"\u0000"):(x=>bucketOf(x.day,q.bucket));
   const G={};const get=k=>G[k]||(G[k]={key:k,events:0,byKind:{},err:0,stop:0,untimed:0,open:0,devices:new Set(),causes:{},num:0,den:0,denErr:0,items:[]});
   for(const o of occ){const g=get(keyOf(o));g.events++;g.byKind[o.kind]=(g.byKind[o.kind]||0)+1;if(o.dur!=null)g.err+=o.dur;else g.untimed++;if(o.stop!=null)g.stop+=o.stop;if(o.open)g.open++;g.devices.add(o.device);
@@ -899,7 +942,8 @@ function aggMetrics(d,keys){const o={days:0,hasData:false};AGG_KEYS.forEach(x=>o
 function fleetAvg(keys,devList=devNames){const vals=devList.map(n=>aggMetrics(D[n],keys)).filter(o=>o.util!=null);const sum=x=>vals.reduce((a,o)=>a+(o[x]||0),0);
   return{util:vals.length?sum("util")/vals.length:null,sumUtil:sum("denom")>0?sum("run")/sum("denom")*100:null,n:vals.length,nErr:sum("nErr"),stop:sum("stop")+sum("err"),
     run:sum("run"),denom:sum("denom"),dup:sum("dup"),rescan:sum("rescan"),rework:sum("rework"),nDup:sum("nDup"),nRescan:sum("nRescan"),nRework:sum("nRework"),nCross:sum("nCross"),vals};}
-function dataDays(){const s=new Set();for(const r of rows){const d=rowDate(r);if(d)s.add(dayKey(d));}return[...s].sort();}
+/* 데이터 날짜 목록 — 15만 행을 매번 훑지 않도록 build 마다 한 번만(D._days). 날짜별 행 수도 함께(D._dayRows, 범위 줄이 쓴다) */
+function dataDays(){if(D&&D._days)return D._days;const s={};for(const r of rows){const d=rowDate(r);if(d){const k=dayKey(d);s[k]=(s[k]||0)+1;}}const out=Object.keys(s).sort();if(D){D._days=out;D._dayRows=s;}return out;}
 const rangeKeys=(endK,n)=>{const out=[];for(let i=n-1;i>=0;i--)out.push(addDays(endK,-i));return out;};
 /* period helpers */
 const weekStart=k=>{const d=keyDay(k);const w=(d.getDay()+6)%7;d.setDate(d.getDate()-w);return dayKey(d);};
@@ -910,7 +954,7 @@ function periodLabel(unit,startK){if(unit==="day")return fmtDay(startK);if(unit=
 const periodName={day:"일",week:"주",month:"월"};
 
 /* ---------- init / day nav ---------- */
-function init(){D=build();const days=dataDays();day=days[days.length-1]||todayKey();selDev=null;ui.cmpAnchor=null;
+function init(){D=build();const days=dataDays();day=days[days.length-1]||todayKey();selDev=null;ui.cmpAnchor=null;EQ=DEFAULT_Q();EQsel=null;EQcache=null;
   $("#dayPick").min=days[0]||"";$("#dayPick").max=todayKey()>day?todayKey():day;
   const gen=String(meta.generated||"").replace(/^\d{4}-0?(\d+)-0?(\d+)\s+/,"$1/$2 ");   /* 2026-09-16 21:01 → 9/16 21:01 */
   let modeTxt=meta.mode==="live"?gen+" 수집":meta.mode==="saved"?gen+" 수집 · 사본":meta.mode==="auto"?gen+" 수집":meta.mode==="gui"?(rows.length?gen+" 수집":"아직 수집한 적 없음"):"데모 데이터 · 장비 "+devNames.length+"대";
@@ -964,8 +1008,9 @@ const devId=n=>"dev-"+String(n).replace(/[^A-Za-z0-9_-]/g,c=>"_"+c.charCodeAt(0)
 function parkDetail(){const d=$("#detail"),p=$("#detPark");if(d&&p&&d.parentNode!==p)p.appendChild(d);}
 function mountDetail(){const d=$("#detail");if(!d||!selDev)return;const m=document.getElementById(devId(selDev)+"-mount");if(m&&d.parentNode!==m)m.appendChild(d);}
 /* 데이터 범위 줄(V01) — 파일 전체 범위 · 선택 날짜 · 장비 · Job · 수집 시각. 양 끝 날짜의 '부분일' 은 가능성 표시일 뿐 데이터 부족만으로 확정하지 않는다. */
-function rangeLineHtml(){const days=dataDays();if(!days.length)return"";const cnt={};for(const r of rows){const d=rowDate(r);if(d){const k=dayKey(d);cnt[k]=(cnt[k]||0)+1;}}
-  const jobs=new Set(),noJob=rows.some(r=>r.kind===""&&!r.job);for(const r of rows)if(r.job)jobs.add(r.job);
+function rangeLineHtml(){const days=dataDays();if(!days.length)return"";const cnt=(D&&D._dayRows)||{};
+  if(D&&!D._jobSet){const js=new Set();let nj=false;for(const r of rows){if(r.job)js.add(r.job);else if(r.kind==="")nj=true;}D._jobSet=js;D._noJob=nj;}
+  const jobs=D?D._jobSet:new Set(),noJob=D?D._noJob:false;
   const first=days[0],last=days[days.length-1];const md=n=>fmtDay(n).split(" ")[0];
   const firstBadge=`<span class="chip mute" title="보관 창의 첫 날짜 — 그날 ${fmtN(cnt[first])}행. 앞이 잘렸을 수 있어 '부분일 가능' 으로만 표시">부분일 가능</span>`;
   const lastBadge=last===todayKey()&&refFixed()?`<span class="chip mute" title="수집 시각(${hm(metricsRef())})까지의 기록">부분일</span>`:"";
@@ -981,7 +1026,7 @@ function renderHome(){
   /* 핵심 카드 4개(V02): 평균 가동률 · 확인된 가동시간 · Error 사건 · 시간 근거 상태. 카드마다 기간·장비 범위를 적는다 */
   $("#homeSum").innerHTML=`<div class="card ss hero"><div class="k">평균 가동률 · ${fmtDay(day)}${isToday(day)?" · 마지막 스캔 기준":""}</div><div class="v">${cur.util==null?"—":cur.util.toFixed(1)+"<small>%</small>"}</div><div class="s">데이터 있는 장비 ${cur.n}대 산술평균${nod.length?` · 데이터 없음 ${nod.length}대`:""}<br>${isToday(day)?"00:00 ~ 장비별 마지막 스캔(수집 시각 기준)":"00:00 ~ 24:00"} · 가동시간 ÷ 경과시간</div></div>
     <div class="card ss"><div class="k">확인된 가동시간 · ${fmtDay(day)}</div><div class="v num">${fmtSecS(cur.run)}</div><div class="s">장비 ${cur.n}대 합계 · 그중 반복 가동 ${cur.run>0?(rep/cur.run*100).toFixed(1):"0.0"}% (${fmtSecS(rep)})${nAbortRun?`<br>가동 중단 ${fmtN(nAbortRun)}건 포함(정상 스캔이 있는 Report 의 중단)`:""}</div></div>
-    <button class="card ss" onclick="setLoss(0);document.getElementById('lossCard').scrollIntoView({behavior:smooth(),block:'start'})" title="Error 구간 사유 상세로 이동"><div class="k">Error 사건 · ${fmtDay(day)}</div><div class="v num" style="color:${nErr?"var(--crit-ink)":"inherit"}">${fmtN(nErr)}<small>건</small></div><div class="s">장비 ${errs.length}대 · Error·정지(추정) ${fmtSecS(list.reduce((a,x)=>a+x.m.stop+x.m.err,0))}<br>주의 장비 ${alerts.length}대(가동률 ${th.util}% 미만 또는 Error ${th.err}건↑)</div></button>
+    <button class="card ss" onclick="EQ.preset='custom';EQ.start=day;EQ.end=day;EQsel=null;go('errors')" title="Error 분석(이 날짜)으로 이동"><div class="k">Error 사건 · ${fmtDay(day)}</div><div class="v num" style="color:${nErr?"var(--crit-ink)":"inherit"}">${fmtN(nErr)}<small>건</small></div><div class="s">장비 ${errs.length}대 · Error·정지(추정) ${fmtSecS(list.reduce((a,x)=>a+x.m.stop+x.m.err,0))}<br>주의 장비 ${alerts.length}대(가동률 ${th.util}% 미만 또는 Error ${th.err}건↑)</div></button>
     <button class="card ss" onclick="go('quality')" title="시간 근거·미확인 목록으로 이동"><div class="k">시간 근거 상태 · 파일 전체</div><div class="v num">${fmtN(noTime)}<small>행 미확인</small></div><div class="s">INI 없음 ${fmtN(q.missing)} · 덮어써짐 ${fmtN(q.stale+q.notOwner)}${q.ambiguous?` · 소유권 보류 ${q.ambiguous}묶음`:""}${q.unresolved?` · 판정 보류 ${q.unresolved}건`:""}${q.unmapped?` · 미분류 ${q.unmapped}행`:""}${bad?`<br><span class="chip warn">수집 실패·일부 누락 ${bad}대</span>`:""}</div></button>`;
   renderLoss(list,vd);renderRep(list);
   const key=x=>x.m.hasData?x.m.util:999;
@@ -1016,7 +1061,7 @@ function renderHome(){
 }
 const smooth=()=>matchMedia("(prefers-reduced-motion: reduce)").matches?"auto":"smooth";   /* 움직임 줄이기 설정이면 스크롤도 바로 */
 /* 장비 선택 — 같은 장비를 다시 누르면 닫히고, 다른 장비를 누르면 바뀐다(동시에 하나만). 닫히면 포커스는 그 장비 버튼으로 돌아간다. */
-function selectDev(n,opt){const was=selDev;selDev=selDev===n?null:n;if(!opt||!opt.keepBack){ui.back=null;ui.backQual=false;}renderHome();renderDetail();
+function selectDev(n,opt){const was=selDev;selDev=selDev===n?null:n;if(!opt||!opt.keepBack){ui.back=null;ui.backQual=false;ui.backErr=false;}renderHome();renderDetail();
   if(selDev){const btn=document.getElementById(devId(selDev));if(btn&&!(opt&&opt.noScroll)){const b=btn.getBoundingClientRect();if(b.top<0||b.bottom>innerHeight)btn.scrollIntoView({behavior:smooth(),block:"start"});}}
   else if(was){const btn=document.getElementById(devId(was));if(btn)btn.focus({preventScroll:true});}}
 /* ---------- 가동률 저하 사유(관측 분류) ----------
@@ -1099,6 +1144,153 @@ function renderRepDetail(list){const box=$("#repDetail");if(!box||!ui.rep){if(bo
   const back={loss:ui.loss,page:ui.lossPage,day,scroll:$(".main").scrollTop};
   box.querySelectorAll("[data-ev]").forEach(tr=>tr.onclick=()=>{const[n,rep,wid]=tr.dataset.ev.split("|");goRow(n,day,rep,wid,back);});
   box.querySelectorAll("[data-xt]").forEach(td=>td.onclick=()=>{ui.repX=td.dataset.xt.split("|");renderHome();});}
+/* ---------- Error 분석 화면(A01~A04·A07·V07) ----------
+   EQ = 적용된 조회(applied). 기본 필터(기간·장비·Job·지표·탭)는 바로 적용, 세부 설정 서랍은 draft 를 적용/취소로 다룬다.
+   탭을 바꿔도 EQ 의 기간·장비·Job 은 그대로다(groupBy 만 바뀐다). 검색·Job 원문은 textContent/esc 로만 그린다(코드로 실행하지 않는다). */
+let EQ=DEFAULT_Q(),EQsel=null,EQpage=0,EQcache=null;
+const nDevAll=()=>devNames.length;
+function jobCatalog(){if(!D||!D._occ)return[];if(D._jobs)return D._jobs;const c={};for(const r of rows){if(r.kind===""||r.kind==="batch"||r.kind==="slot"){const j=r.job||"";c[j]=(c[j]||0)+1;}}
+  D._jobs=Object.keys(c).filter(j=>j).sort(cmpS).map(j=>({job:j,n:c[j]}));D._noJobRows=c[""]||0;return D._jobs;}
+function chipsOf(q){const out=[];const rng=queryRange(q);
+  out.push(`<span class="chip mute">기간 ${q.preset==="all"?"파일 전체":q.preset==="7"?"최근 7개 날짜":q.preset==="30"?"최근 30개 날짜":"직접"}${rng?` ${rng[0].slice(5).replace("-","/")}~${rng[1].slice(5).replace("-","/")}`:""}</span>`);
+  out.push(q.devices==null?`<span class="chip mute">장비 전체 ${nDevAll()}대</span>`:q.devices.length?`<span class="chip run">장비 ${q.devices.length}대: ${esc(q.devices.slice(0,4).join(", "))}${q.devices.length>4?" …":""}</span>`:'<span class="chip warn">장비 선택 없음</span>');
+  out.push(q.jobs==null?`<span class="chip mute">Job 전체${q.includeUnknownJob?" + 미확인":""}</span>`:q.jobs.length?`<span class="chip run">Job ${q.jobs.length}종${q.includeUnknownJob?" + 미확인":""}</span>`:q.includeUnknownJob?'<span class="chip warn">Job 미확인만</span>':'<span class="chip warn">Job 선택 없음</span>');
+  if(q.causes)out.push(`<span class="chip crit">원인 ${q.causes.map(c=>ERR_KO[c]||c).join(", ")} (분자만)</span>`);
+  if(q.kinds.length<4)out.push(`<span class="chip mute">종류 ${q.kinds.map(k=>KIND_KO[k]).join("·")}</span>`);
+  if(q.timeBasis!=="all")out.push(`<span class="chip mute">시간 근거 ${{timed:"확인된 시각",untimed:"시간 미확인",ambiguous:"INI 소유권 보류"}[q.timeBasis]}</span>`);
+  if(q.includeTest)out.push('<span class="chip test">TEST 진단 포함(공식 지표 불변)</span>');return out.join(" ");}
+function renderErrFilters(){const box=$("#errFilters");const q=EQ;const jobs=jobCatalog();const rng=queryRange(q)||["",""];
+  const devSel=q.devices;const jobSel=q.jobs;
+  box.innerHTML=`<span class="lbl">기간</span><div class="seg" id="eqPreset">${[["all","파일 전체"],["7","최근 7개 날짜"],["30","최근 30개 날짜"],["custom","직접"]].map(([k,l])=>`<button data-p="${k}" aria-pressed="${q.preset===k}">${l}</button>`).join("")}</div>
+    <span id="eqCustom" ${q.preset==="custom"?"":"hidden"}><input class="input" type="date" id="eqStart" value="${esc(q.start||rng[0])}" min="${dataDays()[0]||""}" max="${dataDays().slice(-1)[0]||""}"> ~ <input class="input" type="date" id="eqEnd" value="${esc(q.end||rng[1])}" min="${dataDays()[0]||""}" max="${dataDays().slice(-1)[0]||""}"> <button class="btn small" id="eqApplyDates">적용</button></span>
+    <details class="pick" id="pickDev"><summary>장비: ${devSel==null?`전체 ${nDevAll()}대`:devSel.length?`${devSel.length}대`:"선택 없음"} ▾</summary><div class="pp"><input class="input" id="devSearch" placeholder="장비 검색(문자 그대로)" style="width:100%">
+      <div class="pb"><button class="btn small" data-da="all">전체 선택</button><button class="btn small" data-da="none">선택 해제</button><button class="btn small" data-da="found">검색 결과 선택</button></div><div class="pl" id="devList"></div></div></details>
+    <details class="pick" id="pickJob"><summary>Job: ${jobSel==null?`전체 ${fmtN(jobs.length)}종`:jobSel.length?`${jobSel.length}종`:"선택 없음"}${q.includeUnknownJob?" + 미확인":""} ▾</summary><div class="pp"><input class="input" id="jobSearch" placeholder="Job 원문 검색(문자 그대로 · 대소문자 무시)" style="width:100%">
+      <div class="pb"><button class="btn small" data-ja="found">검색 결과 전체 선택</button><button class="btn small" data-ja="all">전체 Job 선택</button><button class="btn small" data-ja="none">선택 해제</button><label class="row" style="font-size:12.5px;margin-left:auto"><input type="checkbox" id="jobUnknown" ${q.includeUnknownJob?"checked":""}> Job 미확인 포함(${fmtN(D._noJobRows||0)}행)</label></div><div class="pl" id="jobList"></div><p class="faint" id="jobNote" style="font-size:12px;margin:4px 0 0"></p></div></details>
+    <div class="echips" id="eqChips">${chipsOf(q)}</div>`;
+  box.querySelectorAll("#eqPreset button").forEach(b=>b.onclick=()=>{EQ.preset=b.dataset.p;if(EQ.preset==="custom"){const r=queryRange(EQ);EQ.start=EQ.start||r[0];EQ.end=EQ.end||r[1];}renderErrors();});
+  const ad=$("#eqApplyDates");if(ad)ad.onclick=()=>{EQ.start=$("#eqStart").value||null;EQ.end=$("#eqEnd").value||null;EQ.preset="custom";renderErrors();};
+  /* 목록은 펼칠 때 채운다(lazy) — 닫힌 채로 533종을 그리지 않는다 */
+  const listDev=()=>{const s=($("#devSearch").value||"").toLowerCase();const items=devNames.filter(n=>n.toLowerCase().includes(s));
+    $("#devList").innerHTML=items.map(n=>`<label><input type="checkbox" data-dev="${esc(n)}" ${devSel==null||devSel.includes(n)?"checked":""}> <span>${esc(n)}</span></label>`).join("")||'<p class="faint">일치하는 장비 없음</p>';
+    $("#devList").querySelectorAll("input[data-dev]").forEach(cb=>cb.onchange=()=>{const cur=new Set(devSel==null?devNames:devSel);if(cb.checked)cur.add(cb.dataset.dev);else cur.delete(cb.dataset.dev);EQ.devices=cur.size===devNames.length?null:[...cur].sort(cmpDev);renderErrors({keepOpen:"pickDev"});});return items;};
+  const pd=$("#pickDev");pd.ontoggle=()=>{if(pd.open)listDev();};if(pd.open)listDev();$("#devSearch").oninput=listDev;
+  box.querySelectorAll("[data-da]").forEach(b=>b.onclick=()=>{const a=b.dataset.da;if(a==="all")EQ.devices=null;else if(a==="none")EQ.devices=[];else{EQ.devices=listDev().sort(cmpDev);if(EQ.devices.length===devNames.length)EQ.devices=null;}renderErrors({keepOpen:"pickDev"});});
+  const listJob=()=>{const s=($("#jobSearch").value||"").toLowerCase();const items=jobs.filter(j=>j.job.toLowerCase().includes(s));const shown=items.slice(0,200);
+    $("#jobList").innerHTML=shown.map(j=>`<label><input type="checkbox" data-job="${esc(j.job)}" ${jobSel==null||jobSel.includes(j.job)?"checked":""}> <span class="j mono">${esc(j.job)}</span><small>${fmtN(j.n)}행</small></label>`).join("")||'<p class="faint">일치하는 Job 없음</p>';
+    $("#jobNote").textContent=`${fmtN(items.length)}종 일치${items.length>200?` · 앞 200종만 표시(검색으로 좁히세요)`:""} · 원문 그대로 비교(대소문자·공백이 다른 Job 은 병합하지 않음)`;
+    $("#jobList").querySelectorAll("input[data-job]").forEach(cb=>cb.onchange=()=>{const all=jobs.map(j=>j.job);const cur=new Set(jobSel==null?all:jobSel);if(cb.checked)cur.add(cb.dataset.job);else cur.delete(cb.dataset.job);EQ.jobs=cur.size===all.length?null:[...cur];renderErrors({keepOpen:"pickJob"});});return items;};
+  const pj=$("#pickJob");pj.ontoggle=()=>{if(pj.open)listJob();};if(pj.open)listJob();$("#jobSearch").oninput=listJob;
+  box.querySelectorAll("[data-ja]").forEach(b=>b.onclick=()=>{const a=b.dataset.ja;if(a==="all")EQ.jobs=null;else if(a==="none")EQ.jobs=[];else{const f=listJob().map(j=>j.job);EQ.jobs=f.length===jobs.length?null:f;}renderErrors({keepOpen:"pickJob"});});
+  $("#jobUnknown").onchange=e=>{EQ.includeUnknownJob=e.target.checked;renderErrors({keepOpen:"pickJob"});};}
+segBind("errTabs","g",v=>{EQ.groupBy=v;EQsel=null;EQpage=0;renderErrors();});
+segBind("errBucket","b",v=>{EQ.bucket=v;EQsel=null;renderErrors();});
+segBind("errMetric","m",v=>{EQ.metric=v;EQ.sort={key:v==="rate"?"rate":v==="time"?"time":"events",dir:"desc"};renderErrors();});
+const metricVal=(r,m)=>m==="rate"?r.rate:m==="time"?r.err:r.events;
+const metricTxt=(r,m)=>m==="rate"?(r.rate==null?"—":r.rate.toFixed(1)):m==="time"?fmtSecS(r.err):fmtN(r.events);
+let EQfilterKey=null;
+function renderErrors(opt){if(!D||!D._occ)return;const keep=opt&&opt.keepOpen;const t0=performance.now();
+  $("#rangeLine3").innerHTML=rangeLineHtml();
+  document.querySelectorAll("#errTabs button").forEach(b=>b.setAttribute("aria-pressed",b.dataset.g===EQ.groupBy));document.querySelectorAll("#errBucket button").forEach(b=>b.setAttribute("aria-pressed",b.dataset.b===EQ.bucket));document.querySelectorAll("#errMetric button").forEach(b=>b.setAttribute("aria-pressed",b.dataset.m===EQ.metric));
+  $("#errBucketLbl").hidden=$("#errBucket").hidden=EQ.groupBy!=="period";
+  /* 필터 줄은 조건이 바뀌었을 때만 다시 그린다(Job 목록 533종 · 장비 30 — 탭·지표 전환에서는 그대로) */
+  const fk=JSON.stringify([EQ.preset,EQ.start,EQ.end,EQ.devices,EQ.jobs,EQ.includeUnknownJob,EQ.causes,EQ.kinds,EQ.timeBasis,EQ.includeTest,devNames.length]);
+  if(fk!==EQfilterKey||!$("#errFilters").children.length){renderErrFilters();EQfilterKey=fk;}
+  if(keep){const d=document.getElementById(keep);if(d)d.open=true;}
+  const R=EQcache=errorQuery(EQ);const T=R.total;const small=T.den>0&&T.den<30;
+  $("#errSum").innerHTML=`<div class="card ss"><div class="k">Error 사건</div><div class="v num">${fmtN(T.events)}<small>건</small></div><div class="s">${Object.entries(T.byKind).map(([k,n])=>`${KIND_KO[k]} ${fmtN(n)}`).join(" · ")||"—"}<br>장비 ${T.devices}대 · 선택 조건 기준</div></div>
+    <div class="card ss"><div class="k">Wafer Error / 적격 시도</div><div class="v num">${fmtN(T.num)}<small>/ ${fmtN(T.den)}</small></div><div class="s">1,000회당 <b>${T.den?(T.num/T.den*1000).toFixed(1):"—"}</b>${small?' <span class="chip warn" title="표본이 30 미만 — 참고용">n&lt;30</span>':""}<br>분모 = 물리적 Wafer 시도(TEST 제외 · 시간 미확인 포함), Slot·배치 사건 제외</div></div>
+    <div class="card ss"><div class="k">확인된 Error 구간 시간</div><div class="v num">${fmtSecS(T.err)}</div><div class="s">정확 시각이 있는 사건의 시작~종료 합<br>이후 공백(추정) ${fmtSecS(T.stop)} — 다음 가동까지, 관측 종료 cap</div></div>
+    <div class="card ss"><div class="k">시간 미확인 사건</div><div class="v num">${fmtN(T.untimed)}<small>건</small></div><div class="s">시간은 — (0초가 아님) · Batch 시작일 귀속<br>${R.range?`범위 ${R.range[0]} ~ ${R.range[1]}`:"기록 없음"}</div></div>`;
+  renderErrChart(R);renderErrTable(R);renderErrDetail(R);
+  const ms=performance.now()-t0;$("#errChartNote").textContent=`${EQ.groupBy==="period"?`기간별(${{day:"일",week:"주 · 월요일 시작",month:"월"}[EQ.bucket]})`:EQ.groupBy==="device"?"장비별":"Job별(원문 정확 일치)"} · ${{events:"Error 사건 수",rate:"Wafer 시도 1,000회당 Error",time:"확인된 구간 시간"}[EQ.metric]} · 집계 ${ms.toFixed(0)}ms`;}
+function renderErrChart(R){const box=$("#errChart");const rows=R.rows.slice();if(!rows.length){box.innerHTML='<p class="empty">해당 조건의 기록 없음</p>';return;}
+  const m=EQ.metric;let list=rows;if(EQ.groupBy!=="period")list=[...rows].sort((a,b)=>(metricVal(b,m)||0)-(metricVal(a,m)||0)).slice(0,30);
+  const W=1200,L=54,Rr=12,T=16,B=EQ.groupBy==="job"?64:34,H=240;const ph=H-T-B;const n=list.length;const gw=(W-L-Rr)/n;const bw=Math.min(gw*.62,48);
+  const vmax=Math.max(1e-9,...list.map(r=>metricVal(r,m)||0));const y=v=>T+ph-(v/vmax)*ph;
+  let s=`<svg class="chart" viewBox="0 0 ${W} ${H}" style="height:${H}px" role="img" aria-label="Error ${EQ.groupBy} 차트">`;
+  [0,.25,.5,.75,1].forEach(f=>{const v=vmax*f;s+=`<line class="grid" x1="${L}" x2="${W-Rr}" y1="${y(v)}" y2="${y(v)}"/><text x="${L-6}" y="${y(v)+4}" text-anchor="end">${m==="time"?fmtSecS(v):m==="rate"?v.toFixed(1):fmtN(Math.round(v))}</text>`;});
+  list.forEach((r,i)=>{const gx=L+i*gw;const v=metricVal(r,m);const hh=v==null?0:Math.max(v>0?2:0,(v/vmax)*ph);const xx=gx+(gw-bw)/2;const sel=EQsel===r.key;
+    s+=`<rect class="dbar" tabindex="0" data-k="${esc(r.key)}" x="${xx.toFixed(1)}" y="${(T+ph-hh).toFixed(1)}" width="${bw.toFixed(1)}" height="${hh.toFixed(1)}" rx="2" fill="${v==null?"var(--nodata)":"var(--err)"}" opacity="${sel?1:.75}"/>`;
+    if(n<=20&&v!=null)s+=`<text class="vl" x="${(xx+bw/2).toFixed(1)}" y="${(T+ph-hh-5).toFixed(1)}" text-anchor="middle">${metricTxt(r,m)}</text>`;
+    const lbl=EQ.groupBy==="period"?(EQ.bucket==="day"?r.key.slice(5).replace("-","/"):EQ.bucket==="week"?r.key.slice(5).replace("-","/"):r.key.slice(2,7).replace("-","/")):r.label.length>14?r.label.slice(0,13)+"…":r.label;
+    if(n<=40||i%Math.ceil(n/40)===0)s+=`<text class="xl ${sel?"sel":""}" x="${(gx+gw/2).toFixed(1)}" y="${H-B+16}" text-anchor="${EQ.groupBy==="job"?"end":"middle"}" ${EQ.groupBy==="job"?`transform="rotate(-30 ${(gx+gw/2).toFixed(1)} ${H-B+16})"`:""}>${esc(lbl)}</text>`;});
+  s+=`<line class="axis" x1="${L}" x2="${W-Rr}" y1="${T+ph}" y2="${T+ph}"/></svg>`+(EQ.groupBy!=="period"&&rows.length>30?`<p class="faint" style="font-size:12px">상위 30개만 그림 — 표에는 전부(${fmtN(rows.length)}) 있습니다</p>`:"");
+  box.innerHTML=s;bindTips(box,"rect.dbar",el=>{const r=rows.find(x=>x.key===el.dataset.k);return`<b>${esc(r.label)}</b><br>사건 ${fmtN(r.events)}건 · 1,000회당 ${r.rate==null?"—":r.rate.toFixed(1)} (${fmtN(r.num)}/${fmtN(r.den)})<br>구간 ${fmtSecS(r.err)} · 공백(추정) ${fmtSecS(r.stop)} · 시간 미확인 ${r.untimed}`;});
+  box.querySelectorAll("rect.dbar").forEach(el=>{const act=()=>{EQsel=EQsel===el.dataset.k?null:el.dataset.k;EQpage=0;renderErrors();};el.onclick=act;el.onkeydown=e=>{if(e.key==="Enter"||e.key===" "){e.preventDefault();act();}};});}
+function renderErrTable(R){const m=EQ.metric;const cols=[["key",EQ.groupBy==="period"?"기간":EQ.groupBy==="device"?"장비":"Job(원문)",false],["events","Error 사건",true],["kinds","구성",false],["num","Wafer Error / 시도",true],["rate","1,000회당",true],["time","확인된 구간",true],["stop","이후 공백(추정)",true],["untimed","시간 미확인",true],["nDev","장비 수",true],["top","대표 원인",false]];
+  const sortable=new Set(["key","events","rate","time"]);
+  $("#errHead").innerHTML=`<tr>${cols.map(([k,l,r])=>`<th class="${r?"r":""} ${sortable.has(k)?"sortable":""}" ${sortable.has(k)?`data-sort="${k}" title="정렬"`:""}>${l}${EQ.sort.key===k?(EQ.sort.dir==="desc"?" ▼":" ▲"):""}</th>`).join("")}</tr>`;
+  $("#errBody").innerHTML=R.rows.map(r=>`<tr class="click ${EQsel===r.key?"sel":""}" tabindex="0" role="button" data-k="${esc(r.key)}" aria-pressed="${EQsel===r.key}"><td>${EQ.groupBy==="job"?`<span class="job2 mono" title="${esc(r.label)}">${esc(r.label)}</span>`:`<b>${esc(r.label)}</b>`}</td><td class="r num">${fmtN(r.events)}</td><td>${Object.entries(r.byKind).map(([k,n])=>`<span class="chip ${k==="wafer_timed"?"crit":"mute"}" title="${KIND_KO[k]}">${KIND_KO[k].replace("Wafer(","").replace(")","")} ${n}</span>`).join(" ")}</td><td class="r num">${fmtN(r.num)} / ${fmtN(r.den)}</td><td class="r num">${r.rate==null?"—":r.rate.toFixed(1)}${r.den&&r.den<30?' <span class="chip warn" title="표본 30 미만">n&lt;30</span>':""}</td><td class="r num">${fmtSecS(r.err)}</td><td class="r num">${fmtSecS(r.stop)}${r.open?` <span class="chip warn" title="복구 기록 없는 사건 ${r.open}건 — 관측 종료까지만">cap ${r.open}</span>`:""}</td><td class="r num">${fmtN(r.untimed)}</td><td class="r num">${r.nDev}</td><td>${r.top?`<span class="chip crit">${ERR_KO[r.top[0]]||r.top[0]} ${r.top[1]}</span>`:"—"}</td></tr>`).join("")||`<tr><td colspan="10" class="empty">${EQ.devices&&!EQ.devices.length?"선택한 장비가 없습니다 — 장비 선택을 여세요":EQ.jobs&&!EQ.jobs.length&&!EQ.includeUnknownJob?"선택한 Job 이 없습니다 — Job 선택을 여세요":"해당 조건의 기록 없음"} <button class="btn small" onclick="EQ=DEFAULT_Q();renderErrors()">조건 초기화</button></td></tr>`;
+  $("#errHead").querySelectorAll("[data-sort]").forEach(th=>th.onclick=()=>{const k=th.dataset.sort;EQ.sort=EQ.sort.key===k?{key:k,dir:EQ.sort.dir==="desc"?"asc":"desc"}:{key:k,dir:k==="key"?"asc":"desc"};renderErrors();});
+  $("#errBody").querySelectorAll("tr[data-k]").forEach(tr=>{const act=()=>{EQsel=EQsel===tr.dataset.k?null:tr.dataset.k;EQpage=0;renderErrors();if(EQsel)$("#errDetail").scrollIntoView({behavior:smooth(),block:"nearest"});};tr.onclick=act;tr.onkeydown=e=>{if(e.key==="Enter"||e.key===" "){e.preventDefault();act();}};});}
+const ERR_PAGE=50;
+function renderErrDetail(R){const box=$("#errDetail");const r=EQsel!=null?R.rows.find(x=>x.key===EQsel):null;if(!r){box.hidden=true;box.innerHTML="";return;}box.hidden=false;
+  const items=r.items;const page=Math.min(EQpage,Math.max(0,Math.ceil(items.length/ERR_PAGE)-1));const slice=items.slice(page*ERR_PAGE,(page+1)*ERR_PAGE);
+  box.innerHTML=`<div class="lossd" style="margin:0;border:0"><div class="hd"><b>${esc(r.label)} · 사건 ${fmtN(items.length)}건</b><button class="btn ghost small" onclick="EQsel=null;renderErrors()" aria-label="닫기">닫기 ✕</button></div>
+    <div class="tscroll"><table class="tbl"><thead><tr><th>시각</th><th>장비</th><th>Job</th><th>Lot / Wafer</th><th>원인 · 결과</th><th>종류</th><th class="r">구간</th><th class="r">이후 공백</th><th>시간 근거</th><th>원본</th></tr></thead><tbody>${slice.map(o=>`<tr><td class="num">${dayKey(new Date(o.t)).slice(5)} ${hm(new Date(o.t))}${o.dateBasis==="batch"?' <span class="chip mute" title="정확 발생 시각 없음 — Batch 시작일·시각에 귀속">Batch 귀속</span>':""}</td><td><b>${esc(o.device)}</b></td><td><span class="job2 mono" title="${esc(o.job)}">${o.job?esc(o.job):'<span class="faint">Job 미확인</span>'}</span></td><td class="mono">${o.lot?esc(o.lot):'<span class="faint">(Lot 확인 불가)</span>'}${o.wafer_id?" / "+esc(o.wafer_id):""}${o.slots?` <span class="chip crit">Slot ${o.slots}개</span>`:""}</td><td>${(o.causes.length?o.causes.map(c=>`<span class="chip crit">${ERR_KO[c]||c}</span>`).join(" "):'<span class="faint">원인 문구 없음</span>')} → ${ERR_KO[o.outcome]||o.outcome}${o.abort&&!o.causes.length?' <span class="chip abort">PASS 없는 Report 의 중단</span>':""}${o.test?' <span class="chip test">TEST 진단</span>':""}</td><td><span class="chip mute">${KIND_KO[o.kind]}</span></td><td class="r num">${o.dur==null?"—":fmtSec(o.dur)}</td><td class="r num">${o.stop==null?"—":fmtSec(o.stop)}${o.open?' <span class="chip warn">관측 종료 cap</span>':""}</td><td class="faint" style="white-space:normal">${o.own==="NOT_OWNER"?"INI 덮어써짐(다른 Report 소유)":o.own==="AMBIGUOUS"?"소유권 보류":o.dur==null?(INI_KO[o.r.ini_match]||"시간 미확인"):(o.r.time_basis==="TOLERANCE_ONLY"?"±10분 여유로 포함":"Batch 구간 안")}</td><td><span style="display:inline-flex;gap:4px">${reportUrl(o.r)?`<button class="btn small" data-orep="${esc(o.id)}">Report 열기</button>`:""}<button class="btn small" data-ogo="${esc(o.id)}">보기</button></span></td></tr>`).join("")}</tbody></table></div>
+    ${items.length>ERR_PAGE?`<div class="row" style="margin-top:6px"><button class="btn small" ${page===0?"disabled":""} onclick="EQpage--;renderErrors()">이전 ${ERR_PAGE}</button><span class="faint">${page*ERR_PAGE+1}~${Math.min(items.length,(page+1)*ERR_PAGE)} / ${fmtN(items.length)}</span><button class="btn small" ${(page+1)*ERR_PAGE>=items.length?"disabled":""} onclick="EQpage++;renderErrors()">다음 ${ERR_PAGE}</button></div>`:""}</div>`;
+  box.querySelectorAll("[data-orep]").forEach(b=>b.onclick=()=>{const o=D._occ.byId[b.dataset.orep];if(o)openReport(o.r);});
+  box.querySelectorAll("[data-ogo]").forEach(b=>b.onclick=()=>{const o=D._occ.byId[b.dataset.ogo];if(!o)return;ui.backErr=true;go("home");goRow(o.device,o.day,o.report,o.wafer_id,{qual:false});});}
+/* 세부 설정 서랍(A09) — draft 를 복제해 적용/취소. 저장된 보기는 localStorage + JSON 내보내기/불러오기(②③ 커밋에서 확장) */
+let EQd=null;
+function openDrawer(){EQd=JSON.parse(JSON.stringify(EQ));renderDrawer();$("#drawer").hidden=false;const f=$("#drawerBody input,#drawerBody button");if(f)f.focus();}
+function closeDrawer(apply){if(apply){EQ=EQd;EQsel=null;EQpage=0;}EQd=null;$("#drawer").hidden=true;const b=$("#errAdv");if(b)b.focus();if(apply)renderErrors();}
+function renderDrawer(){const q=EQd;const diff=Object.keys(q).filter(k=>JSON.stringify(q[k])!==JSON.stringify(EQ[k])).length;
+  $("#drawerBody").innerHTML=`<div class="row" style="justify-content:space-between"><h2>세부 설정</h2><button class="btn ghost small" onclick="closeDrawer(false)" aria-label="취소">취소 ✕</button></div>
+    <h3>집계</h3><div class="row"><span class="faint" style="font-size:12.5px">기간 탭 단위</span><div class="seg">${["day","week","month"].map(b=>`<button data-db="${b}" aria-pressed="${q.bucket===b}">${{day:"일",week:"주(월요일 시작)",month:"월"}[b]}</button>`).join("")}</div></div>
+    <div class="row"><span class="faint" style="font-size:12.5px">지표</span><div class="seg">${[["events","Error 사건 수"],["rate","Wafer 1,000회당"],["time","확인된 구간 시간"]].map(([k,l])=>`<button data-dm="${k}" aria-pressed="${q.metric===k}">${l}</button>`).join("")}</div></div>
+    <h3>포함 기록</h3>${Object.entries(KIND_KO).map(([k,l])=>`<label class="opt"><input type="checkbox" data-dk="${k}" ${q.kinds.includes(k)?"checked":""}> ${l}</label>`).join("")}
+    <label class="opt"><input type="checkbox" data-dt ${q.includeTest?"checked":""}> TEST 진단 보기 — 공식 가동률·기본 Error율은 바뀌지 않습니다</label>
+    <h3>원인(분자만 — 분모는 기간·장비·Job 의 전체 적격 시도)</h3><div class="pl" style="max-height:200px;overflow:auto">${CAUSE_CODES.map(c=>`<label class="opt"><input type="checkbox" data-dc="${c}" ${q.causes==null||q.causes.includes(c)?"checked":""}> ${ERR_KO[c]||c}</label>`).join("")}<label class="opt"><input type="checkbox" data-dc="ABORTED" ${q.causes==null||q.causes.includes("ABORTED")?"checked":""}> 중단(원인 없음 · PASS 없는 Report)</label><label class="opt"><input type="checkbox" data-dc="USER_ABORT" ${q.causes==null||q.causes.includes("USER_ABORT")?"checked":""}> 사용자 중단(원인 없음 · PASS 없는 Report)</label></div>
+    <h3>시간 근거</h3><div class="seg">${[["all","전체"],["timed","확인된 시각"],["untimed","시간 미확인"],["ambiguous","INI 소유권 보류"]].map(([k,l])=>`<button data-dtb="${k}" aria-pressed="${q.timeBasis===k}">${l}</button>`).join("")}</div><p class="faint" style="font-size:12px">미확인 시간에 추정 초를 넣는 설정은 없습니다 — 시간은 —로 남깁니다.</p>
+    <h3>표시</h3><div class="seg">${[["comfortable","편안하게"],["dense","조밀하게"]].map(([k,l])=>`<button data-dd="${k}" aria-pressed="${q.density===k}">${l}</button>`).join("")}</div>
+    <h3>저장된 보기</h3><div class="row">${VIEW_PRESETS.map((v,i)=>`<button class="btn small" data-preset="${i}" title="${esc(v.help)}">${esc(v.name)}</button>`).join("")}</div>
+    <div class="row" style="margin-top:4px">${savedViews().map((v,i)=>`<span class="chip run"><button data-load="${i}" style="border:0;background:none;color:inherit;cursor:pointer;font:inherit" title="불러오기">${esc(v.name)}</button> <button data-del="${i}" style="border:0;background:none;color:inherit;cursor:pointer" aria-label="삭제">✕</button></span>`).join("")||'<span class="faint" style="font-size:12px">저장된 보기 없음</span>'}</div>
+    <div class="row" style="margin-top:4px"><input class="input" id="viewName" placeholder="이름" style="width:150px"><button class="btn small" id="viewSave">현재 설정 저장</button><span class="faint" id="viewStore" style="font-size:12px">${storageOk()?"이 PC·브라우저에 저장":"저장소 사용 불가 — 이 세션에만 · JSON 으로 내보내세요"}</span></div>
+    <details style="margin-top:4px"><summary style="cursor:pointer;color:var(--accent-2);font-size:13px">설정 JSON 내보내기 · 불러오기</summary><textarea class="input" id="viewJson" style="min-height:90px">${esc(JSON.stringify(exportView(q)))}</textarea><div class="row" style="margin-top:4px"><button class="btn small" id="viewCopy">복사</button><button class="btn small" id="viewImport">붙여 넣은 JSON 적용(검증)</button><span class="faint" id="viewMsg" style="font-size:12px"></span></div></details>
+    <div class="row" style="margin-top:auto;justify-content:space-between"><span class="faint" style="font-size:12.5px">바뀐 항목 ${diff}개</span><span class="row"><button class="btn" onclick="EQd=DEFAULT_Q();renderDrawer()">초기화</button><button class="btn" onclick="closeDrawer(false)">취소</button><button class="btn primary" onclick="closeDrawer(true)">적용</button></span></div>`;
+  const B=$("#drawerBody");B.querySelectorAll("[data-db]").forEach(b=>b.onclick=()=>{q.bucket=b.dataset.db;renderDrawer();});B.querySelectorAll("[data-dm]").forEach(b=>b.onclick=()=>{q.metric=b.dataset.dm;q.sort={key:q.metric==="rate"?"rate":q.metric==="time"?"time":"events",dir:"desc"};renderDrawer();});
+  B.querySelectorAll("[data-dk]").forEach(cb=>cb.onchange=()=>{q.kinds=Object.keys(KIND_KO).filter(k=>B.querySelector(`[data-dk="${k}"]`).checked);renderDrawer();});
+  const dt=B.querySelector("[data-dt]");dt.onchange=()=>{q.includeTest=dt.checked;renderDrawer();};
+  B.querySelectorAll("[data-dc]").forEach(cb=>cb.onchange=()=>{const all=[...CAUSE_CODES,"ABORTED","USER_ABORT"];const sel=all.filter(c=>B.querySelector(`[data-dc="${c}"]`).checked);q.causes=sel.length===all.length?null:sel;renderDrawer();});
+  B.querySelectorAll("[data-dtb]").forEach(b=>b.onclick=()=>{q.timeBasis=b.dataset.dtb;renderDrawer();});B.querySelectorAll("[data-dd]").forEach(b=>b.onclick=()=>{q.density=b.dataset.dd;renderDrawer();});
+  B.querySelectorAll("[data-preset]").forEach(b=>b.onclick=()=>{EQd=VIEW_PRESETS[+b.dataset.preset].make(EQd);renderDrawer();});
+  B.querySelectorAll("[data-load]").forEach(b=>b.onclick=()=>{const v=savedViews()[+b.dataset.load];const r=validateView(v.q);if(r.q){EQd=r.q;renderDrawer();if(r.excluded.length)$("#viewMsg").textContent="이 파일에 없어 제외: "+r.excluded.join(", ");}});
+  B.querySelectorAll("[data-del]").forEach(b=>b.onclick=()=>{const v=savedViews();v.splice(+b.dataset.del,1);saveViews(v);renderDrawer();});
+  $("#viewSave").onclick=()=>{const name=($("#viewName").value||"").trim().slice(0,40);if(!name){$("#viewMsg").textContent="이름을 적으세요";return;}const v=savedViews().filter(x=>x.name!==name);v.push({name,q:exportView(EQd)});saveViews(v);renderDrawer();};
+  $("#viewCopy").onclick=()=>copyText($("#viewJson").value);
+  $("#viewImport").onclick=()=>{let obj=null;try{obj=JSON.parse($("#viewJson").value);}catch(e){$("#viewMsg").textContent="JSON 을 읽을 수 없습니다";return;}const r=validateView(obj);if(!r.q){$("#viewMsg").textContent="적용 불가: "+r.error;return;}EQd=r.q;renderDrawer();$("#viewMsg").textContent=r.excluded.length?"이 파일에 없어 제외: "+r.excluded.join(", ")+" (전체로 넓히지 않음)":"적용됨 — '적용' 을 누르면 반영";};
+  $("#errTable").classList.toggle("dense",EQ.density==="dense");}
+/* 저장된 보기 — localStorage 는 file:// 에서 실패할 수 있어 try/catch + 세션 메모리 폴백. JSON 에는 schema_version 과 데이터 지문을 넣고,
+   불러올 때 허용 키·값·크기를 검증한다(코드로 해석하지 않는다). 다른 파일에 불러오면 없는 장비·Job 은 제외 목록으로 보여 주고 자동으로 전체로 넓히지 않는다. */
+const VIEW_SCHEMA=1;let memViews=null;
+function storageOk(){try{localStorage.setItem("aoi.__t","1");localStorage.removeItem("aoi.__t");return true;}catch(e){return false;}}
+function savedViews(){if(memViews)return memViews;try{const s=localStorage.getItem("aoi.errviews");memViews=s?JSON.parse(s):[];}catch(e){memViews=[];}if(!Array.isArray(memViews))memViews=[];return memViews;}
+function saveViews(v){memViews=v.slice(0,20);try{localStorage.setItem("aoi.errviews",JSON.stringify(memViews));}catch(e){}}
+function exportView(q){return{schema_version:VIEW_SCHEMA,dataset:{generated_iso:meta.generated_iso||"",rows:embRowCount||rows.length},query:q};}   /* 지문 = 수집기가 준 행 수(화면 합성 행 제외) */
+const VIEW_PRESETS=[
+  {name:"전체 Error",help:"조건 초기화",make:()=>DEFAULT_Q()},
+  {name:"선택 장비 집중",help:"현재 장비 선택을 두고 장비별 · 1,000회당 Error",make:q=>({...DEFAULT_Q(),devices:q.devices,groupBy:"device",metric:"rate",sort:{key:"rate",dir:"desc"}})},
+  {name:"선택 Job 집중",help:"현재 Job 선택을 두고 Job별 · 사건 수",make:q=>({...DEFAULT_Q(),jobs:q.jobs,includeUnknownJob:q.includeUnknownJob,groupBy:"job",metric:"events"})},
+  {name:"시간 미확인 조사",help:"시간 근거가 없는 사건만 · 장비별",make:q=>({...DEFAULT_Q(),devices:q.devices,timeBasis:"untimed",groupBy:"device"})}];
+function validateView(obj){if(!obj||typeof obj!=="object")return{q:null,error:"객체가 아님"};const q=obj.query&&typeof obj.query==="object"?obj.query:obj;if(JSON.stringify(q).length>20000)return{q:null,error:"너무 큼"};
+  const base=DEFAULT_Q();const out=DEFAULT_Q();const excluded=[];const strArr=v=>Array.isArray(v)&&v.every(x=>typeof x==="string"&&x.length<300);
+  for(const k of Object.keys(q)){if(!(k in base))continue;const v=q[k];
+    if(k==="preset"){if(["all","7","30","custom"].includes(v))out.preset=v;}
+    else if(k==="start"||k==="end"){if(v==null||/^\d{4}-\d{2}-\d{2}$/.test(String(v)))out[k]=v==null?null:String(v);}
+    else if(k==="devices"||k==="jobs"){if(v===null)out[k]=null;else if(strArr(v)){const known=k==="devices"?devNames:jobCatalog().map(j=>j.job);const keep=v.filter(x=>known.includes(x));v.filter(x=>!known.includes(x)).forEach(x=>excluded.push(x));out[k]=keep;}}
+    else if(k==="causes"){if(v===null)out.causes=null;else if(strArr(v))out.causes=v.filter(c=>CAUSE_CODES.includes(c)||c==="ABORTED"||c==="USER_ABORT");}
+    else if(k==="kinds"){if(strArr(v))out.kinds=v.filter(x=>KIND_KO[x]);}
+    else if(k==="includeUnknownJob"||k==="includeTest"){out[k]=!!v;}
+    else if(k==="groupBy"){if(["period","device","job"].includes(v))out.groupBy=v;}
+    else if(k==="bucket"){if(["day","week","month"].includes(v))out.bucket=v;}
+    else if(k==="metric"){if(["events","rate","time"].includes(v))out.metric=v;}
+    else if(k==="timeBasis"){if(["all","timed","untimed","ambiguous"].includes(v))out.timeBasis=v;}
+    else if(k==="density"){if(["comfortable","dense"].includes(v))out.density=v;}
+    else if(k==="sort"){if(v&&["key","events","rate","time"].includes(v.key)&&["asc","desc"].includes(v.dir))out.sort={key:v.key,dir:v.dir};}}
+  return{q:out,excluded};}
+document.addEventListener("keydown",e=>{if(e.key==="Escape"&&!$("#drawer").hidden){e.preventDefault();closeDrawer(false);}});
 /* ---------- 데이터 품질 목록(P0 최소) ----------
    시간으로 바꾸지 않은 기록을 사유별로 센 뒤 원문 근거 행을 보여 준다. 필터(장비)와 사유 선택은 ui.qual 에 남아 돌아와도 유지된다.
    사유는 관측 분류다 — 행을 지우거나 시간을 지어내지 않는다. */
@@ -1168,8 +1360,8 @@ function bindHitLayer(svg,m){const hit=svg.querySelector("rect.hit");if(!hit)ret
     let best=null,bd=HIT_MAX_PX;for(const t of segs){const d=(sx<t.x0?t.x0-sx:sx-t.x1)*k;if(d<=bd){bd=d;best=t;}}return best?[best]:[];};
   const apply=(list,i)=>{const nxt=list[i]?list[i].el:null;if(nxt===cur&&list.length===cands.length)return;
     if(cur)cur.classList.remove("hot");cur=nxt;cands=list;pick=i;
-    if(!cur){hideTip();hit.classList.remove("pick");return;}
-    cur.classList.add("hot");hit.classList.toggle("pick",cur.dataset.open==="1");
+    if(!cur){hideTip();hit.classList.remove("pick");const hi=$("#hitInfo");if(hi)hi.textContent="";return;}
+    cur.classList.add("hot");hit.classList.toggle("pick",cur.dataset.open==="1");const hi=$("#hitInfo");if(hi)hi.textContent=list.length>1?`겹친 막대 ${list.length}개 · ${i+1}/${list.length} 선택 · ↑↓ 로 전환`:"";
     tip.innerHTML=(list.length>1?`<span class="k">겹친 막대 ${list.length}개 · ↑↓ 로 전환 (${i+1}/${list.length})</span><br>`:"")+segTip(m,cur);tip.style.display="block";};
   hit.onmousemove=ev=>{const list=choose(toX(ev));const keep=pick>0&&cur&&list.some(t=>t.el===cur);apply(list,keep?list.findIndex(t=>t.el===cur):0);if(cur)moveTip(ev);};
   hit.onmouseleave=()=>apply([],0);
@@ -1304,7 +1496,7 @@ function renderDetail(){
   const m=dayMetrics(D[selDev],day);const a=keyDay(day).getTime();const now=nowMs();
   const rp=m.dup+m.rescan+m.rework;
   $("#detTitle").innerHTML=`${esc(selDev)} <span class="faint" style="font-weight:400;font-size:13px">${fmtDay(day)} · 가동률 ${m.hasData?m.util.toFixed(1)+"%":"–"} · 가동 ${fmtSecS(m.run)}${rp?` (반복 ${fmtSecS(rp)})`:""} · Error·정지 ${fmtSecS(m.err+m.stop)}${m.nAbort?` · <span class="chip abort">중단 ${m.nAbort}건${m.nAbortErr?` (Error ${m.nAbortErr})`:""}</span>`:""}${m.nUnk?` · <span class="chip mute">분류 미확인 ${m.nUnk}건</span>`:""}${m.nTest?` · <span class="chip test">Test ${m.nTest}건 제외</span>`:""}${m.overlap>0?` · <span class="chip warn" title="같은 장비의 구간이 겹쳐 우선순위(Error > 가동 > Test > 정지)로 한 번만 배정했습니다">시간 충돌 ${fmtSec(m.overlap)}</span>`:""}</span>`;
-  $("#detLegend").innerHTML=legendHtml();$("#detBack").hidden=!ui.back;$("#detBackQ").hidden=!ui.backQual;
+  $("#detLegend").innerHTML=legendHtml();$("#detBack").hidden=!ui.back;$("#detBackQ").hidden=!ui.backQual;$("#detBackE").hidden=!ui.backErr;
   /* Lot blocks: consecutive wafers of the same lot (gap under 10 min) become one bar */
   const lots=[];const ws=m.items.filter(i=>i.kind!=="stop").sort((p,q)=>p.s-q.s);   /* Test 구간도 Lot 목록에는 남긴다(가동 시간만 0) */
   for(const it of ws){const key=lotKey(it.g.r.lot,it.g.test);const L=lots[lots.length-1];
@@ -1422,14 +1614,29 @@ function renderTrend(){
 }
 
 /* ---------- render: device comparison ---------- */
+/* 장비 비교 표(V04) — 고를 수 있는 열. 기본 6개 이내, 헤더·장비명 고정. 기록시간(Error 구간)·추정 공백·시간 미확인·반복 가동은 켜서 본다 */
+const CMP_COLS=[{id:"bar",label:"가동률",def:true},{id:"util",label:"가동률 %",def:true},{id:"run",label:"가동시간",def:true},{id:"nErr",label:"Error 사건",def:true},{id:"errstop",label:"Error·정지(추정)",def:true},
+  {id:"err",label:"기록시간(Error 구간)",def:false},{id:"stop",label:"추정 공백",def:false},{id:"untimed",label:"시간 미확인 사건",def:false},{id:"rep",label:"반복 가동",def:false},{id:"abort",label:"가동 중단",def:false}];
+function cmpColSel(){if(ui.cmpColSel)return ui.cmpColSel;let s=null;try{s=JSON.parse(localStorage.getItem("aoi.cmpcols")||"null");}catch(e){}ui.cmpColSel=Array.isArray(s)&&s.length?s.filter(x=>CMP_COLS.some(c=>c.id===x)):CMP_COLS.filter(c=>c.def).map(c=>c.id);return ui.cmpColSel;}
 function renderCompare(){
   const n=ui.cmpP;const curKeys=rangeKeys(day,n);      /* 전 기간 대비는 쓰지 않는다(사용자 확정) */
-  const list=devNames.map(name=>({name,c:aggMetrics(D[name],curKeys)}));
+  const untimedOf=name=>{const O=D._occ;if(!O)return 0;const s=new Set(curKeys);return O.list.filter(o=>o.device===name&&!o.test&&o.dur==null&&s.has(o.day)).length;};
+  const list=devNames.map(name=>({name,c:aggMetrics(D[name],curKeys),untimed:untimedOf(name)}));
   const key=x=>x.c.util==null?-1:x.c.util;
   list.sort((a,b)=>ui.cmpSort==="high"?key(b)-key(a):ui.cmpSort==="low"?((a.c.util==null?999:a.c.util)-(b.c.util==null?999:b.c.util)):(b.c.nErr-a.c.nErr)||(key(b)-key(a)));
-  const f=fleetAvg(curKeys);
+  const f=fleetAvg(curKeys);const sel=cmpColSel();const cols=CMP_COLS.filter(c=>sel.includes(c.id));
   $("#cmpNote").textContent=`${n===1?fmtDay(day):curKeys[0].slice(5).replace("-","/")+" ~ "+fmtDay(day)} · 전체 평균 ${pct(f.util)}`;
-  $("#cmpBody").innerHTML=list.map((x,i)=>{const rp=x.c.dup+x.c.rescan+x.c.rework;return`<tr class="click" data-cmp="${esc(x.name)}" title="클릭하면 홈에서 이 장비의 타임라인을 봅니다"><td class="r faint">${i+1}</td><td><b>${esc(x.name)}</b>${x.c.hasData&&(x.c.util<th.util||x.c.nErr>=th.err*n)?' <span class="chip crit">주의</span>':""}</td><td><span class="hbar" style="width:${x.c.util==null?0:x.c.util.toFixed(1)}%"></span></td><td class="r"><b>${x.c.util==null?'<span class="faint">데이터 없음</span>':pct(x.c.util)}</b></td><td class="r" title="중복스캔 ${x.c.nDup} · 재스캔 ${x.c.nRescan} · Rework ${x.c.nRework}건 — 가동시간에 포함">${rp?`${fmtSecS(rp)} <span class="faint">(${x.c.run>0?(rp/x.c.run*100).toFixed(0):0}%)</span>`:0}</td><td class="r">${x.c.nErr?`<span class="chip crit">${x.c.nErr}</span>`:0}</td><td class="r">${fmtSecS(x.c.stop+x.c.err)}</td></tr>`;}).join("")||'<tr><td colspan="7" class="empty">데이터 없음</td></tr>';
+  $("#cmpColsBody").innerHTML=CMP_COLS.map(c=>`<label class="opt" style="display:flex;gap:8px;font-size:13px;padding:3px 0"><input type="checkbox" data-cc="${c.id}" ${sel.includes(c.id)?"checked":""}> ${c.label}</label>`).join("")+`<p class="faint" style="font-size:12px;margin-top:4px">선택 ${sel.length}개${sel.length>6?" — 6개 이내를 권장":""}</p>`;
+  $("#cmpColsBody").querySelectorAll("[data-cc]").forEach(cb=>cb.onchange=()=>{ui.cmpColSel=CMP_COLS.filter(c=>$("#cmpColsBody").querySelector(`[data-cc="${c.id}"]`).checked).map(c=>c.id);try{localStorage.setItem("aoi.cmpcols",JSON.stringify(ui.cmpColSel));}catch(e){}renderCompare();$("#cmpCols").open=true;});
+  $("#cmpHead").innerHTML=`<tr><th class="r">#</th><th>장비</th>${cols.map(c=>`<th class="${c.id==="bar"?"":"r"}" ${c.id==="bar"?'style="width:30%"':""}>${c.label}</th>`).join("")}</tr>`;
+  const cell=(x,c)=>{const m=x.c;const rp=m.dup+m.rescan+m.rework;const none=!m.hasData;
+    switch(c.id){case"bar":return`<td><span class="hbar" style="width:${m.util==null?0:m.util.toFixed(1)}%"></span></td>`;
+      case"util":return`<td class="r"><b>${m.util==null?'<span class="faint">데이터 없음</span>':pct(m.util)}</b></td>`;
+      case"run":return`<td class="r">${none?"—":fmtSecS(m.run)}</td>`;case"nErr":return`<td class="r">${m.nErr?`<span class="chip crit">${fmtN(m.nErr)}</span>`:none?"—":0}</td>`;
+      case"errstop":return`<td class="r">${none?"—":fmtSecS(m.stop+m.err)}</td>`;case"err":return`<td class="r">${none?"—":fmtSecS(m.err)}</td>`;case"stop":return`<td class="r">${none?"—":fmtSecS(m.stop)}</td>`;
+      case"untimed":return`<td class="r">${none&&!x.untimed?"—":fmtN(x.untimed)}</td>`;case"abort":return`<td class="r">${none?"—":`${fmtN(m.nAbort-m.nAbortErr)}건 · ${fmtSecS(m.abortRun)}`}</td>`;
+      case"rep":return`<td class="r" title="중복스캔 ${m.nDup} · 재스캔 ${m.nRescan} · Rework ${m.nRework}건 — 가동시간에 포함">${none?"—":rp?`${fmtSecS(rp)} <span class="faint">(${m.run>0?(rp/m.run*100).toFixed(0):0}%)</span>`:0}</td>`;}return"<td></td>";};
+  $("#cmpBody").innerHTML=list.map((x,i)=>`<tr class="click" data-cmp="${esc(x.name)}" title="클릭하면 홈에서 이 장비의 타임라인을 봅니다"><td class="r faint">${i+1}</td><td><b>${esc(x.name)}</b>${x.c.hasData&&(x.c.util<th.util||x.c.nErr>=th.err*n)?' <span class="chip crit">주의</span>':""}</td>${cols.map(c=>cell(x,c)).join("")}</tr>`).join("")||`<tr><td colspan="${cols.length+2}" class="empty">데이터 없음</td></tr>`;
   $("#cmpBody").querySelectorAll("[data-cmp]").forEach(tr=>tr.onclick=()=>{selDev=tr.dataset.cmp;go("home");renderAll();});
 }
 
