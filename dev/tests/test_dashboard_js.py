@@ -270,30 +270,67 @@ def test_repeat_time_is_a_subset_of_run_time_and_never_a_loss():
         assert m["dup"] + m["rescan"] + m["rework"] <= m["run"]
         assert m["run"] + m["err"] + m["stop"] + m["test"] + m["off"] == m["denom"]
     L = res["loss"][0]
-    assert [r[0] for r in L["rows"]] == ["err", "stop", "abortRun", "testRun", "off"]   # 반복 가동은 저하 사유가 아니다
+    assert [r[0] for r in L["rows"]] == ["err", "stop", "testRun", "off"]   # 반복 가동·가동 중단은 저하 사유가 아니다
 
 
-# ── 중단(Abort)은 Error 가 아니다 (사용자 확정 D35) ───────────────────────────────────────────
-def test_abort_is_not_an_error_and_starts_no_estimated_stop():
-    """`Aborted.` · `Wafer aborted by user.` 는 사람이 세운 것이다 — Error 건수에 넣지 않고,
-    그 뒤 공백을 'Error 후 정지(추정)' 로 돌리지도 않는다. 스캔이 끝나지 않았으므로 실가동(분자)에도 넣지 않는다."""
-    res = run([w("AOI-8", "W1", "09:00", "09:05", status="Aborted."), w("AOI-8", "W2", "12:00", "12:05")])
+# ── 중단(Abort) — 사용자 확정 D41(D35 개정): 같은 Report 에 정상 스캔이 없을 때만 Error ────────────
+def test_abort_in_a_report_without_any_pass_is_an_error_like_any_other():
+    """`Aborted.` 인데 그 Report 에 PASS 가 하나도 없다 → Error 와 똑같이: 건수 · 빨간 막대 · 그 뒤 정지(추정)."""
+    res = run([w("AOI-8", "W1", "09:00", "09:05", status="Aborted.", report="a.htm"), w("AOI-8", "W2", "12:00", "12:05", report="b.htm")])
     m = res["per"]["AOI-8"][DAY]
-    assert m["nErr"] == 0 and m["err"] == 0                      # Error 로 세지 않는다
-    assert m["nAbort"] == 1 and m["abort"] == 300                # '중단' 으로 따로 센다
-    assert m["run"] == 300                                       # 중단된 스캔은 실가동이 아니다(W2 만)
-    assert m["stop"] == 0                                        # 그 뒤 2시간 55분을 '정지(추정)' 로 돌리지 않는다
-    assert m["off"] == 86400 - 600                               # 사라지지는 않는다 — 미가동으로 남는다
-    assert m["run"] + m["err"] + m["stop"] + m["test"] + m["abort"] + m["off"] == m["denom"]
+    assert m["nErr"] == 1 and m["err"] == 300 and m["nAbort"] == 1 and m["nAbortErr"] == 1
+    assert m["stop"] == (12 * 3600) - (9 * 3600 + 300)                  # 그 뒤 공백은 정지(추정)
+    assert m["run"] == 300 and m["abort"] == 0
+    assert m["run"] + m["err"] + m["stop"] + m["test"] + m["off"] == m["denom"]
+    assert att(res, "AOI-8", "W1")["disp"] == "ERROR"
 
 
-def test_user_abort_is_also_not_an_error_but_wafer_lost_still_is():
-    """★ 반송 실패는 문구가 `… Batch Aborted. Skipped.` 로 끝난다 — abort 를 뺀다고 이것까지 빠지면 안 된다."""
-    res = run([w("AOI-8", "W1", "09:00", "09:05", status="Aborted. Wafer aborted by user."),
-               w("AOI-8", "W2", "10:00", "10:05", status="Failed to move wafer to station. Batch Aborted. Skipped.")])
+def test_abort_in_a_report_with_a_pass_counts_as_running_time():
+    """정상 스캔 뒤의 중단은 정상 스캔 시간으로(사용자: '정상 스캔 뒤에 aborted 는 정상 스캔 시간으로 두자')."""
+    res = run([w("AOI-8", "W1", "09:00", "09:05", report="a.htm"), w("AOI-8", "W2", "09:06", "09:11", status="Aborted.", report="a.htm"),
+               w("AOI-8", "W3", "12:00", "12:05", report="b.htm")])
     m = res["per"]["AOI-8"][DAY]
-    assert m["nAbort"] == 1 and m["nErr"] == 1                   # 중단 1건 · Error(반송 실패) 1건
-    assert m["err"] == 300
+    assert m["nErr"] == 0 and m["err"] == 0 and m["stop"] == 0
+    assert m["nAbort"] == 1 and m["nAbortErr"] == 0 and m["abort"] == 300      # 가동 중단 — run 의 부분집합
+    assert m["run"] == 900 and m["off"] == 86400 - 900
+    assert att(res, "AOI-8", "W2")["disp"] == "ABORT"                          # 이름·색은 남는다
+
+
+def test_report_pass_context_ignores_time_validity_and_row_order():
+    """PASS 인데 시각이 없어도(STALE) PASS 다 — Report 문맥은 필터·시간 유효성 전 원천 전체에서 본다. 순서도 무관."""
+    stale = {"device": "AOI-8", "lot": "LOT-A", "wafer_id": "W9", "status": "Pass", "recipe": "R1", "wafer_start_time": "", "wafer_end_time": "",
+             "batch_start": f"{DAY}T08:00:00", "batch_end": f"{DAY}T08:30:00", "report": "a.htm", "ini_match": "STALE"}
+    ab = w("AOI-8", "W1", "09:00", "09:05", status="Aborted.", report="a.htm")
+    for rows in ([ab, stale], [stale, ab]):
+        m = run(rows)["per"]["AOI-8"][DAY]
+        assert m["nErr"] == 0 and m["abort"] == 300 and m["run"] == 300
+
+
+def test_technical_cause_plus_abort_is_one_error_regardless_of_pass():
+    res = run([w("AOI-8", "W1", "09:00", "09:05", report="a.htm"), w("AOI-8", "W2", "09:06", "09:11", status="Focus Mapping Error. Batch Aborted.", report="a.htm"),
+               w("AOI-8", "W3", "09:12", "09:17", status="Failed to move wafer to station. Batch Aborted. Skipped.", report="a.htm")])
+    m = res["per"]["AOI-8"][DAY]
+    assert m["nErr"] == 2 and m["err"] == 600 and m["nAbort"] == 1 and m["nAbortErr"] == 1   # Focus Mapping 은 중단 결과 + 원인 → Error 한 번
+    assert m["run"] == 300
+
+
+def test_cancelled_and_dash_are_unclassified_not_error_not_running():
+    res = run([w("AOI-8", "W1", "09:00", "09:05", status="Cancelled", report="a.htm"), w("AOI-8", "W2", "10:00", "10:05", status="-", report="a.htm"),
+               w("AOI-8", "W3", "11:00", "11:05", status="Skipped.", report="b.htm")])
+    m = res["per"]["AOI-8"][DAY]
+    assert m["nErr"] == 0 and m["nAbort"] == 0 and m["run"] == 0 and m["nUnk"] == 3 and m["unk"] == 900
+    assert m["off"] == 86400 and m["hasData"] is True                      # 미가동(사유 미확인)에 남고, 기록이 없는 날은 아니다
+    assert m["run"] + m["err"] + m["stop"] + m["test"] + m["off"] == m["denom"]
+    assert all(a["disp"] == "UNK" for a in res["attempts"])
+
+
+def test_user_abort_follows_the_same_rule_and_wafer_lost_is_always_an_error():
+    """★ 반송 실패는 문구가 `… Batch Aborted. Skipped.` 로 끝난다 — 원인이 있어 PASS 유무와 무관하게 Error."""
+    res = run([w("AOI-8", "W1", "09:00", "09:05", status="Aborted. Wafer aborted by user.", report="a.htm"),
+               w("AOI-8", "W2", "10:00", "10:05", status="Failed to move wafer to station. Batch Aborted. Skipped.", report="b.htm"),
+               w("AOI-8", "W3", "10:10", "10:15", report="b.htm")])
+    m = res["per"]["AOI-8"][DAY]
+    assert m["nErr"] == 2 and m["nAbort"] == 1 and m["nAbortErr"] == 1     # 사용자 중단(PASS 없는 Report) 1 + 반송 실패 1
 
 
 def test_an_attempt_after_an_abort_is_a_rescan_not_a_duplicate():
@@ -304,16 +341,15 @@ def test_an_attempt_after_an_abort_is_a_rescan_not_a_duplicate():
     assert res["per"]["AOI-8"][DAY]["rescan"] == 300
 
 
-def test_abort_appears_as_its_own_loss_reason():
-    res = run([w("AOI-8", "W1", "09:00", "09:05", status="Aborted.")])
-    L = res["loss"][0]
-    assert [r[0] for r in L["rows"]] == ["err", "stop", "abortRun", "testRun", "off"]
-    assert dict((r[0], r[1]) for r in L["rows"])["abortRun"] == 300
-    assert abs(L["ppSum"] + L["util"] - 100) < 1e-6              # 사유 %p 합은 여전히 100 − 평균
+def test_abort_is_a_loss_reason_only_when_it_is_an_error():
+    L = run([w("AOI-8", "W1", "09:00", "09:05", status="Aborted.")])["loss"][0]
+    assert [r[0] for r in L["rows"]] == ["err", "stop", "testRun", "off"]       # 가동 중단은 저하 사유가 아니다(부분집합)
+    assert dict((r[0], r[1]) for r in L["rows"])["err"] == 300
+    assert abs(L["ppSum"] + L["util"] - 100) < 1e-6                              # 사유 %p 합은 여전히 100 − 평균
 
 
-def test_batch_level_abort_is_counted_as_a_stop_not_an_error():
-    """통째로 중단된 배치도 Error 가 아니다(D05 의 '시간은 세고 분자에서 제외' 는 그대로)."""
+def test_batch_level_abort_is_an_error_with_batch_time():
+    """통째로 중단된 배치(kind=batch)에는 정상 스캔이 없으므로 Error 다(D05 의 '시간은 세고 분자에서 제외' 그대로)."""
     res = run([w("AOI-8", "", "11:00", "11:02", lot="LOT-A", status="Aborted.", kind="batch", ini_match="BATCH")])
     m = res["per"]["AOI-8"][DAY]
-    assert m["nErr"] == 0 and m["nAbort"] == 1 and m["abort"] == 120 and m["run"] == 0
+    assert m["nErr"] == 1 and m["err"] == 120 and m["nAbort"] == 1 and m["nAbortErr"] == 1 and m["run"] == 0

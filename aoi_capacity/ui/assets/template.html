@@ -384,7 +384,9 @@ const DISPLAY_META={
   RESCAN:{label:"재스캔",color:"var(--warn)",chip:"redo",pattern:"",help:"다른 장비에서 먼저 스캔·Error 난 자재의 후속 스캔, 같은 장비의 Error 복구 스캔, Lot 이름의 RE·RESCAN — 가동률에 포함"},
   REWORK:{label:"Rework",color:"var(--rework)",chip:"rework",pattern:"",help:"Lot 이름에 REWORK — 가동률에 포함"},
   ERROR:{label:"Error",color:"var(--err)",chip:"crit",pattern:"",help:"Error 발생부터 다음 Wafer 시작까지를 막대 하나로 잇습니다. 정지 시간은 그 공백으로 추정한 값입니다"},
-  ABORT:{label:"중단",color:"var(--abort)",chip:"abort",pattern:"cross",help:"Aborted · Wafer aborted by user — 사람이 세운 것이라 Error 로 세지 않습니다. 스캔이 끝나지 않았으므로 실가동에서도 뺍니다"},
+  ABORT:{label:"중단",color:"var(--abort)",chip:"abort",pattern:"cross",help:"Aborted · Wafer aborted by user 인데 같은 Report 에 정상 스캔이 있는 것 — 가동에 포함합니다(D41)"},
+  ABORT_ERROR:{label:"중단(Error)",color:"var(--err)",chip:"crit",pattern:"cross",help:"Aborted · Wafer aborted by user 인데 같은 Report 에 정상 스캔이 하나도 없는 것 — Error 와 똑같이 셉니다(D41)"},
+  UNK:{label:"분류 미확인",color:"var(--off)",chip:"mute",pattern:"hatch",help:"건너뜀·취소·결과 미확인인데 시각이 있는 기록 — 가동에도 Error 에도 넣지 않고 미가동(사유 미확인)에 둡니다"},
   TEST:{label:"Test",color:"var(--test)",chip:"test",pattern:"dots",help:"Lot 이름에 TEST — 분모(24시간)에는 들어가고 실가동에서만 뺍니다"},
   STOP:{label:"Error 후 정지(추정)",color:"var(--err)",chip:"crit",pattern:"",help:"Error Wafer 종료부터 같은 장비의 다음 Wafer 시작까지의 공백 — 장비 이벤트 로그가 아닙니다"},
   OFF:{label:"미가동",color:"var(--off)",chip:"mute",pattern:"",help:"가동·Test·Error·정지(추정) 어디에도 없는 시간 — 사유는 로그에 없습니다"}};
@@ -394,7 +396,7 @@ const chipOf=(t,txt)=>`<span class="chip ${DM(t).chip}">${txt||DM(t).label}</spa
 const REL_KO={FIRST_OBSERVED:"확인된 첫 기록",SAME_DEVICE_REPEAT:"같은 장비 반복",SAME_DEVICE_RESCAN:"같은 장비 재스캔",CROSS_DEVICE_RESCAN:"다른 장비 재스캔",TOKEN_RESCAN:"Lot 표기 RE(이전 기록 미확인)",UNRESOLVED:"판정 보류"};
 const CONF_KO={confirmed:"확정",inferred:"추정",unresolved:"보류"};
 /* ★ 분류 규칙 번호 — 규칙이 바뀌면 올린다. 저장된 값이 아니라 열 때마다 같은 원천 행에서 다시 계산한다. */
-const CLASS_VERSION=3;
+const CLASS_VERSION=4;
 
 let rows=[],meta={},devNames=[],D=null,day=null,selDev=null;
 let ui={group:"",sort:"name",view:"cards",unit:"day",span:14,trendDev:"",cmpP:1,cmpSort:"high",cmpAnchor:null,loss:null,lossMode:"pp",lossPage:0,rep:null,back:null};
@@ -457,14 +459,23 @@ function prepareRows(list){const kids={};
   for(const r of list){if(r.kind!=="batch")continue;const u=new Set(r.causes);for(const x of(kids[r.device+"|"+r.report]||[]))x.causes.forEach(c=>u.add(c));
     r.causes=CAUSE_CODES.filter(c=>u.has(c));}
   return list;}
-/* ★ 중단(Abort)은 Error 가 아니다(사용자 확정 D35) — 사람이 세운 것이지 설비가 못 돈 것이 아니다.
-   Error 건수에 넣지 않고, 그 뒤 공백을 'Error 후 정지' 로 돌리지도 않는다. 다만 사라지지도 않는다:
-   '중단' 이라는 제 이름·제 색으로 남고, 스캔이 끝나지 않았으므로 실가동(분자)에는 넣지 않는다(Test 와 같은 자리).
-   ★ 반송 실패(`… Batch Aborted. Skipped.`)는 원인 WAFER_LOST 가 먼저라 여기 섞이지 않는다. */
-const ABORT_CODES=["USER_ABORT","ABORTED"];
-const isAbort=n=>ABORT_CODES.includes(n);
-/* 설비 Error = 원인 코드가 있는 것. 결과만 있는 것(중단·건너뜀·취소·미확인)은 Error 가 아니다. */
+/* 설비 Error = 원인 코드가 있는 것. 결과만 있는 것(중단·건너뜀·취소·미확인)은 그 자체로는 Error 가 아니다. */
 const isErr=n=>CAUSE_CODES.includes(n);
+/* ★ 지표 상태(metric_state) — 사용자 확정 D41(D35 개정). 원인·결과·작업 표기에서 **한 번만** 정한다:
+     TEST          Lot 표기 TEST                                   → 분모 포함 · 분자 제외
+     ERROR         원인 코드가 있음(결과가 무엇이든)                  → Error 건수 · 빨간 막대 · 그 뒤 정지(추정)
+     ERROR         원인 없는 중단(Aborted · Wafer aborted by user)인데 **같은 Report 에 정상 스캔(PASS)이 하나도 없음**
+     RUN           원인 없는 중단인데 같은 Report 에 PASS 가 있음     → 가동에 포함(abortRun 부분집합 — 저하 사유가 아니다)
+     RUN           PASS
+     UNCLASSIFIED  건너뜀·취소·결과 미확인                           → 가동에도 Error 에도 넣지 않는다(시간이 있으면 미가동·사유 미확인에 남긴다)
+   Report 의 PASS 유무는 필터·시간 유효성과 무관하게 **로드한 원천 행 전체**에서 본다(PASS 인데 시각이 없어도 PASS).
+   ★ 반송 실패(`… Batch Aborted. Skipped.`)는 원인 WAFER_LOST 가 있어 언제나 ERROR 다. '중단' 이라는 이름은 두 경우 모두 남긴다. */
+const ABORT_OUTCOMES=["USER_ABORT","ABORTED"];
+const isAbortOutcome=o=>ABORT_OUTCOMES.includes(o);
+const reportKey=r=>r.device+"|"+r.report;
+let reportHasPass={};   /* build() 가 원천 행 전체에서 채운다 */
+function metricState(r){if(r.scan_type==="TEST")return"TEST";if(r.kind==="batch")return"ERROR";if(r.causes&&r.causes.length)return"ERROR";
+  if(isAbortOutcome(r.outcome))return reportHasPass[reportKey(r)]?"RUN":"ERROR";if(r.outcome==="PASS")return"RUN";return"UNCLASSIFIED";}
 function fmtSec(s){if(s==null||isNaN(s))return"–";s=Math.round(s);const h=Math.floor(s/3600),m=Math.floor(s%3600/60),x=s%60;if(h)return`${h}시간 ${p2(m)}분`;if(m)return`${m}분 ${p2(x)}초`;return`${x}초`;}
 function fmtSecS(s){if(s==null||isNaN(s))return"–";s=Math.round(s);const h=Math.floor(s/3600),m=Math.floor(s%3600/60);if(h)return`${h}h ${p2(m)}m`;return`${m}m`;}
 const hm=d=>`${p2(d.getHours())}:${p2(d.getMinutes())}`;
@@ -536,7 +547,7 @@ function loadDemo(){
 function lotTip(L){
   const cnt=t=>L.parts.filter(p=>p.g.disp===t).length;
   const kinds=[["정상",cnt("RUN"),"var(--run)"],["중복스캔",cnt("DUP"),"var(--dup)"],["재스캔",cnt("RESCAN"),"var(--warn)"],["Rework",cnt("REWORK"),"var(--rework)"],
-               ["Error",L.err,"var(--err)"],["중단",L.nAbort,"var(--abort)"],["Test",L.nTest,"var(--test)"]].filter(x=>x[1]);
+               ["Error",L.err,"var(--err)"],["중단(가동)",L.nAbort,"var(--abort)"],["Test",L.nTest,"var(--test)"],["분류 미확인",L.nUnk,"var(--ink-3)"]].filter(x=>x[1]);
   const mix=kinds.map(([n,c,col])=>`<span style="color:${col}">■</span> ${n} ${c}`).join(" · ");
   const nBatch=L.parts.filter(p=>p.g.batch).length,nWafer=L.parts.length-nBatch;   /* 통째로 실패한 시도는 Wafer 가 아니다 */
   /* hover 는 3줄 — 대상 / 시각·기간 / 핵심 상태. 파일명·원문·계산식은 상세에서 본다. */
@@ -576,9 +587,10 @@ const materialKey=r=>`${normLot(r.lot)}|${String(r.wafer_id||"").trim()}`;
 const processKey=r=>String(r.recipe||"").trim();
 function build(){
   devNames=[...new Set(rows.map(r=>r.device))].sort(cmpDev);
-  const M={};for(const n of devNames)M[n]={name:n,segs:[],errNoTime:[],cache:{},seen:{},raw:{},obsEnd:0};
+  reportHasPass={};for(const r of rows)if(r.kind!=="batch"&&r.outcome==="PASS")reportHasPass[reportKey(r)]=true;   /* Report 문맥 — 필터 전 원천 전체 */
+  const M={};for(const n of devNames)M[n]={name:n,segs:[],errNoTime:[],abortNoTime:[],cache:{},seen:{},raw:{},obsEnd:0};
   let obsEnd=0;const attempts=[];   /* 자재 이력에 들어갈 시도(시각 있는 Wafer 행 + 시각 없는 STALE/NOT_FOUND Wafer 행) */
-  for(const r of rows){const d=M[r.device];const st=parseDt(r.wafer_start_time),en=parseDt(r.wafer_end_time);
+  for(const r of rows){const d=M[r.device];const st=parseDt(r.wafer_start_time),en=parseDt(r.wafer_end_time);const ms=r.state=metricState(r);
     /* ① 같은 원본 행이 두 번(같은 파일 재수집·사본 합치기) — 시도로도 시간으로도 세지 않는다 */
     const rawKey=`${r.report}|${r.wafer_id}|${r.wafer_start_time}|${r.wafer_end_time}|${r.status}|${r.lot}`;
     if(d.raw[rawKey]){d.raw[rawKey].rawDups++;continue;}
@@ -588,9 +600,9 @@ function build(){
       const key=`${r.wafer_id}|${st.getTime()}|${en.getTime()}`;const prev=d.seen[key];
       if(prev){prev.refs++;prev.rawDups+=0;if(r.report&&!prev.reports.includes(r.report))prev.reports.push(r.report);
                if(r.scan_type==="RESCAN")prev.redo=true;if(r.scan_type==="REWORK")prev.rework=true;if(r.scan_type==="TEST")prev.test=true;
-               if(isAbort(r.norm_status)){prev.abort=true;if(!prev.err)prev.r=r;}
-               if(isErr(r.norm_status)){prev.err=true;prev.r=r;}d.raw[rawKey]=prev;continue;}
-      const g={s:st.getTime(),e:en.getTime(),err:isErr(r.norm_status),abort:isAbort(r.norm_status),r,refs:1,rawDups:1,reports:r.report?[r.report]:[],batch:r.kind==="batch",
+               if(isAbortOutcome(r.outcome)){prev.abort=true;if(!prev.err&&prev.unk)prev.r=r;}
+               if(ms==="ERROR"){prev.err=true;prev.unk=false;prev.r=r;}else if(ms==="RUN"&&prev.unk){prev.unk=false;prev.r=r;}d.raw[rawKey]=prev;continue;}
+      const g={s:st.getTime(),e:en.getTime(),err:ms==="ERROR",abort:isAbortOutcome(r.outcome),unk:ms==="UNCLASSIFIED",r,refs:1,rawDups:1,reports:r.report?[r.report]:[],batch:r.kind==="batch",
                redo:r.scan_type==="RESCAN",rework:r.scan_type==="REWORK",test:r.scan_type==="TEST",dev:r.device,disp:"RUN",rel:null,conf:null,prior:null,why:""};
       d.seen[key]=g;d.raw[rawKey]=g;d.segs.push(g);obsEnd=Math.max(obsEnd,g.e);d.obsEnd=Math.max(d.obsEnd,g.e);
       if(!g.batch&&!isPlaceholder(r.wafer_id)&&!isPlaceholder(r.lot))attempts.push({g,dev:r.device,mk:materialKey(r),pk:processKey(r),s:g.s,e:g.e,timed:true,r});
@@ -600,11 +612,12 @@ function build(){
       const o={t,rawDups:1,r};d.raw[rawKey]=o;if(t)obsEnd=Math.max(obsEnd,be?be.getTime():t);
       /* LoadPort/Slot 자리표시 행과, 통째로 실패한 배치 안의 행은 따로 세지 않는다 —
          그 시도는 'batch' 행 한 건이 대표한다(사용자 확정: 배치 1건으로 묶기) */
-      if((isErr(r.norm_status)||isAbort(r.norm_status))&&r.ini_match!=="NO_WAFER_ID"&&r.ini_match!=="BATCH_FAILED"){d.errNoTime.push(o);if(t)d.obsEnd=Math.max(d.obsEnd,t);}
+      if(r.ini_match!=="NO_WAFER_ID"&&r.ini_match!=="BATCH_FAILED"){if(ms==="ERROR"||(ms==="TEST"&&(r.causes.length||isAbortOutcome(r.outcome)))){d.errNoTime.push(o);if(t)d.obsEnd=Math.max(d.obsEnd,t);}
+        else if(isAbortOutcome(r.outcome)&&ms==="RUN")d.abortNoTime.push(o);}   /* 가동 중단(시각 없음)은 건수만 — Error 도 시간도 아니다 */
       /* 시각 없는 Wafer 시도(STALE·NOT_FOUND·READ_ERROR)도 자재 이력에는 넣는다 — 시간은 세지 않고(지어내지 않는다),
          Batch 구간이 다른 시도와 겹치지 않을 때만 선후의 근거로 쓴다 */
       if(r.kind!=="batch"&&!isPlaceholder(r.wafer_id)&&!isPlaceholder(r.lot)&&r.ini_match!=="NO_WAFER_ID"&&r.ini_match!=="BATCH_FAILED"&&t)
-        attempts.push({g:null,dev:r.device,mk:materialKey(r),pk:processKey(r),s:t,e:be?Math.max(be.getTime(),t):t,timed:false,r,err:isErr(r.norm_status),abort:isAbort(r.norm_status),o});}}
+        attempts.push({g:null,dev:r.device,mk:materialKey(r),pk:processKey(r),s:t,e:be?Math.max(be.getTime(),t):t,timed:false,r,err:ms==="ERROR",abort:isAbortOutcome(r.outcome),o});}}
   for(const d of Object.values(M)){d.segs.sort((a,b)=>a.s-b.s);d.segs.forEach((g,i)=>{const nx=d.segs[i+1];g.stopEnd=g.err&&nx?nx.s:g.err?null:undefined;});
     /* index segments by day for fast per-day lookups. 복구 기록이 없는 Error 의 정지(추정)는 관측 종료(로드한 데이터의 마지막 시각)까지만 —
        그 뒤는 '정지 확정' 이 아니라 '기록 없음' 이다. */
@@ -644,9 +657,9 @@ function materialIndex(attempts){
     if(g.redo&&a.rel==="FIRST_OBSERVED"){g.rel=a.rel="TOKEN_RESCAN";g.why=a.why="Lot 표기 RE·RESCAN — 이 자재의 앞선 기록은 로드 범위에 없음";}
     g.disp=dispOf(g);}
   return idx;}
-/* 표시 분류(우선순위): Test → Error → 중단 → 재스캔(다른 장비·Error/중단 뒤·RE 표기) → Rework → 중복스캔 → 가동.
-   Rework 자재가 다른 장비에서 다시 스캔되면 대표는 재스캔, Rework 는 배지로 남긴다(Q03 — 사용자 확인 대기). 보류는 원천 표기대로. */
-function dispOf(g){if(g.test)return"TEST";if(g.err)return"ERROR";if(g.abort)return"ABORT";
+/* 표시 분류(우선순위): Test → Error(원인 있음 · PASS 없는 Report 의 중단 포함) → 분류 미확인 → 중단(가동) → 재스캔(다른 장비·Error/중단 뒤·RE 표기) → Rework → 중복스캔 → 가동.
+   Rework 자재가 같은 Job 으로 다시 스캔되면 대표는 재스캔, Rework 는 배지로 남긴다(D42). 보류는 원천 표기대로. */
+function dispOf(g){if(g.test)return"TEST";if(g.err)return"ERROR";if(g.unk)return"UNK";if(g.abort)return"ABORT";
   const rel=g.rel||"FIRST_OBSERVED";
   if(rel==="CROSS_DEVICE_RESCAN"||rel==="SAME_DEVICE_RESCAN"||rel==="TOKEN_RESCAN")return"RESCAN";
   if(g.rework)return"REWORK";if(rel==="SAME_DEVICE_REPEAT")return"DUP";return"RUN";}
@@ -654,8 +667,9 @@ function dispOf(g){if(g.test)return"TEST";if(g.err)return"ERROR";if(g.abort)retu
 function dayLastScan(d,k){const a=keyDay(k).getTime(),z=a+DAY;let last=0;
   for(const i of(d.byDay[k]||[])){const g=d.segs[i];if(g.e>=a&&g.s<z)last=Math.max(last,Math.min(g.e,z));}
   for(const x of d.errNoTime)if(x.t!=null&&x.t>=a&&x.t<z)last=Math.max(last,x.t);
+  for(const x of d.abortNoTime)if(x.t!=null&&x.t>=a&&x.t<z)last=Math.max(last,x.t);
   return last;}
-const EMPTY_M=k=>({key:k,future:true,run:0,err:0,stop:0,nErr:0,nWafer:0,nTest:0,testRun:0,abortRun:0,nAbort:0,dup:0,rescan:0,rework:0,nDup:0,nRescan:0,nRework:0,nCross:0,overlap:0,items:[],errors:[],aborts:[],denom:0,util:null,hasData:false,off:0,a:0,b:0});
+const EMPTY_M=k=>({key:k,future:true,run:0,err:0,stop:0,nErr:0,nWafer:0,nTest:0,testRun:0,abortRun:0,nAbort:0,nAbortErr:0,unk:0,nUnk:0,dup:0,rescan:0,rework:0,nDup:0,nRescan:0,nRework:0,nCross:0,overlap:0,items:[],errors:[],aborts:[],denom:0,util:null,hasData:false,off:0,a:0,b:0});
 function dayMetrics(d,k){
   if(d.cache[k]&&!isToday(k))return d.cache[k];
   const a=keyDay(k).getTime();const now=Date.now();if(a>now)return EMPTY_M(k);
@@ -671,37 +685,40 @@ function dayMetrics(d,k){
        빼는 것과 없었던 것은 다르다. */
     if(g.test){if(c){if(starts(g.s))m.nTest++;m.items.push({s:c[0],e:c[1],kind:"test",g});
       if(!m.first||c[0]<m.first)m.first=c[0];if(!m.last||c[1]>m.last)m.last=c[1];}continue;}
-    /* 중단(Abort)은 Error 가 아니다(D35) — 건수는 '중단' 으로 따로 세고, 시간은 실가동(분자)에 넣지 않으며,
-       그 뒤 공백을 'Error 후 정지' 로 돌리지도 않는다. 화면에서는 제 색(교차 빗금)으로 남는다. */
-    if(g.abort){if(c){if(starts(g.s)){m.nAbort++;m.aborts.push({t:g.s,end:g.e,r:g.r,g});}m.items.push({s:c[0],e:c[1],kind:"abort",g});
+    /* 분류 미확인(건너뜀·취소·결과 미확인인데 시각 있음) — 가동에도 Error 에도 넣지 않는다. 시간은 미가동(사유 미확인)에 남고 건수만 따로 센다. */
+    if(g.unk){if(c){if(starts(g.s))m.nUnk++;m.items.push({s:c[0],e:c[1],kind:"unk",g});
       if(!m.first||c[0]<m.first)m.first=c[0];if(!m.last||c[1]>m.last)m.last=c[1];}continue;}
-    if(c){if(starts(g.s)){m.nWafer++;if(g.err){m.nErr++;m.errors.push({t:g.s,end:g.e,r:g.r,g,stop:g.stopEnd?(g.stopEnd-g.e)/1000:null,open:g.stopEnd===null});}
+    /* 중단(D41): 원인 없는 중단은 같은 Report 에 PASS 가 없으면 Error(g.err), 있으면 가동(abortRun 부분집합). 건수 nAbort 는 둘 다 센다. */
+    if(c){if(starts(g.s)){m.nWafer++;if(g.abort){m.nAbort++;if(g.err)m.nAbortErr++;else m.aborts.push({t:g.s,end:g.e,r:g.r,g});}
+        if(g.err){m.nErr++;m.errors.push({t:g.s,end:g.e,r:g.r,g,stop:g.stopEnd?(g.stopEnd-g.e)/1000:null,open:g.stopEnd===null});}
         else{if(g.disp==="DUP")m.nDup++;else if(g.disp==="RESCAN"){m.nRescan++;if(g.rel==="CROSS_DEVICE_RESCAN")m.nCross++;}else if(g.disp==="REWORK")m.nRework++;}}
       m.items.push({s:c[0],e:c[1],kind:g.err?"err":"run",g});if(!m.first||c[0]<m.first)m.first=c[0];if(!m.last||c[1]>m.last)m.last=c[1];}
     if(g.err){const se=g.stopEnd===null?Math.min(b,Math.max(g.e,D._obsEnd||g.e)):g.stopEnd;const cs=se?clip(g.e,se):null;if(cs){m.items.push({s:cs[0],e:cs[1],kind:"stop",g});}}}
   for(const x of d.errNoTime){if(x.t!=null&&x.t>=a&&x.t<b){if(x.r.scan_type==="TEST"){m.nTest++;continue;}
-    if(isAbort(x.r.norm_status)){m.nAbort++;m.aborts.push({t:x.t,end:null,r:x.r,noTime:true});continue;}
+    if(isAbortOutcome(x.r.outcome)){m.nAbort++;m.nAbortErr++;}
     m.nErr++;m.errors.push({t:x.t,end:null,r:x.r,stop:null,noTime:true});}}
+  for(const x of d.abortNoTime){if(x.t!=null&&x.t>=a&&x.t<b){if(x.r.scan_type==="TEST"){m.nTest++;continue;}m.nAbort++;m.aborts.push({t:x.t,end:null,r:x.r,noTime:true});}}
   /* ★ 시간 분할: 같은 장비·같은 날에서 가동 U + Test T + Error E + 정지(추정) S + 잔여 R = 분모 D.
-     구간이 겹치면(실측 0초지만) 우선순위 Error > 가동 > Test > 정지 로 **한 번만** 배정하고 겹친 초를 overlap 에 적는다 —
-     max(0,…) 로 조용히 숨기지 않는다. 각 항목의 표시 길이(items)는 그대로다. */
-  const PRI={err:0,run:1,abort:2,test:3,stop:4};const cov=[];
+     구간이 겹치면(실측 0초지만) 우선순위 Error > 가동 > Test > 분류 미확인 > 정지 로 **한 번만** 배정하고 겹친 초를 overlap 에 적는다 —
+     max(0,…) 로 조용히 숨기지 않는다. 각 항목의 표시 길이(items)는 그대로다. 가동 중단(abortRun)은 U 의 부분집합이다(D41). */
+  const PRI={err:0,run:1,test:2,unk:3,stop:4};const cov=[];
   const uncovered=(s,e)=>{let len=e-s;for(const[x,y]of cov){const o=Math.min(e,y)-Math.max(s,x);if(o>0)len-=o;}return Math.max(0,len);};
   const addCov=(s,e)=>{cov.push([s,e]);cov.sort((p,q)=>p[0]-q[0]);for(let i=1;i<cov.length;){if(cov[i][0]<=cov[i-1][1]){cov[i-1][1]=Math.max(cov[i-1][1],cov[i][1]);cov.splice(i,1);}else i++;}};
   let raw=0;
   for(const it of[...m.items].sort((p,q)=>PRI[p.kind]-PRI[q.kind]||p.s-q.s)){const u=uncovered(it.s,it.e)/1000;raw+=(it.e-it.s)/1000;it.sec=u;addCov(it.s,it.e);
-    if(it.kind==="err")m.err+=u;else if(it.kind==="stop")m.stop+=u;else if(it.kind==="test")m.testRun+=u;else if(it.kind==="abort")m.abortRun+=u;
-    else{m.run+=u;if(it.g.disp==="DUP")m.dup+=u;else if(it.g.disp==="RESCAN")m.rescan+=u;else if(it.g.disp==="REWORK")m.rework+=u;}}
+    if(it.kind==="err")m.err+=u;else if(it.kind==="stop")m.stop+=u;else if(it.kind==="test")m.testRun+=u;else if(it.kind==="unk")m.unk+=u;
+    else{m.run+=u;if(it.g.abort)m.abortRun+=u;if(it.g.disp==="DUP")m.dup+=u;else if(it.g.disp==="RESCAN")m.rescan+=u;else if(it.g.disp==="REWORK")m.rework+=u;}}
   const covered=cov.reduce((t,[x,y])=>t+(y-x),0)/1000;m.overlap=Math.max(0,raw-covered);
   /* ★ Test 가동(TEST)은 **분모에는 들어가되 분자(실가동)에는 안 들어간다**(사용자 확정) —
      양산을 위해 돈 게 아니기 때문이다. 그래서 util 은 run 만 쓰고, TEST 만 있는 날도 '데이터 없음' 이 아니다. */
   m.errors.sort((x,y)=>x.t-y.t);m.aborts.sort((x,y)=>x.t-y.t);m.denom=denom;m.util=denom>0?m.run/denom*100:0;
   /* 데이터 있음 = 그날 시작한 Wafer·Error·Test 가 있다. 전날 Error 의 정지(추정)만 이어지는 날은 '데이터 없음' 그대로다 —
      기록이 없는 날을 확정 미가동 0% 로 평균에 넣지 않는다(기존 정책 유지). */
-  m.hasData=m.nWafer>0||m.nErr>0||m.nTest>0||m.nAbort>0;m.off=Math.max(0,denom-covered);m.partial=isToday(k);
+  /* 분류 미확인 시간은 미가동(사유 미확인)에 남긴다 — 가동에도 Error 에도 넣지 않는다. 항등식 U+T+E+S+R = D 는 그대로다. */
+  m.hasData=m.nWafer>0||m.nErr>0||m.nTest>0||m.nAbort>0||m.nUnk>0;m.off=Math.max(0,denom-covered)+m.unk;m.partial=isToday(k);
   d.cache[k]=m;return m;}
 /* aggregate over a list of day keys: util = Σrun / Σdenom (days up to now) */
-const AGG_KEYS=["run","denom","nErr","stop","err","nWafer","nTest","testRun","abortRun","nAbort","dup","rescan","rework","nDup","nRescan","nRework","nCross","overlap","off"];
+const AGG_KEYS=["run","denom","nErr","stop","err","nWafer","nTest","testRun","abortRun","nAbort","nAbortErr","unk","nUnk","dup","rescan","rework","nDup","nRescan","nRework","nCross","overlap","off"];
 function aggMetrics(d,keys){const o={days:0,hasData:false};AGG_KEYS.forEach(x=>o[x]=0);for(const k of keys){const m=dayMetrics(d,k);if(m.future)continue;AGG_KEYS.forEach(x=>o[x]+=m[x]||0);o.days++;if(m.hasData)o.hasData=true;}o.util=o.denom>0&&o.hasData?o.run/o.denom*100:null;return o;}
 /* 전체 평균 = 데이터 있는 장비들의 가동률 **산술평균**(기존 정의 그대로 — 몰래 가중평균으로 바꾸지 않는다).
    합산 시간 기준(ΣU/ΣD)은 따로 sumUtil 로 준다(오늘처럼 장비마다 분모가 다르면 둘이 다를 수 있다). */
@@ -798,7 +815,7 @@ function renderHome(){
       return`<div class="ditem ${selDev===n?"open":""}"><button class="card dev ${selDev===n?"sel":""} ${isAlert(m)?"alert":""}" ${btnAttrs(n)}>
         <div class="hd"><span class="name">${esc(n)}</span>${st}</div>
         <div class="row1"><div class="big ${m.hasData?"":"none"}">${m.hasData?`${m.util.toFixed(1)}<small>%</small>`:"–"}</div></div>
-        <div class="strip">${m.hasData?`<i style="width:${((m.run-rp)/m.denom*100).toFixed(2)}%;background:var(--run)"></i><i style="width:${(rp/m.denom*100).toFixed(2)}%;background:var(--dup)" title="반복 가동"></i><i style="width:${(m.abortRun/m.denom*100).toFixed(2)}%;background:var(--abort)" title="중단"></i><i style="width:${(m.testRun/m.denom*100).toFixed(2)}%;background:var(--test)"></i><i style="width:${((m.err+m.stop)/m.denom*100).toFixed(2)}%;background:var(--err)"></i>`:""}</div>
+        <div class="strip">${m.hasData?`<i style="width:${(Math.max(0,m.run-rp-m.abortRun)/m.denom*100).toFixed(2)}%;background:var(--run)"></i><i style="width:${(rp/m.denom*100).toFixed(2)}%;background:var(--dup)" title="반복 가동"></i><i style="width:${(m.abortRun/m.denom*100).toFixed(2)}%;background:var(--abort)" title="중단(가동)"></i><i style="width:${(m.testRun/m.denom*100).toFixed(2)}%;background:var(--test)"></i><i style="width:${((m.err+m.stop)/m.denom*100).toFixed(2)}%;background:var(--err)"></i>`:""}</div>
         <div class="kv"><span>가동 <b>${fmtSecS(m.run)}</b></span>${rp?`<span>반복 <b>${fmtSecS(rp)}</b></span>`:""}<span>정지 <b class="${m.stop?"err":""}">${fmtSecS(m.err+m.stop)}</b></span></div></button><div class="dmount" id="${devId(n)}-mount"></div></div>`;}).join("")
       +out.map(d=>`<div class="ditem"><div class="card dev off" title="${esc(d.note||"")}"><div class="hd"><span class="name">${esc(d.name)}</span><span class="st none">수집 안 함</span></div>
         <div class="row1"><div class="big none">–</div></div><div class="strip"></div>
@@ -823,11 +840,10 @@ function selectDev(n,opt){const was=selDev;selDev=selDev===n?null:n;if(!opt||!op
    같은 dayMetrics 결과를 사유별로 나눈다: Error 구간 E · Error 후 정지(추정) S · Test T · 미가동(사유 미확인) R.
    평균 기준 %p 기여 = 100/N × Σ_i(L_ic/D_i) — 데이터 있는 장비 N·같은 분모를 쓰므로 사유 %p 합 = 100 − 평균 가동률(반올림 오차 안).
    합산 시간 기준(ΣL_c/ΣD_i)은 따로 보여 준다. 사유는 로그에서 관측한 분류이지 물리적 원인이 아니다. */
-const LOSS_META=[{id:"err",label:"Error 구간",color:"var(--err)",help:"Error 로 끝난 Wafer 의 시작~종료. 상태 코드별로 아래에서 나눕니다"},
+const LOSS_META=[{id:"err",label:"Error 구간",color:"var(--err)",help:"Error 로 끝난 Wafer 의 시작~종료(정상 스캔이 없는 Report 의 중단 포함 — D41). 상태 코드별로 아래에서 나눕니다"},
   {id:"stop",label:"Error 후 정지(추정)",color:"var(--err)",soft:true,help:"Error Wafer 종료부터 다음 Wafer 시작까지 관측된 공백 — 원인 확정이 아닙니다"},
-  {id:"abortRun",label:"중단(Abort)",color:"var(--abort)",help:"Aborted · Wafer aborted by user 로 끝난 스캔의 시간 — Error 로 세지 않지만 실가동도 아닙니다"},
   {id:"testRun",label:"Test",color:"var(--test)",help:"Lot 이름에 TEST — 분모에는 들어가고 실가동에서 뺀 시간"},
-  {id:"off",label:"미가동 · 사유 미확인",color:"var(--off)",help:"어느 기록에도 없는 시간 — 로그만으로 원인을 말할 수 없습니다(시간 미확인 행이 섞여 있을 수 있음)"}];
+  {id:"off",label:"미가동 · 사유 미확인",color:"var(--off)",help:"어느 기록에도 없는 시간 — 로그만으로 원인을 말할 수 없습니다(시간 미확인 행·분류 미확인 기록이 섞여 있을 수 있음)"}];
 function lossCalc(list){const withData=list.filter(x=>x.m.hasData);const N=withData.length;const D=withData.reduce((a,x)=>a+x.m.denom,0);
   const rows=LOSS_META.map(c=>{const sec=withData.reduce((a,x)=>a+(x.m[c.id]||0),0);const pp=N?100/N*withData.reduce((a,x)=>a+(x.m.denom>0?(x.m[c.id]||0)/x.m.denom:0),0):0;
     const per=withData.map(x=>({n:x.n,m:x.m,sec:x.m[c.id]||0,pp:N&&x.m.denom>0?100/N*(x.m[c.id]||0)/x.m.denom:0})).filter(p=>p.sec>0).sort((a,b)=>b.sec-a.sec);
@@ -853,14 +869,13 @@ function lossEvents(r,list){const ev=[];const push=o=>ev.push(o);
       /* 전날 Error 의 정지가 오늘로 이어진 것(오늘 Error 목록에 없음) */
       if(r.id==="stop")for(const it of m.items){if(it.kind==="stop"&&!m.errors.some(e=>e.g===it.g))push({t:it.s,n,r:it.g.r,code:it.g.r.norm_status,err:0,stop:it.sec,q:"carry",carry:true});}}
     else if(r.id==="testRun"){for(const it of m.items)if(it.kind==="test")push({t:it.s,n,r:it.g.r,code:"TEST",err:0,stop:0,test:it.sec,q:"exact"});}
-    else if(r.id==="abortRun"){for(const it of m.items)if(it.kind==="abort")push({t:it.s,n,r:it.g.r,code:it.g.r.norm_status,err:0,stop:0,abort:it.sec,q:"exact"});}
     else{/* 미가동: 기록 사이의 빈 구간(10분 이상)만 나열 — 원인은 모른다 */
       const cov=[...m.items].map(i=>[i.s,i.e]).sort((p,q)=>p[0]-q[0]);let t=m.a;const gaps=[];for(const[s,e]of cov){if(s-t>=10*60e3)gaps.push([t,s]);t=Math.max(t,e);}if(m.b-t>=10*60e3)gaps.push([t,m.b]);
       for(const[s,e]of gaps)push({t:s,n,r:null,code:"",err:0,stop:0,gap:(e-s)/1000,q:"gap"});}}
   return ev.sort((a,b)=>a.t-b.t);}
 const LOSS_PAGE=50;
 function renderLossDetail(L){const box=$("#lossDetail");if(!box)return;const i=ui.loss;if(i==null||!L.rows[i]){box.innerHTML="";return;}
-  const r=L.rows[i];const list=homeList();const ev=lossEvents(r,list);const secOf=e=>r.id==="err"?e.err:r.id==="stop"?e.stop:r.id==="testRun"?e.test:r.id==="abortRun"?e.abort:e.gap;
+  const r=L.rows[i];const list=homeList();const ev=lossEvents(r,list);const secOf=e=>r.id==="err"?e.err:r.id==="stop"?e.stop:r.id==="testRun"?e.test:e.gap;
   const codes={};if(r.id==="err")for(const e of ev)codes[e.code]=(codes[e.code]||0)+e.err;
   const page=Math.min(ui.lossPage,Math.max(0,Math.ceil(ev.length/LOSS_PAGE)-1));const slice=ev.slice(page*LOSS_PAGE,(page+1)*LOSS_PAGE);
   const est=r.id==="stop"||r.id==="off";const evSum=ev.reduce((a,e)=>a+secOf(e),0);
@@ -868,7 +883,7 @@ function renderLossDetail(L){const box=$("#lossDetail");if(!box)return;const i=u
     <div class="sum"><span>시간 <b>${fmtSec(r.sec)}</b></span><span>가동률 저하 기여 <b>${r.pp.toFixed(2)}%p</b></span><span>집계 장비 <b>${L.N}대</b> (기여 ${r.per.length}대)</span><span>${r.id==="off"?"구간":"건"} <b>${ev.length}</b></span><span class="faint">이벤트 합 ${fmtSec(evSum)}${Math.abs(evSum-r.sec)>1?` (차이 ${fmtSec(Math.abs(evSum-r.sec))} — ${r.id==="off"?"10분 미만 공백은 나열하지 않음":"자정 경계 분할"})`:" = 사유 시간"}</span></div>
     ${r.id==="err"&&Object.keys(codes).length?`<h3>상태 코드별</h3><div class="row" style="font-size:12.5px">${Object.entries(codes).sort((a,b)=>b[1]-a[1]).map(([c,s])=>`<span class="chip crit">${ERR_KO[c]||c} ${fmtSecS(s)}</span>`).join(" ")}</div>`:""}
     <h3>장비별 기여</h3><div class="tscroll"><table class="tbl"><thead><tr><th>장비</th><th class="r">기여 시간</th><th class="r">기여 %p</th><th class="r">${r.id==="off"?"구간":"건수"}</th><th>데이터 상태</th></tr></thead><tbody>${r.per.map(p=>`<tr class="click" data-dev-go="${esc(p.n)}"><td><b>${esc(p.n)}</b></td><td class="r">${fmtSec(p.sec)}</td><td class="r">${p.pp.toFixed(2)}</td><td class="r">${ev.filter(e=>e.n===p.n).length}</td><td class="faint">${collectChip(p.n)||(p.m.partial?"마지막 스캔까지":"하루")}${p.m.overlap>0?` · 시간 충돌 ${fmtSec(p.m.overlap)}`:""}</td></tr>`).join("")||'<tr><td colspan="5" class="empty">해당 조건의 기록이 없습니다.</td></tr>'}</tbody></table></div>
-    <h3>이벤트 ${ev.length?`${page*LOSS_PAGE+1}~${Math.min(ev.length,(page+1)*LOSS_PAGE)} / ${ev.length}`:""}</h3><div class="tscroll"><table class="tbl"><thead><tr><th>발생 시각</th><th>장비</th><th>Lot / Wafer</th><th>상태·원인</th><th class="r">${r.id==="testRun"?"Test 시간":r.id==="abortRun"?"중단 시간":r.id==="off"?"공백":"Error 시간"}</th>${r.id==="stop"?'<th class="r">정지 추정</th>':""}<th>근거 품질</th><th>원본</th></tr></thead><tbody>${slice.map(e=>`<tr class="click" data-ev="${esc(e.n)}|${esc(e.r?e.r.report:"")}|${esc(e.r?e.r.wafer_id:"")}"><td class="num">${hm(new Date(e.t))}</td><td><b>${esc(e.n)}</b></td><td class="mono">${e.r?escLot(e.r)+(e.r.kind==="batch"?"":" / "+esc(e.r.wafer_id)):'<span class="faint">기록 없음</span>'}</td><td>${e.code==="TEST"?chipOf("TEST"):isAbort(e.code)?chipOf("ABORT",ERR_KO[e.code]||"중단"):e.code?`<span class="chip crit">${ERR_KO[e.code]||e.code}</span>`:'<span class="chip mute">사유 미확인</span>'}${e.carry?' <span class="chip mute">전날 Error 이어짐</span>':""}</td><td class="r">${fmtSec(r.id==="stop"?e.err:secOf(e))}</td>${r.id==="stop"?`<td class="r">${fmtSec(e.stop)}${e.open?' <span class="chip warn">복구 기록 없음</span>':""}</td>`:""}<td class="faint">${{exact:"시각 확인",open:"관측 종료까지 추정",carry:"전날 이어짐",batch_only:"Batch 시각만",gap:"기록 공백(추정)"}[e.q]||e.q}</td><td>${e.r&&reportUrl(e.r)?`<button class="btn small" data-open="${esc(e.n)}|${esc(e.r.report)}|${esc(e.r.wafer_id)}">Report 열기</button>`:""}</td></tr>`).join("")||'<tr><td colspan="8" class="empty">해당 조건의 기록이 없습니다.</td></tr>'}</tbody></table></div>
+    <h3>이벤트 ${ev.length?`${page*LOSS_PAGE+1}~${Math.min(ev.length,(page+1)*LOSS_PAGE)} / ${ev.length}`:""}</h3><div class="tscroll"><table class="tbl"><thead><tr><th>발생 시각</th><th>장비</th><th>Lot / Wafer</th><th>상태·원인</th><th class="r">${r.id==="testRun"?"Test 시간":r.id==="off"?"공백":"Error 시간"}</th>${r.id==="stop"?'<th class="r">정지 추정</th>':""}<th>근거 품질</th><th>원본</th></tr></thead><tbody>${slice.map(e=>`<tr class="click" data-ev="${esc(e.n)}|${esc(e.r?e.r.report:"")}|${esc(e.r?e.r.wafer_id:"")}"><td class="num">${hm(new Date(e.t))}</td><td><b>${esc(e.n)}</b></td><td class="mono">${e.r?escLot(e.r)+(e.r.kind==="batch"?"":" / "+esc(e.r.wafer_id)):'<span class="faint">기록 없음</span>'}</td><td>${e.code==="TEST"?chipOf("TEST"):isAbortOutcome(e.code)?chipOf("ABORT_ERROR",`중단(Error) · ${ERR_KO[e.code]||e.code}`):e.code?`<span class="chip crit">${ERR_KO[e.code]||e.code}</span>`:'<span class="chip mute">사유 미확인</span>'}${e.carry?' <span class="chip mute">전날 Error 이어짐</span>':""}</td><td class="r">${fmtSec(r.id==="stop"?e.err:secOf(e))}</td>${r.id==="stop"?`<td class="r">${fmtSec(e.stop)}${e.open?' <span class="chip warn">복구 기록 없음</span>':""}</td>`:""}<td class="faint">${{exact:"시각 확인",open:"관측 종료까지 추정",carry:"전날 이어짐",batch_only:"Batch 시각만",gap:"기록 공백(추정)"}[e.q]||e.q}</td><td>${e.r&&reportUrl(e.r)?`<button class="btn small" data-open="${esc(e.n)}|${esc(e.r.report)}|${esc(e.r.wafer_id)}">Report 열기</button>`:""}</td></tr>`).join("")||'<tr><td colspan="8" class="empty">해당 조건의 기록이 없습니다.</td></tr>'}</tbody></table></div>
     ${ev.length>LOSS_PAGE?`<div class="row" style="margin-top:6px"><button class="btn small" ${page===0?"disabled":""} onclick="ui.lossPage--;renderHome()">이전 ${LOSS_PAGE}</button><button class="btn small" ${(page+1)*LOSS_PAGE>=ev.length?"disabled":""} onclick="ui.lossPage++;renderHome()">다음 ${LOSS_PAGE}</button></div>`:""}
     <p class="faint" style="font-size:12px;margin-top:8px">사유는 로그에서 관측한 분류입니다. 정지(추정)·미가동의 실제 원인(인력·자재·보전)은 이 데이터에 없습니다. 행을 클릭하면 그 장비의 상세로 이동합니다.</p></div>`;
   const back={loss:i,page:ui.lossPage,day,scroll:$(".main").scrollTop};
@@ -907,7 +922,9 @@ function renderRules(){const b=$("#ruleBody");if(!b)return;$("#ruleVer").textCon
     ["재스캔","다른 장비에서 먼저 스캔·Error 난 자재의 후속 정상 스캔 / 같은 장비 Error 뒤 복구 스캔 / Lot 표기 RE·RESCAN","가동률 포함 · 앞선 장비의 시간은 옮기지 않음"],
     ["Rework","Lot 표기 REWORK (다른 장비 재스캔이면 대표는 재스캔, Rework 배지 유지 — 확인 대기)","가동률 포함"],
     ["Error","현재 시도가 Error — 반복 관계는 배지로만","분자 제외 · Error 후 다음 Wafer 까지 정지(추정)"],
-    ["중단","<span class='mono'>Aborted.</span> · <span class='mono'>Wafer aborted by user.</span> — 사람이 세운 것이라 Error 가 아니다(반송 실패 <span class='mono'>… Batch Aborted. Skipped.</span> 는 Error 로 남는다)","분모 포함 · 분자 제외 · <b>Error 건수 제외</b> · 뒤 공백을 정지(추정)로 돌리지 않음"],
+    ["중단(Error)","<span class='mono'>Aborted.</span> · <span class='mono'>Wafer aborted by user.</span> 인데 <b>같은 Report 에 정상 스캔(PASS)이 하나도 없음</b>(D41). 기술 원인이 붙은 중단(예: <span class='mono'>Focus Mapping Error. Batch Aborted.</span>)과 반송 실패는 PASS 유무와 무관하게 Error","Error 와 똑같이 — 건수 · 빨간 막대 · 뒤 공백 정지(추정)"],
+    ["중단(가동)","원인 없는 중단인데 같은 Report 에 정상 스캔이 있음(D41)","가동 포함(abortRun) · 저하 사유 아님 · Error 건수 제외"],
+    ["분류 미확인","건너뜀 · 취소(<span class='mono'>Cancelled</span>) · 결과 미확인(<span class='mono'>-</span>)인데 시각이 있음","가동에도 Error 에도 넣지 않음 · 미가동(사유 미확인)에 남김"],
     ["Test","Lot 표기 TEST","분모 포함 · 분자 제외 · Error 건수 제외"],
     ["시각 중복 참조","Report 여러 개가 같은 INI 시각을 가리킴","시간 1번 · 이력 보존 · 반복으로 단정하지 않음"],["보류","시각이 겹치거나 같은 시작 · 앞선 시도 시각 미확인이 겹침","원천 표기대로 · 확정 재스캔에 세지 않음"]];
   b.innerHTML=`<table class="tbl"><thead><tr><th>표시</th><th>조건</th><th>집계</th></tr></thead><tbody>${R.map(r=>`<tr><td><b>${r[0]}</b></td><td style="white-space:normal">${r[1]}</td><td style="white-space:normal">${r[2]}</td></tr>`).join("")}</tbody></table>
@@ -957,14 +974,16 @@ function relLine(g){if(!g.rel||g.rel==="FIRST_OBSERVED"){return g.att&&g.att.of>
 function segTip(m,el){if(el.dataset.l!=null)return lotTip(m.lots[+el.dataset.l]);
   const it=m.items[+el.dataset.i],r=it.g.r;const span=`${hm(new Date(it.g.s))} → ${hm(new Date(it.g.e))} · ${fmtSec((it.g.e-it.g.s)/1000)}`;
   if(it.kind==="test")return`<b>Test · ${escLot(r)}</b><br>${span}<br><span class="k">가동률 제외 (Lot 이름에 TEST)</span>`+tipHint();
-  if(it.kind==="abort")return`<b>중단 · ${ERR_KO[r.norm_status]||"중단됨"}</b> · ${escLot(r)}${r.kind==="batch"?"":" / "+esc(r.wafer_id)}<br>${span}`
-    +`<br><span class="k">Error 로 세지 않음 · 스캔이 끝나지 않아 실가동에서도 제외</span>${relLine(it.g)?"<br>"+relLine(it.g):""}`+tipHint();
+  if(it.kind==="unk")return`<b>분류 미확인 · ${ERR_KO[r.outcome]||r.outcome}</b> · ${escLot(r)} / ${esc(r.wafer_id)}<br>${span}<br><span class="k">가동에도 Error 에도 넣지 않음 · 미가동(사유 미확인)에 남김</span>`+tipHint();
+  if(it.kind==="run"&&it.g.abort)return`<b>중단(가동) · ${ERR_KO[r.outcome]||"중단됨"}</b> · ${escLot(r)} / ${esc(r.wafer_id)}<br>${span}`
+    +`<br><span class="k">같은 Report 에 정상 스캔이 있어 가동에 포함(D41)</span>${relLine(it.g)?"<br>"+relLine(it.g):""}`+tipHint();
   if(it.kind==="stop")return`<b>정지(추정)</b> · ${fmtSec((it.e-it.s)/1000)}<br>${hm(new Date(it.s))} → ${hm(new Date(it.e))}<br><span class="k">${escLot(r)} / ${esc(r.wafer_id)} Error 뒤 다음 Wafer 까지${it.g.stopEnd===null?" · 복구 기록 없음(관측 종료까지)":""}</span>`;
   const marks=[it.g.disp!=="ERROR"&&it.g.disp!=="RUN"?chipOf(it.g.disp):"",it.g.rework&&it.g.disp!=="REWORK"?chipOf("REWORK"):"",it.g.conf==="unresolved"?'<span class="chip warn">재스캔 후보 · 보류</span>':""].filter(Boolean).join(" ");
   const dup=it.g.refs>1?` · <span class="k">Report ${it.g.refs}건이 같은 시각 참조 · 시간은 1번만 계산</span>`:"";
   if(it.kind==="err"){
     const st=m.items.find(i=>i.kind==="stop"&&i.g===it.g);
-    return`<b><span style="color:var(--crit-ink)">${ERR_KO[r.norm_status]||"Error"}</span>${it.g.batch?" · 배치 중단":""}</b> · ${escLot(r)}${r.kind==="batch"?"":" / "+esc(r.wafer_id)}`
+    return`<b><span style="color:var(--crit-ink)">${it.g.abort&&!it.g.r.causes.length?"중단(Error) · ":""}${ERR_KO[r.norm_status]||"Error"}</span>${it.g.batch?" · 배치 실패":""}</b> · ${escLot(r)}${r.kind==="batch"?"":" / "+esc(r.wafer_id)}`
+      +(it.g.abort&&!it.g.r.causes.length?`<br><span class="k">같은 Report 에 정상 스캔이 없어 Error 와 똑같이 셈(D41)</span>`:"")
       +`<br>Error 발생 <b>${hm(new Date(it.g.s))}</b> · Error 구간 ${fmtSec((it.g.e-it.g.s)/1000)}`
       +(st?`<br>그 뒤 정지(추정) ${fmtSec((st.e-st.s)/1000)} → ${hm(new Date(st.e))} · <span class="k">합계 ${fmtSec((st.e-it.g.s)/1000)}</span>`
           :`<br><span class="k">복구 기록 없음 — 이 뒤로 스캔된 Wafer 가 없습니다</span>`)
@@ -980,10 +999,12 @@ function drawBand(m,t0,t1,o){
   const vis=(s0,e0)=>e0>=t0&&s0<=t1;
   const pid="p"+(drawBand.n=(drawBand.n||0)+1);   /* 패턴 id 는 svg 마다 달라야 한다(개요·확대가 같은 문서에 있다) */
   let s=`<svg class="chart" viewBox="0 0 ${W} ${H}" style="height:${H}px" role="img" aria-label="${o.aria||""}">`;
-  s+=`<defs><pattern id="${pid}-hatch" patternUnits="userSpaceOnUse" width="6" height="6" patternTransform="rotate(45)"><rect width="6" height="6" fill="var(--dup)"/><line x1="0" y1="0" x2="0" y2="6" stroke="rgba(255,255,255,.55)" stroke-width="2"/></pattern>`
-    +`<pattern id="${pid}-dots" patternUnits="userSpaceOnUse" width="5" height="5"><rect width="5" height="5" fill="var(--test)"/><circle cx="2.5" cy="2.5" r="1" fill="rgba(255,255,255,.75)"/></pattern>`
-    +`<pattern id="${pid}-cross" patternUnits="userSpaceOnUse" width="6" height="6"><rect width="6" height="6" fill="var(--abort)"/><path d="M0 0L6 6M6 0L0 6" stroke="rgba(255,255,255,.6)" stroke-width="1.2"/></pattern></defs>`;
-  const fillOf=t=>DM(t).pattern==="hatch"?`url(#${pid}-hatch)`:DM(t).pattern==="dots"?`url(#${pid}-dots)`:DM(t).pattern==="cross"?`url(#${pid}-cross)`:DM(t).color;
+  /* 패턴은 DISPLAY_META 항목마다 제 색으로 만든다(중복스캔 청록 사선 · Test 분홍 점무늬 · 중단 회청 교차 빗금 · 중단(Error) 빨강 교차 빗금 · 분류 미확인 회색 사선) */
+  const pat=(k,d)=>d.pattern==="hatch"?`<pattern id="${pid}-${k}" patternUnits="userSpaceOnUse" width="6" height="6" patternTransform="rotate(45)"><rect width="6" height="6" fill="${d.color}"/><line x1="0" y1="0" x2="0" y2="6" stroke="rgba(255,255,255,.55)" stroke-width="2"/></pattern>`
+    :d.pattern==="dots"?`<pattern id="${pid}-${k}" patternUnits="userSpaceOnUse" width="5" height="5"><rect width="5" height="5" fill="${d.color}"/><circle cx="2.5" cy="2.5" r="1" fill="rgba(255,255,255,.75)"/></pattern>`
+    :d.pattern==="cross"?`<pattern id="${pid}-${k}" patternUnits="userSpaceOnUse" width="6" height="6"><rect width="6" height="6" fill="${d.color}"/><path d="M0 0L6 6M6 0L0 6" stroke="rgba(255,255,255,.6)" stroke-width="1.2"/></pattern>`:"";
+  s+=`<defs>${Object.entries(DISPLAY_META).map(([k,d])=>pat(k,d)).join("")}</defs>`;
+  const fillOf=t=>DM(t).pattern?`url(#${pid}-${t})`:DM(t).color;
   s+=`<rect x="${L}" y="${barY}" width="${W-L-R}" height="${barH}" fill="var(--nodata)" rx="3"/>`;
   /* 미가동 배경은 **집계 끝(m.b)** 까지만 칠한다 — 오늘 마지막 스캔 뒤(집계 밖)를 설명 없이 미가동으로 그리지 않는다 */
   if(m.hasData){const offEnd=m.partial?Math.min(m.b,t1):t1;if(offEnd>t0)s+=`<rect x="${L}" y="${barY}" width="${(x(offEnd)-L).toFixed(1)}" height="${barH}" fill="var(--off)" rx="3"/>`;}
@@ -999,8 +1020,8 @@ function drawBand(m,t0,t1,o){
      (실물: 9/15 AOI-8 NTM — 배치가 통째로 중단된 시도가 파란 막대에 묻혀 있었다).
      색·패턴은 DISPLAY_META 한 곳에서: 중복스캔 청록 사선, 재스캔 노랑, Rework 보라, Test 분홍 점무늬, Error 빨강.
      반복 시도 조각(중복스캔·재스캔·Rework)은 포인터 후보(rect.seg.part)다 — 짧아도 직접 고른다. 폭은 시간 비례 그대로. */
-  const mark=it=>it.kind==="test"?fillOf("TEST"):it.kind==="abort"?fillOf("ABORT"):it.kind==="err"?"var(--err)":fillOf(it.g.disp);
-  const isRep=it=>it.kind==="abort"||(it.kind==="run"&&(it.g.disp==="DUP"||it.g.disp==="RESCAN"||it.g.disp==="REWORK"));
+  const mark=it=>it.kind==="test"?fillOf("TEST"):it.kind==="unk"?fillOf("UNK"):it.kind==="err"?(it.g.abort?fillOf("ABORT_ERROR"):"var(--err)"):fillOf(it.g.disp);
+  const isRep=it=>it.kind==="unk"||(it.kind==="run"&&(it.g.disp==="DUP"||it.g.disp==="RESCAN"||it.g.disp==="REWORK"||it.g.disp==="ABORT"));
   m.lots.forEach((Lt,i)=>{if(!vis(Lt.s,Lt.e))return;const[xs,w]=clipX(Lt.s,Lt.e,2);
     s+=`<rect class="seg lot" tabindex="0" data-l="${i}" x="${xs.toFixed(1)}" y="${barY}" width="${w.toFixed(1)}" height="${barH}" fill="${Lt.test?fillOf("TEST"):"var(--run)"}" opacity="${i%2?.72:1}" rx="1"/>`;
     for(const it of Lt.parts){if(!vis(it.s,it.e))continue;const[px,pw]=clipX(it.s,it.e,1.5);
@@ -1008,7 +1029,7 @@ function drawBand(m,t0,t1,o){
       else s+=`<rect class="part" x="${px.toFixed(1)}" y="${barY}" width="${pw.toFixed(1)}" height="${barH}" fill="${mark(it)}" opacity="${i%2?.72:1}" pointer-events="none"/>`;}
     if(w>46)s+=`<text x="${(xs+4).toFixed(1)}" y="${barY+barH/2+4}" fill="var(--accent-ink)" style="font-size:11px;font-weight:600;pointer-events:none">${esc(Lt.lot.length>10?Lt.lot.slice(0,9)+"…":Lt.lot)}</text>`;});
   errIt.forEach(it=>{const sp=stopOf(it.g),e2=sp?Math.max(it.e,sp.e):it.e;if(!vis(it.s,e2))return;const[xs,w]=clipX(it.s,e2,2);
-    s+=`<rect class="seg" tabindex="0" data-i="${m.items.indexOf(it)}" x="${xs.toFixed(1)}" y="${barY}" width="${w.toFixed(1)}" height="${barH}" fill="var(--err)"/>`;});
+    s+=`<rect class="seg" tabindex="0" data-i="${m.items.indexOf(it)}" x="${xs.toFixed(1)}" y="${barY}" width="${w.toFixed(1)}" height="${barH}" fill="${it.g.abort?fillOf("ABORT_ERROR"):"var(--err)"}"/>`;});
   if(m.partial&&o.now>=t0&&o.now<=t1)s+=`<line class="now" x1="${x(o.now).toFixed(1)}" x2="${x(o.now).toFixed(1)}" y1="${barY-8}" y2="${barY+barH+8}"/><text x="${x(o.now).toFixed(1)}" y="${barY-10}" text-anchor="middle" fill="var(--accent-2)">지금</text>`;
   if(m.partial&&m.b>t0&&m.b<t1&&Math.abs(m.b-o.now)>60e3)s+=`<line class="now" x1="${x(m.b).toFixed(1)}" x2="${x(m.b).toFixed(1)}" y1="${barY-4}" y2="${barY+barH+4}" style="stroke:var(--ink-3)"/><text x="${x(m.b).toFixed(1)}" y="${barY+barH+44}" text-anchor="middle">집계 끝</text>`;
   /* 포인터용 투명 층 — 맨 위에 두어 마우스는 이 층이 받고, 가장 가까운 막대에 넘긴다(막대 크기는 그대로) */
@@ -1060,23 +1081,23 @@ function bindZoomDrag(svg,m,a){const hit=svg.querySelector("rect.hit");if(!hit)r
   const click=hit.onclick;hit.onclick=ev=>{if(hit.dataset.drag)return;if(click)click(ev);};}
 
 /* 범례 — DISPLAY_META 에서 그린다(용어·색·패턴 단일 출처) */
-function legendHtml(){return["RUN","DUP","RESCAN","REWORK","ERROR","ABORT","TEST","OFF"].map(t=>{const d=DM(t);return`<span title="${esc(d.help)}"><i class="sw ${d.pattern}" style="background:${d.color}"></i>${d.label}${t==="ERROR"?" · 정지(추정)":t==="TEST"?" (가동률 제외)":""}</span>`;}).join("")
+function legendHtml(){return["RUN","DUP","RESCAN","REWORK","ERROR","ABORT_ERROR","ABORT","TEST","OFF"].map(t=>{const d=DM(t);return`<span title="${esc(d.help)}"><i class="sw ${d.pattern}" style="background:${d.color}"></i>${d.label}${t==="ERROR"?" · 정지(추정)":t==="TEST"?" (가동률 제외)":""}</span>`;}).join("")
   +'<span class="faint" style="margin-left:auto">드래그: 확대 · 클릭: 상세 · 더블클릭: Report 열기</span>';}
 function renderDetail(){
   const box=$("#detail");if(!selDev||!D[selDev]){box.hidden=true;parkDetail();return;}box.hidden=false;mountDetail();
   const m=dayMetrics(D[selDev],day);const a=keyDay(day).getTime();const now=Date.now();
   const rp=m.dup+m.rescan+m.rework;
-  $("#detTitle").innerHTML=`${esc(selDev)} <span class="faint" style="font-weight:400;font-size:13px">${fmtDay(day)} · 가동률 ${m.hasData?m.util.toFixed(1)+"%":"–"} · 가동 ${fmtSecS(m.run)}${rp?` (반복 ${fmtSecS(rp)})`:""} · Error·정지 ${fmtSecS(m.err+m.stop)}${m.nAbort?` · <span class="chip abort">중단 ${m.nAbort}건</span>`:""}${m.nTest?` · <span class="chip test">Test ${m.nTest}건 제외</span>`:""}${m.overlap>0?` · <span class="chip warn" title="같은 장비의 구간이 겹쳐 우선순위(Error > 가동 > Test > 정지)로 한 번만 배정했습니다">시간 충돌 ${fmtSec(m.overlap)}</span>`:""}</span>`;
+  $("#detTitle").innerHTML=`${esc(selDev)} <span class="faint" style="font-weight:400;font-size:13px">${fmtDay(day)} · 가동률 ${m.hasData?m.util.toFixed(1)+"%":"–"} · 가동 ${fmtSecS(m.run)}${rp?` (반복 ${fmtSecS(rp)})`:""} · Error·정지 ${fmtSecS(m.err+m.stop)}${m.nAbort?` · <span class="chip abort">중단 ${m.nAbort}건${m.nAbortErr?` (Error ${m.nAbortErr})`:""}</span>`:""}${m.nUnk?` · <span class="chip mute">분류 미확인 ${m.nUnk}건</span>`:""}${m.nTest?` · <span class="chip test">Test ${m.nTest}건 제외</span>`:""}${m.overlap>0?` · <span class="chip warn" title="같은 장비의 구간이 겹쳐 우선순위(Error > 가동 > Test > 정지)로 한 번만 배정했습니다">시간 충돌 ${fmtSec(m.overlap)}</span>`:""}</span>`;
   $("#detLegend").innerHTML=legendHtml();$("#detBack").hidden=!ui.back;
   /* Lot blocks: consecutive wafers of the same lot (gap under 10 min) become one bar */
   const lots=[];const ws=m.items.filter(i=>i.kind!=="stop").sort((p,q)=>p.s-q.s);   /* Test 구간도 Lot 목록에는 남긴다(가동 시간만 0) */
   for(const it of ws){const key=lotKey(it.g.r.lot,it.g.test);const L=lots[lots.length-1];
     if(L&&L.key===key&&it.s-L.e<=LOT_GAP_SEC*1000){L.e=Math.max(L.e,it.e);L.n++;L.parts.push(it);
-      L.run+=it.kind==="run"?(it.e-it.s):0;if(it.kind==="err")L.err++;if(it.kind==="test")L.nTest++;if(it.kind==="abort")L.nAbort++;
+      L.run+=it.kind==="run"?(it.e-it.s):0;if(it.kind==="err")L.err++;if(it.kind==="test")L.nTest++;if(it.kind==="run"&&it.g.abort)L.nAbort++;if(it.kind==="unk")L.nUnk++;
       if(it.g.disp==="RESCAN")L.redo=true;if(it.g.disp==="DUP")L.dup=true;if(it.g.rework)L.rework=true;if(it.g.test)L.test=true;
       L.stat[it.g.r.norm_status]=(L.stat[it.g.r.norm_status]||0)+1;}
     else lots.push({key,lot:it.g.r.lot,recipe:it.g.r.recipe,s:it.s,e:it.e,n:1,parts:[it],
-      run:it.kind==="run"?(it.e-it.s):0,err:it.kind==="err"?1:0,nTest:it.kind==="test"?1:0,nAbort:it.kind==="abort"?1:0,
+      run:it.kind==="run"?(it.e-it.s):0,err:it.kind==="err"?1:0,nTest:it.kind==="test"?1:0,nAbort:it.kind==="run"&&it.g.abort?1:0,nUnk:it.kind==="unk"?1:0,
       redo:it.g.disp==="RESCAN",dup:it.g.disp==="DUP",rework:!!it.g.rework,test:!!it.g.test,r:it.g.r,
       stat:{[it.g.r.norm_status]:1}});}
   m.lots=lots;
@@ -1090,7 +1111,7 @@ function renderDetail(){
   const lotMark=L=>L.test?chipOf("TEST","Test · 제외"):[L.redo?chipOf("RESCAN"):"",L.dup?chipOf("DUP"):"",L.rework?chipOf("REWORK"):"",L.nAbort?chipOf("ABORT",`중단 ${L.nAbort}`):""].filter(Boolean).join(" ");
   const lotTbl=m.lots.length?`<details style="margin:6px 0 10px"><summary style="cursor:pointer;color:var(--accent-2);font-size:13px">Lot ${m.lots.length}개 목록</summary><table class="tbl" style="margin-top:6px"><thead><tr><th>Lot</th><th>표기</th><th>Recipe</th><th>시작</th><th>종료</th><th class="r">소요</th><th class="r">가동</th><th class="r">Error</th><th>원본</th></tr></thead><tbody>${m.lots.map((L,i)=>{const nr=reportsOf(L.parts).length;return`<tr class="click" onclick="pinLot(${i})" ondblclick="openReport(window._m.lots[${i}].r)" title="클릭: 상세 · 더블클릭: Report 열기"><td class="mono">${esc(L.lot)}</td><td>${lotMark(L)}</td><td>${esc(L.recipe)}</td><td class="num">${hm(new Date(L.s))}</td><td class="num">${hm(new Date(L.e))}</td><td class="r">${fmtSecS((L.e-L.s)/1000)}</td><td class="r">${fmtSecS(L.run/1000)}</td><td class="r">${L.err?`<span class="chip crit">${L.err}</span>`:0}</td><td>${nr>1?`<span class="chip mute" title="Report ${nr}개 — 상세에서 고릅니다">원본 ${nr}개</span>`:openBtn(`window._m.lots[${i}].r`)}</td></tr>`;}).join("")}</tbody></table></details>`:"";
   $("#detErrs").innerHTML=lotTbl+(m.errors.length?`<table class="tbl"><thead><tr><th>시각</th><th>Lot / Wafer</th><th>Error</th><th class="r">정지(추정)</th><th>장비 메시지</th><th>원본</th></tr></thead><tbody>${m.errors.map((e,i)=>`<tr class="click" data-e="${i}" onclick="hlSeg(${i});pinErr(${i})" ondblclick="openReport(window._m.errors[${i}].r)" title="클릭: 상세 · 더블클릭: Report 열기"><td class="num">${e.t?hm(new Date(e.t)):"–"}${e.noTime?' <span class="chip mute" title="Wafer 시각이 없어 Batch 시작 시각입니다">시간 미확인</span>':""}</td><td class="mono">${escLot(e.r)}${e.r.kind==="batch"?' <span class="chip crit">배치 전체</span>':" / "+esc(e.r.wafer_id)}</td><td><span class="chip crit">${ERR_KO[e.r.norm_status]||"Error"}</span>${e.r.kind==="batch"?' <span class="chip mute">스캔 전 중단</span>':""}${e.g&&e.g.rel&&e.g.rel!=="FIRST_OBSERVED"?' <span class="chip redo" title="'+esc(e.g.why)+'">'+(REL_KO[e.g.rel]||"")+'</span>':""}</td><td class="r">${e.open?'<span class="chip warn">복구 기록 없음</span>':e.stop!=null?fmtSec(e.stop):"–"}</td><td class="faint" title="${esc(e.r.status)}">${cut(e.r.status,40)}</td><td>${openBtn(`window._m.errors[${i}].r`)}</td></tr>`).join("")}</tbody></table><p class="faint" style="font-size:12px;margin-top:8px">정지(추정) = Error Wafer 종료부터 다음 Wafer 시작까지의 공백. 장비 이벤트 로그가 아닙니다.</p>`
-    :(m.hasData?`<p class="faint" style="font-size:13px;padding:6px 0">이 날은 Error 가 없습니다.${m.nAbort?` 중단 ${m.nAbort}건은 Error 로 세지 않습니다.`:""}</p>`:'<p class="faint" style="font-size:13px;padding:6px 0">이 날은 데이터가 없습니다.</p>'));
+    :(m.hasData?`<p class="faint" style="font-size:13px;padding:6px 0">이 날은 Error 가 없습니다.${m.nAbort?` 중단 ${m.nAbort}건은 같은 Report 에 정상 스캔이 있어 가동으로 셌습니다(D41).`:""}</p>`:'<p class="faint" style="font-size:13px;padding:6px 0">이 날은 데이터가 없습니다.</p>'));
   closeSeg();window._m=m;
   if(ui.pendingPin){const p=ui.pendingPin;ui.pendingPin=null;const it=m.items.find(x=>x.g&&x.g.r===p.r&&x.kind!=="stop")||m.items.find(x=>x.g&&x.g.r===p.r);   /* 전날 Error 의 정지만 있는 날은 그 정지 조각 */
     if(it)pinSeg({it});else{const i=m.errors.findIndex(e=>e.r===p.r);if(i>=0)pinErr(i);}}}
@@ -1100,7 +1121,7 @@ function renderDetail(){
 const INI_KO={EXACT:"시각 확인됨",NOT_FOUND:"시간 미확인 · INI 없음",STALE:"시간 미확인 · INI 가 다시 검사로 덮어써짐",READ_ERROR:"시간 미확인 · INI 읽기 실패",
   NO_WAFER_ID:"자리표시 행(LoadPort/Slot)",BATCH_FAILED:"실패한 배치의 행 — 배치 1건으로 셈",BATCH:"스캔된 Wafer 없음 · Batch 시각으로 표시"};
 const reportsOf=parts=>{const seen=new Set(),out=[];for(const p of parts){const r=p.g.r;if(r.report&&!seen.has(r.report)){seen.add(r.report);out.push(r);}}return out;};
-const kindKo=g=>g.test?"Test":g.err?ERR_KO[g.r.norm_status]||"Error":g.abort?"중단 · "+(ERR_KO[g.r.norm_status]||"중단됨"):DM(g.disp).label;
+const kindKo=g=>g.test?"Test":g.err?(g.abort&&!g.r.causes.length?"중단(Error) · ":"")+(ERR_KO[g.r.norm_status]||"Error"):g.unk?"분류 미확인 · "+(ERR_KO[g.r.outcome]||g.r.outcome):g.abort?"중단(가동) · "+(ERR_KO[g.r.outcome]||"중단됨"):DM(g.disp).label;
 /* 자재 이력(같은 자재 키의 모든 시도, 시각순) — 장비·시각·원천 상태·표시 분류·근거·Report. 다른 장비의 시도로 바로 이동할 수 있다. */
 function historyHtml(g){const a=g.att;if(!a||!D._index)return"";const list=D._index.groups[a.mk]||[];if(list.length<2)return"";
   return`<div class="plist">${list.map(x=>{const cur=x===a;const st=x.timed?(x.g.err?ERR_KO[x.g.r.norm_status]||"Error":x.g.test?"Test":"정상"):(x.err?ERR_KO[x.r.norm_status]||"Error":"정상");
@@ -1130,7 +1151,7 @@ function pinSeg(sel){const m=window._m,box=$("#segDetail");if(!m||!box)return;co
       const hist=historyHtml(g);if(hist)add("자재 이력",hist);
       if(g.err){const st=m.items.find(i=>i.kind==="stop"&&i.g===g);add("정지(추정)",st?`${fmtSec((st.e-st.s)/1000)} — ${hm(new Date(st.s))} → ${hm(new Date(st.e))} ${g.stopEnd===null?"관측 종료까지(복구 기록 없음)":"다음 Wafer 시작까지"}`:"복구 기록 없음 — 이 뒤로 스캔된 Wafer 가 없습니다");}}
     else add("시각",sel.t?`${hm(new Date(sel.t))} (Batch 시작) · Wafer 시각 없음`:"시간 미확인");
-    add("Recipe",esc(r.recipe));if(isErr(r.norm_status)||isAbort(r.norm_status))add("장비 메시지",`<code>${esc(r.status)}</code> <button class="btn small" onclick="copyText(this.previousElementSibling.textContent)">복사</button>`);
+    add("Recipe",esc(r.recipe));if(r.outcome&&r.outcome!=="PASS")add("장비 메시지",`<code>${esc(r.status)}</code> <button class="btn small" onclick="copyText(this.previousElementSibling.textContent)">복사</button>`);
     if(r.outcome&&r.outcome!=="PASS")add("원인 · 결과",`${(r.causes||[]).map(c=>`<span class="chip crit">${ERR_KO[c]||c}</span>`).join(" ")||'<span class="faint">원인 문구 없음</span>'} → ${ERR_KO[r.outcome]||r.outcome}`);   /* D43: 원인과 종료 결과는 다른 축 */
     add("INI 확인",INI_KO[r.ini_match]||esc(r.ini_match||""));if(r.data_issue&&r.ini_match!=="EXACT")add("비고",esc(r.data_issue));}
   m._pin={reports:reps};

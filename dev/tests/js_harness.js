@@ -30,13 +30,14 @@ const out=vm.runInContext(`(function(){rows=__rows.map(o=>({kind:"",job:"",setup
   D=build();const keys=dataDays();
   const res={devices:devNames,days:keys,per:{},attempts:[],index:{unresolved:D._index.nUnresolved,cross:D._index.nCross,same:D._index.nSame,dup:D._index.nDup},
     class_version:typeof CLASS_VERSION==="number"?CLASS_VERSION:null,today:todayKey()};
-  const T=["run","err","stop","test","abort","dup","rescan","rework","off","overlap","denom"],C=["nErr","nWafer","nTest","nAbort","nDup","nRescan","nCross","nRework","nUnk"];
+  const T=["run","err","stop","test","abort","unk","dup","rescan","rework","off","overlap","denom"],C=["nErr","nWafer","nTest","nAbort","nAbortErr","nDup","nRescan","nCross","nRework","nUnk"];
   const tot={};T.concat(C).forEach(k=>tot[k]=0);const bad=[];
-  for(const n of devNames){res.per[n]={};for(const k of keys){const m=dayMetrics(D[n],k);const o={run:m.run,err:m.err,stop:m.stop,test:m.testRun,abort:m.abortRun,nAbort:m.nAbort,dup:m.dup,rescan:m.rescan,rework:m.rework,off:m.off,overlap:m.overlap,denom:m.denom,util:m.util,nErr:m.nErr,nWafer:m.nWafer,nTest:m.nTest,nDup:m.nDup,nRescan:m.nRescan,nCross:m.nCross,nRework:m.nRework,nUnk:m.nUnk||0,hasData:m.hasData};
+  for(const n of devNames){res.per[n]={};for(const k of keys){const m=dayMetrics(D[n],k);const o={run:m.run,err:m.err,stop:m.stop,test:m.testRun,abort:m.abortRun,unk:m.unk||0,nAbort:m.nAbort,nAbortErr:m.nAbortErr||0,dup:m.dup,rescan:m.rescan,rework:m.rework,off:m.off,overlap:m.overlap,denom:m.denom,util:m.util,nErr:m.nErr,nWafer:m.nWafer,nTest:m.nTest,nDup:m.nDup,nRescan:m.nRescan,nCross:m.nCross,nRework:m.nRework,nUnk:m.nUnk||0,hasData:m.hasData};
       if(!__summary)o.items=m.items.map(i=>({kind:i.kind,s:i.s,e:i.e,sec:i.sec,disp:i.g.disp,wafer:i.g.r.wafer_id,lot:i.g.r.lot}));
       if(m.future)continue;T.concat(C).forEach(x=>tot[x]+=o[x]||0);
-      /* 시간 항등식: run+err+stop+test+off = denom (abort 는 partition 이거나 run 의 부분집합 — 어느 쪽이든 항등식은 아래 둘 중 하나) */
-      const s1=o.run+o.err+o.stop+o.test+o.off,s2=s1+o.abort;if(Math.abs(s1-o.denom)>1e-6&&Math.abs(s2-o.denom)>1e-6)bad.push([n,k,s1,s2,o.denom]);
+      /* 시간 항등식: run+err+stop+test+off = denom (abortRun·dup·rescan·rework 는 run 의 부분집합, unk 는 off 의 부분집합) */
+      const s1=o.run+o.err+o.stop+o.test+o.off;if(Math.abs(s1-o.denom)>1e-6)bad.push([n,k,s1,o.denom]);
+      if(o.abort>o.run+1e-6||o.dup+o.rescan+o.rework>o.run+1e-6||o.unk>o.off+1e-6)bad.push([n,k,"subset",o.abort,o.run,o.unk,o.off]);
       if(__summary){res.per[n][k]={util:o.util,hasData:o.hasData,denom:o.denom,run:o.run};}else res.per[n][k]=o;}}
   res.totals=tot;res.identity_violations=bad;
   const rel={},conf={},disp={};let timed=0;
