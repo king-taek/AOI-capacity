@@ -68,7 +68,7 @@ INI_KEYS = {
 #: 바꾸면 올린다. 캐시는 Report 의 수정시각만 보고 재파싱을 건너뛰므로, 이 번호가 다르면 캐시를 읽을 때
 #: `norm_status`·`scan_type` 을 원문(status·lot)에서 **NAS 접근 없이** 다시 계산한다(`_rederive_rows`).
 #: INI 경로가 바뀌는 수정(빈 job 되찾기 등)은 Report 를 다시 읽어야 하므로 '누락 복구'(`recover`)가 따로 있다.
-PARSER_VERSION = 4
+PARSER_VERSION = 5
 #: 누락 복구가 다시 읽는 대상 — INI 를 못 찾았거나 읽다 실패한 행이 있는 Report 만.
 #: STALE(다른 시도가 덮어쓴 INI)은 다시 읽어도 되돌아오지 않고, NO_WAFER_ID(자리표시)·BATCH_FAILED 는 경로 자체가 없다.
 RECOVERABLE_INI = ("NOT_FOUND", "READ_ERROR")
@@ -79,9 +79,12 @@ DEV_OK, DEV_NO_DATA, DEV_PARTIAL, DEV_UNREACHABLE = "ok", "no_data", "partial", 
 #: 옛 17열 파일에는 두 열이 없다 — 화면(template)은 언제나 `status` 원문에서 다시 계산하므로 옛 파일도 새 규칙으로 읽힌다.
 #: `time_basis`(D37) — INI 의 Wafer 시각이 그 Report 의 Batch 구간에 어떻게 들어가는가(STRICT_IN_BATCH · TOLERANCE_ONLY · BATCH_ONLY · MISSING …).
 #: 시간의 주인(같은 INI 시각을 여러 Report 가 참조할 때)은 화면이 원천 행 전체에서 정한다 — 이 열은 사람이 CSV 로 볼 근거다.
-ROW_SCHEMA_VERSION = 3
+#: `slots`(D38) — kind="slot" 합성 행의 영향 Slot 수(서로 다른 LoadPort/Slot 조합). 다른 행은 빈 값.
+ROW_SCHEMA_VERSION = 4
 OUT_COLS = ["device", "kind", "job", "setup", "lot", "wafer_id", "status", "norm_status", "cause", "outcome", "scan_type", "recipe",
-            "wafer_start_time", "wafer_end_time", "batch_start", "batch_end", "report", "ini_match", "time_basis", "data_issue"]
+            "wafer_start_time", "wafer_end_time", "batch_start", "batch_end", "report", "ini_match", "time_basis", "slots", "data_issue"]
+#: 합성 행의 종류 — "batch"(통째로 실패한 시도, D06) · "slot"(일부 성공한 배치의 자리표시 행 Error, Report 당 1건, D38)
+SYNTHETIC_KINDS = ("batch", "slot")
 #: HTML 에 박아 넣는 JSON 에서 문자열 풀로 접는 열 — 같은 값이 수없이 되풀이되는 열들이다.
 #: (90일치 30대면 행이 십수만 개다. 시각 두 열만 값이 거의 다 달라 접지 않는다.)
 POOLED_COLS = tuple(c for c in OUT_COLS if c not in ("wafer_start_time", "wafer_end_time"))
@@ -457,7 +460,7 @@ def rows_for_report(dev_name: str, rep: dict, scan_root: str, memo: Optional[_In
              "scan_type": scan_type(w["lot"]),
              "recipe": w["recipe"] or s.get("Recipe", ""),
              "wafer_start_time": "", "wafer_end_time": "", "batch_start": s.get("Batch Start", ""),
-             "batch_end": s.get("Batch End", ""), "ini_match": "", "time_basis": "MISSING", "data_issue": ""}
+             "batch_end": s.get("Batch End", ""), "ini_match": "", "time_basis": "MISSING", "slots": "", "data_issue": ""}
         if _is_placeholder(w):
             r["ini_match"], r["data_issue"] = "NO_WAFER_ID", "LoadPort/Slot 행이라 INI 경로를 만들 수 없음"
         else:
@@ -490,10 +493,7 @@ def rows_for_report(dev_name: str, rep: dict, scan_root: str, memo: Optional[_In
                 except Exception as e:  # noqa: BLE001
                     r["ini_match"], r["data_issue"] = "READ_ERROR", f"{type(e).__name__}: {e}"
         rows.append(r)
-    failed = failed_batch_row(dev_name, rep, rows)
-    if failed:
-        rows.append(failed)
-    return rows
+    return synthesize_rows(rows)
 
 
 def _in_batch_window(st, en, b_start, b_end) -> bool:
@@ -555,14 +555,25 @@ def failed_batch_row(dev_name: str, rep: dict, rows: List[dict]) -> Optional[dic
     흔적이 전혀 남지 않고, Report 에는 `LoadPort A / Slot n` 자리표시 행이 20~25줄 생긴다.
     그래서 ① 시간을 아는 유일한 근거는 Report 의 `Batch Start~End` 이고,
     ② 오류는 'Slot 행 24건' 이 아니라 '배치 중단 1건' 으로 세는 게 맞다(사용자 확정).
-    정상적으로 일부라도 스캔한 배치는 만들지 않는다. 대표 행·원인 합집합은 `_lead_error_row` 가 결정적으로 고른다."""
-    s = rep["summary"]
-    st, en = parse_dt(s.get("Batch Start", "")), parse_dt(s.get("Batch End", ""))
+    정상적으로 일부라도 스캔한 배치는 만들지 않는다. 대표 행·원인 합집합은 `_lead_error_row` 가 결정적으로 고른다.
+    `rep` 는 옛 호출 호환용(값은 행에서 읽는다) — 캐시 재구축(`synthesize_rows`)도 같은 규칙을 쓴다."""
+    return _batch_from_rows([r for r in rows if r.get("kind", "") == ""])
+
+
+def _first(rows: List[dict], key: str) -> str:
+    return next((str(r.get(key) or "") for r in rows if r.get(key)), "")
+
+
+def _batch_from_rows(rows: List[dict]) -> Optional[dict]:
+    if not rows:
+        return None
+    b_start, b_end = _first(rows, "batch_start"), _first(rows, "batch_end")
+    st, en = parse_dt(b_start), parse_dt(b_end)
     if not (st and en and en >= st):
         return None
-    if any(r["wafer_start_time"] and r["wafer_end_time"] for r in rows):
+    if any(r.get("wafer_start_time") and r.get("wafer_end_time") for r in rows):
         return None                                   # 한 장이라도 이 배치 안에서 검사됐으면 실패가 아니다
-    if any(norm_outcome(r["status"]) == "PASS" for r in rows):
+    if any(norm_outcome(r.get("status")) == "PASS" for r in rows):
         return None                                   # 정상 통과한 Wafer 가 있으면 실패한 배치가 아니다
                                                       # (INI 가 지워져 시간만 없는 배치를 오류로 만들지 않는다)
     errs = [r for r in rows if _is_error_row(r)]
@@ -571,18 +582,70 @@ def failed_batch_row(dev_name: str, rep: dict, rows: List[dict]) -> Optional[dic
     lead, union = _lead_error_row(errs)
     # ★ Lot 은 **덮어쓰기 전에** 고른다 — 아래 루프가 ini_match 를 전부 BATCH_FAILED 로 바꾸면
     #   'NO_WAFER_ID 가 아닌 행' 조건이 늘 참이 되어 `LoadPort A` 가 Lot 으로 올라온다(실물 30대 중 8건).
-    lot = next((r["lot"] for r in rows if r["ini_match"] != "NO_WAFER_ID" and r["lot"]), "") \
-        or rep.get("report_lot", "")
+    lot = next((r["lot"] for r in rows if r.get("ini_match") not in ("NO_WAFER_ID", "BATCH_FAILED") and r.get("lot")
+                and not _is_placeholder(r)), "")
     for r in rows:                                    # 이 배치의 행들은 배치 한 건으로 묶어 센다(사용자 확정)
         r["ini_match"] = "BATCH_FAILED"
-    return {"device": dev_name, "kind": "batch", "job": rep.get("job", ""), "setup": rep.get("setup", ""),
-            "report": rep.get("name", ""), "lot": lot, "wafer_id": "",
+    return {"device": _first(rows, "device"), "kind": "batch", "job": _first(rows, "job"), "setup": _first(rows, "setup"),
+            "report": _first(rows, "report"), "lot": lot, "wafer_id": "",
             "status": lead["status"], "norm_status": norm_status(lead["status"]), "cause": cause_field(union),
             "outcome": norm_outcome(lead["status"]), "scan_type": scan_type(lot),
-            "recipe": lead.get("recipe", ""), "wafer_start_time": s.get("Batch Start", ""),
-            "wafer_end_time": s.get("Batch End", ""), "batch_start": s.get("Batch Start", ""),
-            "batch_end": s.get("Batch End", ""), "ini_match": "BATCH", "time_basis": "BATCH_ONLY",
+            "recipe": lead.get("recipe", ""), "wafer_start_time": b_start,
+            "wafer_end_time": b_end, "batch_start": b_start,
+            "batch_end": b_end, "ini_match": "BATCH", "time_basis": "BATCH_ONLY", "slots": "",
             "data_issue": f"검사된 Wafer 없음 — 배치 시각으로만 표시 (행 {len(rows)}개 중 오류 {len(errs)}개)"}
+
+
+def slot_error_row(rows: List[dict]) -> Optional[dict]:
+    """일부만 성공한 배치의 **자리표시(LoadPort/Slot) 행 Error** 를 Report 당 한 건으로 만든다(사용자 확정 D38).
+
+    통째로 실패한 배치가 아니어도 자리표시 행에 명시적 원인(ID 읽기 실패·반송 실패·정렬 오류 …)이 남는다 — 30일치에서 125 Report,
+    예전에는 화면에서 아예 빠지거나(62) '건너뜀' 에 묻혔다(65). 행마다 세지 않고 Report 당 1건 + 영향 Slot 수(서로 다른 Lot/Wafer 자리표시 조합).
+    정확 발생 시각은 없다 — 시간 미확인(0 기여), 시간 범위는 Batch Start~End(범위 추정). Batch 전체 시간을 Error 시간으로 복사하지 않는다.
+    배치 행(kind=batch)이 있는 Report 에는 만들지 않는다(이중 계산 없음)."""
+    src = [r for r in rows if r.get("kind", "") == ""]
+    if any(r.get("kind") == "batch" for r in rows) or not src:
+        return None
+    ph = [r for r in src if r.get("ini_match") == "NO_WAFER_ID" and norm_causes(r.get("status"))]
+    if not ph:
+        return None
+    lead, union = _lead_error_row(ph)
+    slots = {(str(r.get("lot") or ""), str(r.get("wafer_id") or "")) for r in ph}
+    lots = {str(r.get("lot") or "") for r in src if r.get("ini_match") != "NO_WAFER_ID" and r.get("lot") and not _is_placeholder(r)}
+    jobs = {str(r.get("job") or "") for r in src}
+    lot = next(iter(lots)) if len(lots) == 1 else ""
+    note = [] if len(lots) <= 1 else [f"Lot 여러 개({len(lots)})"]
+    if len(jobs) > 1:
+        note.append(f"Job 여러 개({len(jobs)})")
+    b_start, b_end = _first(src, "batch_start"), _first(src, "batch_end")
+    return {"device": _first(src, "device"), "kind": "slot", "job": _first(src, "job") if len(jobs) == 1 else "", "setup": _first(src, "setup"),
+            "report": _first(src, "report"), "lot": lot, "wafer_id": "",
+            "status": lead["status"], "norm_status": norm_status(lead["status"]), "cause": cause_field(union),
+            "outcome": norm_outcome(lead["status"]), "scan_type": scan_type(lot), "recipe": lead.get("recipe", ""),
+            "wafer_start_time": "", "wafer_end_time": "", "batch_start": b_start, "batch_end": b_end,
+            "ini_match": "BATCH_SLOT", "time_basis": "MISSING", "slots": str(len(slots)),
+            "data_issue": f"자리표시 행 Error — Report 당 1건 · 영향 Slot {len(slots)}개 · 시간 미확인(Batch 범위 추정)" + (" · " + " · ".join(note) if note else "")}
+
+
+def synthesize_rows(rows: List[dict]) -> List[dict]:
+    """Report 한 장의 행에서 합성 행(batch · slot)을 **결정적으로 다시 만든다** — 새 수집·캐시 재분류·옛 payload 가 같은 규칙.
+
+    slot 행은 지우고 다시 만든다(두 번 돌려도 수·내용이 같다). batch 행은 이미 있으면 그대로 두고 원인만 다시 합친다
+    (자식 행의 ini_match 가 BATCH_FAILED 로 바뀌어 있어 되돌릴 원천이 없다), 없으면 지금 규칙으로 만든다."""
+    src = [r for r in rows if r.get("kind", "") == ""]
+    batch = next((r for r in rows if r.get("kind") == "batch"), None)
+    if batch is None:
+        batch = _batch_from_rows(src)
+    else:
+        errs = [x for x in src if _is_error_row(x)]
+        batch["cause"] = cause_field(_lead_error_row(errs)[1] if errs else norm_causes(batch.get("status", "")))
+    out = list(src)
+    if batch:
+        out.append(batch)
+    slot = slot_error_row(out)
+    if slot:
+        out.append(slot)
+    return out
 
 
 # ----------------------------------------------------------------------------- cache
@@ -608,15 +671,15 @@ def _load_cache(cfg: dict, full: bool = False, log: Optional[LogFn] = None) -> d
 
 
 def _rederive_rows(cache: dict) -> int:
-    """캐시에 든 행의 `norm_status`·`cause`·`outcome`·`scan_type` 을 지금 규칙으로 다시 계산한다. 원문(status·lot)만 쓰므로 NAS 접근이 없다.
-    배치 대표 행(kind=batch)의 원인은 그 Report 의 실패 행 전부에서 합집합으로 다시 만든다(하위 원인이 대표에 가려지지 않게).
+    """캐시에 든 행의 `norm_status`·`cause`·`outcome`·`scan_type`·`time_basis` 를 지금 규칙으로 다시 계산하고 합성 행(batch·slot)을
+    같은 규칙으로 다시 만든다(`synthesize_rows`). 원문(status·lot·시각)만 쓰므로 NAS 접근이 없다. 두 번 돌려도 결과가 같다.
 
-    돌려주는 값은 값이 바뀐 행 수. 캐시의 `parser_version` 을 지금 번호로 맞춘다."""
+    돌려주는 값은 값이 바뀐 행 수(합성 행 수 변화 포함). 캐시의 `parser_version` 을 지금 번호로 맞춘다."""
     changed = 0
     for entry in cache.get("reports", {}).values():
         rows = entry.get("rows") or []
         for r in rows:
-            if r.get("kind") == "batch":
+            if r.get("kind") in SYNTHETIC_KINDS:
                 continue
             new = {"norm_status": norm_status(r.get("status", "")), "cause": cause_field(norm_causes(r.get("status", ""))),
                    "outcome": norm_outcome(r.get("status", "")), "scan_type": scan_type(r.get("lot", "")),
@@ -625,16 +688,13 @@ def _rederive_rows(cache: dict) -> int:
             if any(r.get(k) != v for k, v in new.items()):
                 r.update(new)
                 changed += 1
-        for r in rows:
-            if r.get("kind") != "batch":
-                continue
-            errs = [x for x in rows if x.get("kind") != "batch" and _is_error_row(x)]
-            union = _lead_error_row(errs)[1] if errs else norm_causes(r.get("status", ""))
-            new = {"norm_status": norm_status(r.get("status", "")), "cause": cause_field(union),
-                   "outcome": norm_outcome(r.get("status", "")), "scan_type": scan_type(r.get("lot", "")), "time_basis": "BATCH_ONLY"}
-            if any(r.get(k) != v for k, v in new.items()):
-                r.update(new)
-                changed += 1
+            r.setdefault("slots", "")
+        before = json.dumps([r for r in rows if r.get("kind") in SYNTHETIC_KINDS], sort_keys=True, ensure_ascii=False)
+        rebuilt = synthesize_rows(rows)
+        after = json.dumps([r for r in rebuilt if r.get("kind") in SYNTHETIC_KINDS], sort_keys=True, ensure_ascii=False)
+        if before != after:
+            changed += 1
+        entry["rows"] = rebuilt
     cache["parser_version"] = PARSER_VERSION
     return changed
 

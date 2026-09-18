@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import datetime as dt
+import json
 
 import pytest
 
@@ -400,3 +401,63 @@ def test_old_report_without_job_setup_recovers_the_path_from_the_table_lot():
 ])
 def test_job_setup_by_table_lot(name, lot, expected):
     assert collect._job_setup_by_table_lot(name, [{"lot": lot, "wafer_id": "W1"}]) == expected
+
+
+# ── D38: 일부만 성공한 배치의 자리표시(Slot) 행 Error — Report 당 1건 ──────────────────────────
+PARTIAL_SLOT_HTML = LIVE_HTML.replace(
+    "<tr><td>FUK-RDL2</td><td>54265684EWA2</td><td>-</td><td>-</td><td>-</td><td>-</td><td>-</td><td>Alignment Error.</td><td>x20</td></tr>",
+    "<tr><td>LoadPort A</td><td>Slot 3</td><td>-</td><td>-</td><td>-</td><td>-</td><td>-</td><td>Failed to read wafer id. Reading error = ****. Wafer Skipped.</td><td>x20</td></tr>"
+    "<tr><td>LoadPort A</td><td>Slot 4</td><td>-</td><td>-</td><td>-</td><td>-</td><td>-</td><td>Failed to read wafer id. Reading error = ####. Wafer Skipped.</td><td>x20</td></tr>"
+    "<tr><td>LoadPort A</td><td>Slot 4</td><td>-</td><td>-</td><td>-</td><td>-</td><td>-</td><td>Failed to read wafer id. Reading error = ####. Wafer Skipped.</td><td>x20</td></tr>"
+    "<tr><td>LoadPort A</td><td>Slot 5</td><td>-</td><td>-</td><td>-</td><td>-</td><td>-</td><td>Skipped.</td><td>x20</td></tr>")
+
+
+def test_partial_batch_slot_errors_become_one_event_per_report(tmp_path):
+    _live_ini(tmp_path, "15-Sep-26 07:30:00 PM", "15-Sep-26 07:44:00 PM")     # 한 장은 정상 스캔
+    rep = collect.parse_report(LIVE_NAME, PARTIAL_SLOT_HTML)
+    rows = collect.rows_for_report("AOI-25", rep, str(tmp_path / "Scanresult"))
+    slot = [r for r in rows if r["kind"] == "slot"]
+    assert len(slot) == 1 and not [r for r in rows if r["kind"] == "batch"]     # 배치 실패가 아니라 Slot 사건 1건
+    s = slot[0]
+    assert s["slots"] == "2" and s["cause"] == "ID_READ_ERROR" and s["outcome"] == "SKIPPED"   # Slot 3·4 (4 는 중복 행) — 원인 없는 Slot 5 는 세지 않음
+    assert s["wafer_start_time"] == "" and s["wafer_end_time"] == "" and s["time_basis"] == "MISSING"   # 시간 미확인 — Batch 시간을 복사하지 않는다
+    assert s["batch_start"] == "15-Sep-26 06:23:14 PM" and s["ini_match"] == "BATCH_SLOT" and s["lot"] == "FUK-RDL2" and s["wafer_id"] == ""
+    assert "Slot 2개" in s["data_issue"]
+    # 자리표시 원천 행은 그대로 남는다(지우지 않는다) — 화면이 따로 세지 않을 뿐
+    assert sum(1 for r in rows if r["ini_match"] == "NO_WAFER_ID") == 4
+
+
+def test_no_slot_event_when_the_batch_failed_as_a_whole(tmp_path):
+    rep = collect.parse_report(LIVE_NAME, FAILED_BATCH_HTML)
+    rows = collect.rows_for_report("AOI-25", rep, str(tmp_path / "Scanresult"))
+    assert [r["kind"] for r in rows if r["kind"]] == ["batch"]
+
+
+def test_synthesize_rows_is_deterministic_and_idempotent():
+    mk = lambda lot, wid, st, ini="NOT_FOUND", **k: {"device": "AOI-8", "kind": "", "job": "J", "setup": "S", "report": "r.htm", "lot": lot, "wafer_id": wid,
+                                                     "status": st, "recipe": "R", "wafer_start_time": "", "wafer_end_time": "",
+                                                     "batch_start": "15-Sep-26 09:00:00 AM", "batch_end": "15-Sep-26 09:30:00 AM", "ini_match": ini, **k}
+    base = [mk("LOT", "W1", "Pass"), mk("LoadPort A", "Slot 2", "Failed to read wafer id on PAL", "NO_WAFER_ID"),
+            mk("LoadPort A", "Slot 3", "Alignment Error.", "NO_WAFER_ID"), mk("LoadPort A", "Slot 4", "Failed to read wafer id on PAL", "NO_WAFER_ID")]
+    once = collect.synthesize_rows([dict(r) for r in base])
+    twice = collect.synthesize_rows([dict(r) for r in once])
+    rev = collect.synthesize_rows([dict(r) for r in reversed(base)])
+    slot = [r for r in once if r["kind"] == "slot"]
+    assert len(slot) == 1 and slot[0]["slots"] == "3" and slot[0]["norm_status"] == "ID_READ_ERROR" and slot[0]["cause"] == "ID_READ_ERROR;ALIGN_ERROR"
+    assert [r for r in twice if r["kind"] == "slot"] == slot                       # 두 번 돌려도 같다
+    assert [r for r in rev if r["kind"] == "slot"] == slot                         # 순서를 뒤집어도 같다
+    assert len(twice) == len(once) == 5                                            # 원천 4 + slot 1 — 늘지 않는다
+
+
+def test_rederive_rebuilds_synthetic_rows_from_an_old_cache():
+    """옛 캐시(D43 이전 규칙 · slot 행 없음)를 지금 규칙으로 — 22 Report 유형(ID 읽기 실패 후 Skipped 만 있는 배치)이 batch 행을 얻고, 두 번 해도 같다."""
+    mk = lambda wid, st, ini="NOT_FOUND": {"device": "AOI-8", "kind": "", "job": "J", "setup": "S", "report": "r.htm", "lot": "LOT", "wafer_id": wid,
+                                          "status": st, "norm_status": "SKIPPED", "recipe": "R", "wafer_start_time": "", "wafer_end_time": "",
+                                          "batch_start": "15-Sep-26 09:00:00 AM", "batch_end": "15-Sep-26 09:30:00 AM", "ini_match": ini}
+    cache = {"reports": {"/x/r.htm": {"rows": [mk("W1", "Failed to read wafer id. Reading error = **. Wafer Skipped."), mk("W2", "Skipped.")]}}, "parser_version": 2}
+    n = collect._rederive_rows(cache)
+    rows = cache["reports"]["/x/r.htm"]["rows"]
+    assert n >= 1 and [r["kind"] for r in rows] == ["", "", "batch"]
+    assert rows[2]["cause"] == "ID_READ_ERROR" and all(r["ini_match"] == "BATCH_FAILED" for r in rows[:2])
+    again = json.loads(json.dumps(cache))
+    assert collect._rederive_rows(again) == 0 and again["reports"]["/x/r.htm"]["rows"] == rows

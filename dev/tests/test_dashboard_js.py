@@ -412,3 +412,45 @@ def test_single_report_with_tolerance_only_time_still_uses_the_time():
     r = _pair("err_first")[0]
     res = run([r])
     assert res["per"]["AOI-1"][DAY]["err"] == 236 and att(res, "AOI-1", "GWAYS13-C7")["basis"] == "TOLERANCE_ONLY"
+
+
+# ── D38: 일부 성공한 배치의 Slot Error — 옛 payload 도 화면이 같은 규칙으로 합성한다 ──────────
+def _slot_rows():
+    ph = lambda wid, st: {"device": "AOI-8", "lot": "LoadPort A", "wafer_id": wid, "status": st, "recipe": "R1", "report": "p.htm",
+                          "wafer_start_time": "", "wafer_end_time": "", "batch_start": f"{DAY}T09:00:00", "batch_end": f"{DAY}T09:30:00", "ini_match": "NO_WAFER_ID"}
+    return [w("AOI-8", "W1", "09:05", "09:10", report="p.htm"), ph("Slot 2", "Failed to read wafer id on PAL"), ph("Slot 3", "Failed to read wafer id on PAL"),
+            ph("Slot 3", "Failed to read wafer id on PAL"), ph("Slot 4", "Skipped."), w("AOI-8", "W5", "12:00", "12:05", report="q.htm")]
+
+
+def test_slot_errors_in_a_partial_batch_are_one_untimed_event_not_per_row():
+    res = run(_slot_rows())
+    m = res["per"]["AOI-8"][DAY]
+    assert m["nErr"] == 1 and m["err"] == 0 and m["stop"] == 0        # Report 당 1건 · 시간 0 기여 · 정지(추정) 없음
+    assert m["run"] == 600 and m["nWafer"] == 2                        # Wafer 시도 수에는 들어가지 않는다(자리표시)
+    assert res["quality"] is not None
+
+
+def test_slot_synthesis_is_idempotent_and_order_independent():
+    rows = _slot_rows()
+    a = run(rows); b = run(list(reversed(rows)))
+    assert a["per"] == b["per"]
+    existing = dict(rows[1]); existing.update({"kind": "slot", "lot": "LOT-A", "wafer_id": "", "ini_match": "BATCH_SLOT", "slots": "2"})
+    c = run(rows + [existing])                                          # 이미 slot 행이 있는 새 payload → 지우고 다시 만들어 1건
+    assert c["per"]["AOI-8"][DAY]["nErr"] == 1
+
+
+def test_legacy_payload_without_batch_row_gets_one_from_the_same_rule():
+    """D43 전 규칙으로는 '건너뜀' 뿐이라 batch 행이 없던 Report(ID 읽기 실패 후 Skipped) — 화면이 배치 1건으로 합성한다."""
+    mk = lambda wid, st: {"device": "AOI-8", "lot": "LOT-A", "wafer_id": wid, "status": st, "recipe": "R1", "report": "old.htm",
+                          "wafer_start_time": "", "wafer_end_time": "", "batch_start": f"{DAY}T09:00:00", "batch_end": f"{DAY}T09:30:00", "ini_match": "NOT_FOUND", "norm_status": "SKIPPED"}
+    res = run([mk("W1", "Failed to read wafer id. Reading error = **. Wafer Skipped."), mk("W2", "Skipped.")])
+    m = res["per"]["AOI-8"][DAY]
+    assert m["nErr"] == 1 and m["err"] == 1800 and m["run"] == 0       # 배치 시각(D05)으로 Error 1건
+    assert res["attempts"] == []                                        # 실패 배치의 자식 행은 자재 후보가 아니다
+
+
+def test_no_slot_event_when_a_batch_row_exists():
+    rows = [w("AOI-8", "", "11:00", "11:02", lot="LOT-A", status="Aborted.", kind="batch", ini_match="BATCH", report="b.htm"),
+            {"device": "AOI-8", "lot": "LoadPort A", "wafer_id": "Slot 2", "status": "Failed to read wafer id on PAL", "recipe": "R1", "report": "b.htm",
+             "wafer_start_time": "", "wafer_end_time": "", "batch_start": f"{DAY}T11:00:00", "batch_end": f"{DAY}T11:02:00", "ini_match": "BATCH_FAILED"}]
+    assert run(rows)["per"]["AOI-8"][DAY]["nErr"] == 1
