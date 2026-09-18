@@ -36,6 +36,10 @@ Camtek AOI 장비의 BatchReport/WaferInfo.ini 를 읽어 장비별 가동률을
 5. **시각은 근거가 있을 때만 쓴다.** `WaferInfo.ini` 는 다시 검사하면 **같은 경로에 덮어써진다**(실물 확인:
    AOI-25 9/14 `00NSP049XYG7`). 그래서 옛 Report 행에도 나중 시각이 붙는다 — INI 시각이 그 Report 의
    `Batch Start~End` 밖이면 `ini_match="STALE"` 로 두고 **시간을 쓰지 않는다**(지어내지 않는다).
+   같은 INI 시각을 **여러 Report** 가 참조하면(앞 시도 Error 뒤 곧 재검사) 그 시각을 Batch 구간에 **엄격히** 담은 Report 가
+   하나뿐일 때 그 Report 만 시간을 갖는다(D37, template `build` 2-pass · `time_basis` 열). 나머지 행은 '시간 미확인 · INI 덮어써짐' —
+   사건(Error 건수)·원문·자재 이력은 남기고 시간은 0 기여. 하나가 아니면 소유권 보류(시간 1번, 대표 행 결정적). `BATCH_WINDOW_MARGIN_SEC`(600)은 그대로.
+   **시간 미확인은 0초가 아니다** — 화면은 '—' 로 적고 Batch 전체 시간을 Error 시간으로 복사하지 않는다.
    검사된 Wafer 가 하나도 없고 정상 통과도 없는 시도는 `kind="batch"` 행 하나로 만들어 `Batch Start~End` 를
    오류 시간으로 쓰고, 그 배치의 나머지 행(LoadPort/Slot 자리표시 포함)은 `BATCH_FAILED` 로 묶어 따로 세지 않는다.
    같은 `(Wafer, 시작, 종료)` 가 여러 번 나오면 화면에서 시간은 한 번만 세고 '다시 검사' 로 노랗게 표시한다.
@@ -69,24 +73,27 @@ Camtek AOI 장비의 BatchReport/WaferInfo.ini 를 읽어 장비별 가동률을
   **`TEST` 는 분모(24시간)에는 들어가되 분자(실가동)에서만 뺀다**(사용자 확정 — 양산을 위해 돈 게 아니다).
   오류 건수에도 넣지 않는다. 화면에서 사라지지는 않는다: 타임라인에 분홍 점무늬 띠, 제목에 'Test n건 제외',
   Lot 목록에 '시험 · 제외' 표. 빼는 것과 없었던 것은 다르다.
-- 행 데이터 계약(`collect.OUT_COLS`): `kind`("" = Wafer 한 장 · "batch" = 통째로 실패한 시도), `batch_end`,
-  `job`·`setup`(Report 안의 `Job/Setup`, 없으면 파일명 규칙 — 나중에 쓸 일이 있어 함께 담는다),
-  `report`(BatchReport 파일 이름 — 화면에서 그 파일을 다시 여는 근거),
-  `scan_type`("" · RESCAN · REWORK · TEST — 겹치면 TEST → RESCAN → REWORK 순), `ini_match`(EXACT · NOT_FOUND · NO_WAFER_ID · READ_ERROR · STALE · BATCH_FAILED · BATCH).
-  상태 분류는 `collect._STATUS_RULES` 와 template 의 `normStatus` 가 **같은 순서**를 쓴다(가드: `test_template_contract.py`).
-  표기는 30대 전수 샘플(Report 55,717개)에서 나온 것만 넣었다 — Pass · Skipped. · Aborted. · Alignment Error. ·
-  Scan 2D/3D Error. · Failed to read wafer id… · Aborted. Wafer aborted by user. · Camera Hardware Failure(HW_ERROR) ·
-  FAR Model…/Illegal Lot Name./Wafer Map Import failed.(RECIPE_ERROR) · Failed to move wafer…(WAFER_LOST).
-  ★ 순서가 곧 의미다: 반송 실패 문구는 `… Batch Aborted. Skipped.` 로 끝나 `skip` 규칙 **위**에 있어야 한다
-  (아래에 두면 오류가 '건너뜀'(정상)으로 묻힌다).
-- **중단(Abort)은 Error 가 아니다**(사용자 확정 D35). `Aborted.` · `Wafer aborted by user.`(=`ABORTED`·`USER_ABORT`)는
-  사람이 세운 것이라 설비 Error 로 세지 않는다 — 화면의 `isErr` 에서 빼고 **Error 건수·빨간 막대·그 뒤 '정지(추정)' 에 넣지 않는다**.
-  사라지지도 않는다: '중단' 이라는 제 이름·제 색(회청색 교차 빗금)으로 타임라인·Lot 표·가동률 저하 사유에 남고,
-  **분모에는 들어가되 실가동(분자)에서는 빠진다**(Test 와 같은 자리 — 스캔이 끝나지 않아 양산 결과가 없다).
-  통째로 중단된 배치(`kind="batch"`)도 같다(D05 의 '시간은 세고 분자에서 제외' 는 그대로, 라벨만 Error → 중단).
-  ★ 반송 실패는 문구가 `… Batch Aborted. Skipped.` 라 `abort` 에 걸릴 수 있는데, `WAFER_LOST` 규칙이 **위**에 있어 Error 로 남는다.
-  앞선 시도가 중단이면 다음 시도는 중복스캔이 아니라 **재스캔**이다(결과를 내지 못해 다시 돌린 것).
-  회귀 가드: `test_abort_is_not_counted_as_an_error` · `test_dashboard_js.py` 의 중단 5건.
+- 행 데이터 계약(`collect.OUT_COLS`, 21열 · `ROW_SCHEMA_VERSION` 4): `kind`("" = Wafer 한 장 · "batch" = 통째로 실패한 시도 · "slot" = 일부 성공한
+  배치의 자리표시 행 Error 를 Report 당 1건으로 합성한 사건, D38), `batch_end`,
+  `job`·`setup`(Report 안의 `Job/Setup`, 없으면 파일명 규칙), `report`(BatchReport 파일 이름 — 화면에서 그 파일을 다시 여는 근거),
+  `cause`(원인 코드들, 규칙 순 세미콜론) · `outcome`(종료 결과) · `norm_status`(호환: 원인이 있으면 첫 원인, 없으면 결과) — **원인과 결과는 다른 축**(D43),
+  `scan_type`("" · RESCAN · REWORK · TEST — 겹치면 TEST → RESCAN → REWORK 순), `ini_match`(EXACT · NOT_FOUND · NO_WAFER_ID · READ_ERROR · STALE · BATCH_FAILED · BATCH · BATCH_SLOT),
+  `time_basis`(STRICT_IN_BATCH · TOLERANCE_ONLY · OUTSIDE_BATCH · BATCH_ONLY · MISSING · INVALID · UNKNOWN_BATCH), `slots`(slot 행의 영향 Slot 수).
+  열은 **이름으로** 읽는다(고정 인덱스 금지) — 옛 17열 파일도 화면이 `status` 원문에서 원인·결과를 다시 계산하고(`prepareRows`) 합성 행을 같은 규칙으로 다시 만든다(`synthesizeRows` = `collect.synthesize_rows`, idempotent).
+  캐시는 `PARSER_VERSION` 이 다르면 `_rederive_rows` 가 NAS 없이 재분류·재합성한다. 옛 standalone HTML 파일 자체는 옛 JS 를 실행한다 — 최신 규칙으로 보려면 재생성(재수집 또는 `write_html`).
+  분류 규칙은 `collect._CAUSE_RULES`(16개, 구체 원인 → 일반 반송 fallback) + `_OUTCOME_RULES`(PASS · USER_CANCELLED · UNKNOWN · USER_ABORT · SKIPPED · ABORTED)이고
+  template 의 `CAUSE_RULES`/`OUTCOME_RULES` 와 **정규식 글자까지 같다**(가드: `test_template_contract.py`). 213문구 전수 표 `dev/samples/status_mapping_2026-09-18.tsv` 는 사람이 검토한 고정 fixture 다(`test_status_mapping.py` 가 Python·JS 를 대조).
+  ★ 원인 규칙을 전부 먼저 보고 결과를 정한다 — `Failed to read wafer id … Wafer Skipped.` 는 원인 ID_READ_ERROR + 결과 SKIPPED(예전엔 건너뜀에 묻혔다, 192행).
+  반송 실패 문구는 `… Batch Aborted. Skipped.` 로 끝나지만 원인 WAFER_LOST 가 먼저라 안전하다 — 회귀 테스트는 그대로 둔다.
+  실패 배치의 대표 행·원인은 `_lead_error_row` 가 결정적으로 고른다(근거 행 많은 원인 → 규칙 순 → 원문 사전순, 원인은 자식 행 합집합) — 부모 `Aborted.` 가 자식 Error 를 가리지 않는다(E04).
+- **지표 상태(metric_state)는 한 번만 정한다**(template `metricState`, 사용자 확정 D41 — D35 개정): TEST → 원인 코드 있음 ERROR →
+  원인 없는 중단(`Aborted.` · `Wafer aborted by user.`)은 **같은 Report 에 정상 스캔(PASS)이 하나도 없으면 Error 와 똑같이**(건수·빨간 교차 빗금·그 뒤 정지(추정)),
+  PASS 가 있으면 **가동**(abortRun ⊂ run — 저하 사유가 아니다) → PASS 는 RUN → 건너뜀·취소(`Cancelled`)·미확인(`-`)은 UNCLASSIFIED(시각이 있어도 가동·Error 어디에도 안 넣고 미가동·사유 미확인에 남김).
+  Report 의 PASS 유무는 **필터·시간 유효성 전 원천 행 전체**(`reportHasPass`)에서 본다 — 시각 없는 PASS 도 PASS, 행 순서 무관.
+  '중단' 이라는 이름은 두 경우 다 남는다(중단(Error) 빨강 교차 빗금 · 중단(가동) 회청 교차 빗금). 통째로 중단된 배치(`kind="batch"`)는 PASS 가 없으므로 Error 다(D05 의 '시간은 세고 분자에서 제외' 그대로).
+  ★ 반송 실패·`Focus Mapping Error. Batch Aborted.` 처럼 원인이 붙은 중단은 PASS 유무와 무관하게 Error 다.
+  앞선 시도가 Error 든 중단이든 결과를 내지 못했으면 다음 시도는 중복스캔이 아니라 **재스캔**이다.
+  회귀 가드: `test_abort_is_an_error_only_when_its_report_has_no_pass` · `test_dashboard_js.py` 의 D41 테스트 9개.
 - `LoadPort A` · `Slot n` 은 Lot·Wafer 가 아니라 자리표시다(`collect._is_placeholder`). Lot 이 비면
   `os.path.join` 에서 그 칸이 사라져 **다른 Lot 의 INI** 를 가리키므로 경로를 아예 만들지 않는다.
   배치 행의 Lot 도 자리표시를 거른 뒤 고른다 — 못 고르면 빈칸으로 두고 화면이 `(Lot 확인 불가)` 라 적는다.
@@ -117,14 +124,24 @@ Camtek AOI 장비의 BatchReport/WaferInfo.ini 를 읽어 장비별 가동률을
 - **데이터 중복과 실제 반복은 다르다**(사용자 확정 D31·D32, template `build`·`materialIndex`):
   ① 같은 원본 행이 두 번(`rawDups`) → 한 번, ② 서로 다른 Report 가 같은 INI 시각을 참조(`refs`) → 시간 한 번·이력 보존·**재스캔으로 단정하지 않음**,
   ③ 시각이 다른 실제 시도 → 시간을 모두 세고 관계를 붙인다. 관계는 조회 날짜·장비 필터와 무관하게 **로드한 전체 행**에서 한 번 계산한다.
-  자재 키 = Lot 원문에서 RE·RESCAN·REWORK·TEST 토큰만 뗀 것 + Wafer ID(장비명 없음, 대소문자·구분자 그대로). 같은 장비·앞선 시도 정상 → 중복스캔,
-  같은 장비 Error 뒤 복구·RE 표기·**다른 장비에서 먼저 스캔/Error** → 재스캔. Recipe 까지 같으면 확정, 자재만 같으면 추정(실물 `BS`/`BS_1`).
+  자재 키 = `[정규화 Lot, 정규화 Wafer ID]` JSON 튜플(D39 — 글자·숫자 외는 전부 구분자, RE·RESCAN·REWORK·TEST 토큰만 제외, 대소문자 무시, 앞자리 0·숫자 접미사 유지, 장비명 없음;
+  `collect.material_key` = template `materialKey`, fixture 대조). **화면의 Lot 표시·Lot 막대(lotKey)·검색·CSV 는 원문 그대로** — 정규화는 이력 연결에만.
+  **공정 = Job 원문 정확 일치**(D36 — trim·대소문자 접기·접두사 추정 금지, 빈 Job 은 잇지 않음): 같은 자재의 **같은 Job** 앞선 시도만 후보(중간에 다른 Job 이 있어도 끊지 않고 A→B→A 는 앞선 A 와, 간격 무관).
+  같은 장비·앞선 시도 정상 → 중복스캔, 같은 장비 Error/중단 뒤 복구·RE 표기·**다른 장비에서 먼저 스캔/Error** → 재스캔. Job 일치 = 확정, 앞선 시도 시각 미확인 = 추정, Recipe 차이는 배지(실물 `BS`/`BS_1`).
+  사용자가 확인한 예외는 `USER_OVERRIDES`(정확한 두 시도에만 · 시각 불변 · 충돌 초 배지 · 0/복수 매칭이면 미적용). Rework 자재가 같은 Job 으로 다시 스캔되면 대표는 재스캔 + Rework 배지(D42).
   시각이 겹치거나 같은 시작이면 **보류**(임의 순서로 정하지 않는다). 첫 시도는 '확인된 첫 기록' 이고 소급해서 바꾸지 않는다.
-  LoadPort/Slot·실패 배치 행은 후보가 아니다. 시각 없는(STALE) 앞선 시도는 Batch 구간으로 선후만 보고 시간은 지어내지 않는다.
-  분류 규칙이 바뀌면 `CLASS_VERSION` 을 올린다 — 저장하지 않고 열 때마다 원천 행에서 다시 계산한다(저장 열 계약은 그대로 17열).
-- **시간 분할 U+T+A+E+S+R = D**(A = 중단)는 같은 장비·같은 날 안에서 우선순위(Error > 가동 > 중단 > Test > 정지)로 **한 번만** 배정하고 겹친 초를 `overlap` 에 적는다
-  (`max(0,…)` 로 숨기지 않는다). 건수는 **시작한 날에 한 번**(자정을 넘는 구간은 시간만 나눈다). 복구 기록 없는 마지막 Error 의 정지(추정)는
-  **관측 종료(로드한 데이터의 마지막 시각)까지만** — 다음 날로 늘리지 않고, 정지 확정으로 표현하지 않는다.
+  LoadPort/Slot·실패 배치·Slot 사건 행은 후보가 아니다. 시각 없는(STALE·소유권 없음) 앞선 시도는 Batch 구간으로 선후만 보고 시간은 지어내지 않는다.
+  분류 규칙이 바뀌면 `CLASS_VERSION` 을 올린다 — 저장하지 않고 열 때마다 원천 행에서 다시 계산한다.
+- **시간 분할 U+T+E+S+R = D** 는 같은 장비·같은 날 안에서 우선순위(Error > 가동 > Test > 분류 미확인 > 정지)로 **한 번만** 배정하고 겹친 초를 `overlap` 에 적는다
+  (`max(0,…)` 로 숨기지 않는다). 가동 중단(abortRun)·중복스캔·재스캔·Rework 는 U 의 부분집합, 분류 미확인은 R 의 부분집합이라 다시 더하지 않는다.
+  건수는 **시작한 날에 한 번**(자정을 넘는 구간은 시간만 나눈다). 복구 기록 없는 마지막 Error 의 정지(추정)는
+  **관측 종료(로드한 데이터의 마지막 시각)까지만**(D44) — 다음 날로 늘리지 않고, 정지 확정으로 표현하지 않는다.
+- **화면의 '오늘' 은 수집 시각(`meta.generated_iso`)이다**(D40, template `metricsRef`) — 집계 경로에 `Date.now()`/`new Date()` 를 두지 않는다(가드). 열람 시계는 '수집 후 경과' 표시에만.
+  며칠 뒤·다른 시간대에서 열어도 숫자가 같다. `generated_iso` 가 없는 옛 파일·데모만 열람 시계로 폴백하고 '열람 시각 기준(비고정)' 배지를 붙인다.
+- **Error 분석 화면**(template `v-errors`)은 사건 canonical 인덱스(`occurrenceIndex` — wafer_timed · wafer_untimed(Batch 시작일 귀속) · failed_batch · partial_batch_slot, 안정 ID)를 쓰고
+  기간별·장비별·Job별 탭은 `errorQuery` 의 groupBy 만 바꾼다(같은 조건이면 세 탭의 사건 집합이 같다). null=전체 · []=선택 없음 · Job 미확인 토글, 원인 필터는 분자에만,
+  이후 공백(정지 추정)은 장비 전체 이력에서 계산해 Job 필터가 바꾸지 못한다. Wafer Error율 분모 = 물리적 Wafer 시도(TEST 제외, 시간 미확인 포함), Slot·배치 사건은 분자에 안 넣는다.
+  MTTR·MTBF 라고 부르지 않는다. 세부 설정은 draft 적용/취소, 저장된 보기는 localStorage(실패 시 세션 메모리) + 설정 JSON(검증, 코드로 해석하지 않음).
 - 홈의 **가동률 저하 사유** 차트(`renderLoss`)는 같은 `dayMetrics` 를 Error 구간·Error 후 정지(추정)·중단·Test·미가동(사유 미확인)으로 나눈다.
   %p 기여 = 100/N × Σ(L/D) 라 합이 100 − 평균 가동률이다(가드 `test_t24…`). 중복스캔·재스캔·Rework 는 가동시간의 부분집합이라 저하 사유에 넣지 않는다
   (별도 '반복 가동' 카드). 사유는 관측 분류이지 물리적 원인이 아니다 — 인력·자재·보전 같은 원인을 지어내지 않는다.
@@ -145,7 +162,9 @@ Camtek AOI 장비의 BatchReport/WaferInfo.ini 를 읽어 장비별 가동률을
 - `updater.DEFAULT_BRANCH` 는 오프라인 폴백 — GitHub 기본 브랜치가 바뀌면 함께 갱신한다.
 
 ## 테스트
-`QT_QPA_PLATFORM=offscreen python -m pytest -q` (빠른 확인: `-m "not ui"`). PyQt6 가 없는 환경에서는 ui 테스트가 skip 된다.
+`QT_QPA_PLATFORM=offscreen python -m pytest -q` (빠른 확인: `-m "not ui and not slow"`, `slow` = 30일치 샘플 전수). PyQt6 가 없는 환경에서는 ui 테스트가 skip 된다.
+보관 샘플에서 행을 꺼낼 때는 `dev/tests/sample_rows.py`(이름 기반 열 복원·풀 검증), 집계 수치를 잴 때는 `python dev/tools/measure.py <샘플>`(열람 시계를 수집 시각에 고정),
+단계별 전후는 `dev/samples/ledger_2026-09-18.md` 에 적는다 — 예상치에 맞추어 규칙·테스트를 고치지 않는다.
 테스트는 실제 pip·네트워크를 절대 실행하지 않는다(`test_updater.py` 의 autouse 가드). 유일한 예외는 `test_dashboard_js.py` —
 `dev/tests/js_harness.js` 가 template 의 스크립트를 **로컬 Node(vm, DOM 대역)** 에서 실행해 분류·시간 모델을 검사한다(네트워크·파일 쓰기 없음,
 Node 가 없으면 skip). 문자열 검사(`test_template_contract.py`)만으로 화면 로직을 '완료' 라고 하지 않는다.
