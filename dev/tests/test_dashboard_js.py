@@ -353,3 +353,62 @@ def test_batch_level_abort_is_an_error_with_batch_time():
     res = run([w("AOI-8", "", "11:00", "11:02", lot="LOT-A", status="Aborted.", kind="batch", ini_match="BATCH")])
     m = res["per"]["AOI-8"][DAY]
     assert m["nErr"] == 1 and m["err"] == 120 and m["nAbort"] == 1 and m["nAbortErr"] == 1 and m["run"] == 0
+
+
+# ── D37: 같은 INI 시각을 두 Report 가 참조 — 시간의 주인은 엄격히 포함하는 Report 하나 ─────────
+def _pair(order="err_first"):
+    """실물(AOI-1 LVG/GWAYS13-C7 9/16)을 본뜬 fixture: Error Report 의 Batch 23:05~23:15 는 INI 시각(23:20~23:24)을 담지 않고(±10분 여유로만),
+    뒤의 Pass Report 의 Batch 23:19~23:24 가 엄격히 담는다."""
+    err = {"device": "AOI-1", "lot": "LVG", "wafer_id": "GWAYS13-C7", "status": "Alignment Error.", "recipe": "R1", "report": "err.htm",
+           "wafer_start_time": f"{DAY}T23:20:16", "wafer_end_time": f"{DAY}T23:24:12", "batch_start": f"{DAY}T23:05:20", "batch_end": f"{DAY}T23:15:38", "ini_match": "EXACT"}
+    ok = {"device": "AOI-1", "lot": "LVG", "wafer_id": "GWAYS13-C7", "status": "Pass", "recipe": "R1", "report": "pass.htm",
+          "wafer_start_time": f"{DAY}T23:20:16", "wafer_end_time": f"{DAY}T23:24:12", "batch_start": f"{DAY}T23:19:27", "batch_end": f"{DAY}T23:24:37", "ini_match": "EXACT"}
+    later = w("AOI-1", "OTHER", "23:40", "23:45", lot="LVG", report="later.htm")
+    return [err, ok, later] if order == "err_first" else [later, ok, err]
+
+
+@pytest.mark.parametrize("order", ["err_first", "pass_first"])
+def test_strict_container_owns_the_time_and_the_error_stays_as_an_untimed_event(order):
+    res = run(_pair(order))
+    m = res["per"]["AOI-1"][DAY]
+    assert m["run"] == 236 + 300                                              # 23:20:16→23:24:12 = 236초 가동 + 23:40→23:45
+    assert m["err"] == 0 and m["stop"] == 0                                   # Error 구간·정지(추정)로 칠하지 않는다
+    assert m["nErr"] == 1                                                     # Error 는 건수로 남는다(시간 미확인)
+    a_ok = att(res, "AOI-1", "GWAYS13-C7", "pass.htm"); a_err = att(res, "AOI-1", "GWAYS13-C7", "err.htm")
+    assert a_ok["timed"] and a_ok["own"] == "OWNED" and a_ok["basis"] == "STRICT_IN_BATCH"
+    assert not a_err["timed"] and a_err["own"] == "NOT_OWNER" and a_err["basis"] == "TOLERANCE_ONLY"
+    assert a_ok["rel"] == "SAME_DEVICE_RESCAN" and a_ok["disp"] == "RESCAN"    # 같은 장비 Error 뒤 복구 = 재스캔 (앞선 시도는 Batch 근거)
+    assert a_err["s"] < a_ok["s"]
+
+
+def test_ownership_result_does_not_depend_on_row_order():
+    a, b = run(_pair("err_first")), run(_pair("pass_first"))
+    assert a["per"] == b["per"]
+    key = lambda r: {(x["dev"], x["wafer"], x["report"]): (x["rel"], x["disp"], x["own"], x["timed"]) for x in r["attempts"]}
+    assert key(a) == key(b)
+
+
+def test_zero_or_two_strict_containers_keeps_the_old_merge_and_marks_it_ambiguous():
+    """엄격 포함 Report 가 하나가 아니면 소유권 보류 — 예전처럼 시간을 한 번만 세고 대표 행은 결정적으로(Error 먼저)."""
+    both = [w("AOI-8", "W1", "09:00", "09:05", report="a.htm"), w("AOI-8", "W1", "09:00", "09:05", status="Scan Error.", report="b.htm")]
+    for rows in (both, list(reversed(both))):
+        res = run(rows)
+        m = res["per"]["AOI-8"][DAY]
+        assert m["err"] == 300 and m["run"] == 0 and m["nErr"] == 1 and len(res["attempts"]) == 1
+        assert res["attempts"][0]["refs"] == 2 and res["attempts"][0]["own"] == "AMBIGUOUS" and res["attempts"][0]["status"] == "Scan Error."
+    assert res["quality"]["ambiguous"] == 1 and res["quality"]["notOwner"] == 0
+
+
+def test_duplicate_rows_inside_the_owner_report_still_give_one_owner():
+    rows = _pair("err_first"); rows.insert(2, dict(rows[1]))                  # Pass Report 의 같은 행이 두 번
+    res = run(rows)
+    a_ok = att(res, "AOI-1", "GWAYS13-C7", "pass.htm")
+    assert a_ok["own"] == "OWNED" and a_ok["rawDups"] == 2 and res["per"]["AOI-1"][DAY]["run"] == 236 + 300
+    assert res["quality"]["notOwner"] == 1
+
+
+def test_single_report_with_tolerance_only_time_still_uses_the_time():
+    """경쟁 Report 가 없으면 여유 안의 시각은 지금처럼 쓴다(BATCH_WINDOW_MARGIN_SEC 는 그대로 600)."""
+    r = _pair("err_first")[0]
+    res = run([r])
+    assert res["per"]["AOI-1"][DAY]["err"] == 236 and att(res, "AOI-1", "GWAYS13-C7")["basis"] == "TOLERANCE_ONLY"

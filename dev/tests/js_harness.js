@@ -42,7 +42,7 @@ const out=vm.runInContext(`(function(){rows=__rows.map(o=>({kind:"",job:"",setup
   res.totals=tot;res.identity_violations=bad;
   const rel={},conf={},disp={};let timed=0;
   for(const a of D._index.attempts){rel[a.rel]=(rel[a.rel]||0)+1;conf[a.conf]=(conf[a.conf]||0)+1;if(a.timed){timed++;disp[a.g.disp]=(disp[a.g.disp]||0)+1;}
-    if(!__summary)res.attempts.push({dev:a.dev,wafer:a.r.wafer_id,lot:a.r.lot,report:a.r.report,timed:a.timed,s:a.s,rel:a.rel,conf:a.conf,no:a.no,of:a.of,prior:a.prior?{dev:a.prior.dev,s:a.prior.s}:null,disp:a.timed?a.g.disp:null,abortFlag:a.timed?!!a.g.abort:!!a.abort,refs:a.timed?a.g.refs:null,rawDups:a.timed?a.g.rawDups:null,why:a.why,mk:a.mk,pk:a.pk});}
+    if(!__summary)res.attempts.push({dev:a.dev,wafer:a.r.wafer_id,lot:a.r.lot,report:a.r.report,timed:a.timed,s:a.s,rel:a.rel,conf:a.conf,no:a.no,of:a.of,prior:a.prior?{dev:a.prior.dev,s:a.prior.s}:null,disp:a.timed?a.g.disp:null,abortFlag:a.timed?!!a.g.abort:!!a.abort,refs:a.timed?a.g.refs:null,rawDups:a.timed?a.g.rawDups:null,why:a.why,mk:a.mk,pk:a.pk,own:a.r.ownership,basis:a.r.time_basis,status:a.r.status,state:a.r.state});}
   res.model={attempts:D._index.attempts.length,timed_attempts:timed,relations:rel,confidence:conf,display_of_timed_attempts:disp};
   const f=fleetAvg(keys);res.fleet={util:f.util,sumUtil:f.sumUtil,n:f.n};
   res.loss=keys.map(k=>{const L=lossCalc(devNames.map(n=>({n,m:dayMetrics(D[n],k)})));const fa=fleetAvg([k]);return{k,ppSum:L.ppSum,util:fa.util,rows:L.rows.map(r=>[r.id,r.sec,r.pp])};});

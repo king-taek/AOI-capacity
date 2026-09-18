@@ -396,7 +396,7 @@ const chipOf=(t,txt)=>`<span class="chip ${DM(t).chip}">${txt||DM(t).label}</spa
 const REL_KO={FIRST_OBSERVED:"확인된 첫 기록",SAME_DEVICE_REPEAT:"같은 장비 반복",SAME_DEVICE_RESCAN:"같은 장비 재스캔",CROSS_DEVICE_RESCAN:"다른 장비 재스캔",TOKEN_RESCAN:"Lot 표기 RE(이전 기록 미확인)",UNRESOLVED:"판정 보류"};
 const CONF_KO={confirmed:"확정",inferred:"추정",unresolved:"보류"};
 /* ★ 분류 규칙 번호 — 규칙이 바뀌면 올린다. 저장된 값이 아니라 열 때마다 같은 원천 행에서 다시 계산한다. */
-const CLASS_VERSION=4;
+const CLASS_VERSION=5;
 
 let rows=[],meta={},devNames=[],D=null,day=null,selDev=null;
 let ui={group:"",sort:"name",view:"cards",unit:"day",span:14,trendDev:"",cmpP:1,cmpSort:"high",cmpAnchor:null,loss:null,lossMode:"pp",lossPage:0,rep:null,back:null};
@@ -585,44 +585,73 @@ const MARK_TOKENS=new Set(["RE","RESCAN","REWORK","TEST"]);
 const normLot=l=>String(l||"").trim().split(/\s+/).filter(t=>!MARK_TOKENS.has(t.toUpperCase())).join(" ");
 const materialKey=r=>`${normLot(r.lot)}|${String(r.wafer_id||"").trim()}`;
 const processKey=r=>String(r.recipe||"").trim();
+/* 시간 근거(time_basis) — INI 의 Wafer 시각이 그 Report 의 Batch 구간에 어떻게 들어가는가. 파이썬 collect.time_basis 와 같은 규칙.
+   STRICT_IN_BATCH(여유 없이 안) · TOLERANCE_ONLY(±BATCH_WINDOW_MARGIN_SEC 여유로만) · OUTSIDE_BATCH · BATCH_ONLY(실패 배치 행) · MISSING(시각 없음) · INVALID(역전)
+   Batch 시각을 모르면 판단하지 않고 그대로 쓴다(UNKNOWN_BATCH). */
+const BATCH_WINDOW_MARGIN_SEC=600;
+function timeBasis(r,st,en){if(r.kind==="batch")return"BATCH_ONLY";if(!st||!en)return"MISSING";if(en<st)return"INVALID";
+  const bs=parseDt(r.batch_start),be=parseDt(r.batch_end);if(!bs||!be)return"UNKNOWN_BATCH";
+  if(bs<=st&&en<=be)return"STRICT_IN_BATCH";const m=BATCH_WINDOW_MARGIN_SEC*1000;if(bs.getTime()-m<=st.getTime()&&en.getTime()<=be.getTime()+m)return"TOLERANCE_ONLY";return"OUTSIDE_BATCH";}
 function build(){
   devNames=[...new Set(rows.map(r=>r.device))].sort(cmpDev);
   reportHasPass={};for(const r of rows)if(r.kind!=="batch"&&r.outcome==="PASS")reportHasPass[reportKey(r)]=true;   /* Report 문맥 — 필터 전 원천 전체 */
   const M={};for(const n of devNames)M[n]={name:n,segs:[],errNoTime:[],abortNoTime:[],cache:{},seen:{},raw:{},obsEnd:0};
   let obsEnd=0;const attempts=[];   /* 자재 이력에 들어갈 시도(시각 있는 Wafer 행 + 시각 없는 STALE/NOT_FOUND Wafer 행) */
+  /* 1차: 원본 행 중복(①)을 걷어 내고, 시각 있는 행은 INI 참조 그룹(장비·Wafer·INI 시작·INI 종료)으로 모은다 */
+  const timed=[],untimed=[],groups={};
   for(const r of rows){const d=M[r.device];const st=parseDt(r.wafer_start_time),en=parseDt(r.wafer_end_time);const ms=r.state=metricState(r);
     /* ① 같은 원본 행이 두 번(같은 파일 재수집·사본 합치기) — 시도로도 시간으로도 세지 않는다 */
     const rawKey=`${r.report}|${r.wafer_id}|${r.wafer_start_time}|${r.wafer_end_time}|${r.status}|${r.lot}`;
     if(d.raw[rawKey]){d.raw[rawKey].rawDups++;continue;}
-    if(st&&en&&en>=st){
-      /* ② 같은 Wafer 가 여러 Report 에 나오면(원래 검사 + 재검사) WaferInfo.ini 는 마지막 것 하나뿐이라
-         같은 시각이 두 번 붙는다. 시간은 한 번만 세고, Report 가 몇 건이었는지는 남긴다. */
-      const key=`${r.wafer_id}|${st.getTime()}|${en.getTime()}`;const prev=d.seen[key];
-      if(prev){prev.refs++;prev.rawDups+=0;if(r.report&&!prev.reports.includes(r.report))prev.reports.push(r.report);
-               if(r.scan_type==="RESCAN")prev.redo=true;if(r.scan_type==="REWORK")prev.rework=true;if(r.scan_type==="TEST")prev.test=true;
-               if(isAbortOutcome(r.outcome)){prev.abort=true;if(!prev.err&&prev.unk)prev.r=r;}
-               if(ms==="ERROR"){prev.err=true;prev.unk=false;prev.r=r;}else if(ms==="RUN"&&prev.unk){prev.unk=false;prev.r=r;}d.raw[rawKey]=prev;continue;}
-      const g={s:st.getTime(),e:en.getTime(),err:ms==="ERROR",abort:isAbortOutcome(r.outcome),unk:ms==="UNCLASSIFIED",r,refs:1,rawDups:1,reports:r.report?[r.report]:[],batch:r.kind==="batch",
-               redo:r.scan_type==="RESCAN",rework:r.scan_type==="REWORK",test:r.scan_type==="TEST",dev:r.device,disp:"RUN",rel:null,conf:null,prior:null,why:""};
-      d.seen[key]=g;d.raw[rawKey]=g;d.segs.push(g);obsEnd=Math.max(obsEnd,g.e);d.obsEnd=Math.max(d.obsEnd,g.e);
-      if(!g.batch&&!isPlaceholder(r.wafer_id)&&!isPlaceholder(r.lot))attempts.push({g,dev:r.device,mk:materialKey(r),pk:processKey(r),s:g.s,e:g.e,timed:true,r});
-    }
-    else{
-      const bs=parseDt(r.batch_start),be=parseDt(r.batch_end);const t=bs?bs.getTime():null;
-      const o={t,rawDups:1,r};d.raw[rawKey]=o;if(t)obsEnd=Math.max(obsEnd,be?be.getTime():t);
-      /* LoadPort/Slot 자리표시 행과, 통째로 실패한 배치 안의 행은 따로 세지 않는다 —
-         그 시도는 'batch' 행 한 건이 대표한다(사용자 확정: 배치 1건으로 묶기) */
-      if(r.ini_match!=="NO_WAFER_ID"&&r.ini_match!=="BATCH_FAILED"){if(ms==="ERROR"||(ms==="TEST"&&(r.causes.length||isAbortOutcome(r.outcome)))){d.errNoTime.push(o);if(t)d.obsEnd=Math.max(d.obsEnd,t);}
-        else if(isAbortOutcome(r.outcome)&&ms==="RUN")d.abortNoTime.push(o);}   /* 가동 중단(시각 없음)은 건수만 — Error 도 시간도 아니다 */
-      /* 시각 없는 Wafer 시도(STALE·NOT_FOUND·READ_ERROR)도 자재 이력에는 넣는다 — 시간은 세지 않고(지어내지 않는다),
-         Batch 구간이 다른 시도와 겹치지 않을 때만 선후의 근거로 쓴다 */
-      if(r.kind!=="batch"&&!isPlaceholder(r.wafer_id)&&!isPlaceholder(r.lot)&&r.ini_match!=="NO_WAFER_ID"&&r.ini_match!=="BATCH_FAILED"&&t)
-        attempts.push({g:null,dev:r.device,mk:materialKey(r),pk:processKey(r),s:t,e:be?Math.max(be.getTime(),t):t,timed:false,r,err:ms==="ERROR",abort:isAbortOutcome(r.outcome),o});}}
+    r.time_basis=timeBasis(r,st,en);r.ownership="NOT_APPLICABLE";
+    if(st&&en&&en>=st){const c={r,d,st:st.getTime(),en:en.getTime(),ms,rawKey,rawDups:1};timed.push(c);d.raw[rawKey]=c;
+      if(r.kind!=="batch"){const k=`${r.device}|${r.wafer_id}|${c.st}|${c.en}`;(groups[k]=groups[k]||[]).push(c);}}
+    else{const u={r,d,ms,rawKey,rawDups:1};untimed.push(u);d.raw[rawKey]=u;}}
+  /* ★ 2차 — 시간 소유권(사용자 확정 D37): WaferInfo.ini 는 재검사로 덮어써져 마지막 시각만 남는다. 앞 시도가 Error 로 끝나고
+     ±10분 안에 다시 돌려 Pass 하면 두 Report 가 같은 시각을 갖는다. 그 시각을 **자기 Batch 구간에 엄격히 포함하는 Report 가
+     하나뿐이면 그 Report 가 시간을 갖는다**(뒤의 정상 스캔). 여유(±600초)로만 걸린 나머지 Report 의 행은 '시간 미확인 · INI 가
+     나중 검사로 덮어써짐' 이 되어 가동/Error 시간에 들어가지 않되, 사건(Error 건수)·원문·이력은 그대로 남는다.
+     엄격 포함 Report 가 0개거나 2개 이상이면 AMBIGUOUS — 예전처럼 시간을 한 번만 세고 대표 행을 결정적으로 고르되 '확인된 소유' 로 표시하지 않는다.
+     Report 수는 행 수가 아니라 서로 다른 Report 이름으로 센다(같은 Report 의 복제 행이 둘이어도 소유자는 하나). 입력 순서와 무관하다. */
+  const ambiguous=[];
+  for(const list of Object.values(groups)){const reps=new Set(list.map(c=>c.r.report));if(reps.size<2){list.forEach(c=>c.own="OWNED");continue;}
+    const strict=new Set(list.filter(c=>c.r.time_basis==="STRICT_IN_BATCH").map(c=>c.r.report));
+    if(strict.size===1){const o=[...strict][0];list.forEach(c=>c.own=c.r.report===o?"OWNED":"NOT_OWNER");}
+    else{list.forEach(c=>c.own="AMBIGUOUS");ambiguous.push(list);}}
+  let notOwner=0;
+  for(const c of timed){const{r,d,ms}=c;r.ownership=c.own||"NOT_APPLICABLE";
+    if(c.own==="NOT_OWNER"){notOwner++;untimed.push({r,d,ms,rawKey:c.rawKey,rawDups:c.rawDups,notOwner:true});continue;}   /* 시간을 쓰지 않는다 — 아래 '시각 없는 행' 과 같은 길 */
+    /* ② 같은 시각을 참조하는 나머지(같은 Report 의 복제 · AMBIGUOUS 그룹)는 시간을 한 번만 세고 Report 이력을 전부 남긴다(재검사로 단정하지 않는다) */
+    const key=`${r.wafer_id}|${c.st}|${c.en}`;const prev=r.kind!=="batch"?d.seen[key]:null;
+    if(prev){prev.refs++;prev.members.push(r);if(r.report&&!prev.reports.includes(r.report))prev.reports.push(r.report);
+             if(r.scan_type==="RESCAN")prev.redo=true;if(r.scan_type==="REWORK")prev.rework=true;if(r.scan_type==="TEST")prev.test=true;
+             if(isAbortOutcome(r.outcome))prev.abort=true;if(ms==="ERROR"){prev.err=true;prev.unk=false;}else if(ms==="RUN"&&prev.unk)prev.unk=false;d.raw[c.rawKey]=prev;continue;}
+    const g={s:c.st,e:c.en,err:ms==="ERROR",abort:isAbortOutcome(r.outcome),unk:ms==="UNCLASSIFIED",r,members:[r],refs:1,rawDups:c.rawDups,reports:r.report?[r.report]:[],batch:r.kind==="batch",own:c.own||"NOT_APPLICABLE",
+             redo:r.scan_type==="RESCAN",rework:r.scan_type==="REWORK",test:r.scan_type==="TEST",dev:r.device,disp:"RUN",rel:null,conf:null,prior:null,why:""};
+    if(r.kind!=="batch")d.seen[key]=g;d.raw[c.rawKey]=g;d.segs.push(g);obsEnd=Math.max(obsEnd,g.e);d.obsEnd=Math.max(d.obsEnd,g.e);
+    if(!g.batch&&!isPlaceholder(r.wafer_id)&&!isPlaceholder(r.lot))attempts.push({g,dev:r.device,mk:materialKey(r),pk:processKey(r),s:g.s,e:g.e,timed:true,r});}
+  /* 병합된 막대의 대표 행은 **결정적으로** 고른다(입력 순서 무관): Error 행 → 가동 행 → 그 다음, 같으면 Batch 시작이 이른 것 → Report 이름 사전순 */
+  const cmpS=(x,y)=>x<y?-1:x>y?1:0;
+  for(const n of devNames)for(const g of M[n].segs){if(g.members.length<2)continue;
+    const rank=x=>x.state==="ERROR"?0:x.state==="RUN"?1:x.state==="TEST"?2:3;const bt=x=>{const b=parseDt(x.batch_start);return b?b.getTime():Infinity;};
+    g.r=[...g.members].sort((x,y)=>rank(x)-rank(y)||bt(x)-bt(y)||cmpS(String(x.report),String(y.report)))[0];}
+  for(const a of attempts)if(a.timed&&a.r!==a.g.r){a.r=a.g.r;a.mk=materialKey(a.r);a.pk=processKey(a.r);}   /* 시도도 같은 대표 행을 본다 */
+  for(const u of untimed){const{r,d,ms}=u;
+    const bs=parseDt(r.batch_start),be=parseDt(r.batch_end);const t=bs?bs.getTime():null;
+    const o={t,rawDups:u.rawDups,r,notOwner:!!u.notOwner};d.raw[u.rawKey]=o;if(t)obsEnd=Math.max(obsEnd,be?be.getTime():t);
+    /* LoadPort/Slot 자리표시 행과, 통째로 실패한 배치 안의 행은 따로 세지 않는다 —
+       그 시도는 'batch' 행 한 건이 대표한다(사용자 확정: 배치 1건으로 묶기) */
+    if(r.ini_match!=="NO_WAFER_ID"&&r.ini_match!=="BATCH_FAILED"){if(ms==="ERROR"||(ms==="TEST"&&(r.causes.length||isAbortOutcome(r.outcome)))){d.errNoTime.push(o);if(t)d.obsEnd=Math.max(d.obsEnd,t);}
+      else if(isAbortOutcome(r.outcome)&&ms==="RUN")d.abortNoTime.push(o);}   /* 가동 중단(시각 없음)은 건수만 — Error 도 시간도 아니다 */
+    /* 시각 없는 Wafer 시도(STALE·NOT_FOUND·READ_ERROR·시간 소유권 없음)도 자재 이력에는 넣는다 — 시간은 세지 않고(지어내지 않는다),
+       Batch 구간이 다른 시도와 겹치지 않을 때만 선후의 근거로 쓴다 */
+    if(r.kind!=="batch"&&!isPlaceholder(r.wafer_id)&&!isPlaceholder(r.lot)&&r.ini_match!=="NO_WAFER_ID"&&r.ini_match!=="BATCH_FAILED"&&t)
+      attempts.push({g:null,dev:r.device,mk:materialKey(r),pk:processKey(r),s:t,e:be?Math.max(be.getTime(),t):t,timed:false,r,err:ms==="ERROR",abort:isAbortOutcome(r.outcome),o});}
   for(const d of Object.values(M)){d.segs.sort((a,b)=>a.s-b.s);d.segs.forEach((g,i)=>{const nx=d.segs[i+1];g.stopEnd=g.err&&nx?nx.s:g.err?null:undefined;});
     /* index segments by day for fast per-day lookups. 복구 기록이 없는 Error 의 정지(추정)는 관측 종료(로드한 데이터의 마지막 시각)까지만 —
        그 뒤는 '정지 확정' 이 아니라 '기록 없음' 이다. */
     d.byDay={};d.segs.forEach((g,i)=>{for(let t=keyDay(dayKey(new Date(g.s))).getTime();t<=g.e;t+=DAY){const k=dayKey(new Date(t));(d.byDay[k]=d.byDay[k]||[]).push(i);}if(g.err&&g.stopEnd!==undefined){const se=g.stopEnd===null?Math.max(g.e,obsEnd):g.stopEnd;for(let t=keyDay(dayKey(new Date(g.e))).getTime();t<=se;t+=DAY){const k=dayKey(new Date(t));const a=(d.byDay[k]=d.byDay[k]||[]);if(!a.includes(i))a.push(i);}}});}
-  M._obsEnd=obsEnd;M._index=materialIndex(attempts);
+  M._obsEnd=obsEnd;M._notOwner=notOwner;M._ambiguous=ambiguous.length;M._index=materialIndex(attempts);
   return M;}
 /* ---------- 전 장비 공통 자재 이력 ----------
    같은 자재 키의 시도를 시각순으로 놓고, 앞선 시도가 **확실히 먼저 끝난** 경우에만 관계를 붙인다.
@@ -782,7 +811,7 @@ function homeList(){return visDevs().map(n=>({n,m:dayMetrics(D[n],day)}));}
 /* 수집 범위 밖이라 이번에 읽지 않은 장비 — 화면에서 '수집 안 함' 으로만 보여 준다(데이터 없음과 구분) */
 function scopeOut(){return(meta.devices||[]).filter(d=>d.scope==="out"&&!devNames.includes(d.name)).sort((a,b)=>cmpDev(a.name,b.name));}
 /* 데이터 품질 요약 — 수집 상태와는 별개다(수집 ok 라도 STALE·NOT_FOUND 행은 있다). 행 수이지 시간이 아니다. */
-function qualitySummary(){const q={stale:0,missing:0,unresolved:(D&&D._index)?D._index.nUnresolved:0};for(const r of rows){if(r.ini_match==="STALE")q.stale++;else if(r.ini_match==="NOT_FOUND"||r.ini_match==="READ_ERROR")q.missing++;}return q;}
+function qualitySummary(){const q={stale:0,missing:0,unresolved:(D&&D._index)?D._index.nUnresolved:0,notOwner:D?D._notOwner||0:0,ambiguous:D?D._ambiguous||0:0};for(const r of rows){if(r.ini_match==="STALE")q.stale++;else if(r.ini_match==="NOT_FOUND"||r.ini_match==="READ_ERROR")q.missing++;}return q;}
 const devId=n=>"dev-"+String(n).replace(/[^A-Za-z0-9_-]/g,c=>"_"+c.charCodeAt(0).toString(16));
 /* 상세 패널은 하나뿐 — 렌더 전에 주차장(#detPark)으로 빼 두었다가 선택한 장비의 자리로 옮긴다(innerHTML 이 지우지 않게) */
 function parkDetail(){const d=$("#detail"),p=$("#detPark");if(d&&p&&d.parentNode!==p)p.appendChild(d);}
@@ -799,7 +828,7 @@ function renderHome(){
     <div class="card ss"><div class="k">주의 장비</div><div class="v num" style="color:${alerts.length?"var(--crit-ink)":"inherit"}">${alerts.length}<small>대</small></div><div class="s">가동률 ${th.util}% 미만 또는 Error ${th.err}건↑</div></div>
     <div class="card ss"><div class="k">Error 발생</div><div class="v num">${errs.length}<small>대</small></div><div class="s">총 ${errs.reduce((a,x)=>a+x.m.nErr,0)}건 · Error·정지 ${fmtSecS(list.reduce((a,x)=>a+x.m.stop+x.m.err,0))}</div></div>
     <div class="card ss"><div class="k">반복 가동</div><div class="v num">${cur.run>0?(rep/cur.run*100).toFixed(1):"0.0"}<small>%</small></div><div class="s">가동시간 중 중복스캔·재스캔·Rework ${fmtSecS(rep)}</div></div>
-    <div class="card ss"><div class="k">최저 장비</div><div class="v" style="font-size:20px">${worst?esc(worst.n):"–"}</div><div class="s">${worst?pct(worst.m.util):"–"}${q.stale+q.missing?` · <span title="시각을 못 읽은 원천 행 수(로드 전체) — 시간으로 바꾸지 않습니다">시간 미확인 ${q.stale+q.missing}행</span>`:""}${q.unresolved?` · 판정 보류 ${q.unresolved}건`:""}</div></div>`;
+    <div class="card ss"><div class="k">최저 장비</div><div class="v" style="font-size:20px">${worst?esc(worst.n):"–"}</div><div class="s">${worst?pct(worst.m.util):"–"}${q.stale+q.missing?` · <span title="시각을 못 읽은 원천 행 수(로드 전체) — 시간으로 바꾸지 않습니다">시간 미확인 ${q.stale+q.missing}행</span>`:""}${q.notOwner?` · <span title="같은 INI 시각을 담은 다른 Report 가 시간을 가진 행(D37)">INI 덮어써짐 ${q.notOwner}행</span>`:""}${q.ambiguous?` · 소유권 보류 ${q.ambiguous}묶음`:""}${q.unresolved?` · 판정 보류 ${q.unresolved}건`:""}</div></div>`;
   renderLoss(list,vd);renderRep(list);
   const key=x=>x.m.hasData?x.m.util:999;
   list.sort((a,b)=>ui.sort==="name"?cmpDev(a.n,b.n):ui.sort==="err"?(b.m.nErr-a.m.nErr)||(key(a)-key(b)):(key(a)-key(b)));
@@ -926,7 +955,7 @@ function renderRules(){const b=$("#ruleBody");if(!b)return;$("#ruleVer").textCon
     ["중단(가동)","원인 없는 중단인데 같은 Report 에 정상 스캔이 있음(D41)","가동 포함(abortRun) · 저하 사유 아님 · Error 건수 제외"],
     ["분류 미확인","건너뜀 · 취소(<span class='mono'>Cancelled</span>) · 결과 미확인(<span class='mono'>-</span>)인데 시각이 있음","가동에도 Error 에도 넣지 않음 · 미가동(사유 미확인)에 남김"],
     ["Test","Lot 표기 TEST","분모 포함 · 분자 제외 · Error 건수 제외"],
-    ["시각 중복 참조","Report 여러 개가 같은 INI 시각을 가리킴","시간 1번 · 이력 보존 · 반복으로 단정하지 않음"],["보류","시각이 겹치거나 같은 시작 · 앞선 시도 시각 미확인이 겹침","원천 표기대로 · 확정 재스캔에 세지 않음"]];
+    ["시각 중복 참조","Report 여러 개가 같은 INI 시각을 가리킴 — 그 시각을 Batch 구간에 <b>엄격히</b> 담은 Report 가 하나뿐이면 그 Report 가 시간을 갖고(D37) 나머지는 시간 미확인(사건·원문은 보존). 하나가 아니면 소유권 보류","시간 1번 · 이력 보존 · 반복으로 단정하지 않음"],["보류","시각이 겹치거나 같은 시작 · 앞선 시도 시각 미확인이 겹침","원천 표기대로 · 확정 재스캔에 세지 않음"]];
   b.innerHTML=`<table class="tbl"><thead><tr><th>표시</th><th>조건</th><th>집계</th></tr></thead><tbody>${R.map(r=>`<tr><td><b>${r[0]}</b></td><td style="white-space:normal">${r[1]}</td><td style="white-space:normal">${r[2]}</td></tr>`).join("")}</tbody></table>
     <p class="help" style="margin-top:10px">자재 키 = Lot 이름(RE·RESCAN·REWORK·TEST 토큰만 제외, 대소문자·구분자 그대로) + Wafer ID. Recipe 가 같으면 <b>확정</b>, 자재만 같고 Recipe 가 다르면 <b>추정</b>(실물: 같은 Lot·Wafer 가 장비마다 <span class="mono">BS</span> / <span class="mono">BS_1</span>). Wafer ID 만 같거나 Lot 만 같은 경우는 연결하지 않습니다. LoadPort/Slot 자리표시·실패 배치 행은 제외합니다.</p>`;}
 
@@ -1110,7 +1139,7 @@ function renderDetail(){
   const cut=(t,n)=>{t=String(t||"");return t.length>n?esc(t.slice(0,n-1))+"…":esc(t);};
   const lotMark=L=>L.test?chipOf("TEST","Test · 제외"):[L.redo?chipOf("RESCAN"):"",L.dup?chipOf("DUP"):"",L.rework?chipOf("REWORK"):"",L.nAbort?chipOf("ABORT",`중단 ${L.nAbort}`):""].filter(Boolean).join(" ");
   const lotTbl=m.lots.length?`<details style="margin:6px 0 10px"><summary style="cursor:pointer;color:var(--accent-2);font-size:13px">Lot ${m.lots.length}개 목록</summary><table class="tbl" style="margin-top:6px"><thead><tr><th>Lot</th><th>표기</th><th>Recipe</th><th>시작</th><th>종료</th><th class="r">소요</th><th class="r">가동</th><th class="r">Error</th><th>원본</th></tr></thead><tbody>${m.lots.map((L,i)=>{const nr=reportsOf(L.parts).length;return`<tr class="click" onclick="pinLot(${i})" ondblclick="openReport(window._m.lots[${i}].r)" title="클릭: 상세 · 더블클릭: Report 열기"><td class="mono">${esc(L.lot)}</td><td>${lotMark(L)}</td><td>${esc(L.recipe)}</td><td class="num">${hm(new Date(L.s))}</td><td class="num">${hm(new Date(L.e))}</td><td class="r">${fmtSecS((L.e-L.s)/1000)}</td><td class="r">${fmtSecS(L.run/1000)}</td><td class="r">${L.err?`<span class="chip crit">${L.err}</span>`:0}</td><td>${nr>1?`<span class="chip mute" title="Report ${nr}개 — 상세에서 고릅니다">원본 ${nr}개</span>`:openBtn(`window._m.lots[${i}].r`)}</td></tr>`;}).join("")}</tbody></table></details>`:"";
-  $("#detErrs").innerHTML=lotTbl+(m.errors.length?`<table class="tbl"><thead><tr><th>시각</th><th>Lot / Wafer</th><th>Error</th><th class="r">정지(추정)</th><th>장비 메시지</th><th>원본</th></tr></thead><tbody>${m.errors.map((e,i)=>`<tr class="click" data-e="${i}" onclick="hlSeg(${i});pinErr(${i})" ondblclick="openReport(window._m.errors[${i}].r)" title="클릭: 상세 · 더블클릭: Report 열기"><td class="num">${e.t?hm(new Date(e.t)):"–"}${e.noTime?' <span class="chip mute" title="Wafer 시각이 없어 Batch 시작 시각입니다">시간 미확인</span>':""}</td><td class="mono">${escLot(e.r)}${e.r.kind==="batch"?' <span class="chip crit">배치 전체</span>':" / "+esc(e.r.wafer_id)}</td><td><span class="chip crit">${ERR_KO[e.r.norm_status]||"Error"}</span>${e.r.kind==="batch"?' <span class="chip mute">스캔 전 중단</span>':""}${e.g&&e.g.rel&&e.g.rel!=="FIRST_OBSERVED"?' <span class="chip redo" title="'+esc(e.g.why)+'">'+(REL_KO[e.g.rel]||"")+'</span>':""}</td><td class="r">${e.open?'<span class="chip warn">복구 기록 없음</span>':e.stop!=null?fmtSec(e.stop):"–"}</td><td class="faint" title="${esc(e.r.status)}">${cut(e.r.status,40)}</td><td>${openBtn(`window._m.errors[${i}].r`)}</td></tr>`).join("")}</tbody></table><p class="faint" style="font-size:12px;margin-top:8px">정지(추정) = Error Wafer 종료부터 다음 Wafer 시작까지의 공백. 장비 이벤트 로그가 아닙니다.</p>`
+  $("#detErrs").innerHTML=lotTbl+(m.errors.length?`<table class="tbl"><thead><tr><th>시각</th><th>Lot / Wafer</th><th>Error</th><th class="r">정지(추정)</th><th>장비 메시지</th><th>원본</th></tr></thead><tbody>${m.errors.map((e,i)=>`<tr class="click" data-e="${i}" onclick="hlSeg(${i});pinErr(${i})" ondblclick="openReport(window._m.errors[${i}].r)" title="클릭: 상세 · 더블클릭: Report 열기"><td class="num">${e.t?hm(new Date(e.t)):"–"}${e.noTime?` <span class="chip mute" title="${e.r.ownership==="NOT_OWNER"?"INI 시각을 다른 Report 가 소유 — Batch 시작 시각으로 표시":"Wafer 시각이 없어 Batch 시작 시각입니다"}">시간 미확인${e.r.ownership==="NOT_OWNER"?" · INI 덮어써짐":""}</span>`:""}</td><td class="mono">${escLot(e.r)}${e.r.kind==="batch"?' <span class="chip crit">배치 전체</span>':" / "+esc(e.r.wafer_id)}</td><td><span class="chip crit">${ERR_KO[e.r.norm_status]||"Error"}</span>${e.r.kind==="batch"?' <span class="chip mute">스캔 전 중단</span>':""}${e.g&&e.g.rel&&e.g.rel!=="FIRST_OBSERVED"?' <span class="chip redo" title="'+esc(e.g.why)+'">'+(REL_KO[e.g.rel]||"")+'</span>':""}</td><td class="r">${e.open?'<span class="chip warn">복구 기록 없음</span>':e.stop!=null?fmtSec(e.stop):"–"}</td><td class="faint" title="${esc(e.r.status)}">${cut(e.r.status,40)}</td><td>${openBtn(`window._m.errors[${i}].r`)}</td></tr>`).join("")}</tbody></table><p class="faint" style="font-size:12px;margin-top:8px">정지(추정) = Error Wafer 종료부터 다음 Wafer 시작까지의 공백. 장비 이벤트 로그가 아닙니다.</p>`
     :(m.hasData?`<p class="faint" style="font-size:13px;padding:6px 0">이 날은 Error 가 없습니다.${m.nAbort?` 중단 ${m.nAbort}건은 같은 Report 에 정상 스캔이 있어 가동으로 셌습니다(D41).`:""}</p>`:'<p class="faint" style="font-size:13px;padding:6px 0">이 날은 데이터가 없습니다.</p>'));
   closeSeg();window._m=m;
   if(ui.pendingPin){const p=ui.pendingPin;ui.pendingPin=null;const it=m.items.find(x=>x.g&&x.g.r===p.r&&x.kind!=="stop")||m.items.find(x=>x.g&&x.g.r===p.r);   /* 전날 Error 의 정지만 있는 날은 그 정지 조각 */
@@ -1118,6 +1147,7 @@ function renderDetail(){
 
 /* ---------- 고정 상세(클릭·Enter) ----------
    hover 에서 뺀 것들 — 원문 메시지·파일명·INI 확인 상태·Report 목록·복사·자재 이력 — 를 여기서 본다. 툴팁과 달리 버튼이 있다. */
+const OWN_KO={NOT_OWNER:"시간 미확인 · INI 가 나중 검사로 덮어써짐 — 같은 시각을 Batch 구간에 담은 다른 Report 가 시간을 가짐(D37)",AMBIGUOUS:"같은 시각을 여러 Report 가 참조 — 엄격 포함 Report 가 하나가 아니어서 소유권 보류(시간은 한 번만 계산)"};
 const INI_KO={EXACT:"시각 확인됨",NOT_FOUND:"시간 미확인 · INI 없음",STALE:"시간 미확인 · INI 가 다시 검사로 덮어써짐",READ_ERROR:"시간 미확인 · INI 읽기 실패",
   NO_WAFER_ID:"자리표시 행(LoadPort/Slot)",BATCH_FAILED:"실패한 배치의 행 — 배치 1건으로 셈",BATCH:"스캔된 Wafer 없음 · Batch 시각으로 표시"};
 const reportsOf=parts=>{const seen=new Set(),out=[];for(const p of parts){const r=p.g.r;if(r.report&&!seen.has(r.report)){seen.add(r.report);out.push(r);}}return out;};
@@ -1153,7 +1183,9 @@ function pinSeg(sel){const m=window._m,box=$("#segDetail");if(!m||!box)return;co
     else add("시각",sel.t?`${hm(new Date(sel.t))} (Batch 시작) · Wafer 시각 없음`:"시간 미확인");
     add("Recipe",esc(r.recipe));if(r.outcome&&r.outcome!=="PASS")add("장비 메시지",`<code>${esc(r.status)}</code> <button class="btn small" onclick="copyText(this.previousElementSibling.textContent)">복사</button>`);
     if(r.outcome&&r.outcome!=="PASS")add("원인 · 결과",`${(r.causes||[]).map(c=>`<span class="chip crit">${ERR_KO[c]||c}</span>`).join(" ")||'<span class="faint">원인 문구 없음</span>'} → ${ERR_KO[r.outcome]||r.outcome}`);   /* D43: 원인과 종료 결과는 다른 축 */
-    add("INI 확인",INI_KO[r.ini_match]||esc(r.ini_match||""));if(r.data_issue&&r.ini_match!=="EXACT")add("비고",esc(r.data_issue));}
+    add("INI 확인",(r.ownership==="NOT_OWNER"?OWN_KO.NOT_OWNER:INI_KO[r.ini_match]||esc(r.ini_match||""))+(r.time_basis&&r.time_basis!=="MISSING"&&r.time_basis!=="BATCH_ONLY"?` · 시간 근거 ${r.time_basis==="STRICT_IN_BATCH"?"Batch 구간 안":r.time_basis==="TOLERANCE_ONLY"?"±10분 여유로만 포함":r.time_basis}`:""));
+    if(g&&g.own==="AMBIGUOUS")add("시간 소유권",OWN_KO.AMBIGUOUS+` · Report ${g.reports.length}개`);
+    if(r.data_issue&&r.ini_match!=="EXACT")add("비고",esc(r.data_issue));}
   m._pin={reports:reps};
   add(reps.length>1?`Report ${reps.length}개`:"Report",reps.length?reps.map((r,i)=>`${reportUrl(r)?`<button class="btn small" onclick="openReport(window._m._pin.reports[${i}])">Report 열기</button> `:""}<span class="mono faint">${esc(r.report)}</span>`).join("<br>"):'<span class="faint">Report 파일 이름이 없습니다</span>');
   box.innerHTML=`<div class="hd"><b>${title}</b><button class="btn ghost small" onclick="closeSeg()" aria-label="닫기">닫기 ✕</button></div><div class="grid">${rows.join("")}</div>`;box.hidden=false;

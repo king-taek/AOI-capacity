@@ -68,7 +68,7 @@ INI_KEYS = {
 #: 바꾸면 올린다. 캐시는 Report 의 수정시각만 보고 재파싱을 건너뛰므로, 이 번호가 다르면 캐시를 읽을 때
 #: `norm_status`·`scan_type` 을 원문(status·lot)에서 **NAS 접근 없이** 다시 계산한다(`_rederive_rows`).
 #: INI 경로가 바뀌는 수정(빈 job 되찾기 등)은 Report 를 다시 읽어야 하므로 '누락 복구'(`recover`)가 따로 있다.
-PARSER_VERSION = 3
+PARSER_VERSION = 4
 #: 누락 복구가 다시 읽는 대상 — INI 를 못 찾았거나 읽다 실패한 행이 있는 Report 만.
 #: STALE(다른 시도가 덮어쓴 INI)은 다시 읽어도 되돌아오지 않고, NO_WAFER_ID(자리표시)·BATCH_FAILED 는 경로 자체가 없다.
 RECOVERABLE_INI = ("NOT_FOUND", "READ_ERROR")
@@ -77,9 +77,11 @@ DEV_OK, DEV_NO_DATA, DEV_PARTIAL, DEV_UNREACHABLE = "ok", "no_data", "partial", 
 #: kind = "" (Wafer 한 장) · "batch" (통째로 실패한 배치 한 건 — Wafer 시각이 하나도 없는 시도)
 #: `cause`(원인 코드들, 세미콜론) · `outcome`(종료 결과) 은 D43 의 두 축 — `norm_status` 는 호환 필드(원인이 있으면 첫 원인, 없으면 결과).
 #: 옛 17열 파일에는 두 열이 없다 — 화면(template)은 언제나 `status` 원문에서 다시 계산하므로 옛 파일도 새 규칙으로 읽힌다.
-ROW_SCHEMA_VERSION = 2
+#: `time_basis`(D37) — INI 의 Wafer 시각이 그 Report 의 Batch 구간에 어떻게 들어가는가(STRICT_IN_BATCH · TOLERANCE_ONLY · BATCH_ONLY · MISSING …).
+#: 시간의 주인(같은 INI 시각을 여러 Report 가 참조할 때)은 화면이 원천 행 전체에서 정한다 — 이 열은 사람이 CSV 로 볼 근거다.
+ROW_SCHEMA_VERSION = 3
 OUT_COLS = ["device", "kind", "job", "setup", "lot", "wafer_id", "status", "norm_status", "cause", "outcome", "scan_type", "recipe",
-            "wafer_start_time", "wafer_end_time", "batch_start", "batch_end", "report", "ini_match", "data_issue"]
+            "wafer_start_time", "wafer_end_time", "batch_start", "batch_end", "report", "ini_match", "time_basis", "data_issue"]
 #: HTML 에 박아 넣는 JSON 에서 문자열 풀로 접는 열 — 같은 값이 수없이 되풀이되는 열들이다.
 #: (90일치 30대면 행이 십수만 개다. 시각 두 열만 값이 거의 다 달라 접지 않는다.)
 POOLED_COLS = tuple(c for c in OUT_COLS if c not in ("wafer_start_time", "wafer_end_time"))
@@ -455,7 +457,7 @@ def rows_for_report(dev_name: str, rep: dict, scan_root: str, memo: Optional[_In
              "scan_type": scan_type(w["lot"]),
              "recipe": w["recipe"] or s.get("Recipe", ""),
              "wafer_start_time": "", "wafer_end_time": "", "batch_start": s.get("Batch Start", ""),
-             "batch_end": s.get("Batch End", ""), "ini_match": "", "data_issue": ""}
+             "batch_end": s.get("Batch End", ""), "ini_match": "", "time_basis": "MISSING", "data_issue": ""}
         if _is_placeholder(w):
             r["ini_match"], r["data_issue"] = "NO_WAFER_ID", "LoadPort/Slot 행이라 INI 경로를 만들 수 없음"
         else:
@@ -473,9 +475,10 @@ def rows_for_report(dev_name: str, rep: dict, scan_root: str, memo: Optional[_In
                     r["wafer_start_time"], r["wafer_end_time"] = a.get("WaferStartTime", ""), a.get("WaferEndTime", "")
                     iss = []
                     st, en = parse_dt(r["wafer_start_time"]), parse_dt(r["wafer_end_time"])
+                    r["time_basis"] = time_basis(st, en, b_start, b_end)
                     if not (st and en and en >= st):
                         iss.append("Wafer 시작/종료 시각 누락 또는 역전")
-                    elif not _in_batch_window(st, en, b_start, b_end):
+                    elif r["time_basis"] == "OUTSIDE_BATCH":
                         r["ini_match"] = "STALE"       # 덮어써진 INI — 이 시도가 아니라 다른 시도의 시각
                         r["wafer_start_time"] = r["wafer_end_time"] = ""
                         iss.append("이 배치 시각 밖의 INI(다시 검사하며 덮어써짐) — 시간 미사용")
@@ -495,10 +498,24 @@ def rows_for_report(dev_name: str, rep: dict, scan_root: str, memo: Optional[_In
 
 def _in_batch_window(st, en, b_start, b_end) -> bool:
     """INI 의 Wafer 시각이 이 Report 의 배치 구간 안인가(여유 `BATCH_WINDOW_MARGIN_SEC`)."""
+    return time_basis(st, en, b_start, b_end) in ("STRICT_IN_BATCH", "TOLERANCE_ONLY", "UNKNOWN_BATCH")
+
+
+def time_basis(st, en, b_start, b_end) -> str:
+    """시간 근거(D37) — template 의 `timeBasis` 와 같은 규칙.
+    STRICT_IN_BATCH(여유 없이 안) · TOLERANCE_ONLY(±여유로만) · OUTSIDE_BATCH · MISSING · INVALID(역전) · UNKNOWN_BATCH(배치 시각 없음 — 판단하지 않고 그대로 쓴다)."""
+    if not (st and en):
+        return "MISSING"
+    if en < st:
+        return "INVALID"
     if not (b_start and b_end):
-        return True                                   # 배치 시각을 모르면 판단하지 않는다(그대로 쓴다)
+        return "UNKNOWN_BATCH"
+    if b_start <= st and en <= b_end:
+        return "STRICT_IN_BATCH"
     margin = dt.timedelta(seconds=BATCH_WINDOW_MARGIN_SEC)
-    return (b_start - margin) <= st and en <= (b_end + margin)
+    if (b_start - margin) <= st and en <= (b_end + margin):
+        return "TOLERANCE_ONLY"
+    return "OUTSIDE_BATCH"
 
 
 def _is_error_row(r: dict) -> bool:
@@ -564,7 +581,7 @@ def failed_batch_row(dev_name: str, rep: dict, rows: List[dict]) -> Optional[dic
             "outcome": norm_outcome(lead["status"]), "scan_type": scan_type(lot),
             "recipe": lead.get("recipe", ""), "wafer_start_time": s.get("Batch Start", ""),
             "wafer_end_time": s.get("Batch End", ""), "batch_start": s.get("Batch Start", ""),
-            "batch_end": s.get("Batch End", ""), "ini_match": "BATCH",
+            "batch_end": s.get("Batch End", ""), "ini_match": "BATCH", "time_basis": "BATCH_ONLY",
             "data_issue": f"검사된 Wafer 없음 — 배치 시각으로만 표시 (행 {len(rows)}개 중 오류 {len(errs)}개)"}
 
 
@@ -602,7 +619,9 @@ def _rederive_rows(cache: dict) -> int:
             if r.get("kind") == "batch":
                 continue
             new = {"norm_status": norm_status(r.get("status", "")), "cause": cause_field(norm_causes(r.get("status", ""))),
-                   "outcome": norm_outcome(r.get("status", "")), "scan_type": scan_type(r.get("lot", ""))}
+                   "outcome": norm_outcome(r.get("status", "")), "scan_type": scan_type(r.get("lot", "")),
+                   "time_basis": time_basis(parse_dt(r.get("wafer_start_time")), parse_dt(r.get("wafer_end_time")),
+                                            parse_dt(r.get("batch_start")), parse_dt(r.get("batch_end")))}
             if any(r.get(k) != v for k, v in new.items()):
                 r.update(new)
                 changed += 1
@@ -612,7 +631,7 @@ def _rederive_rows(cache: dict) -> int:
             errs = [x for x in rows if x.get("kind") != "batch" and _is_error_row(x)]
             union = _lead_error_row(errs)[1] if errs else norm_causes(r.get("status", ""))
             new = {"norm_status": norm_status(r.get("status", "")), "cause": cause_field(union),
-                   "outcome": norm_outcome(r.get("status", "")), "scan_type": scan_type(r.get("lot", ""))}
+                   "outcome": norm_outcome(r.get("status", "")), "scan_type": scan_type(r.get("lot", "")), "time_basis": "BATCH_ONLY"}
             if any(r.get(k) != v for k, v in new.items()):
                 r.update(new)
                 changed += 1
