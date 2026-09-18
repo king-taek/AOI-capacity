@@ -396,7 +396,7 @@ const chipOf=(t,txt)=>`<span class="chip ${DM(t).chip}">${txt||DM(t).label}</spa
 const REL_KO={FIRST_OBSERVED:"확인된 첫 기록",SAME_DEVICE_REPEAT:"같은 장비 반복",SAME_DEVICE_RESCAN:"같은 장비 재스캔",CROSS_DEVICE_RESCAN:"다른 장비 재스캔",TOKEN_RESCAN:"Lot 표기 RE(이전 기록 미확인)",UNRESOLVED:"판정 보류"};
 const CONF_KO={confirmed:"확정",inferred:"추정",unresolved:"보류",user_confirmed:"사용자 확인"};
 /* ★ 분류 규칙 번호 — 규칙이 바뀌면 올린다. 저장된 값이 아니라 열 때마다 같은 원천 행에서 다시 계산한다. */
-const CLASS_VERSION=7;
+const CLASS_VERSION=8;
 
 let rows=[],meta={},devNames=[],D=null,day=null,selDev=null;
 let ui={group:"",sort:"name",view:"cards",unit:"day",span:14,trendDev:"",cmpP:1,cmpSort:"high",cmpAnchor:null,loss:null,lossMode:"pp",lossPage:0,rep:null,back:null};
@@ -517,7 +517,13 @@ const keyDay=k=>{const[y,m,d]=k.split("-").map(Number);return new Date(y,m-1,d);
 const WD=["일","월","화","수","목","금","토"];
 const fmtDay=k=>{const d=keyDay(k);return`${d.getMonth()+1}/${d.getDate()} (${WD[d.getDay()]})`;};
 const addDays=(k,n)=>{const d=keyDay(k);d.setDate(d.getDate()+n);return dayKey(d);};
-const todayKey=()=>dayKey(new Date());
+/* ★ 집계 기준시계(사용자 확정 D40): 화면의 '오늘' 은 브라우저의 오늘이 아니라 **수집 시각(meta.generated_iso)** 이다.
+   D17(오늘만 00:00~마지막 스캔)은 그대로고 '오늘' 의 정의만 바뀐다 → 며칠 뒤 열어도 같은 숫자. 열람 시계(Date.now)는 '수집 후 경과' 표시에만 쓴다.
+   generated_iso 가 없는 옛 파일·데모만 열람 시계로 돌아가며 그때는 '비고정 기준' 배지를 붙인다. 시각 문자열에 시간대가 없으므로 설비 민간시각 그대로 비교한다. */
+function metricsRef(){const d=meta&&meta.generated_iso?parseDt(String(meta.generated_iso).slice(0,19)):null;return d||new Date();}
+const nowMs=()=>metricsRef().getTime();
+const refFixed=()=>!!(meta&&meta.generated_iso&&parseDt(String(meta.generated_iso).slice(0,19)));
+const todayKey=()=>dayKey(metricsRef());
 const isToday=k=>k===todayKey();
 const rowDate=r=>parseDt(r.wafer_start_time)||parseDt(r.batch_start);
 /* 장비 순서: AOI-1 … AOI-25 다음에 4F-AOI-01 … (숫자 순서, 사전식 아님) */
@@ -760,7 +766,7 @@ function dayLastScan(d,k){const a=keyDay(k).getTime(),z=a+DAY;let last=0;
 const EMPTY_M=k=>({key:k,future:true,run:0,err:0,stop:0,nErr:0,nWafer:0,nTest:0,testRun:0,abortRun:0,nAbort:0,nAbortErr:0,unk:0,nUnk:0,dup:0,rescan:0,rework:0,nDup:0,nRescan:0,nRework:0,nCross:0,overlap:0,items:[],errors:[],aborts:[],denom:0,util:null,hasData:false,off:0,a:0,b:0});
 function dayMetrics(d,k){
   if(d.cache[k]&&!isToday(k))return d.cache[k];
-  const a=keyDay(k).getTime();const now=Date.now();if(a>now)return EMPTY_M(k);
+  const a=keyDay(k).getTime();const now=nowMs();if(a>now)return EMPTY_M(k);
   /* ★ 분모는 **하루 24시간 고정**이다(사용자 확정). 오늘만 예외 — 아직 오지 않은 시간을 미가동으로
      세면 안 되므로 **마지막으로 스캔된 시각까지**로 끊는다(그마저 없으면 지금 시각까지). */
   const lastScan=isToday(k)?dayLastScan(d,k):0;
@@ -829,7 +835,7 @@ function init(){D=build();const days=dataDays();day=days[days.length-1]||todayKe
   const gen=String(meta.generated||"").replace(/^\d{4}-0?(\d+)-0?(\d+)\s+/,"$1/$2 ");   /* 2026-09-16 21:01 → 9/16 21:01 */
   let modeTxt=meta.mode==="live"?gen+" 수집":meta.mode==="saved"?gen+" 수집 · 사본":meta.mode==="auto"?gen+" 수집":meta.mode==="gui"?(rows.length?gen+" 수집":"아직 수집한 적 없음"):"데모 데이터 · 장비 "+devNames.length+"대";
   if((meta.mode==="auto"||(meta.mode==="gui"&&rows.length))&&meta.generated_iso){const age=(Date.now()-new Date(meta.generated_iso))/60000;modeTxt+=age<60?` (${Math.round(age)}분 전)`:` (${(age/60).toFixed(1)}시간 전)`;$("#modePill").classList.toggle("stale",age>120);}
-  $("#modeTxt").textContent=modeTxt;$("#modePill").title="수집 프로그램이 이 파일을 만든 시각"+(meta.timing&&meta.timing.total_ms?` · 수집에 ${fmtSec(Math.round(meta.timing.total_ms/1000))}`:"");
+  $("#modeTxt").textContent=modeTxt+(refFixed()?" 기준":" · 열람 시각 기준(비고정)");$("#modePill").title=(refFixed()?"집계 기준시각 = 수집 시각(며칠 뒤 열어도 같은 숫자 — D40)":"수집 시각 정보가 없어 열람 시각을 기준으로 집계합니다(열 때마다 달라질 수 있음)")+(meta.timing&&meta.timing.total_ms?` · 수집에 ${fmtSec(Math.round(meta.timing.total_ms/1000))}`:"");
   $("#modePill").classList.toggle("live",meta.mode==="live"||meta.mode==="auto"||(meta.mode==="gui"&&rows.length>0));
   const sc=meta.scope||{};
   $("#footTxt").innerHTML=`${sc.restricted?`수집 범위 · ${esc((sc.devices||[]).join(", "))}<br>`:""}정확 경로만 확인 · 재귀 검색 없음<br>원본 Report / INI 수정 없음${meta.version?`<br>v${esc(meta.version)}`:APP_VERSION?`<br>v${APP_VERSION}`:""}`;
@@ -861,7 +867,8 @@ function renderAll(){
   const days=dataDays();
   $("#dayTxt").innerHTML=fmtDay(day)+(isToday(day)?'<span class="today">TODAY</span>':"");$("#dayPick").value=day;
   $("#dPrev").disabled=day<=days[0];$("#dNext").disabled=day>=(todayKey()>days[days.length-1]?todayKey():days[days.length-1]);
-  $("#homeBasis").textContent=isToday(day)?"00:00 ~ 장비별 마지막 스캔 · 가동시간 ÷ 경과시간":"00:00 ~ 24:00 · 가동시간 ÷ 24시간";
+  const refTxt=refFixed()?`${fmtDay(todayKey()).split(" ")[0]} ${hm(metricsRef())} 수집 기준`:"열람 시각 기준(비고정)";
+  $("#homeBasis").textContent=(isToday(day)?"00:00 ~ 장비별 마지막 스캔 · 가동시간 ÷ 경과시간":"00:00 ~ 24:00 · 가동시간 ÷ 24시간")+" · "+refTxt;
   renderHome();renderDetail();if($("#v-trend").classList.contains("on"))renderTrend();if($("#v-compare").classList.contains("on"))renderCompare();}
 const isAlert=m=>m.hasData&&(m.util<th.util||m.nErr>=th.err);
 const groups=()=>[...new Set(devNames.map(n=>devGroup[n]).filter(Boolean))];
@@ -883,7 +890,7 @@ function renderHome(){
   const alerts=list.filter(x=>isAlert(x.m)),nod=list.filter(x=>!x.m.hasData),errs=list.filter(x=>x.m.nErr>0);
   const worst=[...list].filter(x=>x.m.hasData).sort((a,b)=>a.m.util-b.m.util)[0];
   const rep=cur.dup+cur.rescan+cur.rework;
-  $("#homeSum").innerHTML=`<div class="card ss hero"><div class="k">평균 가동률 · ${isToday(day)?"마지막 스캔 기준":"하루"}</div><div class="v">${cur.util==null?"–":cur.util.toFixed(1)+"<small>%</small>"}</div><div class="s">${isToday(day)?"00:00 ~ 장비별 마지막 스캔":"00:00 ~ 24:00"} · 가동시간 ÷ 경과시간 · 장비 평균</div></div>
+  $("#homeSum").innerHTML=`<div class="card ss hero"><div class="k">평균 가동률 · ${isToday(day)?"마지막 스캔 기준":"하루"}</div><div class="v">${cur.util==null?"–":cur.util.toFixed(1)+"<small>%</small>"}</div><div class="s">${isToday(day)?"00:00 ~ 장비별 마지막 스캔(수집 시각 기준)":"00:00 ~ 24:00"} · 가동시간 ÷ 경과시간 · 장비 평균</div></div>
     <div class="card ss"><div class="k">장비</div><div class="v num">${vd.length}<small>대</small></div><div class="s">데이터 있음 ${cur.n}대${nod.length?` · 없음 ${nod.length}대`:""}</div></div>
     <div class="card ss"><div class="k">주의 장비</div><div class="v num" style="color:${alerts.length?"var(--crit-ink)":"inherit"}">${alerts.length}<small>대</small></div><div class="s">가동률 ${th.util}% 미만 또는 Error ${th.err}건↑</div></div>
     <div class="card ss"><div class="k">Error 발생</div><div class="v num">${errs.length}<small>대</small></div><div class="s">총 ${errs.reduce((a,x)=>a+x.m.nErr,0)}건 · Error·정지 ${fmtSecS(list.reduce((a,x)=>a+x.m.stop+x.m.err,0))}</div></div>
@@ -1122,7 +1129,7 @@ function drawBand(m,t0,t1,o){
     if(w>46)s+=`<text x="${(xs+4).toFixed(1)}" y="${barY+barH/2+4}" fill="var(--accent-ink)" style="font-size:11px;font-weight:600;pointer-events:none">${esc(Lt.lot.length>10?Lt.lot.slice(0,9)+"…":Lt.lot)}</text>`;});
   errIt.forEach(it=>{const sp=stopOf(it.g),e2=sp?Math.max(it.e,sp.e):it.e;if(!vis(it.s,e2))return;const[xs,w]=clipX(it.s,e2,2);
     s+=`<rect class="seg" tabindex="0" data-i="${m.items.indexOf(it)}" x="${xs.toFixed(1)}" y="${barY}" width="${w.toFixed(1)}" height="${barH}" fill="${it.g.abort?fillOf("ABORT_ERROR"):"var(--err)"}"/>`;});
-  if(m.partial&&o.now>=t0&&o.now<=t1)s+=`<line class="now" x1="${x(o.now).toFixed(1)}" x2="${x(o.now).toFixed(1)}" y1="${barY-8}" y2="${barY+barH+8}"/><text x="${x(o.now).toFixed(1)}" y="${barY-10}" text-anchor="middle" fill="var(--accent-2)">지금</text>`;
+  if(m.partial&&o.now>=t0&&o.now<=t1)s+=`<line class="now" x1="${x(o.now).toFixed(1)}" x2="${x(o.now).toFixed(1)}" y1="${barY-8}" y2="${barY+barH+8}"/><text x="${x(o.now).toFixed(1)}" y="${barY-10}" text-anchor="middle" fill="var(--accent-2)">수집 시각</text>`;
   if(m.partial&&m.b>t0&&m.b<t1&&Math.abs(m.b-o.now)>60e3)s+=`<line class="now" x1="${x(m.b).toFixed(1)}" x2="${x(m.b).toFixed(1)}" y1="${barY-4}" y2="${barY+barH+4}" style="stroke:var(--ink-3)"/><text x="${x(m.b).toFixed(1)}" y="${barY+barH+44}" text-anchor="middle">집계 끝</text>`;
   /* 포인터용 투명 층 — 맨 위에 두어 마우스는 이 층이 받고, 가장 가까운 막대에 넘긴다(막대 크기는 그대로) */
   s+=`<rect class="hit" x="${L}" y="${barY-8}" width="${W-L-R}" height="${barH+16}"/>`;
@@ -1158,7 +1165,7 @@ function renderZoom(m,a){const box=$("#zoomTl");if(!box)return;const z=ui.zoom;i
   box.innerHTML=`<div class="zh"><b>확대</b> <span class="mono">${hm(new Date(z.s))} → ${hm(new Date(z.e))}</span> <span class="faint">· ${fmtSec(Math.round(span/1000))}</span>
     <span class="sp"></span><div class="seg"><button onclick="zoomSpan(3.6e6)" aria-pressed="${span===3.6e6}">1시간</button><button onclick="zoomSpan(4*3.6e6)" aria-pressed="${span===4*3.6e6}">4시간</button></div>
     <button class="btn icon small" onclick="zoomShift(-1)" title="앞으로">◀</button><button class="btn icon small" onclick="zoomShift(1)" title="뒤로">▶</button><button class="btn ghost small" onclick="setZoom(window._m,${a},null)" aria-label="확대 닫기">닫기 ✕</button></div>
-    <div id="zoomSvg">${drawBand(m,z.s,z.e,{ticks:tick,label:t=>hm(new Date(t)),now:Date.now(),aria:`${hm(new Date(z.s))}~${hm(new Date(z.e))} 확대`})}</div>`;
+    <div id="zoomSvg">${drawBand(m,z.s,z.e,{ticks:tick,label:t=>hm(new Date(t)),now:nowMs(),aria:`${hm(new Date(z.s))}~${hm(new Date(z.e))} 확대`})}</div>`;
   wireSegs($("#zoomSvg"),m);}
 /* 개요에서 드래그 → 확대 구간. 3px 미만 움직임은 클릭(상세 고정)으로 둔다. */
 function bindZoomDrag(svg,m,a){const hit=svg.querySelector("rect.hit");if(!hit)return;const W=1200,L=14,R=14;
@@ -1177,7 +1184,7 @@ function legendHtml(){return["RUN","DUP","RESCAN","REWORK","ERROR","ABORT_ERROR"
   +'<span class="faint" style="margin-left:auto">드래그: 확대 · 클릭: 상세 · 더블클릭: Report 열기</span>';}
 function renderDetail(){
   const box=$("#detail");if(!selDev||!D[selDev]){box.hidden=true;parkDetail();return;}box.hidden=false;mountDetail();
-  const m=dayMetrics(D[selDev],day);const a=keyDay(day).getTime();const now=Date.now();
+  const m=dayMetrics(D[selDev],day);const a=keyDay(day).getTime();const now=nowMs();
   const rp=m.dup+m.rescan+m.rework;
   $("#detTitle").innerHTML=`${esc(selDev)} <span class="faint" style="font-weight:400;font-size:13px">${fmtDay(day)} · 가동률 ${m.hasData?m.util.toFixed(1)+"%":"–"} · 가동 ${fmtSecS(m.run)}${rp?` (반복 ${fmtSecS(rp)})`:""} · Error·정지 ${fmtSecS(m.err+m.stop)}${m.nAbort?` · <span class="chip abort">중단 ${m.nAbort}건${m.nAbortErr?` (Error ${m.nAbortErr})`:""}</span>`:""}${m.nUnk?` · <span class="chip mute">분류 미확인 ${m.nUnk}건</span>`:""}${m.nTest?` · <span class="chip test">Test ${m.nTest}건 제외</span>`:""}${m.overlap>0?` · <span class="chip warn" title="같은 장비의 구간이 겹쳐 우선순위(Error > 가동 > Test > 정지)로 한 번만 배정했습니다">시간 충돌 ${fmtSec(m.overlap)}</span>`:""}</span>`;
   $("#detLegend").innerHTML=legendHtml();$("#detBack").hidden=!ui.back;

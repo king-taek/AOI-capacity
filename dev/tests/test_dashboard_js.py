@@ -543,3 +543,31 @@ def test_material_normalisation_matches_python_fixture():
         assert j["key"] == collect.material_key(l, w_), (l, w_)
         assert j["lot_norm"] == collect.norm_lot(l) and j["wafer_norm"] == collect.norm_wafer(w_)
         assert j["scan_type"] == collect.scan_type(l), l
+
+
+# ── D40: 화면의 '오늘' 은 수집 시각 — 열람 날짜·시간대를 바꿔도 같은 집계 ───────────────────────
+def run_meta(rows, meta, viewer_now, tz="Asia/Seoul"):
+    import os
+    out = subprocess.run([NODE, str(HARNESS)], input=json.dumps({"rows": rows, "meta": meta, "viewer_now": viewer_now}),
+                         capture_output=True, text=True, timeout=60, cwd=str(ROOT), env=dict(os.environ, TZ=tz))
+    assert out.returncode == 0, out.stderr
+    return json.loads(out.stdout)
+
+
+def test_metrics_reference_is_the_collection_time_not_the_viewer_clock():
+    rows = [w("AOI-8", "W1", "09:00", "10:00"), w("AOI-9", "W2", "08:00", "08:30")]
+    meta = {"generated_iso": f"{DAY}T12:59:17", "mode": "gui"}
+    a = run_meta(rows, meta, f"{DAY}T13:00:00")                                # 수집 직후
+    b = run_meta(rows, meta, "2026-09-25T09:00:00")                            # 일주일 뒤에 열어도
+    c = run_meta(rows, meta, "2026-09-25T09:00:00", tz="UTC")                  # 다른 시간대의 PC 에서도
+    strip = lambda res: {d: {k: {x: v for x, v in m.items() if x != "items"} for k, m in days.items()} for d, days in res["per"].items()}   # items 의 epoch ms 는 시간대마다 다르다(같은 민간시각)
+    assert a["today"] == DAY and strip(a) == strip(b) == strip(c) and a["fleet"] == b["fleet"] == c["fleet"]
+    assert a["per"]["AOI-8"][DAY]["denom"] == 10 * 3600 and a["per"]["AOI-9"][DAY]["denom"] == 8 * 3600 + 1800   # 오늘 = 수집일: 마지막 스캔까지
+
+
+def test_without_generated_iso_the_viewer_clock_is_the_fallback():
+    rows = [w("AOI-8", "W1", "09:00", "10:00")]
+    a = run_meta(rows, {"mode": "saved"}, f"{DAY}T12:00:00")
+    b = run_meta(rows, {"mode": "saved"}, "2026-09-25T09:00:00")
+    assert a["today"] == DAY and a["per"]["AOI-8"][DAY]["denom"] == 10 * 3600
+    assert b["today"] == "2026-09-25" and b["per"]["AOI-8"][DAY]["denom"] == 86400   # 옛 파일은 예전처럼(비고정 배지)

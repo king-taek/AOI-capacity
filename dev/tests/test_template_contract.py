@@ -230,6 +230,11 @@ def test_today_basis_wording_is_last_scan_not_now():
     for bad in ("현재까지", "00:00 ~ 현재", "hm(new Date())} 기준"):
         assert bad not in HTML, bad
     assert "마지막 스캔 기준" in HTML
+    # D40: 집계 시계는 수집 시각 — 집계 경로에 Date.now()/new Date() 가 남지 않는다(경과 표시·저장 시각·로그만 열람 시계)
+    assert "function metricsRef(" in HTML and "const todayKey=()=>dayKey(metricsRef());" in HTML
+    js = HTML[HTML.index("function dayMetrics("):HTML.index("function aggMetrics(")]
+    assert "Date.now()" not in js and "new Date()" not in js
+    assert "const now=nowMs();if(a>now)return EMPTY_M(k);" in HTML and "수집 기준" in HTML and "열람 시각 기준(비고정)" in HTML
 
 
 def test_readme_and_settings_help_follow_the_confirmed_rules():
