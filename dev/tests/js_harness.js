@@ -23,6 +23,7 @@ const ctx={document:doc,window:{},navigator:{},localStorage:{getItem:()=>null,se
 ctx.window=ctx;vm.createContext(ctx);
 ctx.__today=input.today||"";
 vm.runInContext(js,ctx,{filename:"template.js"});
+if(input.classify){ctx.__ph=input.classify;const m=vm.runInContext(`(function(){const o={};for(const s of __ph)o[s]={causes:normCauses(s),outcome:normOutcome(s),norm_status:normStatus(s),unmapped:isUnmappedStatus(s)};return o;})()`,ctx);process.stdout.write(JSON.stringify(m));process.exit(0);}
 ctx.__rows=input.rows;ctx.__meta=input.meta||{};ctx.__summary=!!input.summary;
 const out=vm.runInContext(`(function(){rows=__rows.map(o=>({kind:"",job:"",setup:"",lot:"",wafer_id:"",status:"Pass",norm_status:"",scan_type:"",recipe:"",wafer_start_time:"",wafer_end_time:"",batch_start:"",batch_end:"",report:"",ini_match:"EXACT",data_issue:"",...o}));
   meta=__meta;if(typeof prepareRows==="function")prepareRows(rows);else rows.forEach(r=>{r.norm_status=r.norm_status||normStatus(r.status);});

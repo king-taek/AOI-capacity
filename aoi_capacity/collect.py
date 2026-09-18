@@ -68,14 +68,17 @@ INI_KEYS = {
 #: 바꾸면 올린다. 캐시는 Report 의 수정시각만 보고 재파싱을 건너뛰므로, 이 번호가 다르면 캐시를 읽을 때
 #: `norm_status`·`scan_type` 을 원문(status·lot)에서 **NAS 접근 없이** 다시 계산한다(`_rederive_rows`).
 #: INI 경로가 바뀌는 수정(빈 job 되찾기 등)은 Report 를 다시 읽어야 하므로 '누락 복구'(`recover`)가 따로 있다.
-PARSER_VERSION = 2
+PARSER_VERSION = 3
 #: 누락 복구가 다시 읽는 대상 — INI 를 못 찾았거나 읽다 실패한 행이 있는 Report 만.
 #: STALE(다른 시도가 덮어쓴 INI)은 다시 읽어도 되돌아오지 않고, NO_WAFER_ID(자리표시)·BATCH_FAILED 는 경로 자체가 없다.
 RECOVERABLE_INI = ("NOT_FOUND", "READ_ERROR")
 #: 장비별 수집 상태(`dev_meta[].status`) — 화면이 '데이터 없음' 과 '수집 실패' 를 구분해 보여 주는 근거.
 DEV_OK, DEV_NO_DATA, DEV_PARTIAL, DEV_UNREACHABLE = "ok", "no_data", "partial", "unreachable"
 #: kind = "" (Wafer 한 장) · "batch" (통째로 실패한 배치 한 건 — Wafer 시각이 하나도 없는 시도)
-OUT_COLS = ["device", "kind", "job", "setup", "lot", "wafer_id", "status", "norm_status", "scan_type", "recipe",
+#: `cause`(원인 코드들, 세미콜론) · `outcome`(종료 결과) 은 D43 의 두 축 — `norm_status` 는 호환 필드(원인이 있으면 첫 원인, 없으면 결과).
+#: 옛 17열 파일에는 두 열이 없다 — 화면(template)은 언제나 `status` 원문에서 다시 계산하므로 옛 파일도 새 규칙으로 읽힌다.
+ROW_SCHEMA_VERSION = 2
+OUT_COLS = ["device", "kind", "job", "setup", "lot", "wafer_id", "status", "norm_status", "cause", "outcome", "scan_type", "recipe",
             "wafer_start_time", "wafer_end_time", "batch_start", "batch_end", "report", "ini_match", "data_issue"]
 #: HTML 에 박아 넣는 JSON 에서 문자열 풀로 접는 열 — 같은 값이 수없이 되풀이되는 열들이다.
 #: (90일치 30대면 행이 십수만 개다. 시각 두 열만 값이 거의 다 달라 접지 않는다.)
@@ -117,30 +120,84 @@ def parse_dt(s) -> Optional[dt.datetime]:
     return None
 
 
-#: 실장비 Report 에서 실제로 나온 표기를 근거로 만든 순서 — 위에서부터 먼저 맞는 것을 쓴다.
-#: 근거는 30대 전수 샘플(Report 55,717개 중 2,400행)에서 나온 표기 전부다. 반송 실패는 문구 끝이
-#: `… Batch Aborted. Skipped.` 라 `skip` 규칙보다 **위**에 둔다 — 아래에 두면 '건너뜀'(정상)으로 묻힌다.
-_STATUS_RULES = [
-    # 'Failed to move wafer from LoadPort A to End-Effector Error: Robot: The wafer could not be
-    #  detected on Hand1 after the GET motion. . Batch Aborted. Skipped.'
-    # 반송(핸들링) 실패 — 'Wafer Handling Failure (LoadPort A to End-Effector).' · 'Failed on MoveToStation'
-    ("WAFER_LOST", re.compile(r"wafer\s+lost|failed\s+to\s+sense\s+wafer"
-                              r"|failed\s+to\s+move\s+wafer|could\s+not\s+be\s+detected\s+on\s+hand"
-                              r"|wafer\s+handling\s+failure|failed\s+on\s+movetostation", re.I)),
-    ("HW_ERROR", re.compile(r"hardware\s+failure", re.I)),             # 'Camera Hardware Failure. … Batch Aborted.'
-    ("SKIPPED", re.compile(r"skip", re.I)),
-    ("ID_READ_ERROR", re.compile(r"failed\s+to\s+read\s+wafer\s+id", re.I)),
-    ("SCAN_ERROR", re.compile(r"scan\s*(?:2d|3d)?\s*error", re.I)),     # 'Scan 2D Error.' · 'Scan Error: …'
-    # 'Alignment Error.' · 'Manual Alignment Failed.' · 'Prealigner failure'
-    ("ALIGN_ERROR", re.compile(r"alignment\s+error|alignment\s+failed|prealigner\s+fail", re.I)),
-    ("CLEAN_REF_ERROR", re.compile(r"clean\s+reference\s+error", re.I)),   # 3일치 실장비 72건
-    ("NOTHING_TO_SCAN", re.compile(r"nothing\s+to\s+scan", re.I)),
-    # 'FAR Model inside recipe is invalid, …' · 'Scan 2D: Illegal Lot Name.' · 'Wafer Map Import failed.'
-    ("RECIPE_ERROR", re.compile(r"far\s*model|illegal\s+lot\s+name|wafer\s+map\s+import\s+failed"
-                                r"|multi\s*recipe\s+error", re.I)),
-    ("USER_ABORT", re.compile(r"wafer\s+aborted\s+by\s+user", re.I)),
-    ("ABORTED", re.compile(r"abort", re.I)),
+#: ★ 원인(cause)과 종료 결과(outcome)는 다른 축이다(사용자 확정 D43).
+#:   `Failed to read wafer id … Wafer Skipped.` 는 원인 ID_READ_ERROR + 결과 SKIPPED 다 — 예전에는 `skip` 규칙이 먼저 걸려
+#:   ID 인식 실패가 '건너뜀'(정상)에 묻혔다(30일치 실데이터 192행/89 Report). 그래서 **원인 규칙을 전부 먼저** 보고,
+#:   남은 것에서 결과를 정한다. `norm_status`(호환 필드)는 '원인이 있으면 첫 원인, 없으면 결과' 다.
+#: 순서가 곧 의미다 — 구체적 원인이 앞, 일반 반송(HANDLING_ERROR)이 맨 뒤(fallback). 반송 실패 문구는 `… Batch Aborted. Skipped.` 로
+#: 끝나므로 원인/결과 분리로 구조적으로 안전하지만 회귀 테스트는 그대로 둔다. 근거: 30대 30일치 실데이터 상태 문구 213종 전수
+#: (`dev/samples/status_mapping_2026-09-18.tsv` 가 문구 → 원인 → 결과 표, 사람이 검토한 고정 fixture).
+#: 정규식 문자열은 template.html 의 CAUSE_RULES/OUTCOME_RULES 와 **글자까지 같다**(가드: test_template_contract).
+_CAUSE_RULES = [
+    # 'Failed to move wafer from LoadPort A to End-Effector Error: Robot: The wafer could not be detected on Hand1 …. Batch Aborted. Skipped.'
+    # 'Wafer lost while moving wafer …' · 'Wafer Handling Failure (LoadPort A to End-Effector).' · 'Failed on MoveToStation'
+    ("WAFER_LOST", r"wafer\s+lost|failed\s+to\s+sense\s+wafer|failed\s+to\s+move\s+wafer|could\s+not\s+be\s+detected\s+on\s+hand"
+                   r"|wafer\s+handling\s+failure|failed\s+on\s+movetostation"),
+    ("HW_ERROR", r"hardware\s+failure"),                                   # 'Camera Hardware Failure. … Batch Aborted.'
+    ("ID_READ_ERROR", r"failed\s+to\s+read\s+wafer\s+id"),               # '… on PAL' · '… Reading error = ***. Wafer Skipped.'
+    # 'Wafer ID Mask length(11) differs from actual Wafer ID length(10). …' · 'Wafer ID Read does not match slot number. …'
+    ("ID_FORMAT_ERROR", r"wafer\s+id\s+mask\s+length|wafer\s+id\s+read\s+does\s+not\s+match"),
+    ("SCAN_ERROR", r"scan\s*(?:2d|3d)?\s*error"),                          # 'Scan 2D Error.' · 'Scan Error: …'
+    ("ALIGN_ERROR", r"alignment\s+error|alignment\s+failed|prealigner\s+fail"),   # 'Alignment Error.' · 'Manual Alignment Failed.' · 'Prealigner failure'
+    ("PREALIGNER_RESPONSE_ERROR", r"prealigner:\s*expected\s+status\s+field\s+was\s+not\s+found"),
+    ("AUTO_FOCUS_ERROR", r"auto\s+focus\s+error"),
+    ("FOCUS_MAPPING_ERROR", r"focus\s+mapping\s+error"),                  # 'Focus Mapping Error. Batch Aborted.' (35행 — 단순 중단이 아니다)
+    ("MOTION_ERROR", r"motor->get_position|motion\s+failed\s+to\s+get_continuousscanstatus|acsmotor::get_position"),
+    ("CLEAN_REF_ERROR", r"clean\s+reference\s+error"),
+    ("NOTHING_TO_SCAN", r"nothing\s+to\s+scan"),
+    # 'FAR Model inside recipe is invalid, …' · 'Scan 2D: Illegal Lot Name.' · 'Wafer Map Import failed.' · 'Scanning Multi recipe error.'
+    ("RECIPE_ERROR", r"far\s*model|illegal\s+lot\s+name|wafer\s+map\s+import\s+failed|multi\s*recipe\s+error"),
+    ("CONTROL_TIMEOUT", r"abort\s+timed-?out"),                            # 'Abort timed-out'
+    ("GRAY_LEVEL_LIMIT", r"gray\s+level\s+average\s+exceeds"),
+    # 일반 반송·로봇 동작 실패 — 구체 원인이 없을 때의 fallback (맨 뒤)
+    ("HANDLING_ERROR", r"robot\s+operation\s+failed|movetabletostoredposandlock|wafer\s+move\s+failure"),
 ]
+#: 종료 결과 — 정확 문구(취소·미확인)를 먼저, 사용자 중단이 일반 중단보다 먼저, 'Aborted. Skipped.' 같은 복합은 마지막 결과인 SKIPPED.
+_OUTCOME_RULES = [
+    ("PASS", r"^pass$"),
+    ("USER_CANCELLED", r"^cancelled$"),
+    ("UNKNOWN", r"^-?$"),                                                 # '-' 또는 빈 문구 = 결과 미확인(자리표시)
+    ("USER_ABORT", r"wafer\s+aborted\s+by\s+user"),
+    ("SKIPPED", r"skip"),
+    ("ABORTED", r"abort"),
+]
+_CAUSE_RX = [(c, re.compile(p, re.I)) for c, p in _CAUSE_RULES]
+_OUTCOME_RX = [(c, re.compile(p, re.I)) for c, p in _OUTCOME_RULES]
+#: 원인 코드가 있으면 설비 Error(사용자 확정 D43). 결과만 있는 것(중단·건너뜀·취소·미확인)은 여기서 판단하지 않는다.
+CAUSE_CODES = tuple(c for c, _ in _CAUSE_RULES)
+#: 회귀 가드용 — 옛 이름. 코드 순서 = (원인들, 결과들) 을 이은 것.
+_STATUS_RULES = [(c, rx) for c, rx in _CAUSE_RX] + [(c, rx) for c, rx in _OUTCOME_RX if c not in ("PASS", "UNKNOWN")]
+
+
+def norm_causes(s) -> List[str]:
+    """상태 문구에 명시된 실패 유형들(규칙 순서, 중복 없음). 물리적 근본 원인의 확정이 아니다."""
+    t = (s or "").strip()
+    return [c for c, rx in _CAUSE_RX if rx.search(t)] if t else []
+
+
+def norm_outcome(s) -> str:
+    """종료 결과 — PASS · USER_CANCELLED · UNKNOWN · USER_ABORT · SKIPPED · ABORTED · FAILED(원인만 있고 결과 문구 없음).
+    문구가 있는데 원인도 결과도 못 읽으면 UNKNOWN(미지원 문구 — `is_unmapped_status`)."""
+    t = (s or "").strip()
+    for code, rx in _OUTCOME_RX:
+        if rx.search(t):
+            return code
+    return "FAILED" if norm_causes(t) else "UNKNOWN"
+
+
+def is_unmapped_status(s) -> bool:
+    """읽을 수는 있는데 어느 규칙에도 안 걸리는 문구 — 품질 목록에 남긴다(지우지 않는다)."""
+    t = (s or "").strip()
+    return bool(t) and t != "-" and not norm_causes(t) and not any(rx.search(t) for _, rx in _OUTCOME_RX)
+
+
+def cause_field(causes: List[str]) -> str:
+    """행에 담는 직렬화 — 규칙 순서로 세미콜론 연결(메모리 모델은 배열)."""
+    return ";".join(causes)
+
+
+def parse_causes(field) -> List[str]:
+    return [c for c in str(field or "").split(";") if c]
 
 
 #: Lot 이름 끝에 붙는 작업 표기 — 실물 근거(AOI-1 Report 2011개 · AOI-8 4784개 · 30대 전수 55,717개):
@@ -166,13 +223,12 @@ def scan_type(lot) -> str:
 
 
 def norm_status(s) -> str:
+    """호환 필드 — 원인이 있으면 첫 원인, 없으면 결과. 빈 문구는 빈 값."""
     t = (s or "").strip()
-    if t.lower() == "pass":
-        return "PASS"
-    for code, rx in _STATUS_RULES:
-        if rx.search(t):
-            return code
-    return "OTHER" if t else ""
+    if not t:
+        return ""
+    causes = norm_causes(t)
+    return causes[0] if causes else norm_outcome(t)
 
 
 class TableParser(HTMLParser):
@@ -392,9 +448,11 @@ def rows_for_report(dev_name: str, rep: dict, scan_root: str, memo: Optional[_In
     s = rep["summary"]
     b_start, b_end = parse_dt(s.get("Batch Start", "")), parse_dt(s.get("Batch End", ""))
     for w in rep["wafers"]:
+        causes = norm_causes(w["status"])
         r = {"device": dev_name, "kind": "", "job": rep.get("job", ""), "setup": rep.get("setup", ""),
              "report": rep.get("name", ""), "lot": w["lot"], "wafer_id": w["wafer_id"], "status": w["status"],
-             "norm_status": norm_status(w["status"]), "scan_type": scan_type(w["lot"]),
+             "norm_status": norm_status(w["status"]), "cause": cause_field(causes), "outcome": norm_outcome(w["status"]),
+             "scan_type": scan_type(w["lot"]),
              "recipe": w["recipe"] or s.get("Recipe", ""),
              "wafer_start_time": "", "wafer_end_time": "", "batch_start": s.get("Batch Start", ""),
              "batch_end": s.get("Batch End", ""), "ini_match": "", "data_issue": ""}
@@ -443,6 +501,36 @@ def _in_batch_window(st, en, b_start, b_end) -> bool:
     return (b_start - margin) <= st and en <= (b_end + margin)
 
 
+def _is_error_row(r: dict) -> bool:
+    """명시적 실패 행 — 원인 코드가 있거나, 결과가 중단(ABORTED·USER_ABORT)·FAILED 인 행. 건너뜀·PASS·취소·미확인은 아니다."""
+    return bool(norm_causes(r.get("status"))) or norm_outcome(r.get("status")) in ("ABORTED", "USER_ABORT", "FAILED")
+
+
+def _lead_error_row(errs: List[dict]) -> Tuple[dict, List[str]]:
+    """대표 행과 원인 합집합 — **결정적으로** 고른다(입력 순서를 뒤집어도 같은 대표).
+
+    대표 원인 = 서로 다른 근거 행이 가장 많은 원인, 같으면 규칙 순서(구체적 원인 우선). 원인 없는 행만 있으면 첫 행.
+    대표 행 = 그 원인을 가진 행 중 자리표시가 아닌 것 우선, 그 다음 상태 원문 사전순 — 원문은 그대로 보존한다.
+    ★ 첫 행을 그냥 쓰면 하위 행의 원인이 대표에 가려진다(E04: ABORTED 부모 아래 명시적 Error 13 Report)."""
+    union: List[str] = []
+    count: Dict[str, int] = {}
+    for r in errs:
+        for c in norm_causes(r.get("status")):
+            if c not in union:
+                union.append(c)
+            count[c] = count.get(c, 0) + 1
+    order = {c: i for i, c in enumerate(CAUSE_CODES)}
+    union.sort(key=lambda c: order[c])
+    if union:
+        top = max(union, key=lambda c: (count[c], -order[c]))
+        cand = [r for r in errs if top in norm_causes(r.get("status"))]
+    else:
+        cand = list(errs)
+    real = [r for r in cand if r.get("ini_match") != "NO_WAFER_ID"]
+    lead = min(real or cand, key=lambda r: str(r.get("status") or ""))
+    return lead, union
+
+
 def failed_batch_row(dev_name: str, rep: dict, rows: List[dict]) -> Optional[dict]:
     """통째로 실패한 시도를 **배치 한 건**으로 만든다.
 
@@ -450,21 +538,20 @@ def failed_batch_row(dev_name: str, rep: dict, rows: List[dict]) -> Optional[dic
     흔적이 전혀 남지 않고, Report 에는 `LoadPort A / Slot n` 자리표시 행이 20~25줄 생긴다.
     그래서 ① 시간을 아는 유일한 근거는 Report 의 `Batch Start~End` 이고,
     ② 오류는 'Slot 행 24건' 이 아니라 '배치 중단 1건' 으로 세는 게 맞다(사용자 확정).
-    정상적으로 일부라도 스캔한 배치는 만들지 않는다."""
+    정상적으로 일부라도 스캔한 배치는 만들지 않는다. 대표 행·원인 합집합은 `_lead_error_row` 가 결정적으로 고른다."""
     s = rep["summary"]
     st, en = parse_dt(s.get("Batch Start", "")), parse_dt(s.get("Batch End", ""))
     if not (st and en and en >= st):
         return None
     if any(r["wafer_start_time"] and r["wafer_end_time"] for r in rows):
         return None                                   # 한 장이라도 이 배치 안에서 검사됐으면 실패가 아니다
-    if any(norm_status(r["status"]) == "PASS" for r in rows):
+    if any(norm_outcome(r["status"]) == "PASS" for r in rows):
         return None                                   # 정상 통과한 Wafer 가 있으면 실패한 배치가 아니다
                                                       # (INI 가 지워져 시간만 없는 배치를 오류로 만들지 않는다)
-    errs = [r for r in rows if norm_status(r["status"]) not in ("", "PASS", "SKIPPED")]
+    errs = [r for r in rows if _is_error_row(r)]
     if not errs:
         return None
-    real = [r for r in errs if r["ini_match"] != "NO_WAFER_ID"]   # 자리표시(Slot)가 아닌 진짜 Wafer 행
-    lead = (real or errs)[0]
+    lead, union = _lead_error_row(errs)
     # ★ Lot 은 **덮어쓰기 전에** 고른다 — 아래 루프가 ini_match 를 전부 BATCH_FAILED 로 바꾸면
     #   'NO_WAFER_ID 가 아닌 행' 조건이 늘 참이 되어 `LoadPort A` 가 Lot 으로 올라온다(실물 30대 중 8건).
     lot = next((r["lot"] for r in rows if r["ini_match"] != "NO_WAFER_ID" and r["lot"]), "") \
@@ -473,7 +560,8 @@ def failed_batch_row(dev_name: str, rep: dict, rows: List[dict]) -> Optional[dic
         r["ini_match"] = "BATCH_FAILED"
     return {"device": dev_name, "kind": "batch", "job": rep.get("job", ""), "setup": rep.get("setup", ""),
             "report": rep.get("name", ""), "lot": lot, "wafer_id": "",
-            "status": lead["status"], "norm_status": norm_status(lead["status"]), "scan_type": scan_type(lot),
+            "status": lead["status"], "norm_status": norm_status(lead["status"]), "cause": cause_field(union),
+            "outcome": norm_outcome(lead["status"]), "scan_type": scan_type(lot),
             "recipe": lead.get("recipe", ""), "wafer_start_time": s.get("Batch Start", ""),
             "wafer_end_time": s.get("Batch End", ""), "batch_start": s.get("Batch Start", ""),
             "batch_end": s.get("Batch End", ""), "ini_match": "BATCH",
@@ -503,15 +591,30 @@ def _load_cache(cfg: dict, full: bool = False, log: Optional[LogFn] = None) -> d
 
 
 def _rederive_rows(cache: dict) -> int:
-    """캐시에 든 행의 `norm_status`·`scan_type` 을 지금 규칙으로 다시 계산한다. 원문(status·lot)만 쓰므로 NAS 접근이 없다.
+    """캐시에 든 행의 `norm_status`·`cause`·`outcome`·`scan_type` 을 지금 규칙으로 다시 계산한다. 원문(status·lot)만 쓰므로 NAS 접근이 없다.
+    배치 대표 행(kind=batch)의 원인은 그 Report 의 실패 행 전부에서 합집합으로 다시 만든다(하위 원인이 대표에 가려지지 않게).
 
     돌려주는 값은 값이 바뀐 행 수. 캐시의 `parser_version` 을 지금 번호로 맞춘다."""
     changed = 0
     for entry in cache.get("reports", {}).values():
-        for r in entry.get("rows") or ():
-            ns, st = norm_status(r.get("status", "")), scan_type(r.get("lot", ""))
-            if r.get("norm_status") != ns or r.get("scan_type") != st:
-                r["norm_status"], r["scan_type"] = ns, st
+        rows = entry.get("rows") or []
+        for r in rows:
+            if r.get("kind") == "batch":
+                continue
+            new = {"norm_status": norm_status(r.get("status", "")), "cause": cause_field(norm_causes(r.get("status", ""))),
+                   "outcome": norm_outcome(r.get("status", "")), "scan_type": scan_type(r.get("lot", ""))}
+            if any(r.get(k) != v for k, v in new.items()):
+                r.update(new)
+                changed += 1
+        for r in rows:
+            if r.get("kind") != "batch":
+                continue
+            errs = [x for x in rows if x.get("kind") != "batch" and _is_error_row(x)]
+            union = _lead_error_row(errs)[1] if errs else norm_causes(r.get("status", ""))
+            new = {"norm_status": norm_status(r.get("status", "")), "cause": cause_field(union),
+                   "outcome": norm_outcome(r.get("status", "")), "scan_type": scan_type(r.get("lot", ""))}
+            if any(r.get(k) != v for k, v in new.items()):
+                r.update(new)
                 changed += 1
     cache["parser_version"] = PARSER_VERSION
     return changed

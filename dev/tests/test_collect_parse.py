@@ -27,7 +27,7 @@ def test_parse_dt_every_format_seen_on_real_machines():
     ("Alignment Error.", "ALIGN_ERROR"),
     ("Aborted. Wafer aborted by user.", "USER_ABORT"),
     ("Aborted.", "ABORTED"),
-    ("Something new", "OTHER"),
+    ("Something new", "UNKNOWN"),          # 미지원 문구 — 지우지 않고 UNKNOWN(품질 목록)으로 남긴다(D43)
     ("", ""),
 ])
 def test_norm_status(raw, expected):
@@ -130,7 +130,8 @@ def test_failed_batch_becomes_one_row_with_batch_times(tmp_path):
     assert len(batch) == 1
     b = batch[0]
     assert (b["wafer_start_time"], b["wafer_end_time"]) == ("15-Sep-26 06:23:14 PM", "16-Sep-26 09:17:51 AM")
-    assert b["norm_status"] == "ABORTED" and b["wafer_id"] == "" and b["lot"] == "FUK-RDL2"
+    # 대표 원인은 하위 행의 명시적 Error(Slot 3 의 Alignment Error.) — 첫 행의 'Aborted.' 에 가려지지 않는다(D43·E04)
+    assert b["norm_status"] == "ALIGN_ERROR" and b["cause"] == "ALIGN_ERROR" and b["wafer_id"] == "" and b["lot"] == "FUK-RDL2"
     # 나머지 행(자리표시 Slot 포함)은 배치 한 건으로 묶여 따로 세지 않는다
     assert all(r["ini_match"] == "BATCH_FAILED" for r in rows if r["kind"] != "batch")
 
@@ -262,11 +263,66 @@ def test_empty_lot_never_builds_an_ini_path(tmp_path):
     ("Scan 3D Error.", "SCAN_ERROR"),
     ("Scan 2D Error. Reason: Process Scanned Images Failed.", "SCAN_ERROR"),
     ("Failed to read wafer id on PAL", "ID_READ_ERROR"),
-    ("Failed to read wafer id. Reading error = **********. Wafer Skipped.", "SKIPPED"),
+    ("Failed to read wafer id. Reading error = **********. Wafer Skipped.", "ID_READ_ERROR"),   # D43: 원인이 결과(건너뜀)보다 먼저
     ("Wafer aborted by user.", "USER_ABORT"),
 ])
 def test_norm_status_covers_every_wording_seen_on_30_machines(raw, expected):
     assert collect.norm_status(raw) == expected
+
+
+# ── D43: 원인(cause)과 종료 결과(outcome)는 다른 축 ──────────────────────────────────────
+@pytest.mark.parametrize("raw,causes,outcome", [
+    ("Failed to read wafer id. Reading error = **********. Wafer Skipped.", ["ID_READ_ERROR"], "SKIPPED"),
+    ("Focus Mapping Error. Batch Aborted.", ["FOCUS_MAPPING_ERROR"], "ABORTED"),
+    ("Aborted.", [], "ABORTED"), ("Aborted", [], "ABORTED"),
+    ("Aborted. Wafer aborted by user.", [], "USER_ABORT"),
+    ("Failed to read wafer id. Reading error = **********. Wafer aborted by user.", ["ID_READ_ERROR"], "USER_ABORT"),
+    ("Skipped. Aborted.", [], "SKIPPED"), ("Aborted. Skipped.", [], "SKIPPED"),       # 복합은 마지막 결과 SKIPPED
+    ("Cancelled", [], "USER_CANCELLED"), ("-", [], "UNKNOWN"), ("", [], "UNKNOWN"),
+    ("Abort timed-out", ["CONTROL_TIMEOUT"], "ABORTED"),
+    ("Wafer Gray Level Average exceeds limits!. Batch Aborted.", ["GRAY_LEVEL_LIMIT"], "ABORTED"),
+    ("Auto Focus Error.", ["AUTO_FOCUS_ERROR"], "FAILED"),                              # 원인만 있고 결과 문구 없음
+    ("Wafer ID Mask length(11) differs from actual Wafer ID length(10). ID: X Mask: I", ["ID_FORMAT_ERROR"], "FAILED"),
+    ("Robot operation failed: Failed on MoveTableToStoredPosAndLock. LastError: Table: Failed on MoveToStoredPos(m_eTableLockPosition) . Batch Aborted.",
+     ["HANDLING_ERROR"], "ABORTED"),
+    ("Failed to MoveTableToStoredPosAndLock. LastError: Table: Motion failed to get_ContinuousScanStatus(pVal) , Exception: … AcsMotor::get_Position Failed",
+     ["MOTION_ERROR", "HANDLING_ERROR"], "FAILED"),
+    ("Alignment Error. Robot operation failed: Failed on MoveTableToStoredPosAndLock. LastError: Table: Wafer on chuck is not secured. Chuck remains locked. . Batch Aborted.",
+     ["ALIGN_ERROR", "HANDLING_ERROR"], "ABORTED"),
+    # 반송 실패는 문구가 `… Batch Aborted. Skipped.` 로 끝난다 — 원인이 먼저라 결과(SKIPPED)에 묻히지 않는다
+    ("Failed to move wafer from LoadPort A to End-Effector Error: Robot: The wafer could not be detected on Hand1 after the GET motion. . Batch Aborted. Skipped.",
+     ["WAFER_LOST"], "SKIPPED"),
+])
+def test_cause_and_outcome_are_separate_axes(raw, causes, outcome):
+    assert collect.norm_causes(raw) == causes and collect.norm_outcome(raw) == outcome
+    assert collect.norm_status(raw) == ("" if not raw else causes[0] if causes else outcome)   # 빈 문구의 호환 필드는 빈 값
+
+
+def test_unmapped_status_is_kept_as_unknown_not_dropped():
+    assert collect.is_unmapped_status("Something new") and collect.norm_outcome("Something new") == "UNKNOWN"
+    assert not collect.is_unmapped_status("-") and not collect.is_unmapped_status("") and not collect.is_unmapped_status("Aborted.")
+
+
+def test_rows_carry_cause_and_outcome_columns(tmp_path):
+    rep = collect.parse_report(LIVE_NAME, LIVE_HTML)
+    rows = collect.rows_for_report("AOI-25", rep, str(tmp_path / "Scanresult"))
+    by = {r["wafer_id"]: r for r in rows}
+    assert by["54265684EWA2"]["cause"] == "ALIGN_ERROR" and by["54265684EWA2"]["outcome"] == "FAILED"
+    assert by["54265662EWE7"]["cause"] == "" and by["54265662EWE7"]["outcome"] == "PASS"
+    assert {"cause", "outcome"} <= set(collect.OUT_COLS) and collect.ROW_SCHEMA_VERSION >= 2
+
+
+def test_batch_lead_is_deterministic_and_keeps_child_causes():
+    """★ E04: 부모(첫 행 Aborted) 아래 명시적 Error 가 있으면 대표 원인은 그 Error 다 — 순서를 뒤집어도 같다."""
+    mk = lambda st, ini="NOT_FOUND": {"status": st, "ini_match": ini, "recipe": "R"}
+    rows = [mk("Aborted."), mk("Alignment Error.", "NO_WAFER_ID"), mk("Scan 2D Error."), mk("Scan 2D Error. Aborted.")]
+    lead, union = collect._lead_error_row(rows)
+    assert union == ["SCAN_ERROR", "ALIGN_ERROR"]           # 규칙 순서(구체적 원인 순)
+    assert lead["status"] == "Scan 2D Error."                # 근거 행이 가장 많은 원인 · 자리표시 아님 · 원문 사전순
+    lead2, union2 = collect._lead_error_row(list(reversed(rows)))
+    assert lead2["status"] == lead["status"] and union2 == union
+    lead3, _ = collect._lead_error_row([mk("Aborted."), mk("Alignment Error.", "NO_WAFER_ID")])
+    assert lead3["status"] == "Alignment Error."             # 원인 있는 자리표시 행이 원인 없는 진짜 행보다 먼저
 
 
 # ── Job name · Report 파일 이름(나중에 쓸 일이 있어 함께 담는다) ───────────────

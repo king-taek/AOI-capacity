@@ -1,0 +1,218 @@
+# 30일치 실데이터 상태 문구 213종 전수 매핑 — 사람이 검토한 고정 fixture(D43). 같은 함수로 만들어 통과시키는 표가 아니다:
+# 규칙을 바꾸면 이 표와 어긋나는 문구가 테스트에서 드러난다(dev/tests/test_status_mapping.py — Python 과 JS 둘 다 이 표와 비교).
+# 검토 메모: 'PAL processing partly succeeded. Wafer Skipped.'(3행)는 원인을 지정하지 않았다(ID 판독기 부분 성공 — 사용자 확인 시 ID_READ_ERROR 후보).
+# 'Wafer ID Read does not match slot number … Wafer Skipped.'(1행)는 ID_FORMAT_ERROR(형식·Mask 불일치)로 두었다. 'Cancelled' 는 사용자 취소, '-' 는 결과 미확인(사용자 확인). 열: 행수 \t 원인들(;) \t 결과 \t norm_status(호환) \t 옛 norm_status \t 문구(원문 그대로)
+rows	causes	outcome	norm_status	old_norm_status	status
+129593		PASS	PASS	PASS	Pass
+8976		ABORTED	ABORTED	ABORTED	Aborted.
+6585		SKIPPED	SKIPPED	SKIPPED	Skipped.
+3221		ABORTED	ABORTED	ABORTED	Aborted
+2290		SKIPPED	SKIPPED	SKIPPED	Skipped
+1464	ALIGN_ERROR	FAILED	ALIGN_ERROR	ALIGN_ERROR	Alignment Error.
+1131	RECIPE_ERROR	FAILED	RECIPE_ERROR	RECIPE_ERROR	Wafer Map Import failed.
+562	SCAN_ERROR	FAILED	SCAN_ERROR	SCAN_ERROR	Scan 2D Error.
+543	NOTHING_TO_SCAN	FAILED	NOTHING_TO_SCAN	NOTHING_TO_SCAN	Nothing to Scan.
+534		USER_ABORT	USER_ABORT	USER_ABORT	Aborted. Wafer aborted by user.
+189	CLEAN_REF_ERROR	FAILED	CLEAN_REF_ERROR	CLEAN_REF_ERROR	Clean Reference Error.
+183		USER_ABORT	USER_ABORT	USER_ABORT	Wafer aborted by user.
+85	SCAN_ERROR	FAILED	SCAN_ERROR	SCAN_ERROR	Scan 3D Error.
+58	ID_READ_ERROR	SKIPPED	ID_READ_ERROR	SKIPPED	Failed to read wafer id. Reading error = **********. Wafer Skipped.
+35	RECIPE_ERROR	ABORTED	RECIPE_ERROR	RECIPE_ERROR	Wafer Map Import failed. Aborted.
+35	FOCUS_MAPPING_ERROR	ABORTED	FOCUS_MAPPING_ERROR	ABORTED	Focus Mapping Error. Batch Aborted.
+29	ID_READ_ERROR	FAILED	ID_READ_ERROR	ID_READ_ERROR	Failed to read wafer id on PAL
+24	WAFER_LOST	ABORTED	WAFER_LOST	WAFER_LOST	Wafer lost while moving wafer from End-Effector to FrontSideInsp Error: Table: Failed to sense wafer on chuck. . Batch Aborted.
+24	SCAN_ERROR	FAILED	SCAN_ERROR	SCAN_ERROR	Scan 2D Error. Reason: Processing - Failed to InitForScan.
+23	RECIPE_ERROR	FAILED	RECIPE_ERROR	RECIPE_ERROR	Scanning Multi recipe error.
+23	ID_READ_ERROR	SKIPPED	ID_READ_ERROR	SKIPPED	Failed to read wafer id. Reading error = ************. Wafer Skipped.
+22		SKIPPED	SKIPPED	SKIPPED	Aborted. Skipped.
+21	RECIPE_ERROR	FAILED	RECIPE_ERROR	RECIPE_ERROR	FAR Model inside recipe is invalid, Please review active model or disable far model activation in Global RTP.
+20	WAFER_LOST	SKIPPED	WAFER_LOST	WAFER_LOST	Failed to move wafer from LoadPort A to End-Effector Error: Robot: The wafer could not be detected on Hand1 after the GET motion. . Batch Aborted. Skipped.
+19	ID_READ_ERROR	ABORTED	ID_READ_ERROR	ID_READ_ERROR	Failed to read wafer id. Reading error = **********. Aborted.
+18	SCAN_ERROR	FAILED	SCAN_ERROR	SCAN_ERROR	Scan Error: Scan2d optic is not valid on machine.
+16	ALIGN_ERROR	FAILED	ALIGN_ERROR	ALIGN_ERROR	Manual Alignment Failed.
+16	WAFER_LOST	ABORTED	WAFER_LOST	WAFER_LOST	Wafer lost while moving wafer from End-Effector to FrontSideInsp_ShiftedLoad Error: Table: Failed to sense wafer on chuck. . Batch Aborted.
+15	WAFER_LOST	FAILED	WAFER_LOST	WAFER_LOST	Wafer Handling Failure (End-Effector to FrontSideInsp_ShiftedLoad).
+13	ID_READ_ERROR	SKIPPED	ID_READ_ERROR	SKIPPED	Failed to read wafer id. Reading error = ***********. Wafer Skipped.
+13	ALIGN_ERROR	FAILED	ALIGN_ERROR	ALIGN_ERROR	Prealigner failure
+13	NOTHING_TO_SCAN	ABORTED	NOTHING_TO_SCAN	NOTHING_TO_SCAN	Nothing to Scan. Aborted.
+12	ALIGN_ERROR	ABORTED	ALIGN_ERROR	ALIGN_ERROR	Alignment Error. Aborted.
+10	MOTION_ERROR;HANDLING_ERROR	FAILED	MOTION_ERROR	OTHER	Failed to MoveTableToStoredPosAndLock. LastError: Table: Motion failed to get_ContinuousScanStatus(pVal) , Exception: System.Runtime.InteropServices.COMException (0x800427B2): AcsMotor::get_Position Failed Meaning:get_AxesPosition at MachineSrv.AutoLoaderClass.MoveTableToStoredPosAndLock(eTableStoredPos ePos, Boolean wait) at AutomationManager.EFEM.AutoLoaderWrapper.MoveTableToStoredPosAndLock(eTableStoredPos position, Boolean wait)
+9	HW_ERROR	ABORTED	HW_ERROR	HW_ERROR	Camera Hardware Failure. Failed switch to camera IVP_RANGER, Failed to Set Camera. Batch Aborted.
+9	WAFER_LOST	SKIPPED	WAFER_LOST	WAFER_LOST	Failed to move wafer from LoadPort B to End-Effector Error: Robot: The wafer could not be detected on Hand1 after the GET motion. Sensor State = A:0 B:0 . Batch Aborted. Skipped.
+8	CONTROL_TIMEOUT	ABORTED	CONTROL_TIMEOUT	ABORTED	Abort timed-out
+8	ID_READ_ERROR	ABORTED	ID_READ_ERROR	ID_READ_ERROR	Failed to read wafer id. Reading error = ************. Batch Aborted.
+8	HANDLING_ERROR	FAILED	HANDLING_ERROR	OTHER	Failed to MoveTableToStoredPosAndLock. LastError: Wafer ID reading failed., Exception: System.Runtime.InteropServices.COMException (0x80004005): Error HRESULT E_FAIL has been returned from a call to a COM component. at MachineSrv.AutoLoaderClass.MoveTableToStoredPosAndLock(eTableStoredPos ePos, Boolean wait) at AutomationManager.EFEM.AutoLoaderWrapper.MoveTableToStoredPosAndLock(eTableStoredPos position, Boolean wait)
+7	SCAN_ERROR	ABORTED	SCAN_ERROR	SCAN_ERROR	Scan 2D Error. Aborted.
+7	AUTO_FOCUS_ERROR	FAILED	AUTO_FOCUS_ERROR	OTHER	Auto Focus Error.
+6	RECIPE_ERROR	FAILED	RECIPE_ERROR	RECIPE_ERROR	Scan 2D: Illegal Lot Name.
+6	SCAN_ERROR	FAILED	SCAN_ERROR	SCAN_ERROR	Scan 2D Error. Reason: Scan coverage validation failed - some scan areas were not covered by processed frames.
+6	SCAN_ERROR	FAILED	SCAN_ERROR	SCAN_ERROR	Scan 2D Error. Reason: Process Scanned Images Failed.
+5	WAFER_LOST	ABORTED	WAFER_LOST	WAFER_LOST	Failed to move wafer from End-Effector to LoadPort A Error: Robot: EVFATAL:Program Error . Batch Aborted.
+4		SKIPPED	SKIPPED	SKIPPED	Skipped. Aborted.
+3	ID_READ_ERROR	ABORTED	ID_READ_ERROR	ID_READ_ERROR	Failed to read wafer id. Reading error = ************. Aborted.
+3	ALIGN_ERROR;HANDLING_ERROR	ABORTED	ALIGN_ERROR	ALIGN_ERROR	Alignment Error. Robot operation failed: Failed on MoveTableToStoredPosAndLock. LastError: Table: Wafer on chuck is not secured. Chuck remains locked. . Batch Aborted.
+3	MOTION_ERROR;HANDLING_ERROR	FAILED	MOTION_ERROR	OTHER	Failed to MoveTableToStoredPosAndLock. LastError: Table: Motion failed to get_ContinuousScanStatus(pVal) , Exception: System.Runtime.InteropServices.COMException (0x80004005): Error HRESULT E_FAIL has been returned from a call to a COM component. at MachineSrv.AutoLoaderClass.MoveTableToStoredPosAndLock(eTableStoredPos ePos, Boolean wait) at AutomationManager.EFEM.AutoLoaderWrapper.MoveTableToStoredPosAndLock(eTableStoredPos position, Boolean wait)
+3		SKIPPED	SKIPPED	SKIPPED	PAL processing partly succeeded. Wafer Skipped.
+3	SCAN_ERROR;HANDLING_ERROR	ABORTED	SCAN_ERROR	SCAN_ERROR	Scan 2D Error. Robot operation failed: Failed on MoveTableToStoredPosAndLock. LastError: Table: Wafer on chuck is not secured. Chuck remains locked. . Batch Aborted.
+3	ID_READ_ERROR	ABORTED	ID_READ_ERROR	ID_READ_ERROR	Failed to read wafer id. Reading error = 52225759EUE0. Batch Aborted.
+2	ID_FORMAT_ERROR	FAILED	ID_FORMAT_ERROR	OTHER	Wafer ID Mask length(11) differs from actual Wafer ID length(10). ID: SN34J10-A0 Mask: IIIIIIIIIII
+2	ID_READ_ERROR	ABORTED	ID_READ_ERROR	ID_READ_ERROR	Failed to read wafer id. Reading error = 7501647WF2. Aborted.
+2	SCAN_ERROR	ABORTED	SCAN_ERROR	SCAN_ERROR	Scan Error: Scan2d optic is not valid on machine. Aborted.
+2	ID_READ_ERROR	ABORTED	ID_READ_ERROR	ID_READ_ERROR	Failed to read wafer id. Reading error = B2I66185GCE7. Batch Aborted.
+2	ID_READ_ERROR	ABORTED	ID_READ_ERROR	ID_READ_ERROR	Failed to read wafer id. Reading error = GX57511412. Batch Aborted.
+2	MOTION_ERROR;HANDLING_ERROR	FAILED	MOTION_ERROR	OTHER	Failed to MoveTableToStoredPosAndLock. LastError: Table: Failed on motor->get_Position(&coord) , Exception: System.Runtime.InteropServices.COMException (0x80042792): AcsMotor::get_Position Failed Meaning:get_AxesPosition at MachineSrv.AutoLoaderClass.MoveTableToStoredPosAndLock(eTableStoredPos ePos, Boolean wait) at AutomationManager.EFEM.AutoLoaderWrapper.MoveTableToStoredPosAndLock(eTableStoredPos position, Boolean wait)
+2		UNKNOWN	UNKNOWN	OTHER	-
+2	ID_READ_ERROR	ABORTED	ID_READ_ERROR	ID_READ_ERROR	Failed to read wafer id. Reading error = GX5.509361. Aborted.
+2	WAFER_LOST	ABORTED	WAFER_LOST	WAFER_LOST	Failed to move wafer from LoadPort B to End-Effector Error: Robot: The wafer could not be detected on Hand1 after the GET motion. Sensor State = A:0 B:0 . Batch Aborted.
+2	ID_READ_ERROR	ABORTED	ID_READ_ERROR	ID_READ_ERROR	Failed to read wafer id. Reading error = GX575014-8. Aborted.
+2	ID_READ_ERROR	SKIPPED	ID_READ_ERROR	SKIPPED	Failed to read wafer id. Reading error = ********. Wafer Skipped.
+2	ALIGN_ERROR	ABORTED	ALIGN_ERROR	ALIGN_ERROR	Manual Alignment Failed. Aborted.
+2	ID_READ_ERROR	ABORTED	ID_READ_ERROR	ID_READ_ERROR	Failed to read wafer id. Reading error = FWULMHF-HFWJ. Batch Aborted.
+2	ID_READ_ERROR	ABORTED	ID_READ_ERROR	ID_READ_ERROR	Failed to read wafer id. Reading error = . Aborted.
+2	WAFER_LOST	FAILED	WAFER_LOST	WAFER_LOST	Wafer Handling Failure (PreAligner to End-Effector).
+2	WAFER_LOST	FAILED	WAFER_LOST	WAFER_LOST	Wafer Handling Failure (LoadPort A to PreAligner).
+2	ID_READ_ERROR	ABORTED	ID_READ_ERROR	ID_READ_ERROR	Failed to read wafer id. Reading error = LII77-----. Batch Aborted.
+2	ID_READ_ERROR	SKIPPED	ID_READ_ERROR	SKIPPED	Failed to read wafer id. Reading error = LSH75N2?-C. Wafer Skipped.
+2	ID_READ_ERROR	SKIPPED	ID_READ_ERROR	SKIPPED	Failed to read wafer id. Reading error = LSH75N2?-H. Wafer Skipped.
+2	ID_READ_ERROR	SKIPPED	ID_READ_ERROR	SKIPPED	Failed to read wafer id. Reading error = LSH75N1?-F. Wafer Skipped.
+2	ID_READ_ERROR	ABORTED	ID_READ_ERROR	ID_READ_ERROR	Failed to read wafer id. Reading error = NFVGX57504. Aborted.
+2	ID_READ_ERROR	ABORTED	ID_READ_ERROR	ID_READ_ERROR	Failed to read wafer id. Reading error = ??61DU5763. Batch Aborted.
+2	SCAN_ERROR;HANDLING_ERROR	ABORTED	SCAN_ERROR	SCAN_ERROR	Scan 3D Error. Robot operation failed: Failed on MoveTableToStoredPosAndLock. LastError: Table: Wafer on chuck is not secured. Chuck remains locked. . Batch Aborted.
+2	ID_READ_ERROR	ABORTED	ID_READ_ERROR	ID_READ_ERROR	Failed to read wafer id. Reading error = ?2255537EWG0. Batch Aborted.
+2	CLEAN_REF_ERROR;HANDLING_ERROR	ABORTED	CLEAN_REF_ERROR	CLEAN_REF_ERROR	Clean Reference Error. Robot operation failed: Failed on MoveTableToStoredPosAndLock. LastError: Table: Wafer on chuck is not secured. Chuck remains locked. . Batch Aborted.
+2	ID_READ_ERROR	ABORTED	ID_READ_ERROR	ID_READ_ERROR	Failed to read wafer id. Reading error = KX57507855. Batch Aborted.
+2	ID_READ_ERROR	ABORTED	ID_READ_ERROR	ID_READ_ERROR	Failed to read wafer id. Reading error = UEUIEI7ITI. Batch Aborted.
+2	ID_READ_ERROR	ABORTED	ID_READ_ERROR	ID_READ_ERROR	Failed to read wafer id. Reading error = AWS6P244XYG7. Batch Aborted.
+2	ID_READ_ERROR	ABORTED	ID_READ_ERROR	ID_READ_ERROR	Failed to read wafer id. Reading error = W6960173XYP4. Batch Aborted.
+2	ID_READ_ERROR	ABORTED	ID_READ_ERROR	ID_READ_ERROR	Failed to read wafer id. Reading error = 99P75PPP99A6. Batch Aborted.
+2	HW_ERROR	ABORTED	HW_ERROR	HW_ERROR	Camera Hardware Failure. Failed switch to camera [Camera], Cannot change camera during continuous scan. Batch Aborted.
+2	ID_READ_ERROR	ABORTED	ID_READ_ERROR	ID_READ_ERROR	Failed to read wafer id. Reading error = 61GX5183EWC7. Batch Aborted.
+1	WAFER_LOST	FAILED	WAFER_LOST	WAFER_LOST	Wafer Handling Failure (LoadPort A to End-Effector).
+1	WAFER_LOST	SKIPPED	WAFER_LOST	WAFER_LOST	Failed to move wafer from LoadPort A to End-Effector Error: Robot: The wafer could not be detected on Hand1 after the GET motion. Sensor State = A:0 B:0 . Batch Aborted. Skipped.
+1	ID_READ_ERROR	SKIPPED	ID_READ_ERROR	SKIPPED	Failed to read wafer id. Reading error = CX06130139GU. Wafer Skipped.
+1	WAFER_LOST	SKIPPED	WAFER_LOST	WAFER_LOST	Failed to move wafer from LoadPort A to End-Effector Error: Loadport A,slot 7: Source carrier is not ready for operation. . Batch Aborted. Skipped.
+1	ID_READ_ERROR	SKIPPED	ID_READ_ERROR	SKIPPED	Failed to read wafer id. Reading error = 61HJ5C07EWB6ZX. Wafer Skipped.
+1	ID_READ_ERROR	SKIPPED	ID_READ_ERROR	SKIPPED	Failed to read wafer id. Reading error = TFA211-21B5. Wafer Skipped.
+1	ID_READ_ERROR	SKIPPED	ID_READ_ERROR	SKIPPED	Failed to read wafer id. Reading error = TFA211-12G0. Wafer Skipped.
+1	WAFER_LOST	FAILED	WAFER_LOST	WAFER_LOST	Failed on MoveToStation
+1	ID_READ_ERROR	SKIPPED	ID_READ_ERROR	SKIPPED	Failed to read wafer id. Reading error = UNR763-0WT-. Wafer Skipped.
+1	ID_READ_ERROR	SKIPPED	ID_READ_ERROR	SKIPPED	Failed to read wafer id. Reading error = T99C1ZF--T4A. Wafer Skipped.
+1	ID_READ_ERROR	SKIPPED	ID_READ_ERROR	SKIPPED	Failed to read wafer id. Reading error = T7TTS2T-B6. Wafer Skipped.
+1	ID_READ_ERROR	SKIPPED	ID_READ_ERROR	SKIPPED	Failed to read wafer id. Reading error = 7F77FT--E7. Wafer Skipped.
+1	ID_READ_ERROR	SKIPPED	ID_READ_ERROR	SKIPPED	Failed to read wafer id. Reading error = 4TFM2VT-A3. Wafer Skipped.
+1	ID_READ_ERROR	ABORTED	ID_READ_ERROR	ID_READ_ERROR	Failed to read wafer id. Reading error = GX57505118. Aborted.
+1	ID_READ_ERROR	USER_ABORT	ID_READ_ERROR	ID_READ_ERROR	Failed to read wafer id. Reading error = **********. Wafer aborted by user.
+1		USER_ABORT	USER_ABORT	USER_ABORT	Wafer aborted by user. Aborted.
+1	ID_READ_ERROR	ABORTED	ID_READ_ERROR	ID_READ_ERROR	Failed to read wafer id. Reading error = GX5#507941. Batch Aborted.
+1	ID_READ_ERROR	SKIPPED	ID_READ_ERROR	SKIPPED	Failed to read wafer id. Reading error = SJ83S17-D5. Wafer Skipped.
+1	ID_READ_ERROR	SKIPPED	ID_READ_ERROR	SKIPPED	Failed to read wafer id. Reading error = SJ49F25-F7. Skipped.
+1	ID_READ_ERROR	SKIPPED	ID_READ_ERROR	SKIPPED	Failed to read wafer id. Reading error = GAKSN24-DZ. Wafer Skipped.
+1	WAFER_LOST	FAILED	WAFER_LOST	WAFER_LOST	Wafer Handling Failure (End-Effector to LoadPort B).
+1	MOTION_ERROR;HANDLING_ERROR	FAILED	MOTION_ERROR	OTHER	Failed to MoveTableToStoredPosAndLock. LastError: Table: Failed on motor->get_Position(&coord) , Exception: System.Runtime.InteropServices.COMException (0x800427D6): AcsMotor::get_Position Failed Meaning:get_AxesPosition at MachineSrv.AutoLoaderClass.MoveTableToStoredPosAndLock(eTableStoredPos ePos, Boolean wait) at AutomationManager.EFEM.AutoLoaderWrapper.MoveTableToStoredPosAndLock(eTableStoredPos position, Boolean wait)
+1	PREALIGNER_RESPONSE_ERROR;MOTION_ERROR;HANDLING_ERROR	FAILED	PREALIGNER_RESPONSE_ERROR	OTHER	Failed to MoveTableToStoredPosAndLock. LastError: PreAligner: Expected Status Field was not found (cmd=sta, answ=00C >) Table: Motion failed to get_ContinuousScanStatus(pVal) , Exception: System.Runtime.InteropServices.COMException (0x800427B2): AcsMotor::get_Position Failed Meaning:get_AxesPosition at MachineSrv.AutoLoaderClass.MoveTableToStoredPosAndLock(eTableStoredPos ePos, Boolean wait) at AutomationManager.EFEM.AutoLoaderWrapper.MoveTableToStoredPosAndLock(eTableStoredPos position, Boolean wait)
+1	PREALIGNER_RESPONSE_ERROR;MOTION_ERROR;HANDLING_ERROR	FAILED	PREALIGNER_RESPONSE_ERROR	OTHER	Failed to MoveTableToStoredPosAndLock. LastError: PreAligner: Expected Status Field was not found (cmd=sta, answ=00C >) Table: Motion failed to get_ContinuousScanStatus(pVal) , Exception: System.Runtime.InteropServices.COMException (0x80004005): Error HRESULT E_FAIL has been returned from a call to a COM component. at MachineSrv.AutoLoaderClass.MoveTableToStoredPosAndLock(eTableStoredPos ePos, Boolean wait) at AutomationManager.EFEM.AutoLoaderWrapper.MoveTableToStoredPosAndLock(eTableStoredPos position, Boolean wait)
+1	WAFER_LOST	ABORTED	WAFER_LOST	WAFER_LOST	Aborted. Failed to move wafer from FrontSideInsp to End-Effector Error: Table: Failed on m_TableMoveCmd.WaitUntilDone(30000) . Batch Aborted.
+1	WAFER_LOST;HW_ERROR;MOTION_ERROR	ABORTED	WAFER_LOST	WAFER_LOST	Camera Hardware Failure. Failed switch to camera [Camera], Failed on m_pTable->get_ContinuousScanStatus(continuousScanStatus). Batch Aborted. Failed to move wafer from FrontSideInsp to LoadPort A Error: Table: Failed on motor->get_Position(&coord) .
+1	ID_READ_ERROR	SKIPPED	ID_READ_ERROR	SKIPPED	Failed to read wafer id. Reading error = N06HG-17. Wafer Skipped.
+1	ID_READ_ERROR	SKIPPED	ID_READ_ERROR	SKIPPED	Failed to read wafer id. Reading error = NM3YM?20. Wafer Skipped.
+1	ID_READ_ERROR	SKIPPED	ID_READ_ERROR	SKIPPED	Failed to read wafer id. Reading error = NM3YM-1J. Wafer Skipped.
+1	ID_READ_ERROR	SKIPPED	ID_READ_ERROR	SKIPPED	Failed to read wafer id. Reading error = 1HG5164EWA5J. Wafer Skipped.
+1	ID_READ_ERROR	SKIPPED	ID_READ_ERROR	SKIPPED	Failed to read wafer id. Reading error = N8R564-10D7. Wafer Skipped.
+1	ID_READ_ERROR	SKIPPED	ID_READ_ERROR	SKIPPED	Failed to read wafer id. Reading error = N8R564-10DF. Wafer Skipped.
+1	HANDLING_ERROR	ABORTED	HANDLING_ERROR	ABORTED	Wafer Move Failure From FrontSideInsp to End-Effector Error: General System Error. Batch Aborted.
+1	ID_READ_ERROR	SKIPPED	ID_READ_ERROR	SKIPPED	Failed to read wafer id. Reading error = GWT2R20-H2. Wafer Skipped.
+1	ID_READ_ERROR	SKIPPED	ID_READ_ERROR	SKIPPED	Failed to read wafer id. Reading error = GWT2R17-E-. Wafer Skipped.
+1	ID_READ_ERROR	SKIPPED	ID_READ_ERROR	SKIPPED	Failed to read wafer id. Reading error = GWT2R16-C4. Wafer Skipped.
+1	ID_READ_ERROR	SKIPPED	ID_READ_ERROR	SKIPPED	Failed to read wafer id. Reading error = GWT2R13-C6. Wafer Skipped.
+1	ID_READ_ERROR	SKIPPED	ID_READ_ERROR	SKIPPED	Failed to read wafer id. Reading error = GWT2R09-F3. Wafer Skipped.
+1	ID_READ_ERROR	SKIPPED	ID_READ_ERROR	SKIPPED	Failed to read wafer id. Reading error = GWT2R05-D2. Wafer Skipped.
+1	ID_READ_ERROR	SKIPPED	ID_READ_ERROR	SKIPPED	Failed to read wafer id. Reading error = GWT2R04-A7. Wafer Skipped.
+1	ID_READ_ERROR	SKIPPED	ID_READ_ERROR	SKIPPED	Failed to read wafer id. Reading error = GWT2R02-D4. Wafer Skipped.
+1	ID_READ_ERROR	FAILED	ID_READ_ERROR	ID_READ_ERROR	Failed to read wafer id. Reading error = .
+1	WAFER_LOST	FAILED	WAFER_LOST	WAFER_LOST	Wafer Handling Failure (End-Effector to LoadPort A).
+1	ID_READ_ERROR	SKIPPED	ID_READ_ERROR	SKIPPED	Failed to read wafer id. Reading error = WWWWW?W1. Wafer Skipped.
+1	ID_READ_ERROR	SKIPPED	ID_READ_ERROR	SKIPPED	Failed to read wafer id. Reading error = X19130136E1?. Wafer Skipped.
+1	ID_READ_ERROR	SKIPPED	ID_READ_ERROR	SKIPPED	Failed to read wafer id. Reading error = X07130136D5?. Wafer Skipped.
+1	ID_READ_ERROR	SKIPPED	ID_READ_ERROR	SKIPPED	Failed to read wafer id. Reading error = SX06130136A5. Wafer Skipped.
+1	ID_READ_ERROR	SKIPPED	ID_READ_ERROR	SKIPPED	Failed to read wafer id. Reading error = *************. Wafer Skipped.
+1	ID_READ_ERROR	SKIPPED	ID_READ_ERROR	SKIPPED	Failed to read wafer id. Reading error = SN54T14-D5. Wafer Skipped.
+1	ID_READ_ERROR	SKIPPED	ID_READ_ERROR	SKIPPED	Failed to read wafer id. Reading error = SN54T1H-G2. Wafer Skipped.
+1	ID_READ_ERROR	SKIPPED	ID_READ_ERROR	SKIPPED	Failed to read wafer id. Reading error = SN54T07-G4. Wafer Skipped.
+1	ID_READ_ERROR	SKIPPED	ID_READ_ERROR	SKIPPED	Failed to read wafer id. Reading error = SL39L22-A2. Wafer Skipped.
+1	ID_READ_ERROR	SKIPPED	ID_READ_ERROR	SKIPPED	Failed to read wafer id. Reading error = SL39L18-C7. Wafer Skipped.
+1	ID_READ_ERROR	SKIPPED	ID_READ_ERROR	SKIPPED	Failed to read wafer id. Reading error = SL3HL14-A6. Wafer Skipped.
+1	ID_READ_ERROR	SKIPPED	ID_READ_ERROR	SKIPPED	Failed to read wafer id. Reading error = SL39LA9-B0. Wafer Skipped.
+1	ID_READ_ERROR	SKIPPED	ID_READ_ERROR	SKIPPED	Failed to read wafer id. Reading error = SL39LA8-G0. Wafer Skipped.
+1	ID_READ_ERROR	SKIPPED	ID_READ_ERROR	SKIPPED	Failed to read wafer id. Reading error = SL39LA7-D5. Wafer Skipped.
+1	ID_READ_ERROR	SKIPPED	ID_READ_ERROR	SKIPPED	Failed to read wafer id. Reading error = SL39LA5-G2. Wafer Skipped.
+1	ID_READ_ERROR	SKIPPED	ID_READ_ERROR	SKIPPED	Failed to read wafer id. Reading error = SL39L03-B4. Wafer Skipped.
+1	ID_READ_ERROR	SKIPPED	ID_READ_ERROR	SKIPPED	Failed to read wafer id. Reading error = SL39L02-G4. Wafer Skipped.
+1		USER_CANCELLED	USER_CANCELLED	OTHER	Cancelled
+1	ID_READ_ERROR	SKIPPED	ID_READ_ERROR	SKIPPED	Failed to read wafer id. Reading error = .9LULUL-IJ. Wafer Skipped.
+1	ID_READ_ERROR	SKIPPED	ID_READ_ERROR	SKIPPED	Failed to read wafer id. Reading error = #J9UJVL--L. Wafer Skipped.
+1	ID_READ_ERROR	SKIPPED	ID_READ_ERROR	SKIPPED	Failed to read wafer id. Reading error = 53-5R-98W#TT?. Wafer Skipped.
+1	ID_READ_ERROR	SKIPPED	ID_READ_ERROR	SKIPPED	Failed to read wafer id. Reading error = T60C87-06G3. Wafer Skipped.
+1	GRAY_LEVEL_LIMIT	ABORTED	GRAY_LEVEL_LIMIT	ABORTED	Wafer Gray Level Average exceeds limits!. Batch Aborted.
+1	ID_READ_ERROR	SKIPPED	ID_READ_ERROR	SKIPPED	Failed to read wafer id. Reading error = E0QS20-10-G1. Wafer Skipped.
+1	ID_READ_ERROR	SKIPPED	ID_READ_ERROR	SKIPPED	Failed to read wafer id. Reading error = UMC721-01C4. Wafer Skipped.
+1	ID_FORMAT_ERROR	SKIPPED	ID_FORMAT_ERROR	SKIPPED	Wafer ID Read does not match slot number. Wafer ID: CX19130105F0 Mask: ~I Slot#: [9]. Wafer Skipped.
+1	ID_READ_ERROR	SKIPPED	ID_READ_ERROR	SKIPPED	Failed to read wafer id. Reading error = J50-MHM?TL. Wafer Skipped.
+1	ID_READ_ERROR	SKIPPED	ID_READ_ERROR	SKIPPED	Failed to read wafer id. Reading error = IHKSN13-E7. Wafer Skipped.
+1	ID_READ_ERROR	SKIPPED	ID_READ_ERROR	SKIPPED	Failed to read wafer id. Reading error = TVHKSN1?-E. Wafer Skipped.
+1	ID_READ_ERROR	SKIPPED	ID_READ_ERROR	SKIPPED	Failed to read wafer id. Reading error = ZHKSN10-EZ. Wafer Skipped.
+1	ID_READ_ERROR	SKIPPED	ID_READ_ERROR	SKIPPED	Failed to read wafer id. Reading error = 77KS.2T-33. Wafer Skipped.
+1	ID_READ_ERROR	SKIPPED	ID_READ_ERROR	SKIPPED	Failed to read wafer id. Reading error = GAKSN17-G5. Wafer Skipped.
+1	ID_READ_ERROR	SKIPPED	ID_READ_ERROR	SKIPPED	Failed to read wafer id. Reading error = GAKSN10-E6. Wafer Skipped.
+1	ID_READ_ERROR	SKIPPED	ID_READ_ERROR	SKIPPED	Failed to read wafer id. Reading error = 0KRF010XYB6?. Wafer Skipped.
+1	ID_READ_ERROR	SKIPPED	ID_READ_ERROR	SKIPPED	Failed to read wafer id. Reading error = 7M77T13-G7. Wafer Skipped.
+1	ID_READ_ERROR	SKIPPED	ID_READ_ERROR	SKIPPED	Failed to read wafer id. Reading error = FFLMMB1-HM. Wafer Skipped.
+1	ID_READ_ERROR	ABORTED	ID_READ_ERROR	ID_READ_ERROR	Failed to read wafer id. Reading error = LSH75N2?-E. Aborted.
+1	ID_READ_ERROR	SKIPPED	ID_READ_ERROR	SKIPPED	Failed to read wafer id. Reading error = LSH75N2?-E. Wafer Skipped.
+1	ID_READ_ERROR	SKIPPED	ID_READ_ERROR	SKIPPED	Failed to read wafer id. Reading error = FSH75N2?-E. Wafer Skipped.
+1	ID_READ_ERROR	SKIPPED	ID_READ_ERROR	SKIPPED	Failed to read wafer id. Reading error = LSH75N1?-H. Wafer Skipped.
+1	ID_READ_ERROR	SKIPPED	ID_READ_ERROR	SKIPPED	Failed to read wafer id. Reading error = FSH75N1?-E. Wafer Skipped.
+1	ID_READ_ERROR	SKIPPED	ID_READ_ERROR	SKIPPED	Failed to read wafer id. Reading error = HSH75N1?-C. Wafer Skipped.
+1	ID_READ_ERROR	SKIPPED	ID_READ_ERROR	SKIPPED	Failed to read wafer id. Reading error = SH75N16-AW. Wafer Skipped.
+1	ID_READ_ERROR	SKIPPED	ID_READ_ERROR	SKIPPED	Failed to read wafer id. Reading error = LSH75N1?-C. Wafer Skipped.
+1	ID_READ_ERROR	SKIPPED	ID_READ_ERROR	SKIPPED	Failed to read wafer id. Reading error = USH75N1?-A. Wafer Skipped.
+1	ID_READ_ERROR	SKIPPED	ID_READ_ERROR	SKIPPED	Failed to read wafer id. Reading error = SH75N11-DN. Wafer Skipped.
+1	ID_READ_ERROR	SKIPPED	ID_READ_ERROR	SKIPPED	Failed to read wafer id. Reading error = LSH75N0?-D. Wafer Skipped.
+1	ID_READ_ERROR	SKIPPED	ID_READ_ERROR	SKIPPED	Failed to read wafer id. Reading error = SH75N08-AI. Wafer Skipped.
+1	ID_READ_ERROR	SKIPPED	ID_READ_ERROR	SKIPPED	Failed to read wafer id. Reading error = LSH75N0?-F. Wafer Skipped.
+1	ID_READ_ERROR	SKIPPED	ID_READ_ERROR	SKIPPED	Failed to read wafer id. Reading error = SH75N02-B8. Wafer Skipped.
+1	ID_READ_ERROR	SKIPPED	ID_READ_ERROR	SKIPPED	Failed to read wafer id. Reading error = SH75N01-GW. Wafer Skipped.
+1	ID_READ_ERROR	SKIPPED	ID_READ_ERROR	SKIPPED	Failed to read wafer id. Reading error = 47395102EWG5. Wafer Skipped.
+1	ID_READ_ERROR	SKIPPED	ID_READ_ERROR	SKIPPED	Failed to read wafer id. Reading error = TE2135660E. Wafer Skipped.
+1	ID_READ_ERROR	SKIPPED	ID_READ_ERROR	SKIPPED	Failed to read wafer id. Reading error = ?E2135570E. Wafer Skipped.
+1	ID_READ_ERROR	ABORTED	ID_READ_ERROR	ID_READ_ERROR	Failed to read wafer id. Reading error = #750ZB2#MR. Aborted.
+1	ID_READ_ERROR	ABORTED	ID_READ_ERROR	ID_READ_ERROR	Failed to read wafer id. Reading error = GIX57030-3. Batch Aborted.
+1	ID_READ_ERROR	SKIPPED	ID_READ_ERROR	SKIPPED	Failed to read wafer id. Reading error = X57507491L??. Skipped.
+1	ID_READ_ERROR	SKIPPED	ID_READ_ERROR	SKIPPED	Failed to read wafer id. Reading error = X57501793???. Wafer Skipped.
+1	ID_READ_ERROR	SKIPPED	ID_READ_ERROR	SKIPPED	Failed to read wafer id. Reading error = X57511908???. Skipped.
+1	ID_READ_ERROR	ABORTED	ID_READ_ERROR	ID_READ_ERROR	Failed to read wafer id. Reading error = 61GX5228EM-5. Batch Aborted.
+1	ID_READ_ERROR	ABORTED	ID_READ_ERROR	ID_READ_ERROR	Failed to read wafer id. Reading error = 61GX5228EWT5. Batch Aborted.
+1	ID_READ_ERROR	ABORTED	ID_READ_ERROR	ID_READ_ERROR	Failed to read wafer id. Reading error = 8L57501421. Batch Aborted.
+1	ID_READ_ERROR	ABORTED	ID_READ_ERROR	ID_READ_ERROR	Failed to read wafer id. Reading error = KH57501422. Batch Aborted.
+1	ID_READ_ERROR	ABORTED	ID_READ_ERROR	ID_READ_ERROR	Failed to read wafer id. Reading error = 8.57501421. Batch Aborted.
+1	ID_READ_ERROR	ABORTED	ID_READ_ERROR	ID_READ_ERROR	Failed to read wafer id. Reading error = GX57008548. Batch Aborted.
+1	ID_READ_ERROR	SKIPPED	ID_READ_ERROR	SKIPPED	Failed to read wafer id. Reading error = GX575-Z189. Wafer Skipped.
+1	HANDLING_ERROR	ABORTED	HANDLING_ERROR	ABORTED	Aborted. Robot operation failed: Failed on MoveTableToStoredPosAndLock. LastError: Table: Wafer on chuck is not secured. Chuck remains locked. . Batch Aborted.
+1	WAFER_LOST;ALIGN_ERROR	ABORTED	WAFER_LOST	WAFER_LOST	Alignment Error. Failed to move wafer from FrontSideInsp to End-Effector Error: Exchange : Wafer is missing on Front Side Insp. Batch Aborted.
+1	ID_READ_ERROR	SKIPPED	ID_READ_ERROR	SKIPPED	Failed to read wafer id. Reading error = GX57502427. Wafer Skipped.
+1	ID_READ_ERROR	ABORTED	ID_READ_ERROR	ID_READ_ERROR	Failed to read wafer id. Reading error = 52225759EHE0. Batch Aborted.
+1	ID_READ_ERROR	SKIPPED	ID_READ_ERROR	SKIPPED	Failed to read wafer id. Reading error = X57502434P. Wafer Skipped.
+1	ID_READ_ERROR	SKIPPED	ID_READ_ERROR	SKIPPED	Failed to read wafer id. Reading error = K625477-Z1KL. Wafer Skipped.
+1	ID_READ_ERROR	ABORTED	ID_READ_ERROR	ID_READ_ERROR	Failed to read wafer id. Reading error = LF7F477MP7F6. Batch Aborted.
+1	ID_READ_ERROR	SKIPPED	ID_READ_ERROR	SKIPPED	Failed to read wafer id. Reading error = 9HHU49HHHHA4.AUAH6. Wafer Skipped.
+1	WAFER_LOST	ABORTED	WAFER_LOST	WAFER_LOST	Wafer lost while moving wafer from FrontSideInsp to End-Effector Error: Table: Failed to sense wafer on chuck. . Batch Aborted.
+1	ID_READ_ERROR	SKIPPED	ID_READ_ERROR	SKIPPED	Failed to read wafer id. Reading error = 22375397ETL6. Wafer Skipped.
+1	ID_READ_ERROR	ABORTED	ID_READ_ERROR	ID_READ_ERROR	Failed to read wafer id. Reading error = 22375397EMD6. Batch Aborted.
+1	ID_READ_ERROR	ABORTED	ID_READ_ERROR	ID_READ_ERROR	Failed to read wafer id. Reading error = 223753975MP6. Batch Aborted.
+1	ID_READ_ERROR	SKIPPED	ID_READ_ERROR	SKIPPED	Failed to read wafer id. Reading error = E0FS64-22-A2. Wafer Skipped.
+1	ID_READ_ERROR	SKIPPED	ID_READ_ERROR	SKIPPED	Failed to read wafer id. Reading error = **********. Skipped. Aborted.
+1	ID_READ_ERROR	SKIPPED	ID_READ_ERROR	SKIPPED	Failed to read wafer id. Reading error = 70T0H0R?0T. Wafer Skipped.
+1	ID_READ_ERROR	SKIPPED	ID_READ_ERROR	SKIPPED	Failed to read wafer id. Reading error = 5ELF170?F7. Wafer Skipped.
+1	WAFER_LOST;ID_READ_ERROR	SKIPPED	WAFER_LOST	WAFER_LOST	Failed to read wafer id. Reading error = **********. Wafer Skipped. Failed to move wafer from End-Effector to LoadPort A Error: Failed on PostPlace(sEEF, To, hr == S_OK). Batch Aborted.
+1	ID_READ_ERROR	SKIPPED	ID_READ_ERROR	SKIPPED	Failed to read wafer id. Reading error = 7H09HTR?0T. Wafer Skipped.
+1	ID_READ_ERROR	ABORTED	ID_READ_ERROR	ID_READ_ERROR	Failed to read wafer id. Reading error = GIX4900.??. Batch Aborted.
+1	HANDLING_ERROR	ABORTED	HANDLING_ERROR	ABORTED	Robot operation failed: Failed on MoveTableToStoredPosAndLock. LastError: Table: Failed on MoveToStoredPos(m_eTableLockPosition) . Batch Aborted.

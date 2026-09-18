@@ -89,32 +89,30 @@ def test_no_stale_update_base_constant():
     assert "UPDATE_BASE=" not in HTML
 
 
-def test_status_classification_matches_the_python_side():
-    """★ 같은 Report 를 파이썬과 브라우저가 다르게 읽으면 안 된다 — 코드 순서까지 같아야 한다.
-
-    반송 실패('… Batch Aborted. Skipped.')처럼 문구가 겹치는 표기가 있어 **순서가 곧 의미**다."""
+def _js_rules(name):
+    """template 의 `const NAME=[["CODE",/regex/i],…]` 를 (코드, 정규식 문자열) 목록으로."""
     import re
 
+    body = HTML[HTML.index(f"const {name}="):]
+    body = body[:body.index("];") + 1]
+    return re.findall(r'\["([A-Z_]+)",/(.*?)/i\]', body)
+
+
+def test_status_classification_matches_the_python_side():
+    """★ 같은 Report 를 파이썬과 브라우저가 다르게 읽으면 안 된다 — 원인·결과 규칙의 **정규식 문자열과 순서**가 글자까지 같다(D43).
+
+    반송 실패('… Batch Aborted. Skipped.')처럼 문구가 겹치는 표기가 있어 **순서가 곧 의미**다."""
     from aoi_capacity import collect
 
-    body = HTML[HTML.index("function normStatus"):HTML.index("const isErr=")]
-    js_codes = re.findall(r'return"([A-Z_]+)"', body)
-    assert js_codes[0] == "PASS" and 't?"OTHER":""' in body
-    assert js_codes[1:] == [c for c, _ in collect._STATUS_RULES]
-
-    # ★ 중단(Abort)은 Error 가 아니다(사용자 확정 D35) — isErr 에서 빼되 이름·색은 남는다.
-    #   건너뜀(SKIPPED)도 예전부터 Error 가 아니다. 그 둘을 뺀 나머지는 전부 Error 여야 한다.
-    not_err = {"SKIPPED", "USER_ABORT", "ABORTED"}
-    err_codes = [c for c, _ in collect._STATUS_RULES if c not in not_err]
-    is_err = HTML[HTML.index("const isErr="):].split("\n")[0]
-    for code in err_codes:
-        assert f'"{code}"' in is_err, f"isErr 에 {code} 없음"
-    for code in ("USER_ABORT", "ABORTED"):
-        assert f'"{code}"' not in is_err, f"{code} 가 아직 Error 로 세어진다"
+    assert _js_rules("CAUSE_RULES") == [(c, p) for c, p in collect._CAUSE_RULES]
+    assert _js_rules("OUTCOME_RULES") == [(c, p) for c, p in collect._OUTCOME_RULES]
+    # Error = 원인 코드가 있는 것. 중단(D35→D41)·건너뜀·취소·미확인은 결과일 뿐 원인이 아니다.
+    assert "const isErr=n=>CAUSE_CODES.includes(n);" in HTML
     assert 'const ABORT_CODES=["USER_ABORT","ABORTED"];' in HTML
-    for code, _ in collect._STATUS_RULES:
-        if code != "SKIPPED":
-            assert re.search(rf"\b{code}:", HTML), f"ERR_KO 에 {code} 한국어 이름 없음"
+    for code, _ in collect._CAUSE_RULES + collect._OUTCOME_RULES:
+        assert f"{code}:" in HTML[HTML.index("const ERR_KO="):HTML.index("const ERR_TXT=")], f"ERR_KO 에 {code} 한국어 이름 없음"
+    assert "function prepareRows(" in HTML and "prepareRows(rows);" in HTML      # 저장된 norm_status 가 아니라 원문에서 다시 계산
+    assert "o.norm_status=o.norm_status||normStatus(o.status)" not in HTML
 
 
 def test_home_cards_sort_with_cmp_dev_not_alphabetically():
@@ -397,5 +395,5 @@ def test_abort_is_not_counted_as_an_error():
     assert '{id:"abortRun",label:"중단(Abort)"' in HTML                    # 가동률 저하 사유에 제 행으로
     assert "const PRI={err:0,run:1,abort:2,test:3,stop:4};" in HTML
     # 반송 실패(`… Batch Aborted. Skipped.`)는 WAFER_LOST 로 먼저 걸러져 Error 로 남는다
-    body = HTML[HTML.index("function normStatus"):HTML.index("const ABORT_CODES=")]
-    assert body.index("WAFER_LOST") < body.index('return"ABORTED"')
+    body = HTML[HTML.index("const CAUSE_RULES="):HTML.index("const ABORT_CODES=")]
+    assert body.index("WAFER_LOST") < body.index('["ABORTED"')             # 원인 규칙(반송 실패)이 결과 규칙(중단)보다 먼저

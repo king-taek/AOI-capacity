@@ -373,7 +373,8 @@ const MON={jan:0,feb:1,mar:2,apr:3,may:4,jun:5,jul:6,aug:7,sep:8,oct:9,nov:10,de
 const APP_VERSION="";
 const DAY=86400000;
 const escLot=r=>r.lot?esc(r.lot):'<span class="faint">(Lot 확인 불가)</span>';  /* 자리표시 행만 있는 배치 — Lot 을 지어내지 않는다 */
-const ERR_KO={ID_READ_ERROR:"Wafer ID 인식 실패",SCAN_ERROR:"스캔 오류",ALIGN_ERROR:"정렬 오류",CLEAN_REF_ERROR:"기준판(Clean Reference) 오류",NOTHING_TO_SCAN:"스캔할 대상 없음",WAFER_LOST:"Wafer 반송 실패",HW_ERROR:"장비 하드웨어 오류",RECIPE_ERROR:"레시피·모델 오류",USER_ABORT:"사용자 중단",ABORTED:"중단됨",OTHER:"기타 오류"};
+const ERR_KO={ID_READ_ERROR:"Wafer ID 인식 실패",ID_FORMAT_ERROR:"Wafer ID 형식·Mask 불일치",SCAN_ERROR:"스캔 오류",ALIGN_ERROR:"정렬 오류",PREALIGNER_RESPONSE_ERROR:"프리얼라이너 응답 없음",AUTO_FOCUS_ERROR:"오토포커스 실패",FOCUS_MAPPING_ERROR:"포커스 매핑 실패",MOTION_ERROR:"축·모터 동작 실패",HANDLING_ERROR:"반송·로봇 동작 실패",CLEAN_REF_ERROR:"기준판(Clean Reference) 오류",NOTHING_TO_SCAN:"스캔할 대상 없음",WAFER_LOST:"Wafer 반송 실패",HW_ERROR:"장비 하드웨어 오류",RECIPE_ERROR:"레시피·모델 오류",CONTROL_TIMEOUT:"제어 응답 시간 초과",GRAY_LEVEL_LIMIT:"영상 밝기 한계 초과",
+  USER_ABORT:"사용자 중단",ABORTED:"중단됨",USER_CANCELLED:"사용자 취소",SKIPPED:"건너뜀",UNKNOWN:"결과 미확인",FAILED:"실패",PASS:"정상"};
 const ERR_TXT={USER_ABORT:"Aborted. Wafer aborted by user.",ABORTED:"Aborted.",SCAN_ERROR:"Scan Error: Scan2d optic is not valid on machine.",ID_READ_ERROR:"Failed to read wafer id. Reading error = . Aborted."};
 /* ★ 표시 용어·색·패턴의 단일 출처(사용자 확정 U02): 검사→가동, 재검사→재스캔, 재작업→Rework, 오류→Error, 시험→Test.
    범례·툴팁·막대·표·상세가 전부 여기서 읽는다. 원본 상태 문구·Lot 이름·파일명은 바꾸지 않는다. */
@@ -393,7 +394,7 @@ const chipOf=(t,txt)=>`<span class="chip ${DM(t).chip}">${txt||DM(t).label}</spa
 const REL_KO={FIRST_OBSERVED:"확인된 첫 기록",SAME_DEVICE_REPEAT:"같은 장비 반복",SAME_DEVICE_RESCAN:"같은 장비 재스캔",CROSS_DEVICE_RESCAN:"다른 장비 재스캔",TOKEN_RESCAN:"Lot 표기 RE(이전 기록 미확인)",UNRESOLVED:"판정 보류"};
 const CONF_KO={confirmed:"확정",inferred:"추정",unresolved:"보류"};
 /* ★ 분류 규칙 번호 — 규칙이 바뀌면 올린다. 저장된 값이 아니라 열 때마다 같은 원천 행에서 다시 계산한다. */
-const CLASS_VERSION=2;
+const CLASS_VERSION=3;
 
 let rows=[],meta={},devNames=[],D=null,day=null,selDev=null;
 let ui={group:"",sort:"name",view:"cards",unit:"day",span:14,trendDev:"",cmpP:1,cmpSort:"high",cmpAnchor:null,loss:null,lossMode:"pp",lossPage:0,rep:null,back:null};
@@ -413,24 +414,57 @@ function parseDt(s){if(!s)return null;s=String(s).trim();
   m=s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})\s+(\d{1,2}):(\d{2}):(\d{2})\s*(AM|PM)?$/i);
   if(m){let h=+m[4];if(m[7]){const pm=m[7].toUpperCase()==="PM";if(pm&&h<12)h+=12;if(!pm&&h===12)h=0;}return new Date(+m[3],+m[1]-1,+m[2],h,+m[5],+m[6]);}
   m=s.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})$/);if(m)return new Date(+m[1],+m[2]-1,+m[3],+m[4],+m[5],+m[6]);return null;}
-/* 파이썬 collect.norm_status 와 같은 순서·같은 규칙(실장비 표기 근거) */
-/* collect._STATUS_RULES 와 같은 순서 — 반송 실패는 문구가 'Skipped.' 로 끝나 skip 규칙보다 위에 있어야 한다 */
-function normStatus(s){const t=(s||"").trim();if(t.toLowerCase()==="pass")return"PASS";
-  if(/wafer\s+lost|failed\s+to\s+sense\s+wafer|failed\s+to\s+move\s+wafer|could\s+not\s+be\s+detected\s+on\s+hand|wafer\s+handling\s+failure|failed\s+on\s+movetostation/i.test(t))return"WAFER_LOST";
-  if(/hardware\s+failure/i.test(t))return"HW_ERROR";
-  if(/skip/i.test(t))return"SKIPPED";if(/failed\s+to\s+read\s+wafer\s+id/i.test(t))return"ID_READ_ERROR";
-  if(/scan\s*(?:2d|3d)?\s*error/i.test(t))return"SCAN_ERROR";if(/alignment\s+error|alignment\s+failed|prealigner\s+fail/i.test(t))return"ALIGN_ERROR";
-  if(/clean\s+reference\s+error/i.test(t))return"CLEAN_REF_ERROR";
-  if(/nothing\s+to\s+scan/i.test(t))return"NOTHING_TO_SCAN";
-  if(/far\s*model|illegal\s+lot\s+name|wafer\s+map\s+import\s+failed|multi\s*recipe\s+error/i.test(t))return"RECIPE_ERROR";
-  if(/wafer\s+aborted\s+by\s+user/i.test(t))return"USER_ABORT";if(/abort/i.test(t))return"ABORTED";return t?"OTHER":"";}
+/* ★ 원인(cause)과 종료 결과(outcome)는 다른 축이다(사용자 확정 D43) — 파이썬 collect._CAUSE_RULES/_OUTCOME_RULES 와
+   정규식이 **글자까지 같다**(가드: test_template_contract). 원인 규칙을 전부 먼저 보고 남은 것에서 결과를 정한다.
+   `Failed to read wafer id … Wafer Skipped.` = 원인 ID_READ_ERROR + 결과 SKIPPED(예전엔 건너뜀에 묻혔다, 30일치 192행).
+   저장된 norm_status 는 쓰지 않고 열 때마다 status 원문에서 다시 계산한다 — 옛 17열 파일도 새 규칙으로 읽힌다. */
+const CAUSE_RULES=[
+  ["WAFER_LOST",/wafer\s+lost|failed\s+to\s+sense\s+wafer|failed\s+to\s+move\s+wafer|could\s+not\s+be\s+detected\s+on\s+hand|wafer\s+handling\s+failure|failed\s+on\s+movetostation/i],
+  ["HW_ERROR",/hardware\s+failure/i],
+  ["ID_READ_ERROR",/failed\s+to\s+read\s+wafer\s+id/i],
+  ["ID_FORMAT_ERROR",/wafer\s+id\s+mask\s+length|wafer\s+id\s+read\s+does\s+not\s+match/i],
+  ["SCAN_ERROR",/scan\s*(?:2d|3d)?\s*error/i],
+  ["ALIGN_ERROR",/alignment\s+error|alignment\s+failed|prealigner\s+fail/i],
+  ["PREALIGNER_RESPONSE_ERROR",/prealigner:\s*expected\s+status\s+field\s+was\s+not\s+found/i],
+  ["AUTO_FOCUS_ERROR",/auto\s+focus\s+error/i],
+  ["FOCUS_MAPPING_ERROR",/focus\s+mapping\s+error/i],
+  ["MOTION_ERROR",/motor->get_position|motion\s+failed\s+to\s+get_continuousscanstatus|acsmotor::get_position/i],
+  ["CLEAN_REF_ERROR",/clean\s+reference\s+error/i],
+  ["NOTHING_TO_SCAN",/nothing\s+to\s+scan/i],
+  ["RECIPE_ERROR",/far\s*model|illegal\s+lot\s+name|wafer\s+map\s+import\s+failed|multi\s*recipe\s+error/i],
+  ["CONTROL_TIMEOUT",/abort\s+timed-?out/i],
+  ["GRAY_LEVEL_LIMIT",/gray\s+level\s+average\s+exceeds/i],
+  ["HANDLING_ERROR",/robot\s+operation\s+failed|movetabletostoredposandlock|wafer\s+move\s+failure/i]];
+const OUTCOME_RULES=[
+  ["PASS",/^pass$/i],
+  ["USER_CANCELLED",/^cancelled$/i],
+  ["UNKNOWN",/^-?$/i],
+  ["USER_ABORT",/wafer\s+aborted\s+by\s+user/i],
+  ["SKIPPED",/skip/i],
+  ["ABORTED",/abort/i]];
+const CAUSE_CODES=CAUSE_RULES.map(x=>x[0]);
+function normCauses(s){const t=String(s||"").trim();if(!t)return[];return CAUSE_RULES.filter(([,rx])=>rx.test(t)).map(([c])=>c);}
+function normOutcome(s){const t=String(s||"").trim();for(const[c,rx]of OUTCOME_RULES)if(rx.test(t))return c;return normCauses(t).length?"FAILED":"UNKNOWN";}
+/* 읽을 수는 있는데 어느 규칙에도 안 걸리는 문구 — 지우지 않고 품질 목록에 남긴다 */
+const isUnmappedStatus=s=>{const t=String(s||"").trim();return!!t&&t!=="-"&&!normCauses(t).length&&!OUTCOME_RULES.some(([,rx])=>rx.test(t));};
+/* 호환 필드 — 원인이 있으면 첫 원인, 없으면 결과 (collect.norm_status 와 같다) */
+function normStatus(s){const t=String(s||"").trim();if(!t)return"";const c=normCauses(t);return c.length?c[0]:normOutcome(t);}
+/* 행 준비 — 로더·하네스가 build() 전에 한 번 부른다. 원문(status)은 바꾸지 않고 파생 필드만 채운다.
+   배치 대표 행(kind=batch)의 원인은 같은 Report 의 실패 행 전부에서 합집합으로 만든다(하위 원인이 대표에 가려지지 않게 — E04). */
+function prepareRows(list){const kids={};
+  for(const r of list){r.causes=normCauses(r.status);r.outcome=normOutcome(r.status);r.norm_status=r.causes.length?r.causes[0]:(r.status&&String(r.status).trim()?r.outcome:"");
+    if(r.kind!=="batch"&&r.ini_match==="BATCH_FAILED"){const k=r.device+"|"+r.report;(kids[k]=kids[k]||[]).push(r);}}
+  for(const r of list){if(r.kind!=="batch")continue;const u=new Set(r.causes);for(const x of(kids[r.device+"|"+r.report]||[]))x.causes.forEach(c=>u.add(c));
+    r.causes=CAUSE_CODES.filter(c=>u.has(c));}
+  return list;}
 /* ★ 중단(Abort)은 Error 가 아니다(사용자 확정 D35) — 사람이 세운 것이지 설비가 못 돈 것이 아니다.
    Error 건수에 넣지 않고, 그 뒤 공백을 'Error 후 정지' 로 돌리지도 않는다. 다만 사라지지도 않는다:
    '중단' 이라는 제 이름·제 색으로 남고, 스캔이 끝나지 않았으므로 실가동(분자)에는 넣지 않는다(Test 와 같은 자리).
-   ★ 반송 실패(`… Batch Aborted. Skipped.`)는 WAFER_LOST 로 먼저 걸러지므로 여기 섞이지 않는다. */
+   ★ 반송 실패(`… Batch Aborted. Skipped.`)는 원인 WAFER_LOST 가 먼저라 여기 섞이지 않는다. */
 const ABORT_CODES=["USER_ABORT","ABORTED"];
 const isAbort=n=>ABORT_CODES.includes(n);
-const isErr=n=>["ID_READ_ERROR","SCAN_ERROR","ALIGN_ERROR","CLEAN_REF_ERROR","NOTHING_TO_SCAN","WAFER_LOST","HW_ERROR","RECIPE_ERROR","OTHER"].includes(n);
+/* 설비 Error = 원인 코드가 있는 것. 결과만 있는 것(중단·건너뜀·취소·미확인)은 Error 가 아니다. */
+const isErr=n=>CAUSE_CODES.includes(n);
 function fmtSec(s){if(s==null||isNaN(s))return"–";s=Math.round(s);const h=Math.floor(s/3600),m=Math.floor(s%3600/60),x=s%60;if(h)return`${h}시간 ${p2(m)}분`;if(m)return`${m}분 ${p2(x)}초`;return`${x}초`;}
 function fmtSecS(s){if(s==null||isNaN(s))return"–";s=Math.round(s);const h=Math.floor(s/3600),m=Math.floor(s%3600/60);if(h)return`${h}h ${p2(m)}m`;return`${m}m`;}
 const hm=d=>`${p2(d.getHours())}:${p2(d.getMinutes())}`;
@@ -483,7 +517,7 @@ function loadDemo(){
   const emb=JSON.parse($("#embedded").textContent);
   /* 되풀이되는 열은 문자열 풀 번호로 접혀 온다(collect._embed_rows) — 여기서 되돌린다 */
   if(emb.cols){const P=emb.pool||null,F=new Set(emb.pooled||[]);embCols=emb.cols.slice();embPooled=[...F];
-    rows=emb.rows.map(a=>{const o={};emb.cols.forEach((c,i)=>o[c]=P&&F.has(c)?(P[a[i]]??""):a[i]);o.norm_status=o.norm_status||normStatus(o.status);return o;});meta=emb.meta||{generated:"",mode:"saved"};}
+    rows=emb.rows.map(a=>{const o={};emb.cols.forEach((c,i)=>o[c]=P&&F.has(c)?(P[a[i]]??""):a[i]);return o;});meta=emb.meta||{generated:"",mode:"saved"};}
   else{ /* compact demo: days are offsets from today, segments delta-encoded; expanded relative to the real current date */
     rows=[];const now=Date.now();const t0=keyDay(todayKey()).getTime();const codes={2:"USER_ABORT",3:"ABORTED",4:"SCAN_ERROR",5:"ID_READ_ERROR"};
     const iso=t=>{const d=new Date(t);return`${d.getFullYear()}-${p2(d.getMonth()+1)}-${p2(d.getDate())}T${p2(d.getHours())}:${p2(d.getMinutes())}:${p2(d.getSeconds())}`;};
@@ -493,6 +527,7 @@ function loadDemo(){
         const ns=code?codes[code]:"PASS";rows.push({device:dvName,lot,wafer_id:`${lot.slice(0,3).toUpperCase()}${String(off).padStart(2,"0")}-${p2(wi)}`,recipe:rec,norm_status:ns,status:code?ERR_TXT[ns]:"Pass",wafer_start_time:iso(s),wafer_end_time:iso(e),batch_start:"",ini_match:"EXACT",data_issue:""});}}}
     meta={generated:new Date().toLocaleString("ko-KR"),mode:"demo",devices:emb.devs.map(d=>({name:dupe[d.name]>1?`${shortNas(d.nas)} ${d.name}`:d.name,nas:d.nas,note:d.path}))};
   }
+  prepareRows(rows);   /* 원인·결과·호환 상태를 원문에서 다시 계산(저장된 값과 다르면 새 규칙이 이긴다) */
   devGroup={};devStatus={};(meta.devices||[]).forEach(d=>{if(d.nas)devGroup[d.name]=d.nas;if(d.status)devStatus[d.name]={status:d.status,error:d.error||"",readErrors:d.read_errors||0};});
   log(meta.mode==="demo"?`데모 데이터: 장비 ${new Set(rows.map(r=>r.device)).size}대, 최근 5주 분량을 실제 검사 패턴으로 재구성한 예시입니다.`:"저장된 수집 결과를 불러왔습니다.");init();}
 
@@ -1096,6 +1131,7 @@ function pinSeg(sel){const m=window._m,box=$("#segDetail");if(!m||!box)return;co
       if(g.err){const st=m.items.find(i=>i.kind==="stop"&&i.g===g);add("정지(추정)",st?`${fmtSec((st.e-st.s)/1000)} — ${hm(new Date(st.s))} → ${hm(new Date(st.e))} ${g.stopEnd===null?"관측 종료까지(복구 기록 없음)":"다음 Wafer 시작까지"}`:"복구 기록 없음 — 이 뒤로 스캔된 Wafer 가 없습니다");}}
     else add("시각",sel.t?`${hm(new Date(sel.t))} (Batch 시작) · Wafer 시각 없음`:"시간 미확인");
     add("Recipe",esc(r.recipe));if(isErr(r.norm_status)||isAbort(r.norm_status))add("장비 메시지",`<code>${esc(r.status)}</code> <button class="btn small" onclick="copyText(this.previousElementSibling.textContent)">복사</button>`);
+    if(r.outcome&&r.outcome!=="PASS")add("원인 · 결과",`${(r.causes||[]).map(c=>`<span class="chip crit">${ERR_KO[c]||c}</span>`).join(" ")||'<span class="faint">원인 문구 없음</span>'} → ${ERR_KO[r.outcome]||r.outcome}`);   /* D43: 원인과 종료 결과는 다른 축 */
     add("INI 확인",INI_KO[r.ini_match]||esc(r.ini_match||""));if(r.data_issue&&r.ini_match!=="EXACT")add("비고",esc(r.data_issue));}
   m._pin={reports:reps};
   add(reps.length>1?`Report ${reps.length}개`:"Report",reps.length?reps.map((r,i)=>`${reportUrl(r)?`<button class="btn small" onclick="openReport(window._m._pin.reports[${i}])">Report 열기</button> `:""}<span class="mono faint">${esc(r.report)}</span>`).join("<br>"):'<span class="faint">Report 파일 이름이 없습니다</span>');
