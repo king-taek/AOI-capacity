@@ -9,7 +9,7 @@
 :root{
   color-scheme:dark;
   --bg:#0F1319; --surface:#141920; --surface-2:#1A2130; --raise:#1E2838;
-  --ink:#E4EEF8; --ink-2:#8AAEC8; --ink-3:#5C7086; --line:#1E3050; --line-2:#2A4060;
+  --ink:#E4EEF8; --ink-2:#8AAEC8; --ink-3:#7C90A6; --line:#1E3050; --line-2:#2A4060;   /* ink-3: surface 대비 5.4:1 (전 3.5:1 — V03) */
   --accent:#4A9EE8; --accent-2:#7EC8F0; --accent-ink:#0F1319; --accent-soft:#0D2A44;
   --run:#4A9EE8; --err:#E85A5A; --off:#243040; --nodata:#182030; --prev:#3A4A60;
   /* 의미별 색 — 중복스캔(청록·사선) · Test(분홍·점무늬). Test 는 미가동 회색과 헷갈리지 않게 따로 둔다(사용자 확정) */
@@ -25,7 +25,7 @@
 :root[data-theme="light"]{
   color-scheme:light;
   --bg:#f2f5f9; --surface:#ffffff; --surface-2:#f7f9fc; --raise:#e9eef5;
-  --ink:#0f1720; --ink-2:#4b5865; --ink-3:#7a8794; --line:#dde3ea; --line-2:#c6d0dc;
+  --ink:#0f1720; --ink-2:#4b5865; --ink-3:#5E6A77; --line:#dde3ea; --line-2:#c6d0dc;   /* ink-3: 흰 배경 대비 5.5:1 (전 3.7:1 — V03) */
   --accent:#2A6AAA; --accent-2:#4A9EE8; --accent-ink:#ffffff; --accent-soft:#e1eefb;
   --run:#2A6AAA; --err:#d64545; --off:#d3dbe5; --nodata:#eef2f7; --prev:#b9c4d2;
   --dup:#0F766E; --dup-soft:#d7f3ef; --test:#A21CAF; --test-soft:#f6e3f7; --abort:#5A6B80; --abort-soft:#e3e8ef;
@@ -113,7 +113,7 @@ textarea.input{width:100%;min-height:110px;font-family:var(--mono);font-size:12.
 .sw{display:inline-block;width:10px;height:10px;border-radius:2px;vertical-align:-1px;margin-right:5px}
 .card{background:var(--surface);border:1px solid var(--line);border-radius:14px;position:relative}
 .empty{padding:30px;text-align:center;color:var(--ink-3);font-size:13px}
-.chip{display:inline-flex;align-items:center;gap:4px;padding:1px 8px;border-radius:999px;font-size:11.5px;font-weight:600;white-space:nowrap}
+.chip{display:inline-flex;align-items:center;gap:4px;padding:1px 8px;border-radius:999px;font-size:12px;font-weight:600;white-space:nowrap}
 .chip.crit{background:var(--crit-soft);color:var(--crit-ink)}.chip.redo{background:var(--warn-soft);color:var(--warn)}.chip.rework{background:var(--rework-soft);color:var(--rework)}.chip.mute{background:var(--raise);color:var(--ink-2)}.chip.warn{background:var(--warn-soft);color:var(--warn)}.chip.ok{background:var(--good-soft);color:var(--good)}
 .chip.dup{background:var(--dup-soft);color:var(--dup)}.chip.test{background:var(--test-soft);color:var(--test)}.chip.run{background:var(--accent-soft);color:var(--accent-2)}.chip.abort{background:var(--abort-soft);color:var(--abort)}
 :root[data-theme="light"] .chip.run{color:var(--accent)}
@@ -142,10 +142,17 @@ textarea.input{width:100%;min-height:110px;font-family:var(--mono);font-size:12.
 /* summary strip */
 .strip-sum{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:16px}
 .ss{padding:12px 16px}
-.ss .k{font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-3)}
-.ss .v{font-family:var(--display);font-size:26px;font-weight:700;letter-spacing:-.03em;line-height:1.15;margin-top:2px}
-.ss .v small{font-size:14px;color:var(--ink-3);font-weight:500}
-.ss .s{font-size:12px;color:var(--ink-3)}
+/* 핵심 카드(V02): 제목 13px · 숫자 30px · 단위 14px · 보조 12.5px. 클릭 가능한 카드는 버튼이다 */
+.ss .k{font-size:13px;font-weight:600;color:var(--ink-2)}
+.ss .v{font-family:var(--display);font-size:30px;font-weight:700;letter-spacing:-.03em;line-height:1.15;margin-top:2px}
+.ss .v small{font-size:14px;color:var(--ink-3);font-weight:500;margin-left:2px}
+.ss .s{font-size:12.5px;color:var(--ink-3);line-height:1.45}
+button.ss{text-align:left;font:inherit;cursor:pointer;width:100%}button.ss:hover{box-shadow:var(--glow);border-color:var(--line-2)}
+/* 데이터 범위 줄(V01) — 화면을 옮겨도 그대로 남는 한 줄 */
+.rline{display:flex;flex-wrap:wrap;gap:6px 14px;align-items:center;font-size:12.5px;color:var(--ink-2);margin:-4px 0 12px}.rline b{color:var(--ink)}
+/* 긴 원문(V03): 목록에서는 첫 줄만, 펼치면 전체. Job 은 2줄까지 */
+details.msgx summary{cursor:pointer;color:var(--accent-2);list-style:none;white-space:normal}details.msgx code{display:block;white-space:pre-wrap;word-break:break-all;font-family:var(--mono);font-size:12px;margin-top:4px}
+.job2{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;white-space:normal;max-width:280px;line-height:1.35}
 .ss.hero{background:linear-gradient(135deg,var(--surface),var(--surface-2))}
 .ss.hero .v{background:linear-gradient(135deg,var(--ink) 30%,var(--accent-2));-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent}
 
@@ -171,7 +178,7 @@ tr.detrow>td{padding:0 0 10px;white-space:normal}tr.detrow .detail{margin:8px 0 
 .dev .big.none{color:var(--ink-3);font-size:20px}
 .strip{display:flex;height:6px;border-radius:3px;overflow:hidden;background:var(--nodata)}
 .strip i{display:block;height:100%}
-.dev .kv{display:flex;gap:12px;font-size:11.5px;color:var(--ink-3)}
+.dev .kv{display:flex;gap:12px;font-size:12px;color:var(--ink-3)}
 .dev .kv b{color:var(--ink-2);font-weight:600}
 .dev .kv b.err{color:var(--crit-ink)}
 .dev.off{opacity:.55;cursor:default}
@@ -264,13 +271,14 @@ details.adv summary{cursor:pointer;color:var(--accent-2);font-size:13px}
   <button class="btn icon ghost" id="btnTheme" title="밝은/어두운 테마" onclick="toggleTheme()"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M13 9.5A5.5 5.5 0 016.5 3a5.5 5.5 0 100 10 5.5 5.5 0 006.5-3.5z"/></svg></button>
 </header>
 <nav class="tabs" id="tabs" aria-label="화면 이동">
-  <button class="nav" data-v="home">홈</button><button class="nav" data-v="trend">추이</button><button class="nav" data-v="compare">장비 비교</button><button class="nav" data-v="set">설정</button>
+  <button class="nav" data-v="home">홈</button><button class="nav" data-v="trend">추이</button><button class="nav" data-v="compare">장비 비교</button><button class="nav" data-v="quality">품질</button><button class="nav" data-v="set">설정</button>
 </nav>
 
 <nav class="side">
   <button class="nav" data-v="home" aria-current="page"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2 7.5L8 2l6 5.5V14H2z"/><path d="M6 14v-4h4v4"/></svg><span>홈<span class="sub">오늘 모든 장비 가동률</span></span></button>
   <button class="nav" data-v="trend"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2 12l4-5 3 3 5-6"/><path d="M2 14h12"/></svg><span>추이<span class="sub">일 · 주 · 월 가동률</span></span></button>
   <button class="nav" data-v="compare"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2 3h10M2 7h7M2 11h12"/></svg><span>장비 비교<span class="sub">기간별 가동률 순위</span></span></button>
+  <button class="nav" data-v="quality"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="8" r="6"/><path d="M8 5v3.5M8 11v.5"/></svg><span>데이터 품질<span class="sub">시간 근거 · 미확인 목록</span></span></button>
   <button class="nav" data-v="set" style="margin-top:10px"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="8" r="2.2"/><path d="M8 1.5v2M8 12.5v2M1.5 8h2M12.5 8h2M3.4 3.4l1.4 1.4M11.2 11.2l1.4 1.4M3.4 12.6l1.4-1.4M11.2 4.8l1.4-1.4"/></svg><span>설정<span class="sub">표시 · 보관</span></span></button>
   <div class="foot" id="footTxt">정확 경로만 확인 · 재귀 검색 없음<br>원본 Report / INI 수정 없음</div>
 </nav>
@@ -278,6 +286,7 @@ details.adv summary{cursor:pointer;color:var(--accent-2);font-size:13px}
 <main class="main">
   <!-- ================= HOME ================= -->
   <section class="view on" id="v-home">
+    <div class="rline" id="rangeLine"></div>
     <div class="strip-sum" id="homeSum"></div>
     <div class="toolbar">
       <span class="lbl">정렬</span>
@@ -300,6 +309,7 @@ details.adv summary{cursor:pointer;color:var(--accent-2);font-size:13px}
         <h2 id="detTitle"></h2>
         <div class="legend" id="detLegend"></div>
         <button class="btn ghost" id="detBack" onclick="lossBack()" hidden>← 사유 분석으로</button>
+        <button class="btn ghost" id="detBackQ" onclick="ui.backQual=false;go('quality')" hidden>← 품질 목록으로</button>
         <button class="btn ghost" onclick="selectDev(null)" aria-label="닫기">닫기 ✕</button>
       </div>
       <div class="db"><div id="detTl"></div><div class="zoom" id="zoomTl" hidden></div><div class="segd" id="segDetail" hidden></div><div class="errs" id="detErrs"></div></div>
@@ -327,6 +337,18 @@ details.adv summary{cursor:pointer;color:var(--accent-2);font-size:13px}
       <div class="sp"></div><span class="faint" style="font-size:12px" id="cmpNote"></span>
     </div>
     <div class="card"><div class="tscroll" style="max-height:none"><table class="tbl"><thead><tr><th class="r">#</th><th>장비</th><th style="width:36%">가동률</th><th class="r">가동률</th><th class="r">반복 가동</th><th class="r">Error</th><th class="r">Error·정지</th></tr></thead><tbody id="cmpBody"></tbody></table></div></div>
+  </section>
+
+  <!-- ================= DATA QUALITY (시간 근거·미확인 목록) ================= -->
+  <section class="view" id="v-quality">
+    <div class="rline" id="rangeLine2"></div>
+    <div class="toolbar">
+      <button class="btn ghost" onclick="go('home')">← 홈으로</button>
+      <span class="lbl">장비</span><select class="input" id="qualDev"><option value="">전체</option></select>
+      <div class="sp"></div><span class="faint" style="font-size:12px">시간으로 바꾸지 않은 기록 — 사유별 건수와 원문 근거. 원문·행은 지우지 않습니다.</span>
+    </div>
+    <div class="card" style="padding:14px 18px;margin-bottom:14px"><h2 style="margin-bottom:8px">시간 근거 · 미확인 사유</h2><div id="qualSum"></div></div>
+    <div class="card" id="qualCard" hidden><div id="qualList"></div></div>
   </section>
 
   <!-- ================= SETTINGS ================= -->
@@ -509,8 +531,10 @@ const reportKey=r=>r.device+"|"+r.report;
 let reportHasPass={};   /* build() 가 원천 행 전체에서 채운다 */
 function metricState(r){if(r.scan_type==="TEST")return"TEST";if(r.kind==="batch"||r.kind==="slot")return"ERROR";if(r.causes&&r.causes.length)return"ERROR";
   if(isAbortOutcome(r.outcome))return reportHasPass[reportKey(r)]?"RUN":"ERROR";if(r.outcome==="PASS")return"RUN";return"UNCLASSIFIED";}
-function fmtSec(s){if(s==null||isNaN(s))return"–";s=Math.round(s);const h=Math.floor(s/3600),m=Math.floor(s%3600/60),x=s%60;if(h)return`${h}시간 ${p2(m)}분`;if(m)return`${m}분 ${p2(x)}초`;return`${x}초`;}
-function fmtSecS(s){if(s==null||isNaN(s))return"–";s=Math.round(s);const h=Math.floor(s/3600),m=Math.floor(s%3600/60);if(h)return`${h}h ${p2(m)}m`;return`${m}m`;}
+/* 단위(V08): 모르는 값은 '—'(0 이 아니다). 상세는 시·분·초, 목록은 2h 14m · 14m · 23s — 1분 미만을 0m 으로 지우지 않는다 */
+function fmtSec(s){if(s==null||isNaN(s))return"—";s=Math.round(s);const h=Math.floor(s/3600),m=Math.floor(s%3600/60),x=s%60;if(h)return`${h}시간 ${p2(m)}분`;if(m)return`${m}분 ${p2(x)}초`;return`${x}초`;}
+function fmtSecS(s){if(s==null||isNaN(s))return"—";s=Math.round(s);const h=Math.floor(s/3600),m=Math.floor(s%3600/60),x=s%60;if(h)return`${h}h ${p2(m)}m`;if(m)return`${m}m`;return`${x}s`;}
+const fmtN=n=>n==null||isNaN(n)?"—":Number(n).toLocaleString("ko-KR");
 const hm=d=>`${p2(d.getHours())}:${p2(d.getMinutes())}`;
 const dayKey=d=>`${d.getFullYear()}-${p2(d.getMonth()+1)}-${p2(d.getDate())}`;
 const keyDay=k=>{const[y,m,d]=k.split("-").map(Number);return new Date(y,m-1,d);};
@@ -534,10 +558,10 @@ function cmpDev(a,b){const x=devSortKey(a),y=devSortKey(b);if(x[0]!==y[0])return
     if(p===undefined)return -1;if(q===undefined)return 1;if(p===q)continue;
     if(typeof p==="number"&&typeof q==="number")return p-q;return String(p)<String(q)?-1:1;}
   return 0;}
-const pct=v=>v==null||isNaN(v)?"–":v.toFixed(1)+"%";
+const pct=v=>v==null||isNaN(v)?"—":v.toFixed(1)+"%";
 
 /* ---------- navigation ---------- */
-function go(v){document.querySelectorAll(".nav").forEach(b=>b.setAttribute("aria-current",b.dataset.v===v?"page":"false"));document.querySelectorAll(".view").forEach(s=>s.classList.toggle("on",s.id==="v-"+v));$("#daynav").style.visibility=v==="set"||v==="trend"?"hidden":"";$(".main").scrollTop=0;if(v==="trend")renderTrend();if(v==="compare")renderCompare();}
+function go(v){document.querySelectorAll(".nav").forEach(b=>b.setAttribute("aria-current",b.dataset.v===v?"page":"false"));document.querySelectorAll(".view").forEach(s=>s.classList.toggle("on",s.id==="v-"+v));$("#daynav").style.visibility=v==="set"||v==="trend"||v==="quality"?"hidden":"";$(".main").scrollTop=0;if(v==="trend")renderTrend();if(v==="compare")renderCompare();if(v==="quality")renderQuality();}
 document.querySelectorAll(".nav").forEach(b=>b.addEventListener("click",()=>go(b.dataset.v)));
 function setTheme(m){const r=document.documentElement;r.dataset.theme=m==="light"?"light":"dark";try{localStorage.setItem("aoi.theme",r.dataset.theme);}catch(e){}}
 function toggleTheme(){setTheme(document.documentElement.dataset.theme==="light"?"dark":"light");}
@@ -883,19 +907,26 @@ const devId=n=>"dev-"+String(n).replace(/[^A-Za-z0-9_-]/g,c=>"_"+c.charCodeAt(0)
 /* 상세 패널은 하나뿐 — 렌더 전에 주차장(#detPark)으로 빼 두었다가 선택한 장비의 자리로 옮긴다(innerHTML 이 지우지 않게) */
 function parkDetail(){const d=$("#detail"),p=$("#detPark");if(d&&p&&d.parentNode!==p)p.appendChild(d);}
 function mountDetail(){const d=$("#detail");if(!d||!selDev)return;const m=document.getElementById(devId(selDev)+"-mount");if(m&&d.parentNode!==m)m.appendChild(d);}
+/* 데이터 범위 줄(V01) — 파일 전체 범위 · 선택 날짜 · 장비 · Job · 수집 시각. 양 끝 날짜의 '부분일' 은 가능성 표시일 뿐 데이터 부족만으로 확정하지 않는다. */
+function rangeLineHtml(){const days=dataDays();if(!days.length)return"";const cnt={};for(const r of rows){const d=rowDate(r);if(d){const k=dayKey(d);cnt[k]=(cnt[k]||0)+1;}}
+  const jobs=new Set(),noJob=rows.some(r=>r.kind===""&&!r.job);for(const r of rows)if(r.job)jobs.add(r.job);
+  const first=days[0],last=days[days.length-1];const md=n=>fmtDay(n).split(" ")[0];
+  const firstBadge=`<span class="chip mute" title="보관 창의 첫 날짜 — 그날 ${fmtN(cnt[first])}행. 앞이 잘렸을 수 있어 '부분일 가능' 으로만 표시">부분일 가능</span>`;
+  const lastBadge=last===todayKey()&&refFixed()?`<span class="chip mute" title="수집 시각(${hm(metricsRef())})까지의 기록">부분일</span>`:"";
+  return`<span>파일 범위 <b>${md(first)} ~ ${md(last)}</b> (${days.length}일) ${firstBadge} ${lastBadge}</span><span>선택 <b>${fmtDay(day)}</b></span><span>장비 <b>${devNames.length}대</b></span><span>Job <b>${fmtN(jobs.size)}종</b>${noJob?' + Job 미확인':""}</span><span>${refFixed()?`<b>${md(todayKey())} ${hm(metricsRef())}</b> 수집`:"수집 시각 없음(열람 시각 기준)"}</span>`;}
 function renderHome(){
   parkDetail();
   const list=homeList();const vd=visDevs();const out=scopeOut();
   const cur=fleetAvg([day],vd);const q=qualitySummary();
   const alerts=list.filter(x=>isAlert(x.m)),nod=list.filter(x=>!x.m.hasData),errs=list.filter(x=>x.m.nErr>0);
-  const worst=[...list].filter(x=>x.m.hasData).sort((a,b)=>a.m.util-b.m.util)[0];
-  const rep=cur.dup+cur.rescan+cur.rework;
-  $("#homeSum").innerHTML=`<div class="card ss hero"><div class="k">평균 가동률 · ${isToday(day)?"마지막 스캔 기준":"하루"}</div><div class="v">${cur.util==null?"–":cur.util.toFixed(1)+"<small>%</small>"}</div><div class="s">${isToday(day)?"00:00 ~ 장비별 마지막 스캔(수집 시각 기준)":"00:00 ~ 24:00"} · 가동시간 ÷ 경과시간 · 장비 평균</div></div>
-    <div class="card ss"><div class="k">장비</div><div class="v num">${vd.length}<small>대</small></div><div class="s">데이터 있음 ${cur.n}대${nod.length?` · 없음 ${nod.length}대`:""}</div></div>
-    <div class="card ss"><div class="k">주의 장비</div><div class="v num" style="color:${alerts.length?"var(--crit-ink)":"inherit"}">${alerts.length}<small>대</small></div><div class="s">가동률 ${th.util}% 미만 또는 Error ${th.err}건↑</div></div>
-    <div class="card ss"><div class="k">Error 발생</div><div class="v num">${errs.length}<small>대</small></div><div class="s">총 ${errs.reduce((a,x)=>a+x.m.nErr,0)}건 · Error·정지 ${fmtSecS(list.reduce((a,x)=>a+x.m.stop+x.m.err,0))}</div></div>
-    <div class="card ss"><div class="k">반복 가동</div><div class="v num">${cur.run>0?(rep/cur.run*100).toFixed(1):"0.0"}<small>%</small></div><div class="s">가동시간 중 중복스캔·재스캔·Rework ${fmtSecS(rep)}</div></div>
-    <div class="card ss"><div class="k">최저 장비</div><div class="v" style="font-size:20px">${worst?esc(worst.n):"–"}</div><div class="s">${worst?pct(worst.m.util):"–"}${q.stale+q.missing?` · <span title="시각을 못 읽은 원천 행 수(로드 전체) — 시간으로 바꾸지 않습니다">시간 미확인 ${q.stale+q.missing}행</span>`:""}${q.notOwner?` · <span title="같은 INI 시각을 담은 다른 Report 가 시간을 가진 행(D37)">INI 덮어써짐 ${q.notOwner}행</span>`:""}${q.ambiguous?` · 소유권 보류 ${q.ambiguous}묶음`:""}${q.unresolved?` · 판정 보류 ${q.unresolved}건`:""}</div></div>`;
+  const rep=cur.dup+cur.rescan+cur.rework;const nErr=errs.reduce((a,x)=>a+x.m.nErr,0);const noTime=q.stale+q.missing+q.notOwner;const nAbortRun=list.reduce((a,x)=>a+(x.m.nAbort-x.m.nAbortErr),0);
+  const bad=Object.values(devStatus).filter(s=>s.status==="unreachable"||s.status==="partial").length;
+  $("#rangeLine").innerHTML=rangeLineHtml();
+  /* 핵심 카드 4개(V02): 평균 가동률 · 확인된 가동시간 · Error 사건 · 시간 근거 상태. 카드마다 기간·장비 범위를 적는다 */
+  $("#homeSum").innerHTML=`<div class="card ss hero"><div class="k">평균 가동률 · ${fmtDay(day)}${isToday(day)?" · 마지막 스캔 기준":""}</div><div class="v">${cur.util==null?"—":cur.util.toFixed(1)+"<small>%</small>"}</div><div class="s">데이터 있는 장비 ${cur.n}대 산술평균${nod.length?` · 데이터 없음 ${nod.length}대`:""}<br>${isToday(day)?"00:00 ~ 장비별 마지막 스캔(수집 시각 기준)":"00:00 ~ 24:00"} · 가동시간 ÷ 경과시간</div></div>
+    <div class="card ss"><div class="k">확인된 가동시간 · ${fmtDay(day)}</div><div class="v num">${fmtSecS(cur.run)}</div><div class="s">장비 ${cur.n}대 합계 · 그중 반복 가동 ${cur.run>0?(rep/cur.run*100).toFixed(1):"0.0"}% (${fmtSecS(rep)})${nAbortRun?`<br>가동 중단 ${fmtN(nAbortRun)}건 포함(정상 스캔이 있는 Report 의 중단)`:""}</div></div>
+    <button class="card ss" onclick="setLoss(0);document.getElementById('lossCard').scrollIntoView({behavior:smooth(),block:'start'})" title="Error 구간 사유 상세로 이동"><div class="k">Error 사건 · ${fmtDay(day)}</div><div class="v num" style="color:${nErr?"var(--crit-ink)":"inherit"}">${fmtN(nErr)}<small>건</small></div><div class="s">장비 ${errs.length}대 · Error·정지(추정) ${fmtSecS(list.reduce((a,x)=>a+x.m.stop+x.m.err,0))}<br>주의 장비 ${alerts.length}대(가동률 ${th.util}% 미만 또는 Error ${th.err}건↑)</div></button>
+    <button class="card ss" onclick="go('quality')" title="시간 근거·미확인 목록으로 이동"><div class="k">시간 근거 상태 · 파일 전체</div><div class="v num">${fmtN(noTime)}<small>행 미확인</small></div><div class="s">INI 없음 ${fmtN(q.missing)} · 덮어써짐 ${fmtN(q.stale+q.notOwner)}${q.ambiguous?` · 소유권 보류 ${q.ambiguous}묶음`:""}${q.unresolved?` · 판정 보류 ${q.unresolved}건`:""}${q.unmapped?` · 미분류 ${q.unmapped}행`:""}${bad?`<br><span class="chip warn">수집 실패·일부 누락 ${bad}대</span>`:""}</div></button>`;
   renderLoss(list,vd);renderRep(list);
   const key=x=>x.m.hasData?x.m.util:999;
   list.sort((a,b)=>ui.sort==="name"?cmpDev(a.n,b.n):ui.sort==="err"?(b.m.nErr-a.m.nErr)||(key(a)-key(b)):(key(a)-key(b)));
@@ -929,7 +960,7 @@ function renderHome(){
 }
 const smooth=()=>matchMedia("(prefers-reduced-motion: reduce)").matches?"auto":"smooth";   /* 움직임 줄이기 설정이면 스크롤도 바로 */
 /* 장비 선택 — 같은 장비를 다시 누르면 닫히고, 다른 장비를 누르면 바뀐다(동시에 하나만). 닫히면 포커스는 그 장비 버튼으로 돌아간다. */
-function selectDev(n,opt){const was=selDev;selDev=selDev===n?null:n;if(!opt||!opt.keepBack)ui.back=null;renderHome();renderDetail();
+function selectDev(n,opt){const was=selDev;selDev=selDev===n?null:n;if(!opt||!opt.keepBack){ui.back=null;ui.backQual=false;}renderHome();renderDetail();
   if(selDev){const btn=document.getElementById(devId(selDev));if(btn&&!(opt&&opt.noScroll)){const b=btn.getBoundingClientRect();if(b.top<0||b.bottom>innerHeight)btn.scrollIntoView({behavior:smooth(),block:"start"});}}
   else if(was){const btn=document.getElementById(devId(was));if(btn)btn.focus({preventScroll:true});}}
 /* ---------- 가동률 저하 사유(관측 분류) ----------
@@ -1012,6 +1043,36 @@ function renderRepDetail(list){const box=$("#repDetail");if(!box||!ui.rep){if(bo
   const back={loss:ui.loss,page:ui.lossPage,day,scroll:$(".main").scrollTop};
   box.querySelectorAll("[data-ev]").forEach(tr=>tr.onclick=()=>{const[n,rep,wid]=tr.dataset.ev.split("|");goRow(n,day,rep,wid,back);});
   box.querySelectorAll("[data-xt]").forEach(td=>td.onclick=()=>{ui.repX=td.dataset.xt.split("|");renderHome();});}
+/* ---------- 데이터 품질 목록(P0 최소) ----------
+   시간으로 바꾸지 않은 기록을 사유별로 센 뒤 원문 근거 행을 보여 준다. 필터(장비)와 사유 선택은 ui.qual 에 남아 돌아와도 유지된다.
+   사유는 관측 분류다 — 행을 지우거나 시간을 지어내지 않는다. */
+const QUAL_META=[
+  {id:"NOT_FOUND",label:"INI 없음",help:"예상 경로에 WaferInfo.ini 가 없음(NOT_FOUND) — 시간 미확인",test:r=>r.kind===""&&r.ini_match==="NOT_FOUND"},
+  {id:"READ_ERROR",label:"INI 읽기 실패",help:"INI 를 열었지만 읽지 못함 — 시간 미확인",test:r=>r.kind===""&&r.ini_match==="READ_ERROR"},
+  {id:"STALE",label:"INI 덮어써짐(배치 밖)",help:"INI 시각이 이 Report 의 Batch 구간 밖 — 다시 검사하며 덮어써진 것(STALE), 시간 미사용",test:r=>r.kind===""&&r.ini_match==="STALE"},
+  {id:"NOT_OWNER",label:"INI 덮어써짐(소유권 없음)",help:"같은 INI 시각을 Batch 구간에 엄격히 담은 다른 Report 가 시간을 가짐(D37) — 사건은 남고 시간은 0",test:r=>r.ownership==="NOT_OWNER"},
+  {id:"AMBIGUOUS",label:"시간 소유권 보류",help:"같은 INI 시각을 여러 Report 가 참조하는데 엄격 포함 Report 가 하나가 아님 — 시간은 한 번만 세고 확인된 소유로 표시하지 않음",test:r=>r.ownership==="AMBIGUOUS"},
+  {id:"SLOT",label:"Slot Error(범위 추정)",help:"자리표시 행의 Error 를 Report 당 1건으로 센 사건 — 정확 시각 없음(D38)",test:r=>r.kind==="slot"},
+  {id:"BATCH",label:"실패 배치(Batch 시각)",help:"검사된 Wafer 가 없어 Batch Start~End 로만 표시한 시도(D05·D06)",test:r=>r.kind==="batch"},
+  {id:"UNMAPPED",label:"미분류 상태 문구",help:"어느 규칙에도 안 걸리는 상태 문구 — 지우지 않고 남김(UNKNOWN)",test:r=>isUnmappedStatus(r.status)},
+  {id:"NOJOB",label:"Job 미확인",help:"Report 에 Job/Setup 이 없어 되찾지 못한 행 — 공정 동일성을 입증하지 못해 반복 관계를 잇지 않음",test:r=>r.kind===""&&!r.job&&!isPlaceholder(r.wafer_id)}];
+function qualRows(id,dev){const m=QUAL_META.find(x=>x.id===id);if(!m)return[];return rows.filter(r=>(!dev||r.device===dev)&&m.test(r));}
+const QUAL_PAGE=100;
+function renderQuality(){ui.qual=ui.qual||{reason:null,dev:"",page:0};const st=ui.qual;const sel=$("#qualDev");
+  if(sel.options.length!==devNames.length+1){sel.innerHTML='<option value="">전체</option>'+devNames.map(n=>`<option value="${esc(n)}">${esc(n)}</option>`).join("");sel.onchange=()=>{ui.qual.dev=sel.value;ui.qual.page=0;renderQuality();};}
+  sel.value=st.dev;$("#rangeLine2").innerHTML=rangeLineHtml();
+  const cnt=QUAL_META.map(m=>({...m,n:qualRows(m.id,st.dev).length}));
+  $("#qualSum").innerHTML=`<table class="tbl"><thead><tr><th>사유</th><th class="r">행</th><th>설명</th></tr></thead><tbody>${cnt.map(m=>`<tr class="click ${st.reason===m.id?"sel":""}" data-q="${m.id}" tabindex="0" role="button" aria-pressed="${st.reason===m.id}"><td><b>${m.label}</b></td><td class="r num">${fmtN(m.n)}</td><td class="faint" style="white-space:normal">${m.help}</td></tr>`).join("")}</tbody></table>
+    <p class="faint" style="font-size:12px;margin-top:8px">행을 클릭하면 근거 목록이 아래에 열립니다. 아는 0 은 0, 없는 값은 —. 시간 미확인은 0초가 아니라 '모름' 입니다.</p>`;
+  $("#qualSum").querySelectorAll("[data-q]").forEach(tr=>{tr.onclick=()=>{ui.qual.reason=ui.qual.reason===tr.dataset.q?null:tr.dataset.q;ui.qual.page=0;renderQuality();};tr.onkeydown=ev=>{if(ev.key==="Enter"||ev.key===" "){ev.preventDefault();tr.onclick();}};});
+  const card=$("#qualCard");if(!st.reason){card.hidden=true;$("#qualList").innerHTML="";return;}card.hidden=false;
+  const m=QUAL_META.find(x=>x.id===st.reason);const list=qualRows(st.reason,st.dev).map(r=>({r,t:rowDate(r)})).sort((a,b)=>(a.t?a.t.getTime():0)-(b.t?b.t.getTime():0));
+  const page=Math.min(st.page,Math.max(0,Math.ceil(list.length/QUAL_PAGE)-1));const slice=list.slice(page*QUAL_PAGE,(page+1)*QUAL_PAGE);
+  $("#qualList").innerHTML=`<div class="lossd" style="margin:0;border:0"><div class="hd"><b>${m.label} · ${fmtN(list.length)}행${st.dev?` · ${esc(st.dev)}`:""}</b><button class="btn ghost small" onclick="ui.qual.reason=null;renderQuality()" aria-label="닫기">닫기 ✕</button></div>
+    <div class="tscroll"><table class="tbl"><thead><tr><th>장비</th><th>날짜 · 시각</th><th>Lot / Wafer</th><th>상태(원문)</th><th>INI · 소유권</th><th>Report</th><th></th></tr></thead><tbody>${slice.map(({r,t})=>`<tr><td><b>${esc(r.device)}</b></td><td class="num">${t?`${dayKey(t).slice(5)} ${hm(t)}${r.wafer_start_time?"":" (Batch)"}`:"—"}</td><td class="mono">${escLot(r)}${r.wafer_id?" / "+esc(r.wafer_id):""}${r.kind==="slot"?` <span class="chip crit">Slot ${esc(r.slots)}개</span>`:""}</td><td style="white-space:normal;min-width:200px">${msgCellQ(r.status)}</td><td class="faint" style="white-space:normal">${r.ownership==="NOT_OWNER"?"INI 덮어써짐(다른 Report 소유)":r.ownership==="AMBIGUOUS"?"소유권 보류":INI_KO[r.ini_match]||esc(r.ini_match||"")}${r.time_basis==="TOLERANCE_ONLY"?" · ±10분 여유":""}</td><td class="mono faint" style="white-space:normal;word-break:break-all;max-width:320px">${esc(r.report)}</td><td>${t?`<button class="btn small" data-qgo="${esc(r.device)}|${dayKey(t)}|${esc(r.report)}|${esc(r.wafer_id)}">보기</button>`:""}</td></tr>`).join("")||'<tr><td colspan="7" class="empty">해당 조건의 기록 없음</td></tr>'}</tbody></table></div>
+    ${list.length>QUAL_PAGE?`<div class="row" style="margin-top:6px"><button class="btn small" ${page===0?"disabled":""} onclick="ui.qual.page--;renderQuality()">이전 ${QUAL_PAGE}</button><span class="faint">${page*QUAL_PAGE+1}~${Math.min(list.length,(page+1)*QUAL_PAGE)} / ${fmtN(list.length)}</span><button class="btn small" ${(page+1)*QUAL_PAGE>=list.length?"disabled":""} onclick="ui.qual.page++;renderQuality()">다음 ${QUAL_PAGE}</button></div>`:""}</div>`;
+  $("#qualList").querySelectorAll("[data-qgo]").forEach(b=>b.onclick=()=>{const[dev,k,rep,wid]=b.dataset.qgo.split("|");go("home");goRow(dev,k,rep,wid,{qual:true});});}
+const msgCellQ=s=>{s=String(s||"");if(!s)return'<span class="faint">(빈 문구)</span>';const cut=s.length>60;return cut?`<details class="msgx"><summary>${esc(s.slice(0,59))}…</summary><code>${esc(s)}</code></details>`:esc(s);};
 /* 설정 탭 — 분류 기준표(사용자가 확정한 규칙·아직 확인 대기인 가정을 구분해 적는다) */
 function renderRules(){const b=$("#ruleBody");if(!b)return;$("#ruleVer").textContent=String(CLASS_VERSION);
   const R=[["가동","확인된 첫 기록의 정상 스캔","가동률 포함"],["중복스캔","같은 장비 · 같은 자재 · <b>같은 Job 원문</b>(D36) · 앞선 시도 정상 · RE 표기 없음 — 간격·중간 작업 무관","각 시도 시간 모두 포함"],
@@ -1187,7 +1248,7 @@ function renderDetail(){
   const m=dayMetrics(D[selDev],day);const a=keyDay(day).getTime();const now=nowMs();
   const rp=m.dup+m.rescan+m.rework;
   $("#detTitle").innerHTML=`${esc(selDev)} <span class="faint" style="font-weight:400;font-size:13px">${fmtDay(day)} · 가동률 ${m.hasData?m.util.toFixed(1)+"%":"–"} · 가동 ${fmtSecS(m.run)}${rp?` (반복 ${fmtSecS(rp)})`:""} · Error·정지 ${fmtSecS(m.err+m.stop)}${m.nAbort?` · <span class="chip abort">중단 ${m.nAbort}건${m.nAbortErr?` (Error ${m.nAbortErr})`:""}</span>`:""}${m.nUnk?` · <span class="chip mute">분류 미확인 ${m.nUnk}건</span>`:""}${m.nTest?` · <span class="chip test">Test ${m.nTest}건 제외</span>`:""}${m.overlap>0?` · <span class="chip warn" title="같은 장비의 구간이 겹쳐 우선순위(Error > 가동 > Test > 정지)로 한 번만 배정했습니다">시간 충돌 ${fmtSec(m.overlap)}</span>`:""}</span>`;
-  $("#detLegend").innerHTML=legendHtml();$("#detBack").hidden=!ui.back;
+  $("#detLegend").innerHTML=legendHtml();$("#detBack").hidden=!ui.back;$("#detBackQ").hidden=!ui.backQual;
   /* Lot blocks: consecutive wafers of the same lot (gap under 10 min) become one bar */
   const lots=[];const ws=m.items.filter(i=>i.kind!=="stop").sort((p,q)=>p.s-q.s);   /* Test 구간도 Lot 목록에는 남긴다(가동 시간만 0) */
   for(const it of ws){const key=lotKey(it.g.r.lot,it.g.test);const L=lots[lots.length-1];
@@ -1206,10 +1267,11 @@ function renderDetail(){
   wireSegs($("#detTl"),m);bindZoomDrag($("#detTl svg"),m,a);renderZoom(m,a);
   /* 표 — 행 클릭 = 상세 고정, 더블클릭 = Report 열기. 'Report 열기' 버튼은 행 클릭과 겹치지 않게 따로 둔다. */
   const openBtn=expr=>`<button class="btn small" onclick="event.stopPropagation();openReport(${expr})">Report 열기</button>`;
-  const cut=(t,n)=>{t=String(t||"");return t.length>n?esc(t.slice(0,n-1))+"…":esc(t);};
+  /* 원문(V03): 목록에서는 첫 문장만, 펼치면 전체. 40자 절단으로 지우지 않는다 */
+  const msgCell=s=>{s=String(s||"");const cut=s.length>60;const head=cut?s.slice(0,59)+"…":s;return cut?`<details class="msgx" onclick="event.stopPropagation()"><summary title="펼치기">${esc(head)}</summary><code>${esc(s)}</code></details>`:esc(s);};
   const lotMark=L=>L.test?chipOf("TEST","Test · 제외"):[L.redo?chipOf("RESCAN"):"",L.dup?chipOf("DUP"):"",L.rework?chipOf("REWORK"):"",L.nAbort?chipOf("ABORT",`중단 ${L.nAbort}`):""].filter(Boolean).join(" ");
-  const lotTbl=m.lots.length?`<details style="margin:6px 0 10px"><summary style="cursor:pointer;color:var(--accent-2);font-size:13px">Lot ${m.lots.length}개 목록</summary><table class="tbl" style="margin-top:6px"><thead><tr><th>Lot</th><th>표기</th><th>Recipe</th><th>시작</th><th>종료</th><th class="r">소요</th><th class="r">가동</th><th class="r">Error</th><th>원본</th></tr></thead><tbody>${m.lots.map((L,i)=>{const nr=reportsOf(L.parts).length;return`<tr class="click" onclick="pinLot(${i})" ondblclick="openReport(window._m.lots[${i}].r)" title="클릭: 상세 · 더블클릭: Report 열기"><td class="mono">${esc(L.lot)}</td><td>${lotMark(L)}</td><td>${esc(L.recipe)}</td><td class="num">${hm(new Date(L.s))}</td><td class="num">${hm(new Date(L.e))}</td><td class="r">${fmtSecS((L.e-L.s)/1000)}</td><td class="r">${fmtSecS(L.run/1000)}</td><td class="r">${L.err?`<span class="chip crit">${L.err}</span>`:0}</td><td>${nr>1?`<span class="chip mute" title="Report ${nr}개 — 상세에서 고릅니다">원본 ${nr}개</span>`:openBtn(`window._m.lots[${i}].r`)}</td></tr>`;}).join("")}</tbody></table></details>`:"";
-  $("#detErrs").innerHTML=lotTbl+(m.errors.length?`<table class="tbl"><thead><tr><th>시각</th><th>Lot / Wafer</th><th>Error</th><th class="r">정지(추정)</th><th>장비 메시지</th><th>원본</th></tr></thead><tbody>${m.errors.map((e,i)=>`<tr class="click" data-e="${i}" onclick="hlSeg(${i});pinErr(${i})" ondblclick="openReport(window._m.errors[${i}].r)" title="클릭: 상세 · 더블클릭: Report 열기"><td class="num">${e.t?hm(new Date(e.t)):"–"}${e.noTime?` <span class="chip mute" title="${e.r.ownership==="NOT_OWNER"?"INI 시각을 다른 Report 가 소유 — Batch 시작 시각으로 표시":"Wafer 시각이 없어 Batch 시작 시각입니다"}">시간 미확인${e.r.ownership==="NOT_OWNER"?" · INI 덮어써짐":""}</span>`:""}</td><td class="mono">${escLot(e.r)}${e.r.kind==="batch"?' <span class="chip crit">배치 전체</span>':e.r.kind==="slot"?` <span class="chip crit" title="자리표시(LoadPort/Slot) 행의 Error — Report 당 1건">Slot ${esc(e.r.slots)}개</span> <span class="chip warn" title="정확 발생 시각 없음 — Batch 범위만 안다">범위 추정</span>`:" / "+esc(e.r.wafer_id)}</td><td><span class="chip crit">${ERR_KO[e.r.norm_status]||"Error"}</span>${e.r.kind==="batch"?' <span class="chip mute">스캔 전 중단</span>':""}${e.g&&e.g.rel&&e.g.rel!=="FIRST_OBSERVED"?' <span class="chip redo" title="'+esc(e.g.why)+'">'+(REL_KO[e.g.rel]||"")+'</span>':""}</td><td class="r">${e.open?'<span class="chip warn">복구 기록 없음</span>':e.stop!=null?fmtSec(e.stop):"–"}</td><td class="faint" title="${esc(e.r.status)}">${cut(e.r.status,40)}</td><td>${openBtn(`window._m.errors[${i}].r`)}</td></tr>`).join("")}</tbody></table><p class="faint" style="font-size:12px;margin-top:8px">정지(추정) = Error Wafer 종료부터 다음 Wafer 시작까지의 공백. 장비 이벤트 로그가 아닙니다.</p>`
+  const lotTbl=m.lots.length?`<details style="margin:6px 0 10px"><summary style="cursor:pointer;color:var(--accent-2);font-size:13px">Lot ${m.lots.length}개 목록</summary><table class="tbl" style="margin-top:6px"><thead><tr><th>Lot</th><th>표기</th><th>Job</th><th>Recipe</th><th>시작</th><th>종료</th><th class="r">소요</th><th class="r">가동</th><th class="r">Error</th><th>원본</th></tr></thead><tbody>${m.lots.map((L,i)=>{const nr=reportsOf(L.parts).length;return`<tr class="click" onclick="pinLot(${i})" ondblclick="openReport(window._m.lots[${i}].r)" title="클릭: 상세 · 더블클릭: Report 열기"><td class="mono">${esc(L.lot)}</td><td>${lotMark(L)}</td><td><span class="job2 mono" title="${esc(L.r.job||"")}">${L.r.job?esc(L.r.job):'<span class="faint">Job 미확인</span>'}</span></td><td>${esc(L.recipe)}</td><td class="num">${hm(new Date(L.s))}</td><td class="num">${hm(new Date(L.e))}</td><td class="r">${fmtSecS((L.e-L.s)/1000)}</td><td class="r">${fmtSecS(L.run/1000)}</td><td class="r">${L.err?`<span class="chip crit">${L.err}</span>`:0}</td><td>${nr>1?`<span class="chip mute" title="Report ${nr}개 — 상세에서 고릅니다">원본 ${nr}개</span>`:openBtn(`window._m.lots[${i}].r`)}</td></tr>`;}).join("")}</tbody></table></details>`:"";
+  $("#detErrs").innerHTML=lotTbl+(m.errors.length?`<table class="tbl"><thead><tr><th>시각</th><th>Lot / Wafer</th><th>Error</th><th class="r">정지(추정)</th><th>장비 메시지</th><th>원본</th></tr></thead><tbody>${m.errors.map((e,i)=>`<tr class="click" data-e="${i}" onclick="hlSeg(${i});pinErr(${i})" ondblclick="openReport(window._m.errors[${i}].r)" title="클릭: 상세 · 더블클릭: Report 열기"><td class="num">${e.t?hm(new Date(e.t)):"–"}${e.noTime?` <span class="chip mute" title="${e.r.ownership==="NOT_OWNER"?"INI 시각을 다른 Report 가 소유 — Batch 시작 시각으로 표시":"Wafer 시각이 없어 Batch 시작 시각입니다"}">시간 미확인${e.r.ownership==="NOT_OWNER"?" · INI 덮어써짐":""}</span>`:""}</td><td class="mono">${escLot(e.r)}${e.r.kind==="batch"?' <span class="chip crit">배치 전체</span>':e.r.kind==="slot"?` <span class="chip crit" title="자리표시(LoadPort/Slot) 행의 Error — Report 당 1건">Slot ${esc(e.r.slots)}개</span> <span class="chip warn" title="정확 발생 시각 없음 — Batch 범위만 안다">범위 추정</span>`:" / "+esc(e.r.wafer_id)}</td><td><span class="chip crit">${ERR_KO[e.r.norm_status]||"Error"}</span>${e.r.kind==="batch"?' <span class="chip mute">스캔 전 중단</span>':""}${e.g&&e.g.rel&&e.g.rel!=="FIRST_OBSERVED"?' <span class="chip redo" title="'+esc(e.g.why)+'">'+(REL_KO[e.g.rel]||"")+'</span>':""}</td><td class="r">${e.open?'<span class="chip warn">복구 기록 없음</span>':e.stop!=null?fmtSec(e.stop):"–"}</td><td class="faint" style="white-space:normal;min-width:220px">${msgCell(e.r.status)}</td><td>${openBtn(`window._m.errors[${i}].r`)}</td></tr>`).join("")}</tbody></table><p class="faint" style="font-size:12px;margin-top:8px">정지(추정) = Error Wafer 종료부터 다음 Wafer 시작까지의 공백. 장비 이벤트 로그가 아닙니다.</p>`
     :(m.hasData?`<p class="faint" style="font-size:13px;padding:6px 0">이 날은 Error 가 없습니다.${m.nAbort?` 중단 ${m.nAbort}건은 같은 Report 에 정상 스캔이 있어 가동으로 셌습니다(D41).`:""}</p>`:'<p class="faint" style="font-size:13px;padding:6px 0">이 날은 데이터가 없습니다.</p>'));
   closeSeg();window._m=m;
   if(ui.pendingPin){const p=ui.pendingPin;ui.pendingPin=null;const it=m.items.find(x=>x.g&&x.g.r===p.r&&x.kind!=="stop")||m.items.find(x=>x.g&&x.g.r===p.r);   /* 전날 Error 의 정지만 있는 날은 그 정지 조각 */
@@ -1252,6 +1314,7 @@ function pinSeg(sel){const m=window._m,box=$("#segDetail");if(!m||!box)return;co
       const hist=historyHtml(g);if(hist)add("자재 이력",hist);
       if(g.err){const st=m.items.find(i=>i.kind==="stop"&&i.g===g);add("정지(추정)",st?`${fmtSec((st.e-st.s)/1000)} — ${hm(new Date(st.s))} → ${hm(new Date(st.e))} ${g.stopEnd===null?"관측 종료까지(복구 기록 없음)":"다음 Wafer 시작까지"}`:"복구 기록 없음 — 이 뒤로 스캔된 Wafer 가 없습니다");}}
     else add("시각",sel.t?`${hm(new Date(sel.t))} (Batch 시작) · ${r.kind==="slot"?"정확 발생 시각 없음 — Batch 범위 "+hm(new Date(sel.t))+"~"+(parseDt(r.batch_end)?hm(parseDt(r.batch_end)):"?")+" (범위 추정)":"Wafer 시각 없음"}`:"시간 미확인");
+    add("Job",r.job?`<code>${esc(r.job)}</code> <button class="btn small" onclick="copyText(this.previousElementSibling.textContent)">복사</button>`:'<span class="faint">Job 미확인 — Report 안의 Job/Setup 이 없어 되찾지 못한 것(추측하지 않음)</span>');
     add("Recipe",esc(r.recipe));if(r.outcome&&r.outcome!=="PASS")add("장비 메시지",`<code>${esc(r.status)}</code> <button class="btn small" onclick="copyText(this.previousElementSibling.textContent)">복사</button>`);
     if(r.outcome&&r.outcome!=="PASS")add("원인 · 결과",`${(r.causes||[]).map(c=>`<span class="chip crit">${ERR_KO[c]||c}</span>`).join(" ")||'<span class="faint">원인 문구 없음</span>'} → ${ERR_KO[r.outcome]||r.outcome}`);   /* D43: 원인과 종료 결과는 다른 축 */
     add("INI 확인",(r.ownership==="NOT_OWNER"?OWN_KO.NOT_OWNER:INI_KO[r.ini_match]||esc(r.ini_match||""))+(r.time_basis&&r.time_basis!=="MISSING"&&r.time_basis!=="BATCH_ONLY"?` · 시간 근거 ${r.time_basis==="STRICT_IN_BATCH"?"Batch 구간 안":r.time_basis==="TOLERANCE_ONLY"?"±10분 여유로만 포함":r.time_basis}`:""));
@@ -1262,7 +1325,7 @@ function pinSeg(sel){const m=window._m,box=$("#segDetail");if(!m||!box)return;co
   box.innerHTML=`<div class="hd"><b>${title}</b><button class="btn ghost small" onclick="closeSeg()" aria-label="닫기">닫기 ✕</button></div><div class="grid">${rows.join("")}</div>`;box.hidden=false;
   box.querySelectorAll("[data-hist]").forEach(b=>b.onclick=()=>{const[dev,k,rep,wid]=b.dataset.hist.split("|");goRow(dev,k,rep,wid);});}
 /* 다른 장비·날짜의 행으로 이동해 그 행의 상세를 고정한다(자재 이력·사유 분석에서 쓴다). 돌아갈 자리는 ui.back 에 남긴다. */
-function goRow(dev,k,rep,wid,back){if(back)ui.back=back;const r=rows.find(x=>x.device===dev&&x.report===rep&&x.wafer_id===wid)||rows.find(x=>x.device===dev&&x.report===rep);
+function goRow(dev,k,rep,wid,back){if(back&&back.qual){ui.back=null;ui.backQual=true;}else if(back)ui.back=back;const r=rows.find(x=>x.device===dev&&x.report===rep&&x.wafer_id===wid)||rows.find(x=>x.device===dev&&x.report===rep);
   ui.pendingPin=r?{r}:null;if(k)day=k;selDev=dev;renderAll();
   const btn=document.getElementById(devId(dev));if(btn)btn.scrollIntoView({behavior:smooth(),block:"start"});}
 function hlSeg(i){const m=window._m;const e=m.errors[i];$("#detErrs").querySelectorAll("tr.hl").forEach(t=>t.classList.remove("hl"));const tr=$("#detErrs").querySelector(`tr[data-e="${i}"]`);if(tr){tr.classList.add("hl");tr.scrollIntoView({block:"nearest"});}$("#detail").querySelectorAll("rect.hl").forEach(t=>t.classList.remove("hl"));const idx=m.items.findIndex(it=>it.g.r===e.r&&it.kind!=="stop");if(idx>=0)$("#detail").querySelectorAll(`rect[data-i="${idx}"]`).forEach(r=>r.classList.add("hl"));}

@@ -284,7 +284,8 @@ def test_hover_tooltips_are_short_and_carry_no_file_names():
     """hover 는 3줄(대상 / 시각·기간 / 핵심 상태) + 안내 한 줄. 파일명·원문·계산식은 상세에서 본다."""
     assert "function segTip(" in HTML and "const tipHint=" in HTML
     assert "더블클릭하면 Report 를 엽니다 · " not in HTML and "openHint" not in HTML
-    assert "${esc(r.report)}" not in HTML[HTML.index("function lotTip("):HTML.index("function renderDetail(")]
+    tips = HTML[HTML.index("function lotTip("):HTML.index("const lotKey=")] + HTML[HTML.index("function segTip("):HTML.index("function drawBand(")]
+    assert "${esc(r.report)}" not in tips and "r.report" not in tips             # 툴팁(lotTip·segTip)에는 파일명이 없다 — 목록·상세에서 본다
 
 
 def test_hover_does_not_move_the_target():

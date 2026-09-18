@@ -30,7 +30,7 @@ _TOKEN_KEYS = {
 FALLBACK: Dict[str, Dict[str, str]] = {
     "dark": {
         "bg": "#0F1319", "surface": "#141920", "surface_2": "#1A2130", "raise_": "#1E2838",
-        "ink": "#E4EEF8", "ink_2": "#8AAEC8", "ink_3": "#5C7086", "line": "#1E3050", "line_2": "#2A4060",
+        "ink": "#E4EEF8", "ink_2": "#8AAEC8", "ink_3": "#7C90A6", "line": "#1E3050", "line_2": "#2A4060",
         "accent": "#4A9EE8", "accent_2": "#7EC8F0", "accent_ink": "#0F1319", "accent_soft": "#0D2A44",
         "run": "#4A9EE8", "err": "#E85A5A", "off": "#243040", "nodata": "#182030", "prev": "#3A4A60",
         "good": "#3DCC8E", "good_soft": "#0F2E24", "warn": "#E0A82E", "warn_soft": "#332608",
@@ -38,7 +38,7 @@ FALLBACK: Dict[str, Dict[str, str]] = {
     },
     "light": {
         "bg": "#f2f5f9", "surface": "#ffffff", "surface_2": "#f7f9fc", "raise_": "#e9eef5",
-        "ink": "#0f1720", "ink_2": "#4b5865", "ink_3": "#7a8794", "line": "#dde3ea", "line_2": "#c6d0dc",
+        "ink": "#0f1720", "ink_2": "#4b5865", "ink_3": "#5E6A77", "line": "#dde3ea", "line_2": "#c6d0dc",
         "accent": "#2A6AAA", "accent_2": "#4A9EE8", "accent_ink": "#ffffff", "accent_soft": "#e1eefb",
         "run": "#2A6AAA", "err": "#d64545", "off": "#d3dbe5", "nodata": "#eef2f7", "prev": "#b9c4d2",
         "good": "#1f9e6a", "good_soft": "#dff4ea", "warn": "#d99a12", "warn_soft": "#fff1cf",
