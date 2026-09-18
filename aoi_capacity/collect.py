@@ -215,16 +215,39 @@ _LOT_MARKS = {"TEST": "TEST", "RE": "RESCAN", "RESCAN": "RESCAN", "REWORK": "REW
 EXCLUDED_SCAN_TYPES = ("TEST",)
 
 
+#: 토큰 구분자 — 글자(유니코드)·숫자가 아닌 것 전부(사용자 확정 D39: "사이에 뭐가 있든"). `_` 도 구분자다.
+#: 30일치 Lot 7,708종에 쓰인 구분자: '-' ' ' '_' '#' '+' ',' "'" '%' '.' '~'. template 의 `lotTokens` 와 같은 규칙.
+_TOKEN_SPLIT = re.compile(r"[\W_]+")
+
+
+def lot_tokens(lot) -> List[str]:
+    return [x for x in _TOKEN_SPLIT.split(str(lot or "")) if x]
+
+
 def scan_type(lot) -> str:
-    """Lot 이름에서 작업 표기를 읽는다. 토큰이 통째로 맞을 때만 — `RETURN`·`REX` 는 걸리지 않는다.
+    """Lot 이름에서 작업 표기를 읽는다. 토큰이 통째로 맞을 때만 — `RETURN`·`REX`·`TESTER`·`RW` 는 걸리지 않는다.
 
     겹치면 **TEST → RESCAN → REWORK** 순. 시험 가동은 가동률에서 빼는 쪽이 세므로 먼저 본다."""
-    found = {_LOT_MARKS[t] for t in (x.upper() for x in re.split(r"[\s_\-]+", str(lot or "")) if x)
-             if t in _LOT_MARKS}
+    found = {_LOT_MARKS[t] for t in (x.upper() for x in lot_tokens(lot)) if t in _LOT_MARKS}
     for mark in ("TEST", "RESCAN"):
         if mark in found:
             return mark
     return "REWORK" if found else ""
+
+
+def norm_lot(lot) -> str:
+    """자재 키용 Lot 정규화(D39) — 구분자를 지우고 작업 표기 토큰(RE·RESCAN·REWORK·TEST)만 뺀 뒤 대문자. 화면 표시·Lot 막대에는 쓰지 않는다."""
+    return "".join(x for x in lot_tokens(lot) if x.upper() not in _LOT_MARKS).upper()
+
+
+def norm_wafer(wafer) -> str:
+    """자재 키용 Wafer ID 정규화 — 구분자·대소문자만. 앞자리 0·숫자 접미사는 그대로. 작업 표기 토큰을 지우지 않는다."""
+    return "".join(lot_tokens(wafer)).upper()
+
+
+def material_key(lot, wafer) -> str:
+    """[정규화 Lot, 정규화 Wafer ID] 의 충돌 없는 직렬화(JSON 배열). 장비명은 넣지 않는다. template 의 `materialKey` 와 같다."""
+    return json.dumps([norm_lot(lot), norm_wafer(wafer)], ensure_ascii=False, separators=(",", ":"))
 
 
 def norm_status(s) -> str:

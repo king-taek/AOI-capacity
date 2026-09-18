@@ -356,11 +356,14 @@ def test_cross_device_material_history_is_global_and_explained():
     """★ 사용자 확정(U01·U03): 같은 자재를 이어서 다시 스캔하면 중복스캔, 다른 장비에서 다시 스캔하면 재스캔.
     관계는 조회 날짜·장비 필터와 무관하게 로드한 전체 행에서 한 번 계산하고, 판정 근거와 신뢰도를 남긴다."""
     assert "function materialIndex(" in HTML and "M._index=materialIndex(attempts);" in HTML
-    assert "const materialKey=r=>`${normLot(r.lot)}|${String(r.wafer_id||\"\").trim()}`;" in HTML
+    assert "const materialKey=r=>JSON.stringify([normLot(r.lot),normWafer(r.wafer_id)]);" in HTML     # D39 — 충돌 없는 튜플
     assert 'const MARK_TOKENS=new Set(["RE","RESCAN","REWORK","TEST"]);' in HTML
+    assert 'const processKey=r=>String(r.job||"");' in HTML                                            # D36 — Job 원문 정확 일치
+    assert "const lotKey=(lot,isTest)=>" in HTML and "normLot" not in HTML[HTML.index("const lotKey="):HTML.index("const lotKey=") + 80]   # Lot 막대는 원문 그대로
     for rel in ("FIRST_OBSERVED", "SAME_DEVICE_REPEAT", "SAME_DEVICE_RESCAN", "CROSS_DEVICE_RESCAN", "TOKEN_RESCAN", "UNRESOLVED"):
         assert f"{rel}:" in HTML, rel
-    assert 'a.conf=p.pk===a.pk?"confirmed":"inferred";' in HTML   # Recipe 가 다르면 확정이 아니라 추정(실물 BS / BS_1)
+    assert 'a.conf=p.timed?"confirmed":"inferred";' in HTML and "a.recipeDiff=" in HTML   # Job 일치 = 확정, Recipe 차이는 배지(실물 BS / BS_1)
+    assert "const USER_OVERRIDES=[" in HTML and "function applyOverrides(" in HTML and "GWM5K09-F4" in HTML
     assert "function dispOf(g)" in HTML and "const CLASS_VERSION=" in HTML
     assert "function historyHtml(" in HTML and 'add("판정 근거"' in HTML and 'add("앞선 시도"' in HTML
 

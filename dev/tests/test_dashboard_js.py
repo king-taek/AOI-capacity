@@ -31,10 +31,10 @@ def run(rows, today=FAR):
     return json.loads(out.stdout)
 
 
-def w(dev, wafer, s, e, lot="LOT-A", status="Pass", recipe="R1", report=None, day=DAY, **k):
-    """Wafer 행 하나 — 시각은 그날 HH:MM[:SS]."""
+def w(dev, wafer, s, e, lot="LOT-A", status="Pass", recipe="R1", report=None, day=DAY, job="J1", **k):
+    """Wafer 행 하나 — 시각은 그날 HH:MM[:SS]. Job 은 기본 J1(같은 공정) — D36 은 Job 원문이 같을 때만 반복을 잇는다."""
     iso = lambda t: f"{day}T{t if t.count(':') == 2 else t + ':00'}"
-    return {"device": dev, "lot": lot, "wafer_id": wafer, "status": status, "recipe": recipe,
+    return {"device": dev, "lot": lot, "wafer_id": wafer, "status": status, "recipe": recipe, "job": job,
             "wafer_start_time": iso(s), "wafer_end_time": iso(e), "batch_start": iso(s), "batch_end": iso(e),
             "report": report or f"{dev}_{lot}_{s}_BatchReport.htm", **k}
 
@@ -142,7 +142,7 @@ def test_t11_placeholders_and_batch_rows_are_not_material_candidates():
 
 # ── T12·T13: 앞선 시도가 STALE(시간 없음) — 관계는 붙이되 시간은 지어내지 않는다 ─────────────
 def test_t12_stale_prior_gives_relation_but_no_time():
-    stale = {"device": "AOI-8", "lot": "LOT-A", "wafer_id": "W1", "status": "Pass", "recipe": "R1", "wafer_start_time": "", "wafer_end_time": "",
+    stale = {"device": "AOI-8", "lot": "LOT-A", "wafer_id": "W1", "status": "Pass", "recipe": "R1", "job": "J1", "wafer_start_time": "", "wafer_end_time": "",
              "batch_start": f"{DAY}T08:00:00", "batch_end": f"{DAY}T08:30:00", "report": "old.htm", "ini_match": "STALE"}
     res = run([stale, w("AOI-9", "W1", "10:00", "10:05")])
     a = att(res, "AOI-9", "W1")
@@ -255,11 +255,11 @@ def test_t25_no_nan_for_test_only_days_and_empty_devices():
     assert json.dumps(res).count("NaN") == 0 and "Infinity" not in json.dumps(res)
 
 
-# ── 실물 근거(AOI-3 `BS` / AOI-16 `BS_1`): Recipe 가 다르면 확정이 아니라 추정 ───────────────
-def test_recipe_mismatch_across_devices_is_inferred_not_confirmed():
+# ── 실물 근거(AOI-3 `BS` / AOI-16 `BS_1`): Job 이 같으면 Recipe 가 달라도 같은 공정 — 검토 배지만(D36) ──
+def test_recipe_mismatch_with_the_same_job_is_confirmed_with_a_review_badge():
     res = run([w("AOI-3", "GX1", "09:00", "09:05", lot="PHF", recipe="BS"), w("AOI-16", "GX1", "10:00", "10:05", lot="PHF", recipe="BS_1")])
     a = att(res, "AOI-16", "GX1")
-    assert a["rel"] == "CROSS_DEVICE_RESCAN" and a["conf"] == "inferred" and a["disp"] == "RESCAN"
+    assert a["rel"] == "CROSS_DEVICE_RESCAN" and a["conf"] == "confirmed" and a["disp"] == "RESCAN" and a["recipeDiff"] is True
 
 
 # ── 라벨만 바뀌어도 총 가동시간은 불변(중복스캔·재스캔은 가동의 부분집합) ───────────────────
@@ -359,9 +359,9 @@ def test_batch_level_abort_is_an_error_with_batch_time():
 def _pair(order="err_first"):
     """실물(AOI-1 LVG/GWAYS13-C7 9/16)을 본뜬 fixture: Error Report 의 Batch 23:05~23:15 는 INI 시각(23:20~23:24)을 담지 않고(±10분 여유로만),
     뒤의 Pass Report 의 Batch 23:19~23:24 가 엄격히 담는다."""
-    err = {"device": "AOI-1", "lot": "LVG", "wafer_id": "GWAYS13-C7", "status": "Alignment Error.", "recipe": "R1", "report": "err.htm",
+    err = {"device": "AOI-1", "lot": "LVG", "wafer_id": "GWAYS13-C7", "status": "Alignment Error.", "recipe": "R1", "job": "J1", "report": "err.htm",
            "wafer_start_time": f"{DAY}T23:20:16", "wafer_end_time": f"{DAY}T23:24:12", "batch_start": f"{DAY}T23:05:20", "batch_end": f"{DAY}T23:15:38", "ini_match": "EXACT"}
-    ok = {"device": "AOI-1", "lot": "LVG", "wafer_id": "GWAYS13-C7", "status": "Pass", "recipe": "R1", "report": "pass.htm",
+    ok = {"device": "AOI-1", "lot": "LVG", "wafer_id": "GWAYS13-C7", "status": "Pass", "recipe": "R1", "job": "J1", "report": "pass.htm",
           "wafer_start_time": f"{DAY}T23:20:16", "wafer_end_time": f"{DAY}T23:24:12", "batch_start": f"{DAY}T23:19:27", "batch_end": f"{DAY}T23:24:37", "ini_match": "EXACT"}
     later = w("AOI-1", "OTHER", "23:40", "23:45", lot="LVG", report="later.htm")
     return [err, ok, later] if order == "err_first" else [later, ok, err]
@@ -454,3 +454,92 @@ def test_no_slot_event_when_a_batch_row_exists():
             {"device": "AOI-8", "lot": "LoadPort A", "wafer_id": "Slot 2", "status": "Failed to read wafer id on PAL", "recipe": "R1", "report": "b.htm",
              "wafer_start_time": "", "wafer_end_time": "", "batch_start": f"{DAY}T11:00:00", "batch_end": f"{DAY}T11:02:00", "ini_match": "BATCH_FAILED"}]
     assert run(rows)["per"]["AOI-8"][DAY]["nErr"] == 1
+
+
+# ── D36 · D39 · D42: 자재 키 정규화 · Job 원문 = 공정 · Rework+재스캔 · 사용자 override ─────────
+def test_material_key_ignores_separators_and_case_but_keeps_digits_and_leading_zeros():
+    res = run([w("AOI-8", "GX1", "09:00", "09:05", lot="SHX"), w("AOI-9", "gx-1", "10:00", "10:05", lot="SHX-RE", scan_type="RESCAN"),
+               w("AOI-8", "W2", "11:00", "11:05", lot="GUH-SPT2"), w("AOI-9", "W2", "12:00", "12:05", lot="GUH_SPT2"),
+               w("AOI-8", "W3", "13:00", "13:05", lot="FHP-PI3 ENHANCED"), w("AOI-9", "W3", "14:00", "14:05", lot="FHP-PI3 Enhanced"),
+               w("AOI-8", "0831", "15:00", "15:05", lot="KDG-Rework-0831", scan_type="REWORK"), w("AOI-8", "831", "16:00", "16:05", lot="KDG")])
+    assert att(res, "AOI-9", "gx-1")["rel"] == "CROSS_DEVICE_RESCAN"           # SHX · SHX-RE, GX1 · gx-1
+    assert att(res, "AOI-9", "W2")["rel"] == "CROSS_DEVICE_RESCAN"             # GUH-SPT2 · GUH_SPT2
+    assert att(res, "AOI-9", "W3")["rel"] == "CROSS_DEVICE_RESCAN"             # 대소문자
+    assert att(res, "AOI-8", "0831")["rel"] == "FIRST_OBSERVED" and att(res, "AOI-8", "831")["rel"] == "FIRST_OBSERVED"   # 0831 은 남고 0831≠831
+    assert att(res, "AOI-8", "0831")["mk"] == '["KDG0831","0831"]'
+
+
+def test_process_identity_is_the_raw_job_and_a_b_a_compares_with_the_earlier_a():
+    rows = [w("AOI-8", "W1", "09:00", "09:05", job="INCI-(6000)"), w("AOI-9", "W1", "10:00", "10:05", job="2D@RE-(6412)"),
+            w("AOI-8", "W1", "11:00", "11:05", job="INCI-(6000)", report="a2.htm")]
+    res = run(rows)
+    assert att(res, "AOI-9", "W1")["rel"] == "FIRST_OBSERVED"                  # 다른 Job = 다음 공정 단계, 재스캔이 아니다
+    a3 = att(res, "AOI-8", "W1", "a2.htm")
+    assert a3["rel"] == "SAME_DEVICE_REPEAT" and a3["prior"]["s"] == att(res, "AOI-8", "W1", "AOI-8_LOT-A_09:00_BatchReport.htm")["s"]   # A→B→A
+    assert att(res, "AOI-9", "W1")["of"] == 3                                  # 자재 이력에는 세 시도가 전부 남는다
+
+
+def test_job_names_are_compared_verbatim_and_empty_jobs_never_link():
+    res = run([w("AOI-8", "W1", "09:00", "09:05", job="Job A"), w("AOI-8", "W1", "10:00", "10:05", job="job a"), w("AOI-8", "W1", "11:00", "11:05", job="Job A ")])
+    assert all(a["rel"] == "FIRST_OBSERVED" for a in res["attempts"])          # 대소문자·공백이 다르면 다른 공정(자동 병합 없음)
+    res2 = run([w("AOI-8", "W1", "09:00", "09:05", job=""), w("AOI-8", "W1", "10:00", "10:05", job="")])
+    assert all(a["rel"] == "FIRST_OBSERVED" for a in res2["attempts"]) and res2["index"]["noJob"] == 1
+
+
+def test_five_day_gap_and_intervening_other_job_do_not_break_a_repeat():
+    res = run([w("AOI-8", "W1", "09:00", "09:05", day="2026-09-10"), w("AOI-8", "W1", "12:00", "12:05", day="2026-09-12", job="OTHER"),
+               w("AOI-8", "W1", "09:00", "09:05", day="2026-09-15")])
+    assert att(res, "AOI-8", "W1", "AOI-8_LOT-A_09:00_BatchReport.htm")["rel"] in ("FIRST_OBSERVED", "SAME_DEVICE_REPEAT")
+    reps = [a for a in res["attempts"] if a["rel"] == "SAME_DEVICE_REPEAT"]
+    assert len(reps) == 1 and reps[0]["s"] > att(res, "AOI-8", "W1", "AOI-8_LOT-A_12:00_BatchReport.htm")["s"]
+
+
+def test_rework_rescan_shows_rescan_colour_with_rework_badge_and_different_wafers_stay_rework():
+    res = run([w("AOI-8", "W1", "09:00", "09:05"), w("AOI-9", "W1", "10:00", "10:05", lot="LOT-A REWORK", scan_type="REWORK"),
+               w("AOI-9", "W2", "11:00", "11:05", lot="LOT-A REWORK", scan_type="REWORK")])
+    assert att(res, "AOI-9", "W1")["disp"] == "RESCAN" and att(res, "AOI-9", "W1")["rel"] == "CROSS_DEVICE_RESCAN"
+    assert att(res, "AOI-9", "W2")["disp"] == "REWORK" and att(res, "AOI-9", "W2")["rel"] == "FIRST_OBSERVED"
+    m = res["per"]["AOI-9"][DAY]
+    assert m["rescan"] == 300 and m["rework"] == 300 and m["run"] == 600
+
+
+def test_user_override_applies_only_to_the_exact_pair_and_moves_no_time():
+    F = {"device": "AOI-11", "job": "2D@R2-W97253Z6B1K16_0860752PD-0A", "lot": "YCG-EDGE", "wafer_id": "GWM5K09-F4", "status": "Aborted.", "recipe": "2D_EDGE",
+         "wafer_start_time": "25-Aug-26 12:13:54 PM", "wafer_end_time": "25-Aug-26 12:21:46 PM", "batch_start": "25-Aug-26 12:13:00 PM", "batch_end": "25-Aug-26 12:22:06 PM",
+         "report": "2D@R2-W97253Z6B1K16_0860752PD-0A_6321_YCG-EDGE_26-Aug-25_(12.22.06)_BatchReport.htm", "ini_match": "EXACT"}
+    T = {"device": "AOI-9", "job": "2D@R3-W97253Z6B1K16_0860752PD-0A", "lot": "YCG-EDGE", "wafer_id": "GWM5K09-F4", "status": "Aborted.", "recipe": "2D_EDGE",
+         "wafer_start_time": "25-Aug-26 12:19:31 PM", "wafer_end_time": "25-Aug-26 12:23:26 PM", "batch_start": "25-Aug-26 12:19:00 PM", "batch_end": "25-Aug-26 12:24:29 PM",
+         "report": "2D@R3-W97253Z6B1K16_0860752PD-0A_6322_YCG-EDGE_26-Aug-25_(12.24.29)_BatchReport.htm", "ini_match": "EXACT"}
+    other = dict(T, wafer_id="GWM5K08-D1", report="x.htm")                      # 같은 날 다른 시도(보류 대상) — 번지지 않는다
+    res = run([F, T, other])
+    a = att(res, "AOI-9", "GWM5K09-F4")
+    assert a["rel"] == "CROSS_DEVICE_RESCAN" and a["conf"] == "user_confirmed" and a["override"] == "D36-override-1" and a["prior"]["dev"] == "AOI-11"
+    assert "시각 충돌 135초" in a["why"]
+    assert att(res, "AOI-9", "GWM5K08-D1")["rel"] == "FIRST_OBSERVED"
+    assert res["index"]["overrides"] == [{"id": "D36-override-1", "applied": True}]
+    d = "2026-08-25"
+    m9 = res["per"]["AOI-9"][d]
+    assert res["per"]["AOI-11"][d]["err"] == 472 and m9["err"] == 235 and m9["overlap"] == 235   # 원시 시각·시간은 그대로(같은 시각의 두 Error 는 한 번, 충돌은 overlap 에)
+    res2 = run([F, dict(T, wafer_start_time="25-Aug-26 12:19:32 PM")])         # 한 글자라도 다르면 미적용(경고만)
+    assert res2["index"]["overrides"][0]["applied"] is False and att(res2, "AOI-9", "GWM5K09-F4")["rel"] == "FIRST_OBSERVED"
+
+
+def test_lot_bars_and_time_ownership_are_unchanged_by_material_normalisation():
+    """정규화는 이력 연결에만 쓴다 — Lot 막대(원문)·시간은 그대로다."""
+    res = run([w("AOI-8", "W1", "09:00", "09:05", lot="TTP DIA"), w("AOI-8", "W1", "09:06", "09:11", lot="TTP-DIA")])
+    m = res["per"]["AOI-8"][DAY]
+    assert m["run"] == 600 and att(res, "AOI-8", "W1", "AOI-8_LOT-A_09:06_BatchReport.htm".replace("LOT-A", "TTP-DIA"))["rel"] == "SAME_DEVICE_REPEAT"
+    assert len({i["lot"] for i in m["items"]}) == 2                             # 막대(원문 Lot)는 둘
+
+
+def test_material_normalisation_matches_python_fixture():
+    from aoi_capacity import collect
+    cases = [("SHX-RE", "GX1"), ("GUH_SPT2", "gx-1"), ("GPT 3D", "00NSP049XYG7"), ("KDG-Rework-0831", "0831"), ("LVT RETURN 3D FVI MERGE", "W"),
+             ("REX", "W"), ("TESTER-1", "W"), ("UHV RW 0911 #01", "W"), ("GAS-RE#1", "W"), ("자재-RE", "웨이퍼 1"), ("", ""), ("A+B,C'D%E.F~G", "x_y-z")]
+    out = subprocess.run([NODE, str(HARNESS)], input=json.dumps({"material": [{"lot": l, "wafer_id": w_} for l, w_ in cases]}),
+                         capture_output=True, text=True, timeout=60, cwd=str(ROOT))
+    assert out.returncode == 0, out.stderr
+    for (l, w_), j in zip(cases, json.loads(out.stdout)):
+        assert j["key"] == collect.material_key(l, w_), (l, w_)
+        assert j["lot_norm"] == collect.norm_lot(l) and j["wafer_norm"] == collect.norm_wafer(w_)
+        assert j["scan_type"] == collect.scan_type(l), l

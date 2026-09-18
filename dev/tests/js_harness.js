@@ -23,12 +23,13 @@ const ctx={document:doc,window:{},navigator:{},localStorage:{getItem:()=>null,se
 ctx.window=ctx;vm.createContext(ctx);
 ctx.__today=input.today||"";
 vm.runInContext(js,ctx,{filename:"template.js"});
+if(input.material){ctx.__mat=input.material;const m=vm.runInContext(`(function(){return __mat.map(r=>({lot:r.lot,wafer_id:r.wafer_id,key:materialKey(r),lot_norm:normLot(r.lot),wafer_norm:normWafer(r.wafer_id),scan_type:scanTypeOf(r.lot)}));})()`,ctx);process.stdout.write(JSON.stringify(m));process.exit(0);}
 if(input.classify){ctx.__ph=input.classify;const m=vm.runInContext(`(function(){const o={};for(const s of __ph)o[s]={causes:normCauses(s),outcome:normOutcome(s),norm_status:normStatus(s),unmapped:isUnmappedStatus(s)};return o;})()`,ctx);process.stdout.write(JSON.stringify(m));process.exit(0);}
 ctx.__rows=input.rows;ctx.__meta=input.meta||{};ctx.__summary=!!input.summary;
 const out=vm.runInContext(`(function(){rows=__rows.map(o=>({kind:"",job:"",setup:"",lot:"",wafer_id:"",status:"Pass",norm_status:"",scan_type:"",recipe:"",wafer_start_time:"",wafer_end_time:"",batch_start:"",batch_end:"",report:"",ini_match:"EXACT",data_issue:"",...o}));
   meta=__meta;if(typeof prepareRows==="function")prepareRows(rows);else rows.forEach(r=>{r.norm_status=r.norm_status||normStatus(r.status);});
   D=build();const keys=dataDays();
-  const res={devices:devNames,days:keys,per:{},attempts:[],index:{unresolved:D._index.nUnresolved,cross:D._index.nCross,same:D._index.nSame,dup:D._index.nDup},
+  const res={devices:devNames,days:keys,per:{},attempts:[],index:{unresolved:D._index.nUnresolved,cross:D._index.nCross,same:D._index.nSame,dup:D._index.nDup,noJob:D._index.nNoJob,overrides:D._index.overrides},
     class_version:typeof CLASS_VERSION==="number"?CLASS_VERSION:null,today:todayKey()};
   const T=["run","err","stop","test","abort","unk","dup","rescan","rework","off","overlap","denom"],C=["nErr","nWafer","nTest","nAbort","nAbortErr","nDup","nRescan","nCross","nRework","nUnk"];
   const tot={};T.concat(C).forEach(k=>tot[k]=0);const bad=[];
@@ -42,7 +43,7 @@ const out=vm.runInContext(`(function(){rows=__rows.map(o=>({kind:"",job:"",setup
   res.totals=tot;res.identity_violations=bad;
   const rel={},conf={},disp={};let timed=0;
   for(const a of D._index.attempts){rel[a.rel]=(rel[a.rel]||0)+1;conf[a.conf]=(conf[a.conf]||0)+1;if(a.timed){timed++;disp[a.g.disp]=(disp[a.g.disp]||0)+1;}
-    if(!__summary)res.attempts.push({dev:a.dev,wafer:a.r.wafer_id,lot:a.r.lot,report:a.r.report,timed:a.timed,s:a.s,rel:a.rel,conf:a.conf,no:a.no,of:a.of,prior:a.prior?{dev:a.prior.dev,s:a.prior.s}:null,disp:a.timed?a.g.disp:null,abortFlag:a.timed?!!a.g.abort:!!a.abort,refs:a.timed?a.g.refs:null,rawDups:a.timed?a.g.rawDups:null,why:a.why,mk:a.mk,pk:a.pk,own:a.r.ownership,basis:a.r.time_basis,status:a.r.status,state:a.r.state});}
+    if(!__summary)res.attempts.push({dev:a.dev,wafer:a.r.wafer_id,lot:a.r.lot,report:a.r.report,timed:a.timed,s:a.s,rel:a.rel,conf:a.conf,no:a.no,of:a.of,prior:a.prior?{dev:a.prior.dev,s:a.prior.s}:null,disp:a.timed?a.g.disp:null,abortFlag:a.timed?!!a.g.abort:!!a.abort,refs:a.timed?a.g.refs:null,rawDups:a.timed?a.g.rawDups:null,why:a.why,mk:a.mk,pk:a.pk,own:a.r.ownership,basis:a.r.time_basis,status:a.r.status,state:a.r.state,recipeDiff:!!a.recipeDiff,override:a.override||null});}
   res.model={attempts:D._index.attempts.length,timed_attempts:timed,relations:rel,confidence:conf,display_of_timed_attempts:disp};
   const f=fleetAvg(keys);res.fleet={util:f.util,sumUtil:f.sumUtil,n:f.n};
   res.loss=keys.map(k=>{const L=lossCalc(devNames.map(n=>({n,m:dayMetrics(D[n],k)})));const fa=fleetAvg([k]);return{k,ppSum:L.ppSum,util:fa.util,rows:L.rows.map(r=>[r.id,r.sec,r.pp])};});
