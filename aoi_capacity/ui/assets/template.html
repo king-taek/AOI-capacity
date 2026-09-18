@@ -718,7 +718,7 @@ function build(){
     /* index segments by day for fast per-day lookups. 복구 기록이 없는 Error 의 정지(추정)는 관측 종료(로드한 데이터의 마지막 시각)까지만 —
        그 뒤는 '정지 확정' 이 아니라 '기록 없음' 이다. */
     d.byDay={};d.segs.forEach((g,i)=>{for(let t=keyDay(dayKey(new Date(g.s))).getTime();t<=g.e;t+=DAY){const k=dayKey(new Date(t));(d.byDay[k]=d.byDay[k]||[]).push(i);}if(g.err&&g.stopEnd!==undefined){const se=g.stopEnd===null?Math.max(g.e,obsEnd):g.stopEnd;for(let t=keyDay(dayKey(new Date(g.e))).getTime();t<=se;t+=DAY){const k=dayKey(new Date(t));const a=(d.byDay[k]=d.byDay[k]||[]);if(!a.includes(i))a.push(i);}}});}
-  M._obsEnd=obsEnd;M._notOwner=notOwner;M._ambiguous=ambiguous.length;M._index=materialIndex(attempts);
+  M._obsEnd=obsEnd;M._notOwner=notOwner;M._ambiguous=ambiguous.length;M._index=materialIndex(attempts);M._occ=occurrenceIndex(M);
   return M;}
 /* ---------- 전 장비 공통 자재 이력 ----------
    같은 자재 키의 시도를 시각순으로 놓고, **같은 Job 원문**의 앞선 시도(D36 — 중간에 다른 Job 이 있어도 끊지 않는다) 중 마지막 것이
@@ -775,6 +775,62 @@ function applyOverrides(idx){for(const o of USER_OVERRIDES){const find=k=>idx.at
     a.rel=o.rel;a.conf="user_confirmed";a.prior=p;a.override=o.id;a.why=o.note;
     if(p.e>a.s)a.why+=` · 시각 충돌 ${Math.round((p.e-a.s)/1000)}초(앞선 시도의 종료가 내 시작보다 늦음 — 보정하지 않음)`;
     if(a.rel==="CROSS_DEVICE_RESCAN")idx.nCross++;idx.overrides.push({id:o.id,applied:true});}}
+/* ---------- Error 사건 canonical 인덱스(A06) ----------
+   화면과 분리된 사건 집합 — 기간별·장비별·Job별 탭은 이 집합의 groupBy 만 바꾼다(같은 query 면 세 탭의 사건 집합이 같다).
+   사건 1건 = metric_state=ERROR 인 occurrence(안정 ID = 장비|Report|종류|Wafer|시작). 종류:
+     wafer_timed(정확 시각) · wafer_untimed(시간 미확인 — Batch 시작일에 귀속, 배지) · failed_batch(배치 대표 1건) · partial_batch_slot(Slot 사건 1건)
+   대표(batch)가 세는 사건의 근거 자식 행(BATCH_FAILED)은 중복 합산하지 않는다. TEST 는 기본 제외(진단 보기에서만).
+   '이후 공백'(정지 추정)은 **장비 전체 이력**에서 다음 가동까지의 간격(stopEnd, 관측 종료 cap)이라 Job·원인 필터가 바꾸지 못한다.
+   Wafer Error율 = 분모: 물리적 Wafer ID 가 있고 TEST 가 아니며 상태가 RUN/ERROR 인 시도(시간 미확인 포함) · 분자: 그중 ERROR. Slot/배치 사건은 분자에 넣지 않는다. */
+function occurrenceIndex(M){const list=[];const obsEnd=M._obsEnd||0;
+  const mk=(o)=>{o.id=`${o.device}|${o.report}|${o.kind}|${o.wafer_id}|${o.tRaw}`;o.day=dayKey(new Date(o.t));o.job=o.r.job||"";o.lot=o.r.lot||"";o.causes=o.r.causes||[];o.primary=o.causes[0]||o.r.outcome||"";o.outcome=o.r.outcome||"";o.abort=isAbortOutcome(o.r.outcome);o.test=o.r.scan_type==="TEST";list.push(o);return o;};
+  for(const n of devNames){const d=M[n];
+    for(const g of d.segs){const testErr=g.test&&(g.r.causes.length>0||(g.abort&&!reportHasPass[reportKey(g.r)]));if(!g.err&&!testErr)continue;   /* TEST 의 Error 는 진단 보기용(test=true) */
+      const stopEnd=g.err?(g.stopEnd===null?Math.max(g.e,obsEnd):g.stopEnd):null;
+      mk({device:n,report:g.r.report,kind:g.batch?"failed_batch":"wafer_timed",wafer_id:g.r.wafer_id||"",tRaw:g.r.wafer_start_time,t:g.s,end:g.e,dur:(g.e-g.s)/1000,
+          stop:stopEnd!=null?(stopEnd-g.e)/1000:null,open:g.err&&g.stopEnd===null,r:g.r,g,dateBasis:"exact",own:g.own||"NOT_APPLICABLE"});}
+    for(const x of d.errNoTime){if(x.t==null)continue;const be=parseDt(x.r.batch_end);
+      mk({device:n,report:x.r.report,kind:x.r.kind==="slot"?"partial_batch_slot":"wafer_untimed",wafer_id:x.r.wafer_id||"",tRaw:x.r.batch_start,t:x.t,end:be?be.getTime():null,dur:null,stop:null,open:false,r:x.r,g:null,
+          dateBasis:"batch",own:x.r.ownership||"NOT_APPLICABLE",slots:x.r.kind==="slot"?+x.r.slots||null:null});}}
+  list.sort((a,b)=>a.t-b.t||cmpDev(a.device,b.device)||cmpS(a.id,b.id));
+  const byId={};for(const o of list)byId[o.id]=o;
+  /* Wafer 시도 모집단(분모) — 자재 이력의 시도(물리적 Wafer ID) 중 TEST 아님 · RUN/ERROR */
+  const attempts=(M._index?M._index.attempts:[]).filter(a=>{const st=a.r.state;return st==="RUN"||st==="ERROR";}).map(a=>({device:a.dev,day:dayKey(new Date(a.s)),job:a.r.job||"",err:a.r.state==="ERROR",t:a.s,timed:a.timed}));
+  const summary=()=>{const k={};for(const o of list)k[o.kind]=(k[o.kind]||0)+1;const nErr=list.filter(o=>!o.test).length;const errAtt=attempts.filter(a=>a.err).length;return{occurrences:nErr,test_excluded:list.length-nErr,by_kind:k,wafer_attempts:attempts.length,wafer_error_attempts:errAtt,ids_unique:Object.keys(byId).length===list.length};};
+  return{list,byId,attempts,summary};}
+/* 조회 상태(query) — null = 전체, [] = 선택 없음(칩으로 구분). 기간 기준은 브라우저 오늘이 아니라 데이터 마지막 날짜. */
+const DEFAULT_Q=()=>({version:1,preset:"all",start:null,end:null,devices:null,jobs:null,includeUnknownJob:true,causes:null,groupBy:"period",bucket:"day",metric:"events",
+  kinds:["wafer_timed","wafer_untimed","failed_batch","partial_batch_slot"],timeBasis:"all",includeTest:false,sort:{key:"events",dir:"desc"},density:"comfortable"});
+const KIND_KO={wafer_timed:"Wafer(정확 시각)",wafer_untimed:"Wafer(시간 미확인)",failed_batch:"실패 배치",partial_batch_slot:"Slot 사건"};
+function queryRange(q){const days=dataDays();if(!days.length)return null;const last=days[days.length-1];
+  if(q.preset==="7")return[addDays(last,-6),last];if(q.preset==="30")return[addDays(last,-29),last];
+  if(q.preset==="custom"&&q.start&&q.end)return[q.start<=q.end?q.start:q.end,q.start<=q.end?q.end:q.start];return[days[0],last];}
+const inSet=(v,set)=>set==null||set.includes(v);
+function occFilter(o,q,range){if(o.test&&!q.includeTest)return false;   /* TEST 진단은 별도 보기(공식 가동률·기본 Error율은 그대로) */
+  if(o.day<range[0]||o.day>range[1])return false;if(!inSet(o.device,q.devices))return false;
+  if(o.job){if(!inSet(o.job,q.jobs))return false;}else if(!q.includeUnknownJob)return false;   /* raw_jobs=[] + Job 미확인 포함 → 미확인 Job 만 */
+  if(q.kinds&&!q.kinds.includes(o.kind))return false;
+  if(q.timeBasis==="timed"&&o.dur==null)return false;if(q.timeBasis==="untimed"&&o.dur!=null)return false;if(q.timeBasis==="ambiguous"&&o.own!=="AMBIGUOUS")return false;
+  if(q.causes&&!o.causes.some(c=>q.causes.includes(c))&&!(q.causes.includes(o.primary)))return false;return true;}
+function attFilter(a,q,range){if(a.day<range[0]||a.day>range[1])return false;if(!inSet(a.device,q.devices))return false;if(a.job?!inSet(a.job,q.jobs):!q.includeUnknownJob)return false;return true;}
+const bucketOf=(k,b)=>b==="week"?weekStart(k):b==="month"?monthStart(k):k;
+/* 집계 — rows: groupBy 별 행(사건 수·구성·Wafer 분자/분모·측정 구간·추정 공백·시간 미확인·장비 수·대표 원인). 원인 필터는 분자에만(분모는 기간·장비·Job 의 전체 적격 시도). */
+function errorQuery(q){const O=D&&D._occ;if(!O)return{rows:[],occ:[],att:[],range:null};const range=queryRange(q);if(!range)return{rows:[],occ:[],att:[],range:null};
+  const occ=O.list.filter(o=>occFilter(o,q,range));const att=O.attempts.filter(a=>attFilter(a,q,range));
+  const keyOf=q.groupBy==="device"?(x=>x.device):q.groupBy==="job"?(x=>x.job||"\u0000"):(x=>bucketOf(x.day,q.bucket));
+  const G={};const get=k=>G[k]||(G[k]={key:k,events:0,byKind:{},err:0,stop:0,untimed:0,open:0,devices:new Set(),causes:{},num:0,den:0,denErr:0,items:[]});
+  for(const o of occ){const g=get(keyOf(o));g.events++;g.byKind[o.kind]=(g.byKind[o.kind]||0)+1;if(o.dur!=null)g.err+=o.dur;else g.untimed++;if(o.stop!=null)g.stop+=o.stop;if(o.open)g.open++;g.devices.add(o.device);
+    for(const c of(o.causes.length?o.causes:[o.primary]))g.causes[c]=(g.causes[c]||0)+1;g.items.push(o);}
+  for(const a of att){const g=get(keyOf(a));g.den++;if(a.err){g.denErr++;g.num++;}}
+  /* 원인 필터가 있으면 분자는 그 원인의 Wafer 사건만(분모 고정) */
+  if(q.causes){for(const g of Object.values(G))g.num=g.items.filter(o=>(o.kind==="wafer_timed"||o.kind==="wafer_untimed")&&o.causes.some(c=>q.causes.includes(c))).length;}
+  const rows=Object.values(G).map(g=>({...g,nDev:g.devices.size,rate:g.den>0?g.num/g.den*1000:null,top:Object.entries(g.causes).sort((a,b)=>b[1]-a[1]||cmpS(a[0],b[0]))[0]||null,
+    label:q.groupBy==="job"?(g.key==="\u0000"?"(Job 미확인)":g.key):q.groupBy==="device"?g.key:q.bucket==="day"?fmtDay(g.key):periodLabel(q.bucket,g.key)}));
+  const dir=q.sort.dir==="asc"?1:-1;const val=r=>q.sort.key==="rate"?(r.rate==null?-1:r.rate):q.sort.key==="time"?r.err:q.sort.key==="key"?r.key:r.events;
+  rows.sort((a,b)=>{const x=val(a),y=val(b);return typeof x==="string"?dir*cmpS(x,y):dir*(x-y);});
+  if(q.groupBy==="period")rows.sort((a,b)=>cmpS(a.key,b.key));   /* 기간은 항상 시간순 */
+  return{rows,occ,att,range,total:{events:occ.length,num:att.filter(a=>a.err).length,den:att.length,err:occ.reduce((s,o)=>s+(o.dur||0),0),stop:occ.reduce((s,o)=>s+(o.stop||0),0),untimed:occ.filter(o=>o.dur==null).length,
+    byKind:occ.reduce((k,o)=>{k[o.kind]=(k[o.kind]||0)+1;return k;},{}),devices:new Set(occ.map(o=>o.device)).size}};}
 /* 표시 분류(우선순위): Test → Error(원인 있음 · PASS 없는 Report 의 중단 포함) → 분류 미확인 → 중단(가동) → 재스캔(다른 장비·Error/중단 뒤·RE 표기) → Rework → 중복스캔 → 가동.
    Rework 자재가 같은 Job 으로 다시 스캔되면 대표는 재스캔, Rework 는 배지로 남긴다(D42). 보류는 원천 표기대로. */
 function dispOf(g){if(g.test)return"TEST";if(g.err)return"ERROR";if(g.unk)return"UNK";if(g.abort)return"ABORT";

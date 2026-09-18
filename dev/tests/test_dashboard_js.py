@@ -571,3 +571,77 @@ def test_without_generated_iso_the_viewer_clock_is_the_fallback():
     b = run_meta(rows, {"mode": "saved"}, "2026-09-25T09:00:00")
     assert a["today"] == DAY and a["per"]["AOI-8"][DAY]["denom"] == 10 * 3600
     assert b["today"] == "2026-09-25" and b["per"]["AOI-8"][DAY]["denom"] == 86400   # 옛 파일은 예전처럼(비고정 배지)
+
+
+# ── Error 분석(A06·A02·A03·A07): canonical 사건 집합 · 세 탭 동일 집합 · 분모 · 공백 불변 ──────────
+def run_q(rows, queries, today=FAR):
+    out = subprocess.run([NODE, str(HARNESS)], input=json.dumps({"rows": rows, "today": today, "errq": queries}),
+                         capture_output=True, text=True, timeout=60, cwd=str(ROOT))
+    assert out.returncode == 0, out.stderr
+    return json.loads(out.stdout)
+
+
+def _err_rows():
+    ph = {"device": "AOI-8", "lot": "LoadPort A", "wafer_id": "Slot 2", "status": "Failed to read wafer id on PAL", "recipe": "R1", "job": "JB", "report": "p.htm",
+          "wafer_start_time": "", "wafer_end_time": "", "batch_start": f"{DAY}T14:00:00", "batch_end": f"{DAY}T14:30:00", "ini_match": "NO_WAFER_ID"}
+    untimed = {"device": "AOI-9", "lot": "LOT-A", "wafer_id": "U1", "status": "Alignment Error.", "recipe": "R1", "job": "JA", "report": "u.htm",
+               "wafer_start_time": "", "wafer_end_time": "", "batch_start": f"{DAY}T15:00:00", "batch_end": f"{DAY}T15:20:00", "ini_match": "NOT_FOUND"}
+    return [w("AOI-8", "W1", "09:00", "09:05", status="Scan Error.", job="JA"), w("AOI-8", "W2", "09:10", "09:15", job="JB"),
+            w("AOI-8", "W3", "12:00", "12:05", status="Scan Error.", job="JB"), w("AOI-8", "W4", "12:30", "12:35", job="JA"),
+            w("AOI-8", "W5", "14:05", "14:10", job="JB", report="p.htm"), ph,
+            w("AOI-9", "W6", "10:00", "10:05", status="Aborted.", job="JA", report="a.htm"), untimed, w("AOI-9", "U0", "15:05", "15:10", job="JA", report="u.htm"),
+            w("AOI-9", "W7", "11:00", "11:05", lot="X TEST", scan_type="TEST", status="Scan Error.", job="JA"),
+            w("AOI-9", "", "16:00", "16:10", lot="LOT-B", status="Aborted.", kind="batch", ini_match="BATCH", job="JA", report="b.htm")]
+
+
+def test_three_tabs_share_one_canonical_occurrence_set():
+    res = run_q(_err_rows(), [{"groupBy": "period"}, {"groupBy": "device"}, {"groupBy": "job"}])
+    ids = [sorted(i for r in q["rows"] for i in r["ids"]) for q in res["errq"]]
+    assert ids[0] == ids[1] == ids[2] and len(ids[0]) == 6                    # W1·W3·Slot(p.htm)·W6(PASS 없는 중단)·U1(시간 미확인)·배치 b.htm — TEST 제외
+    assert len(set(ids[0])) == 6 and res["occurrences"]["ids_unique"] is True
+    assert res["errq"][0]["total"]["byKind"] == {"wafer_timed": 3, "partial_batch_slot": 1, "wafer_untimed": 1, "failed_batch": 1}
+    assert res["errq"][0]["total"]["untimed"] == 2                             # Slot + U1 — 시간 미확인은 건수에 남고 시간은 0
+
+
+def test_wafer_rate_uses_the_same_attempt_population_and_never_counts_slot_or_batch():
+    res = run_q(_err_rows(), [{"groupBy": "device"}, {"groupBy": "device", "causes": ["SCAN_ERROR"]}])
+    by = {r["key"]: r for r in res["errq"][0]["rows"]}
+    assert by["AOI-8"]["den"] == 5 and by["AOI-8"]["num"] == 2 and abs(by["AOI-8"]["rate"] - 400) < 1e-9   # W1~W5 중 Error 2 (Slot 은 분자·분모 밖)
+    assert by["AOI-9"]["den"] == 3 and by["AOI-9"]["num"] == 2                # W6(중단=Error) + U0 + U1(시간 미확인 Wafer) — TEST·배치 제외
+    byc = {r["key"]: r for r in res["errq"][1]["rows"]}
+    assert byc["AOI-8"]["den"] == 5 and byc["AOI-8"]["num"] == 2 and "AOI-9" not in byc or byc.get("AOI-9", {}).get("num", 0) == 0   # 원인 필터: 분자만, 분모 고정
+
+
+def test_job_filter_never_changes_the_estimated_gap_after_an_error():
+    res = run_q(_err_rows(), [{"groupBy": "job"}, {"groupBy": "job", "jobs": ["JA"]}])
+    gap_all = {i: r["stop"] for q in res["errq"][:1] for r in q["rows"] for i in [r["key"]]}
+    ja_all = next(r for r in res["errq"][0]["rows"] if r["key"] == "JA"); ja_only = next(r for r in res["errq"][1]["rows"] if r["key"] == "JA")
+    assert ja_all["stop"] == ja_only["stop"] == 300 + 3300                     # W1 09:05 → 다음 가동 09:10(JB, 필터 밖) 300초 + W6 10:05 → 11:00 3300초 — Job 필터로 변하지 않는다
+    assert [r["key"] for r in res["errq"][1]["rows"]] == ["JA"]
+
+
+def test_null_means_all_and_empty_list_means_nothing_and_unknown_job_toggle():
+    rows = _err_rows() + [w("AOI-8", "W9", "17:00", "17:05", status="Scan Error.", job="")]
+    res = run_q(rows, [{"groupBy": "device", "devices": None}, {"groupBy": "device", "devices": []}, {"groupBy": "job", "jobs": [], "includeUnknownJob": True},
+                       {"groupBy": "job", "jobs": None, "includeUnknownJob": False}])
+    assert res["errq"][0]["total"]["events"] == 7 and res["errq"][1]["total"]["events"] == 0
+    assert [r["label"] for r in res["errq"][2]["rows"]] == ["(Job 미확인)"] and res["errq"][2]["total"]["events"] == 1
+    assert res["errq"][3]["total"]["events"] == 6
+
+
+def test_period_presets_anchor_on_the_last_data_date_and_untimed_events_go_to_batch_day():
+    rows = [w("AOI-8", "W1", "09:00", "09:05", status="Scan Error.", day="2026-09-01"), w("AOI-8", "W2", "09:00", "09:05", status="Scan Error.", day="2026-09-12"),
+            {"device": "AOI-8", "lot": "LOT-A", "wafer_id": "U1", "status": "Alignment Error.", "recipe": "R1", "job": "J1", "report": "u.htm", "wafer_start_time": "", "wafer_end_time": "",
+             "batch_start": "2026-09-15T23:50:00", "batch_end": "2026-09-16T00:10:00", "ini_match": "NOT_FOUND"},
+            w("AOI-8", "P1", "23:30", "23:35", day="2026-09-15", report="u.htm")]                     # 같은 Report 에 PASS — 실패 배치로 합성되지 않게
+    res = run_q(rows, [{"preset": "7"}, {"preset": "30"}, {"preset": "custom", "start": "2026-09-01", "end": "2026-09-01"}, {"groupBy": "period", "bucket": "week"}])
+    assert res["errq"][0]["range"] == ["2026-09-09", "2026-09-15"] and res["errq"][0]["total"]["events"] == 2   # 브라우저 오늘이 아니라 데이터 마지막 날짜(9/15) 기준
+    assert res["errq"][1]["total"]["events"] == 3 and res["errq"][2]["total"]["events"] == 1
+    assert [r["key"] for r in res["errq"][3]["rows"]] == ["2026-08-31", "2026-09-07", "2026-09-14"]
+    assert next(r for r in res["errq"][3]["rows"] if r["key"] == "2026-09-14")["untimed"] == 1          # Batch 시작일 귀속
+
+
+def test_test_diagnostics_are_off_by_default_and_do_not_change_official_numbers():
+    res = run_q(_err_rows(), [{}, {"includeTest": True}])
+    assert res["errq"][1]["total"]["events"] == res["errq"][0]["total"]["events"] + 1
+    assert res["per"]["AOI-9"][DAY]["nErr"] == 3 and res["per"]["AOI-9"][DAY]["test"] == 300           # 공식 지표는 그대로

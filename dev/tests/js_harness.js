@@ -25,7 +25,7 @@ ctx.__today=input.today||"";
 vm.runInContext(js,ctx,{filename:"template.js"});
 if(input.material){ctx.__mat=input.material;const m=vm.runInContext(`(function(){return __mat.map(r=>({lot:r.lot,wafer_id:r.wafer_id,key:materialKey(r),lot_norm:normLot(r.lot),wafer_norm:normWafer(r.wafer_id),scan_type:scanTypeOf(r.lot)}));})()`,ctx);process.stdout.write(JSON.stringify(m));process.exit(0);}
 if(input.classify){ctx.__ph=input.classify;const m=vm.runInContext(`(function(){const o={};for(const s of __ph)o[s]={causes:normCauses(s),outcome:normOutcome(s),norm_status:normStatus(s),unmapped:isUnmappedStatus(s)};return o;})()`,ctx);process.stdout.write(JSON.stringify(m));process.exit(0);}
-ctx.__rows=input.rows;ctx.__meta=input.meta||{};ctx.__summary=!!input.summary;
+ctx.__rows=input.rows;ctx.__meta=input.meta||{};ctx.__summary=!!input.summary;ctx.__errq=input.errq||null;
 const out=vm.runInContext(`(function(){rows=__rows.map(o=>({kind:"",job:"",setup:"",lot:"",wafer_id:"",status:"Pass",norm_status:"",scan_type:"",recipe:"",wafer_start_time:"",wafer_end_time:"",batch_start:"",batch_end:"",report:"",ini_match:"EXACT",data_issue:"",...o}));
   meta=__meta;if(typeof prepareRows==="function")prepareRows(rows);else rows.forEach(r=>{r.norm_status=r.norm_status||normStatus(r.status);});
   D=build();const keys=dataDays();
@@ -49,5 +49,6 @@ const out=vm.runInContext(`(function(){rows=__rows.map(o=>({kind:"",job:"",setup
   res.loss=keys.map(k=>{const L=lossCalc(devNames.map(n=>({n,m:dayMetrics(D[n],k)})));const fa=fleetAvg([k]);return{k,ppSum:L.ppSum,util:fa.util,rows:L.rows.map(r=>[r.id,r.sec,r.pp])};});
   if(typeof qualitySummary==="function")res.quality=qualitySummary();
   if(typeof occurrenceIndex==="function"&&D._occ)res.occurrences=D._occ.summary?D._occ.summary():null;
+  if(__errq&&typeof errorQuery==="function"){res.errq=__errq.map(q=>{const Q={...DEFAULT_Q(),...q};const r=errorQuery(Q);return{range:r.range,total:{...r.total},rows:r.rows.map(x=>({key:x.key,label:x.label,events:x.events,byKind:x.byKind,err:x.err,stop:x.stop,untimed:x.untimed,open:x.open,nDev:x.nDev,num:x.num,den:x.den,rate:x.rate,top:x.top,ids:x.items.map(o=>o.id)}))};});}
   return res;})()`,ctx);
 process.stdout.write(JSON.stringify(out));
