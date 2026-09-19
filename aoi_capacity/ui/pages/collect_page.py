@@ -6,7 +6,7 @@ from __future__ import annotations
 
 from typing import Optional
 
-from PyQt6.QtCore import Qt, QUrl, pyqtSignal
+from PyQt6.QtCore import QThread, Qt, QUrl, pyqtSignal
 from PyQt6.QtGui import QDesktopServices
 from PyQt6.QtWidgets import (QCheckBox, QFileDialog, QFrame, QGridLayout, QHBoxLayout, QLabel, QLineEdit,
                              QPlainTextEdit, QSpinBox, QVBoxLayout, QWidget)
@@ -18,6 +18,23 @@ from ..widgets.buttons import make_button
 MAX_LOG_LINES = 1000
 
 
+class _PlanWorker(QThread):
+    """계획 조회를 UI 스레드 밖에서 — 캐시 파일(수십 MB)을 읽는 동안 창이 멈추지 않게. 결과는 토큰으로 가려 늦게 온 옛 조회는 버린다."""
+    result = pyqtSignal(int, object)   # token, RunPlan | None
+
+    def __init__(self, token: int, cfg: dict, full: bool, backfill: bool, recover: bool, parent=None):
+        super().__init__(parent)
+        self._args = (token, cfg, full, backfill, recover)
+
+    def run(self) -> None:  # noqa: D401
+        token, cfg, full, backfill, recover = self._args
+        try:
+            plan = collect.plan_run(cfg, full=full, backfill=backfill, recover=recover)
+        except Exception:  # noqa: BLE001
+            plan = None
+        self.result.emit(token, plan)
+
+
 class CollectPage(QWidget):
     collect_requested = pyqtSignal(bool, bool, bool)   # full, backfill, recover
     stop_requested = pyqtSignal()
@@ -26,6 +43,8 @@ class CollectPage(QWidget):
     def __init__(self, parent: Optional[QWidget] = None):
         super().__init__(parent)
         self._running = False
+        self._plan_token = 0
+        self._plan_worker: Optional[_PlanWorker] = None
         lay = QVBoxLayout(self)
         lay.setContentsMargins(0, 0, 0, 0)
         lay.setSpacing(12)
@@ -167,12 +186,28 @@ class CollectPage(QWidget):
         QDesktopServices.openUrl(QUrl.fromLocalFile(str(results.ensure_html())))
 
     def refresh_plan(self) -> None:
+        """계획 문구를 갱신한다 — 캐시 읽기는 워커 스레드에서(UI 스레드가 몇 초씩 멈추던 원인)."""
         p = prefs.load()
         cfg = prefs.to_collect_cfg(p)
-        try:
-            plan = collect.plan_run(cfg, full=self._opt_full.isChecked(), backfill=self._opt_backfill.isChecked(),
-                                    recover=self._opt_recover.isChecked())
-        except Exception:  # noqa: BLE001
+        self._plan_token += 1
+        token = self._plan_token
+        self._plan.setText(i18n.KO.COLLECT_PLAN_LOADING)
+        w = _PlanWorker(token, cfg, self._opt_full.isChecked(), self._opt_backfill.isChecked(), self._opt_recover.isChecked(), self)
+        w.result.connect(self._on_plan)
+        w.finished.connect(w.deleteLater)
+        self._plan_worker = w
+        w.start()
+
+    def wait_for_plan(self, ms: int = 10_000) -> None:
+        """테스트·종료용 — 진행 중인 계획 조회를 기다린다."""
+        w = self._plan_worker
+        if w is not None and w.isRunning():
+            w.wait(ms)
+
+    def _on_plan(self, token: int, plan) -> None:
+        if token != self._plan_token:
+            return                                      # 늦게 온 옛 조회
+        if plan is None:
             self._plan.setText("")
             return
         if self._opt_full.isChecked():

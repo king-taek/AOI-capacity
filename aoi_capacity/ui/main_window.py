@@ -405,6 +405,7 @@ class MainWindow(QMainWindow):
         prefs.patch(window_width=int(g.width()), window_height=int(g.height()), window_maximized=maximized)
         self._collect_token += 1
         self._update_token += 1
+        self.collect_page.wait_for_plan(3000)
         for tok, w in list(_LIVE_COLLECTORS.items()):
             w.stop()
             w.wait(3000)

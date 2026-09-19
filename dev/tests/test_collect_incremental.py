@@ -364,3 +364,31 @@ def test_write_html_embeds_timing_and_counts(tmp_path, fake_nas):
     assert '"timing":{' in html and '"html_ms":' in html and '"ini_unique":' in html
     # timing 을 안 주면 빈 객체 — 옛 호출 방식도 그대로 돈다
     assert '"timing":{}' in open(collect.write_html(cfg, rows, dev_meta, errors, time.time()), encoding="utf-8").read()
+
+
+# ── 계획 조회(plan_run)는 UI 스레드에서 불린다 — 캐시 행을 재분류하지 않고, 파일이 그대로면 다시 읽지 않는다 ──
+def test_plan_run_never_rederives_rows_and_memoizes_by_file_stamp(tmp_path, monkeypatch):
+    """실측: 83MB 캐시(15만 행)에서 plan_run 이 7.3초 — 규칙 번호가 달라 매번 재분류했고 저장도 안 해 체크박스마다 반복됐다."""
+    import json as _json
+    cache_file = tmp_path / "cache.json"
+    rows = [{"device": "AOI-8", "kind": "", "status": "Pass", "lot": "L", "wafer_id": "W1", "ini_match": "NOT_FOUND",
+             "wafer_start_time": "", "wafer_end_time": "", "batch_start": "", "batch_end": "", "report": "r.htm"}]
+    cache_file.write_text(_json.dumps({"reports": {"/x/r.htm": {"rows": rows, "device": "AOI-8", "device_id": "AOI-8", "mtime": 1}},
+                                       "last_mtime": {"AOI-8": 1}, "failed": {}, "parser_version": 1}), encoding="utf-8")
+    cfg = dict(collect.DEFAULT_CONFIG, cache_file=str(cache_file), output_dir=str(tmp_path))
+
+    def boom(_cache):
+        raise AssertionError("plan_run 이 캐시 행을 재분류했다")
+    monkeypatch.setattr(collect, "_rederive_rows", boom)
+    calls = []
+    real = collect._load_cache
+    monkeypatch.setattr(collect, "_load_cache", lambda *a, **k: (calls.append(1), real(*a, **k))[1])
+    p1 = collect.plan_run(cfg, recover=True)
+    p2 = collect.plan_run(cfg)
+    assert p1.known_devices == 1 and p1.recover_reports == 1 and p2.recover_reports == 0 and p1.first_run is False
+    assert len(calls) == 1                                          # 파일이 그대로면 두 번째는 파싱하지 않는다
+    cache_file.write_text(cache_file.read_text(encoding="utf-8").replace('"AOI-8": 1}', '"AOI-8": 1, "AOI-9": 2}'), encoding="utf-8")
+    import os as _os
+    _os.utime(cache_file, (2_000_000_000, 2_000_000_000))
+    assert collect.plan_run(cfg).known_devices == 2 and len(calls) == 2   # 파일이 바뀌면(수집 뒤) 다시 읽는다
+    assert collect.plan_run(cfg, full=True).first_run is True and len(calls) == 2

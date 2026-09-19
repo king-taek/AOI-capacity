@@ -672,7 +672,9 @@ def synthesize_rows(rows: List[dict]) -> List[dict]:
 
 
 # ----------------------------------------------------------------------------- cache
-def _load_cache(cfg: dict, full: bool = False, log: Optional[LogFn] = None) -> dict:
+def _load_cache(cfg: dict, full: bool = False, log: Optional[LogFn] = None, rederive: bool = True) -> dict:
+    """캐시 JSON 을 읽는다. `rederive=True`(수집 경로)면 규칙 번호가 다를 때 행을 지금 규칙으로 다시 계산한다 —
+    15만 행이면 몇 초가 걸리므로 **UI 스레드에서 부르는 계획 조회(`plan_run`)는 이것을 끄고** 수집 워커에서만 켠다."""
     cache: dict = {"reports": {}, "last_mtime": {}, "failed": {}}
     path = cfg.get("cache_file") or ""
     if full or not path or not os.path.isfile(path):
@@ -686,7 +688,7 @@ def _load_cache(cfg: dict, full: bool = False, log: Optional[LogFn] = None) -> d
             cache.setdefault("failed", {})
     except Exception as e:  # noqa: BLE001
         _say(log, f"캐시 읽기 실패, 새로 시작: {e}")
-    if cache.get("parser_version") != PARSER_VERSION:
+    if rederive and cache.get("parser_version") != PARSER_VERSION:
         n = _rederive_rows(cache)
         if n:
             _say(log, f"분류 규칙이 바뀌어 캐시 행 {n}개의 상태·검사 종류를 다시 계산했습니다(NAS 는 읽지 않음)")
@@ -785,13 +787,37 @@ def _save_cache(cfg: dict, cache: dict) -> None:
     os.replace(tmp, path)
 
 
+#: 캐시 파일 요약의 메모 — (경로) → (mtime_ns, size, 요약). 계획 조회는 체크박스를 누를 때마다 불리는데
+#: 83MB 캐시를 매번 파싱하면 2초, 규칙 번호까지 다르면 7초씩 화면이 멈췄다(실측). 파일이 바뀌면(수집 뒤) 자동으로 다시 읽는다.
+_PLAN_MEMO: Dict[str, tuple] = {}
+
+
+def _cache_summary(path: str) -> dict:
+    """계획 조회에 필요한 것만 — Report 수 · 장비 커서 수 · 누락 복구 대상 수. 행은 재분류하지 않는다(수집 워커가 한다)."""
+    empty = {"n_reports": 0, "known_devices": 0, "n_recover": 0}
+    if not path or not os.path.isfile(path):
+        return empty
+    try:
+        st = os.stat(path)
+        key = (st.st_mtime_ns, st.st_size)
+    except OSError:
+        return empty
+    hit = _PLAN_MEMO.get(path)
+    if hit and hit[0] == key:
+        return hit[1]
+    cache = _load_cache({"cache_file": path}, rederive=False)
+    summary = {"n_reports": len(cache.get("reports", {})), "known_devices": len(cache.get("last_mtime", {})),
+               "n_recover": sum(1 for e in cache.get("reports", {}).values() if _needs_recovery(e))}
+    _PLAN_MEMO[path] = (key, summary)
+    return summary
+
+
 def plan_run(cfg: dict, full: bool = False, backfill: bool = False, recover: bool = False) -> RunPlan:
-    """UI 안내용 — 캐시만 보고 이번 실행이 어떤 성격인지 알려준다(NAS 접근 없음)."""
-    cache = _load_cache(cfg, full=full)
-    first = full or backfill or not cache.get("reports")
-    n_rec = sum(1 for e in cache.get("reports", {}).values() if _needs_recovery(e)) if recover and not full else 0
-    return RunPlan(first_run=first, known_devices=len(cache.get("last_mtime", {})), backfill_days=int(cfg["backfill_days"]),
-                   recover_reports=n_rec)
+    """UI 안내용 — 캐시만 보고 이번 실행이 어떤 성격인지 알려준다(NAS 접근 없음). 행을 다시 계산하지 않고 결과를 메모한다."""
+    s = _cache_summary("" if full else str(cfg.get("cache_file") or ""))
+    first = full or backfill or not s["n_reports"]
+    return RunPlan(first_run=first, known_devices=s["known_devices"], backfill_days=int(cfg["backfill_days"]),
+                   recover_reports=s["n_recover"] if recover and not full else 0)
 
 
 # ----------------------------------------------------------------------------- collect
