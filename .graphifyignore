@@ -1,0 +1,5 @@
+__pycache__/
+*.png
+dev/samples/
+docs/
+graphify-out/
