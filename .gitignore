@@ -25,5 +25,5 @@ __pycache__/
 .pytest_cache/
 .coverage
 
-# graphify 코드 지도(생성물) — `graphify extract . --code-only && graphify cluster-only .` 로 다시 만든다
+# graphify 코드 지도(생성물) — `python dev/tools/graphify_build.py` 로 다시 만든다(main 푸시마다 Actions 가 `graphify-out` 브랜치에 게시)
 graphify-out/
