@@ -1,0 +1,78 @@
+시각: 2026-09-19 22:13:03
+====================================================================================
+[1] 장비별 Scanresult 계열 폴더
+장비          폴더                                    Job수  수정일
+------------------------------------------------------------------------------------
+AOI-1       Scanresult                             235  2026-09-19
+AOI-2       Scanresult                              57  2026-09-19
+AOI-2       Scanresult_BACKUP_260827                39  2026-08-26
+AOI-2       Scanresult_Backup_260614                70  2026-09-15
+AOI-2       Scanresult_Backup_260805               223  2026-09-04
+AOI-3       Scanresult                              32  2026-09-19
+AOI-3       Scanresult Backup_260707                45  2026-09-03
+AOI-4       Scanresult                               7  2026-09-19
+AOI-4       Scanresult_Back up_260416              308  2026-09-03
+AOI-4       Scanresult_Back up_260918              187  2026-09-18
+AOI-5       Scanresult                              50  2026-09-19
+AOI-5       Scanresult_0901                         91  2026-09-01
+AOI-5       Scanresult_Back up_260607              140  2026-06-07
+AOI-5       Scanresult_Backup_250324               164  2026-09-08
+AOI-5       Scanresult_Backup_250623                51  2026-09-03
+AOI-5       Scanresult_Backup_251115               166  2026-09-03
+AOI-5       Scanresult_Backup_260528               172  2026-09-03
+AOI-6       Scanresult                              75  2026-09-19
+AOI-6       Scanresult_260820                      587  2026-09-05
+AOI-7       Scanresult                              41  2026-09-19
+AOI-7       Scanresult backup260904                137  2026-09-04
+AOI-7       Scanresult_260606                       94  2026-09-03
+AOI-7       Scanresult_Backup_260425               362  2026-09-04
+AOI-8       Scanresult                             177  2026-09-19
+AOI-8       Scanresult_260601                      439  2026-09-03
+AOI-9       Scanresult                             250  2026-09-19
+AOI-9       Scanresult_260401                      434  2026-09-03
+AOI-10      Scanresult                             357  2026-09-19
+AOI-11      Scanresult                             358  2026-09-19
+AOI-11      Scanresult_BACKUP                       20  2026-09-04
+AOI-12      Scanresult                              66  2026-09-19
+AOI-12      Scanresult - 5.9.3                     301  2026-08-16
+AOI-12      Scanresult - BACKTUP 0827              200  2026-08-28
+AOI-12      Scanresult_BACKUP                       28  2026-09-04
+AOI-13      Scanresult                              26  2026-09-19
+AOI-13      Scanresult_Backup_260413               151  2026-09-05
+AOI-13      Scanresult_Backup_268020                36  2026-08-20
+AOI-14      Scanresult                              49  2026-09-19
+AOI-14      Scanresult_BACKUP                       15  2026-09-04
+AOI-14      Scanresult_BACKUP0719                  188  2026-09-05
+AOI-15      Scanresult                              66  2026-09-19
+AOI-15      Scanresult_BACKUP_260423               200  2026-09-03
+AOI-16      Scanresult                              26  2026-09-19
+AOI-16      Scanresult_BAKCUP_260429               190  2026-09-03
+AOI-16      Scanresult_Backup_260613                17  2026-06-13
+AOI-17      Scanresult                              22  2026-09-19
+AOI-17      Scanresult_260521                       15  2026-06-02
+AOI-18      Scanresult                              17  2026-09-19
+AOI-19      Scanresult                              16  2026-09-19
+AOI-20      Scanresult                              23  2026-09-19
+AOI-20      Scanresult_Backup_0421                   8  2026-05-13
+AOI-21      Scanresult                              16  2026-09-19
+AOI-22      Scanresult                              21  2026-09-19
+AOI-23      Scanresult                              19  2026-09-19
+AOI-24      Scanresult                              18  2026-09-19
+AOI-25      Scanresult                              30  2026-09-19
+4F-AOI-01   Scanresult                              27  2026-09-19
+4F-AOI-02   Scanresult                              39  2026-09-19
+4F-AOI-03   Scanresult                               6  2026-09-17
+4F-AOI-04   Scanresult                               4  2026-09-19
+4F-AOI-05   Scanresult                               8  2026-09-18
+
+[2] 실패 사례를 백업 폴더에서 다시 찾기
+------------------------------------------------------------------------------------
+AOI-4 / 2D@RE-WB90-74053-11C_0860101PD-0A / 6412 / ATH-DIA / UNR431-25F3
+   - 없음: X:\AOI-4\Scanresult
+   - 없음: X:\AOI-4\Scanresult_Back up_260416
+   O 찾음: X:\AOI-4\Scanresult_Back up_260918\2D@RE-WB90-74053-11C_0860101PD-0A\6412\ATH-DIA\UNR431-25F3\WaferInfo.ini  (915 bytes, 수정 2026-09-18 15:19:55)
+------------------------------------------------------------------------------------
+AOI-4 / 2D@RE-WB90-74053-11C_0860101PD-0A / 6412 / ATH-DIA / UNR431-24G0
+   - 없음: X:\AOI-4\Scanresult
+   - 없음: X:\AOI-4\Scanresult_Back up_260416
+   O 찾음: X:\AOI-4\Scanresult_Back up_260918\2D@RE-WB90-74053-11C_0860101PD-0A\6412\ATH-DIA\UNR431-24G0\WaferInfo.ini  (915 bytes, 수정 2026-09-18 15:21:37)

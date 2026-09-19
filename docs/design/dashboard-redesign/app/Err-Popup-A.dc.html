@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Error 팝업 시안</title>
+<style>
+  body{margin:0;background:#E7EBF0;-webkit-font-smoothing:antialiased}
+  a{color:#2B5F97;text-decoration:none}*{box-sizing:border-box}
+  code{font-family:Consolas,'Cascadia Mono',ui-monospace,monospace}
+</style>
+</helmet>
+<div style="min-height:100vh;background:#E7EBF0;color:#0F151C;font:14px/1.6 'Segoe UI','Malgun Gothic','Apple SD Gothic Neo',system-ui,sans-serif;padding:26px 20px 60px">
+  <p style="max-width:1000px;margin:0 auto 12px;font-size:12.5px;color:#4B5866">{{ hint }}</p>
+  <div style="max-width:1000px;margin:0 auto;background:#fff;border-radius:16px;box-shadow:0 18px 50px rgba(15,21,28,.16);overflow:hidden">
+
+    <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:16px 22px;border-bottom:1px solid #EDF1F5">
+      <h2 style="margin:0;font-size:20px;font-weight:700;letter-spacing:-.02em">{{ dev }}</h2>
+      <span style="font-size:13px;color:#5A6673">{{ dayLabel }}</span>
+      <span style="padding:2px 9px;border-radius:999px;background:#FAE7E4;color:#9C3527;font-size:12px;font-weight:600;white-space:nowrap">Error {{ nTxt }}</span>
+      <div style="flex:1"></div>
+      <button style="padding:5px 11px;border:1px solid #DCE2E9;background:#fff;border-radius:7px;font:inherit;font-size:12.5px;cursor:pointer;color:#4B5866;white-space:nowrap">가동률 보기</button>
+      <button style="width:32px;height:32px;border:1px solid #DCE2E9;background:#fff;border-radius:8px;cursor:pointer;color:#4B5866">✕</button>
+    </div>
+
+    <div style="padding:16px 22px 22px">
+      <section style="display:grid;grid-template-columns:repeat(auto-fit,minmax(124px,1fr));background:#fff;border:1px solid #E1E6EC;border-radius:12px;overflow:hidden;margin-bottom:18px">
+        <sc-for list="{{ stats }}" as="s" hint-placeholder-count="5">
+          <div style="padding:12px 15px;box-shadow:inset 1px 0 0 #EDF1F5">
+            <p style="margin:0;font-size:12.5px;color:#5A6673;white-space:nowrap">{{ s.k }}</p>
+            <p style="margin:2px 0 0;font-size:19px;font-weight:700;letter-spacing:-.02em;font-variant-numeric:tabular-nums;white-space:nowrap;color:{{ s.ink }}">{{ s.v }}</p>
+          </div>
+        </sc-for>
+      </section>
+
+      <sc-if value="{{ isA }}">
+        <div>
+          <h3 style="margin:0 0 8px;font-size:13.5px;font-weight:700">언제 났나</h3>
+          <div style="position:relative;height:15px;margin-bottom:3px">
+            <sc-for list="{{ ticks }}" as="h" hint-placeholder-count="5">
+              <span style="position:absolute;top:0;left:{{ h.l }}%;transform:{{ h.tx }};font-size:10.5px;color:#5A6673;white-space:nowrap">{{ h.t }}</span>
+            </sc-for>
+          </div>
+          <div style="position:relative;height:26px;border-radius:5px;background:#EEF2F6;overflow:hidden;margin-bottom:6px">
+            <sc-for list="{{ marks }}" as="k" hint-placeholder-count="6">
+              <i title="{{ k.title }}" style="position:absolute;top:0;bottom:0;left:{{ k.l }}%;width:{{ k.w }}%;min-width:3px;background:{{ k.c }};border-radius:2px"></i>
+            </sc-for>
+          </div>
+          <p style="margin:0 0 18px;font-size:11.5px;color:#5A6673">진한 빨강이 Error, 연한 빨강이 그 뒤 대기입니다.</p>
+
+          <h3 style="margin:0 0 8px;font-size:13.5px;font-weight:700">유형별</h3>
+          <sc-for list="{{ types }}" as="c" hint-placeholder-count="3">
+            <div style="display:grid;grid-template-columns:170px 1fr 46px 62px;gap:10px;align-items:center;padding:4px 0">
+              <span style="font-size:12.5px;font-family:Consolas,'Cascadia Mono',ui-monospace,monospace;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ c.label }}</span>
+              <span style="display:block;height:8px;border-radius:4px;background:#F0F3F7;overflow:hidden"><i style="display:block;height:100%;border-radius:4px;background:#C5453C;width:{{ c.pct }}%"></i></span>
+              <span style="text-align:right;font-size:12.5px;font-variant-numeric:tabular-nums">{{ c.n }}건</span>
+              <span style="text-align:right;font-size:12.5px;font-weight:600;font-variant-numeric:tabular-nums;white-space:nowrap">{{ c.min }}</span>
+            </div>
+          </sc-for>
+
+          <h3 style="margin:18px 0 8px;font-size:13.5px;font-weight:700">최근 21일 이 장비의 Error</h3>
+          <div style="display:flex;align-items:flex-end;gap:3px;height:74px;border-bottom:1px solid #DCE2E9">
+            <sc-for list="{{ trend }}" as="b" hint-placeholder-count="21">
+              <span title="{{ b.title }}" style="flex:1;display:flex;flex-direction:column;justify-content:flex-end;height:100%">
+                <span style="display:block;font-size:10px;color:#4B5866;text-align:center;margin-bottom:2px">{{ b.v }}</span>
+                <span style="display:block;height:{{ b.h }}%;min-height:2px;background:{{ b.c }};border-radius:2px 2px 0 0"></span>
+              </span>
+            </sc-for>
+          </div>
+          <div style="display:flex;gap:3px;margin-top:4px;margin-bottom:6px">
+            <sc-for list="{{ trend }}" as="b" hint-placeholder-count="21">
+              <span style="flex:1;text-align:center;font-size:10px;color:#5A6673;white-space:nowrap;overflow:visible">{{ b.label }}</span>
+            </sc-for>
+          </div>
+        </div>
+      </sc-if>
+
+      <h3 style="margin:18px 0 8px;font-size:13.5px;font-weight:700">{{ listTitle }}</h3>
+      <div style="border:1px solid #E7ECF1;border-radius:11px;overflow:hidden">
+        <div style="display:grid;grid-template-columns:58px 150px 1fr 60px;gap:10px;padding:8px 14px;background:#FBFCFD;border-bottom:1px solid #EDF1F5;font-size:11.5px;font-weight:600;color:#5A6673">
+          <span>시각</span><span>Lot</span><span>유형 · 원문</span><span style="text-align:right">대기</span>
+        </div>
+        <sc-for list="{{ evts }}" as="e" hint-placeholder-count="6">
+          <div style="display:grid;grid-template-columns:58px 150px 1fr 60px;gap:10px;align-items:start;padding:9px 14px;border-bottom:1px solid #F1F4F7">
+            <span style="font-size:12.5px;font-variant-numeric:tabular-nums;color:#4B5866">{{ e.time }}</span>
+            <span style="font-size:12.5px;font-family:Consolas,'Cascadia Mono',ui-monospace,monospace;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ e.lot }}</span>
+            <span style="display:block;min-width:0">
+              <span style="display:inline-block;padding:1px 7px;border-radius:999px;background:#FAE7E4;color:#9C3527;font-size:11px;font-weight:600;font-family:Consolas,'Cascadia Mono',ui-monospace,monospace">{{ e.type }}</span>
+              <span style="display:block;margin-top:3px;font-size:11.5px;color:#4B5866;font-family:Consolas,'Cascadia Mono',ui-monospace,monospace;word-break:break-all">{{ e.status }}</span>
+            </span>
+            <span style="text-align:right;font-size:12.5px;font-weight:600;font-variant-numeric:tabular-nums;white-space:nowrap">{{ e.min }}</span>
+          </div>
+        </sc-for>
+      </div>
+    </div>
+  </div>
+</div>
+
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:1040,&quot;height&quot;:900}}">
+const MODE="A";
+const P=(window.__aoiFullP ||= fetch("aoi-data.json").then(r=>r.json()));
+const hm=m=>{m=Math.round(m);const h=Math.floor(m/60),x=m%60;return h?(x?h+"시간 "+x+"분":h+"시간"):x+"분";};
+const clock=m=>String(Math.floor(m/60)).padStart(2,"0")+":"+String(m%60).padStart(2,"0");
+const md=s=>s.slice(5).replace("-","/");
+const DEV="AOI-8", DAY="2026-09-18";
+
+class Component extends DCLogic {
+  constructor(props){ super(props); this.state={d:null}; P.then(d=>this.setState({d})).catch(e=>console.error(e)); }
+  renderVals(){
+    const D=this.state.d;
+    const base={isA:MODE==="A",
+      hint:MODE==="A"?"A안 — Error 분석 팝업 (언제·무엇이·얼마나)":"B안 — Error 사건 목록 팝업 (시간순 이벤트)",
+      listTitle:MODE==="A"?"Lot 별 Error":"난 순서대로"};
+    if(!D) return {...base,dev:DEV,dayLabel:"",nTxt:"",stats:[],types:[],marks:[],ticks:[],trend:[],evts:[]};
+    const t=(D.detail[DAY]||{})[DEV]||{lots:[],ct:{},seg:[]};
+    const P2=D.pool;
+    const ct=Object.entries(t.ct||{}).sort((a,b)=>b[1][1]-a[1][1]);
+    const totN=ct.reduce((a,b)=>a+b[1][0],0), totM=ct.reduce((a,b)=>a+b[1][1],0);
+    const cmax=Math.max(1,...ct.map(c=>c[1][1]));
+    /* Error 구간과 그 뒤 대기 */
+    const segs=(t.seg||[]).map(x=>({a:x[0],b:x[1],k:x[2]}));
+    const marks=[];
+    for(let i=0;i<segs.length;i++){ if(segs[i].k!==1) continue;
+      marks.push({l:(segs[i].a/14.4).toFixed(2),w:Math.max(0.25,(segs[i].b-segs[i].a)/14.4).toFixed(2),
+        c:"#C5453C",title:clock(segs[i].a)+" Error"});
+      const nx=segs[i+1]; if(nx){ const g=Math.min(240,nx.a-segs[i].b);
+        if(g>0) marks.push({l:(segs[i].b/14.4).toFixed(2),w:(g/14.4).toFixed(2),c:"#F1D3CE",
+          title:clock(segs[i].b)+"–"+clock(segs[i].b+g)+" 대기 "+hm(g)}); } }
+    /* Lot 별 Error 사건 */
+    const evts=[];
+    for(const L of t.lots){ if(!L[5]) continue;
+      for(const [c,v] of Object.entries(L[9]))
+        evts.push({at:L[2],time:clock(L[2]),lot:P2.lot[L[1]]||"(Lot 확인 불가)",type:c,
+          status:L[10]>=0?P2.st[L[10]]:"(원문 없음)",min:hm(v[1]),m:v[1]}); }
+    evts.sort((a,b)=>MODE==="A"?(b.m-a.m):(a.at-b.at));
+    /* 최근 21일 추이 */
+    const days=D.days.slice(-21);
+    const tr=days.map(dy=>{const x=(D.detail[dy]||{})[DEV]; return x?x.e:0;});
+    const tmax=Math.max(1,...tr);
+    return {...base, dev:DEV, dayLabel:(()=>{const x=new Date(DAY+"T00:00:00");return (x.getMonth()+1)+"월 "+x.getDate()+"일 ("+"일월화수목금토"[x.getDay()]+")";})(),
+      nTxt:totN+"건 · 대기 "+hm(totM),
+      stats:[{k:"Error",v:totN+"건",ink:"#B4402F"},
+        {k:"대기 시간",v:hm(totM),ink:"#B4402F"},
+        {k:"유형",v:ct.length+"가지",ink:"#0F151C"},
+        {k:"Error 난 Lot",v:t.lots.filter(L=>L[5]).length+" / "+t.lots.length+"개",ink:"#0F151C"},
+        {k:"가장 많은 유형",v:ct.length?ct[0][0].replace("_ERROR",""):"—",ink:"#0F151C"}],
+      types:ct.map(([c,v])=>({label:c,n:v[0],min:hm(v[1]),pct:Math.round(v[1]/cmax*100)})),
+      ticks:[0,6,12,18,24].map(h=>({t:h+"시",l:h/24*100,tx:h===0?"translateX(0)":(h===24?"translateX(-100%)":"translateX(-50%)")})),
+      marks,
+      trend:days.map((dy,i)=>({label:(i%4===0||i===days.length-1)?md(dy):"",v:tr[i]||"",
+        h:(tr[i]/tmax*100).toFixed(1),c:dy===DAY?"#C5453C":"#E0A9A2",title:md(dy)+" · Error "+tr[i]+"건"})),
+      evts};
+  }
+}
+
+</script>
+</body>
+</html>

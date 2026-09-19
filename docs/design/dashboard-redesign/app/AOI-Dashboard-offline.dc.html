@@ -1,0 +1,1129 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>AOI 가동 현황</title>
+<style>
+  body{margin:0;background:#F4F6F8;-webkit-font-smoothing:antialiased}
+  a{color:#2B5F97;text-decoration:none}
+  a:hover{color:#1C4470;text-decoration:underline}
+  *{box-sizing:border-box}
+  ::selection{background:#D6E4F5}
+  @keyframes popIn{from{opacity:0;transform:translateY(8px) scale(.995)}to{opacity:1;transform:none}}
+  @keyframes slideIn{from{opacity:0;transform:translateY(-6px)}to{opacity:1;transform:none}}
+  @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+  @keyframes fadeIn{from{opacity:0}to{opacity:1}}
+  @keyframes growX{from{transform:scaleX(0)}to{transform:scaleX(1)}}
+</style>
+<script src="aoi-data.js"></script>
+<template id="__bundler_thumbnail"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120"><rect width="120" height="120" rx="18" fill="#2E6BA8"/><rect x="26" y="40" width="68" height="9" rx="4.5" fill="#fff" opacity=".95"/><rect x="26" y="56" width="46" height="9" rx="4.5" fill="#fff" opacity=".7"/><rect x="26" y="72" width="58" height="9" rx="4.5" fill="#C5453C"/></svg></template>
+</helmet>
+<div style="min-height:100vh;background:#F4F6F8;color:#0F151C;font:14px/1.5 'Segoe UI','Malgun Gothic','Apple SD Gothic Neo',system-ui,sans-serif">
+
+  <header style="position:sticky;top:0;z-index:10;display:flex;align-items:center;gap:16px;padding:0 24px;height:58px;background:rgba(255,255,255,.94);backdrop-filter:blur(10px);border-bottom:1px solid #E1E6EC;flex-wrap:wrap">
+    <div style="display:flex;align-items:center;gap:9px;font-weight:700;letter-spacing:-.01em;font-size:15px;white-space:nowrap">
+      <span style="width:9px;height:18px;border-radius:2px;background:#2E6BA8;display:block"></span>AOI 가동 현황
+    </div>
+    <nav style="display:flex;gap:2px">
+      <button onClick="{{ goHome }}" style="padding:6px 13px;border:0;border-radius:7px;font:inherit;font-size:13px;cursor:pointer;white-space:nowrap;font-weight:600;background:{{ navHomeBg }};color:{{ navHomeInk }}">가동률</button>
+      <button onClick="{{ goErrors }}" style="padding:6px 13px;border:0;border-radius:7px;font:inherit;font-size:13px;cursor:pointer;white-space:nowrap;font-weight:600;background:{{ navErrBg }};color:{{ navErrInk }}">Error</button>
+      <button onClick="{{ goTrend }}" style="padding:6px 13px;border:0;border-radius:7px;font:inherit;font-size:13px;cursor:pointer;white-space:nowrap;font-weight:600;background:{{ navTrendBg }};color:{{ navTrendInk }}">추이</button>
+      <button onClick="{{ goReport }}" style="padding:6px 13px;border:0;border-radius:7px;font:inherit;font-size:13px;cursor:pointer;white-space:nowrap;font-weight:600;background:{{ navRptBg }};color:{{ navRptInk }}">리포트</button>
+    </nav>
+    <div style="flex:1"></div>
+    <div style="display:flex;align-items:center;gap:8px">
+      <button onClick="{{ dayPrev }}" title="이전 날짜" style="width:30px;height:30px;border:1px solid #DCE2E9;background:#fff;border-radius:7px;cursor:{{ prevCur }};color:#5A6673;font-size:15px;line-height:1;opacity:{{ prevOp }}">‹</button>
+      <span style="font-weight:600;font-size:14px;min-width:132px;text-align:center;font-variant-numeric:tabular-nums">{{ dayLabel }}</span>
+      <button onClick="{{ dayNext }}" title="다음 날짜" style="width:30px;height:30px;border:1px solid #DCE2E9;background:#fff;border-radius:7px;cursor:{{ nextCur }};color:#5A6673;font-size:15px;line-height:1;opacity:{{ nextOp }}">›</button>
+      <button onClick="{{ dayLast }}" style="padding:6px 11px;border:1px solid #DCE2E9;background:#fff;border-radius:7px;font:inherit;font-size:12.5px;cursor:pointer;color:#4B5866;white-space:nowrap">최신</button>
+    </div>
+    <span style="font-size:12px;color:#5A6673;white-space:nowrap;font-family:Consolas,'Cascadia Mono',ui-monospace,monospace">{{ stampTxt }}</span>
+  </header>
+
+  <main style="max-width:1420px;margin:0 auto;padding:22px 24px 90px">
+
+    <!-- ============ 가동률 ============ -->
+    <sc-if value="{{ isHome }}" hint-placeholder-val="{{ true }}">
+      <div>
+        <section style="display:grid;grid-template-columns:repeat(auto-fit,minmax(168px,1fr));background:#fff;border:1px solid #E1E6EC;border-radius:12px;overflow:hidden;margin-bottom:20px">
+          <div style="padding:14px 18px;box-shadow:inset 1px 0 0 #EDF1F5">
+            <p style="margin:0;font-size:12.5px;color:#5A6673">평균 가동률</p>
+            <p style="margin:2px 0 0;font-size:34px;font-weight:700;letter-spacing:-.03em;line-height:1.1;font-variant-numeric:tabular-nums">{{ avgTxt }}<span style="font-size:17px;color:#5A6673">%</span></p>
+          </div>
+          <div style="padding:14px 18px;box-shadow:inset 1px 0 0 #EDF1F5">
+            <p style="margin:0;font-size:12.5px;color:#5A6673">살펴볼 장비</p>
+            <p style="margin:2px 0 0;font-size:34px;font-weight:700;letter-spacing:-.03em;line-height:1.1;font-variant-numeric:tabular-nums;color:#B4402F">{{ alertCount }}<span style="font-size:17px;color:#5A6673">대</span></p>
+          </div>
+          <div style="padding:14px 18px;box-shadow:inset 1px 0 0 #EDF1F5">
+            <p style="margin:0;font-size:12.5px;color:#5A6673" title="같은 Lot 에서 같은 유형이 여러 번 나도 1건으로 셉니다">Error</p>
+            <p style="margin:2px 0 0;font-size:34px;font-weight:700;letter-spacing:-.03em;line-height:1.1;font-variant-numeric:tabular-nums">{{ errTotal }}<span style="font-size:17px;color:#5A6673">건</span></p>
+            <p style="margin:1px 0 0;font-size:12.5px;color:#5A6673;white-space:nowrap">대기 시간 {{ stopTxt }}</p>
+          </div>
+        </section>
+
+        <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:12px">
+          <h2 style="margin:0;font-size:15px;font-weight:700;letter-spacing:-.01em">오늘의 가동률</h2>
+          <div style="flex:1"></div>
+          <div style="display:inline-flex;border:1px solid #DCE2E9;border-radius:8px;overflow:hidden;background:#fff">
+            <sc-for list="{{ floors }}" as="f" hint-placeholder-count="3">
+              <button onClick="{{ f.pick }}" style="border:0;border-left:1px solid #DCE2E9;padding:6px 13px;font:inherit;font-size:12.5px;font-weight:600;cursor:pointer;white-space:nowrap;background:{{ f.bg }};color:{{ f.ink }}">{{ f.label }}</button>
+            </sc-for>
+          </div>
+          <div style="display:inline-flex;border:1px solid #DCE2E9;border-radius:8px;overflow:hidden;background:#fff">
+            <sc-for list="{{ sorts }}" as="s" hint-placeholder-count="2">
+              <button onClick="{{ s.pick }}" style="border:0;border-left:1px solid #DCE2E9;padding:6px 13px;font:inherit;font-size:12.5px;font-weight:600;cursor:pointer;white-space:nowrap;background:{{ s.bg }};color:{{ s.ink }}">{{ s.label }}</button>
+            </sc-for>
+          </div>
+        </div>
+
+        <div style="background:#fff;border:1px solid #E1E6EC;border-radius:13px;overflow:hidden">
+          <div style="display:flex;gap:7px 18px;flex-wrap:wrap;padding:11px 18px;border-bottom:1px solid #EDF1F5;font-size:12.5px;color:#4B5866">
+            <span><i style="display:inline-block;width:11px;height:11px;border-radius:2px;background:#2E6BA8;vertical-align:-1px;margin-right:6px"></i>Scan</span>
+            <span><i style="display:inline-block;width:11px;height:11px;border-radius:2px;background:#8FB8DE;vertical-align:-1px;margin-right:6px"></i>Rescan</span>
+            <span><i style="display:inline-block;width:11px;height:11px;border-radius:2px;background:#B49BD6;vertical-align:-1px;margin-right:6px"></i>Test</span>
+            <span><i style="display:inline-block;width:11px;height:11px;border-radius:2px;background:#C5453C;vertical-align:-1px;margin-right:6px"></i>Error</span>
+            <span><i style="display:inline-block;width:11px;height:11px;border-radius:2px;background:#E9EDF2;vertical-align:-1px;margin-right:6px"></i>대기</span>
+          </div>
+          <div style="display:grid;grid-template-columns:96px 58px 1fr 76px 30px;align-items:center;gap:13px;padding:9px 18px 7px;border-bottom:1px solid #EDF1F5;background:#FBFCFD">
+            <span style="font-size:11.5px;font-weight:600;color:#5A6673">장비</span>
+            <span style="font-size:11.5px;font-weight:600;color:#5A6673;text-align:right">가동률</span>
+            <span style="position:relative;display:block;height:14px">
+              <sc-for list="{{ hourTicks }}" as="h" hint-placeholder-count="5">
+                <span style="position:absolute;top:0;left:{{ h.l }}%;white-space:nowrap;transform:{{ h.tx }};font-size:10.5px;color:#5A6673;font-variant-numeric:tabular-nums">{{ h.t }}</span>
+              </sc-for>
+            </span>
+            <span style="font-size:11.5px;font-weight:600;color:#5A6673;text-align:right">Error</span>
+            <span></span>
+          </div>
+
+          <sc-for list="{{ rows }}" as="r" hint-placeholder-count="14">
+            <button onClick="{{ r.go }}" title="{{ r.title }}" style="width:100%;display:grid;grid-template-columns:96px 58px 1fr 76px 30px;align-items:center;gap:13px;padding:9px 18px;border:0;border-bottom:1px solid #F1F4F7;background:none;font:inherit;color:inherit;cursor:pointer;text-align:left;min-height:44px" style-hover="background:#F7F9FB">
+              <span style="display:flex;align-items:center;gap:6px;font-weight:600;font-size:13.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">
+                <span style="width:5px;height:5px;border-radius:50%;flex:none;background:{{ r.dot }}"></span>
+                <span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis">{{ r.n }}</span>
+              </span>
+              <span style="text-align:right;font-variant-numeric:tabular-nums;font-size:14.5px;font-weight:600;color:{{ r.uInk }}">{{ r.uTxt }}</span>
+              <span style="display:block;height:20px;border-radius:10px;background:#E9EDF2;overflow:hidden;background-image:{{ r.bar }}"></span>
+              <span style="text-align:right;font-variant-numeric:tabular-nums;font-size:13px;color:{{ r.eInk }}">{{ r.eTxt }}</span>
+              <span style="text-align:right;color:#5A6673;font-size:15px">›</span>
+            </button>
+          </sc-for>
+
+        </div>
+      </div>
+    </sc-if>
+
+    <!-- ============ Error ============ -->
+    <sc-if value="{{ isErrors }}">
+      <div>
+        <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:16px">
+          <h1 style="margin:0;font-size:22px;font-weight:700;letter-spacing:-.02em">Error</h1>
+          <div style="flex:1"></div>
+          <div style="display:inline-flex;border:1px solid #DCE2E9;border-radius:8px;overflow:hidden;background:#fff">
+            <sc-for list="{{ err.floors }}" as="f" hint-placeholder-count="3">
+              <button onClick="{{ f.pick }}" style="border:0;border-left:1px solid #DCE2E9;padding:6px 13px;font:inherit;font-size:12.5px;font-weight:600;cursor:pointer;white-space:nowrap;background:{{ f.bg }};color:{{ f.ink }}">{{ f.label }}</button>
+            </sc-for>
+          </div>
+          <div style="display:inline-flex;border:1px solid #DCE2E9;border-radius:8px;overflow:hidden;background:#fff">
+            <sc-for list="{{ err.spans }}" as="s" hint-placeholder-count="4">
+              <button onClick="{{ s.pick }}" style="border:0;border-left:1px solid #DCE2E9;padding:6px 13px;font:inherit;font-size:12.5px;font-weight:600;cursor:pointer;white-space:nowrap;background:{{ s.bg }};color:{{ s.ink }}">{{ s.label }}</button>
+            </sc-for>
+          </div>
+          <div style="display:inline-flex;border:1px solid #DCE2E9;border-radius:8px;overflow:hidden;background:#fff">
+            <sc-for list="{{ err.metrics }}" as="s" hint-placeholder-count="2">
+              <button onClick="{{ s.pick }}" style="border:0;border-left:1px solid #DCE2E9;padding:6px 13px;font:inherit;font-size:12.5px;font-weight:600;cursor:pointer;white-space:nowrap;background:{{ s.bg }};color:{{ s.ink }}">{{ s.label }}</button>
+            </sc-for>
+          </div>
+        </div>
+
+        <section style="display:grid;grid-template-columns:repeat(auto-fit,minmax(168px,1fr));background:#fff;border:1px solid #E1E6EC;border-radius:12px;overflow:hidden;margin-bottom:16px">
+          <sc-for list="{{ err.stats }}" as="s" hint-placeholder-count="4">
+            <div style="padding:13px 16px;box-shadow:inset 1px 0 0 #EDF1F5;min-width:0">
+              <p style="margin:0;font-size:12.5px;color:#5A6673;white-space:nowrap">{{ s.k }}</p>
+              <p style="margin:2px 0 0;font-size:22px;font-weight:700;letter-spacing:-.02em;font-variant-numeric:tabular-nums;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-family:{{ s.font }}">{{ s.v }}</p>
+              <p style="margin:1px 0 0;font-size:12px;color:#5A6673;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ s.s }}</p>
+            </div>
+          </sc-for>
+        </section>
+
+        <section style="background:#fff;border:1px solid #E1E6EC;border-radius:13px;padding:16px 20px 12px;margin-bottom:16px">
+          <div style="display:flex;align-items:baseline;gap:10px;margin-bottom:12px">
+            <h2 style="margin:0;font-size:14.5px;font-weight:700">날짜별 {{ err.metricLabel }}</h2>
+            <span style="font-size:12.5px;color:#5A6673">{{ err.dayPickTxt }}</span>
+            <sc-if value="{{ err.hasDayPick }}">
+              <button onClick="{{ err.clearDay }}" title="선택한 기간 전체를 합쳐서 봅니다" style="border:0;background:none;font:inherit;font-size:12.5px;color:#2B5F97;cursor:pointer;padding:0">전체 기간 합계로</button>
+            </sc-if>
+          </div>
+          <div style="position:relative;display:flex;align-items:flex-end;justify-content:center;gap:3px;height:140px;border-bottom:1px solid #DCE2E9">
+            <sc-for list="{{ err.bars }}" as="b" hint-placeholder-count="21">
+              <button onClick="{{ b.pick }}" title="{{ b.title }}" style="flex:1 1 0;min-width:0;max-width:104px;display:flex;flex-direction:column;justify-content:flex-end;height:100%;border:0;background:none;padding:0;cursor:pointer">
+                <span style="display:block;font-size:10.5px;color:#4B5866;text-align:center;margin-bottom:3px;font-variant-numeric:tabular-nums">{{ b.vTxt }}</span>
+                <span style="display:block;height:{{ b.h }}%;background:{{ b.color }};border-radius:3px 3px 0 0;min-height:2px"></span>
+              </button>
+            </sc-for>
+          </div>
+          <div style="display:flex;gap:3px;margin-top:5px;justify-content:center">
+            <sc-for list="{{ err.bars }}" as="b" hint-placeholder-count="21">
+              <span style="flex:1 1 0;min-width:0;max-width:104px;text-align:center;font-size:10px;color:#5A6673;white-space:nowrap;overflow:visible">{{ b.label }}</span>
+            </sc-for>
+          </div>
+        </section>
+
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(310px,1fr));gap:16px">
+          <section style="background:#fff;border:1px solid #E1E6EC;border-radius:13px;overflow:hidden">
+            <div style="padding:15px 20px 10px"><h2 style="margin:0;font-size:14.5px;font-weight:700">유형별</h2></div>
+            <sc-for list="{{ err.types }}" as="c" hint-placeholder-count="6">
+              <button onClick="{{ c.pick }}" title="{{ c.title }}" style="width:100%;display:grid;grid-template-columns:166px 1fr 50px 72px 14px;gap:9px;align-items:center;padding:9px 20px;border:0;border-top:1px solid #F1F4F7;font:inherit;color:inherit;text-align:left;cursor:pointer;min-height:44px;background:{{ c.bg }}" style-hover="background:#F7F9FB">
+                <span style="font-size:12.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-family:Consolas,'Cascadia Mono',ui-monospace,monospace">{{ c.label }}</span>
+                <span style="display:block;height:9px;border-radius:5px;background:#F0F3F7;overflow:hidden"><i style="display:block;height:100%;border-radius:5px;background:#C5453C;width:{{ c.pct }}%"></i></span>
+                <span style="text-align:right;font-size:13px;font-variant-numeric:tabular-nums;font-weight:{{ err.nW }};color:{{ err.nInk }}">{{ c.n }}건</span>
+                <span style="text-align:right;font-size:13px;font-variant-numeric:tabular-nums;white-space:nowrap;font-weight:{{ err.mW }};color:{{ err.mInk }}">{{ c.minTxt }}</span>
+                <span style="text-align:right;color:#5A6673;font-size:13px">{{ c.mark }}</span>
+              </button>
+            </sc-for>
+          </section>
+
+          <section style="background:#fff;border:1px solid #E1E6EC;border-radius:13px;overflow:hidden">
+            <div style="padding:15px 20px 10px"><h2 style="margin:0;font-size:14.5px;font-weight:700">장비별</h2></div>
+            <sc-for list="{{ err.devs }}" as="d" hint-placeholder-count="6">
+              <button onClick="{{ d.go }}" title="{{ d.title }}" style="width:100%;display:grid;grid-template-columns:88px 1fr 50px 72px 14px;gap:9px;align-items:center;padding:9px 20px;border:0;border-top:1px solid #F1F4F7;background:none;font:inherit;color:inherit;text-align:left;cursor:pointer;min-height:44px" style-hover="background:#F7F9FB">
+                <span style="font-size:13px;font-weight:600">{{ d.n }}</span>
+                <span style="display:block;height:9px;border-radius:5px;background:#F0F3F7;overflow:hidden"><i style="display:block;height:100%;border-radius:5px;background:#C5453C;width:{{ d.pct }}%"></i></span>
+                <span style="text-align:right;font-size:13px;font-variant-numeric:tabular-nums;font-weight:{{ err.nW }};color:{{ err.nInk }}">{{ d.v }}건</span>
+                <span style="text-align:right;font-size:13px;font-variant-numeric:tabular-nums;white-space:nowrap;font-weight:{{ err.mW }};color:{{ err.mInk }}">{{ d.minTxt }}</span>
+                <span style="text-align:right;color:#5A6673;font-size:13px">›</span>
+              </button>
+            </sc-for>
+          </section>
+
+          <section style="background:#fff;border:1px solid #E1E6EC;border-radius:13px;overflow:hidden">
+            <div style="padding:15px 20px 10px"><h2 style="margin:0;font-size:14.5px;font-weight:700">Job별</h2></div>
+            <sc-for list="{{ err.jobs }}" as="j" hint-placeholder-count="6">
+              <button onClick="{{ j.pick }}" title="{{ j.title }}" style="width:100%;display:grid;grid-template-columns:1fr 50px 72px 14px;gap:9px;align-items:center;padding:9px 20px;border:0;border-top:1px solid #F1F4F7;background:none;font:inherit;color:inherit;text-align:left;cursor:pointer;min-height:44px" style-hover="background:#F7F9FB">
+                <span style="display:block;min-width:0">
+                  <span style="display:block;font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-family:{{ j.font }}">{{ j.label }}</span>
+                  <span style="display:block;font-size:11.5px;color:#5A6673;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ j.sub }}</span>
+                  <span style="display:flex;height:8px;margin-top:4px;border-radius:4px;background:#F0F3F7;overflow:hidden">
+                    <i style="height:100%;background:#2E6BA8;width:{{ j.pct }}%"></i>
+                    <i style="height:100%;background:#C5453C;width:{{ j.pct2 }}%"></i>
+                  </span>
+                </span>
+                <span style="text-align:right;font-size:13px;font-variant-numeric:tabular-nums;font-weight:{{ err.nW }};color:{{ err.nInk }}">{{ j.n }}건</span>
+                <span style="text-align:right;font-size:13px;font-variant-numeric:tabular-nums;white-space:nowrap;font-weight:{{ err.mW }};color:{{ err.mInk }}">{{ j.minTxt }}</span>
+                <span style="text-align:right;color:#5A6673;font-size:13px">{{ j.mark }}</span>
+              </button>
+            </sc-for>
+          </section>
+        </div>
+
+      </div>
+    </sc-if>
+
+    <!-- ============ 추이 ============ -->
+    <sc-if value="{{ isTrend }}">
+      <div>
+        <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:16px">
+          <h1 style="margin:0;font-size:22px;font-weight:700;letter-spacing:-.02em">추이</h1>
+          <div style="flex:1"></div>
+          <div style="display:inline-flex;border:1px solid #DCE2E9;border-radius:8px;overflow:hidden;background:#fff">
+            <sc-for list="{{ tr.floors }}" as="f" hint-placeholder-count="3">
+              <button onClick="{{ f.pick }}" style="border:0;border-left:1px solid #DCE2E9;padding:6px 13px;font:inherit;font-size:12.5px;font-weight:600;cursor:pointer;white-space:nowrap;background:{{ f.bg }};color:{{ f.ink }}">{{ f.label }}</button>
+            </sc-for>
+          </div>
+          <div style="display:inline-flex;border:1px solid #DCE2E9;border-radius:8px;overflow:hidden;background:#fff">
+            <sc-for list="{{ tr.units }}" as="u" hint-placeholder-count="3">
+              <button onClick="{{ u.pick }}" style="border:0;border-left:1px solid #DCE2E9;padding:6px 14px;font:inherit;font-size:12.5px;font-weight:600;cursor:pointer;white-space:nowrap;background:{{ u.bg }};color:{{ u.ink }}">{{ u.label }}</button>
+            </sc-for>
+          </div>
+        </div>
+
+        <section style="background:#fff;border:1px solid #E1E6EC;border-radius:13px;padding:16px 20px 12px;margin-bottom:16px">
+          <div style="display:flex;align-items:baseline;gap:10px;margin-bottom:12px">
+            <h2 style="margin:0;font-size:14.5px;font-weight:700">{{ tr.chartTitle }}</h2>
+            <span style="font-size:12.5px;color:#5A6673;white-space:nowrap">평균 {{ tr.avgTxt }}%</span>
+          </div>
+          <div style="position:relative;display:flex;align-items:flex-end;justify-content:center;gap:4px;height:180px;border-bottom:1px solid #DCE2E9">
+            <span style="position:absolute;left:0;right:0;bottom:{{ tr.avgLine }}%;border-top:1px dashed #B0862F;z-index:1"></span>
+            <sc-for list="{{ tr.bars }}" as="b" hint-placeholder-count="21">
+              <button onClick="{{ b.pick }}" title="{{ b.title }}" style="flex:1 1 0;min-width:0;max-width:108px;display:flex;flex-direction:column;justify-content:flex-end;height:100%;border:0;background:none;padding:0;cursor:{{ b.cur }}">
+                <span style="display:block;font-size:10.5px;color:#4B5866;text-align:center;margin-bottom:3px;font-variant-numeric:tabular-nums">{{ b.vTxt }}</span>
+                <span style="display:block;height:{{ b.h }}%;background:{{ b.color }};border-radius:3px 3px 0 0;min-height:2px"></span>
+              </button>
+            </sc-for>
+          </div>
+          <div style="display:flex;gap:4px;margin-top:5px;justify-content:center">
+            <sc-for list="{{ tr.bars }}" as="b" hint-placeholder-count="21">
+              <span style="flex:1 1 0;min-width:0;max-width:108px;text-align:center;font-size:10px;color:#5A6673;white-space:nowrap;overflow:visible">{{ b.label }}</span>
+            </sc-for>
+          </div>
+        </section>
+
+        <div style="display:flex;align-items:baseline;gap:12px;flex-wrap:wrap;margin-bottom:12px">
+          <h2 style="margin:0;font-size:15px;font-weight:700">장비별 {{ tr.dayCount }}일</h2>
+        </div>
+        <div style="background:#fff;border:1px solid #E1E6EC;border-radius:13px;overflow:hidden">
+          <sc-for list="{{ tr.heat }}" as="h" hint-placeholder-count="12">
+            <div style="display:grid;grid-template-columns:96px 1fr 54px;gap:12px;align-items:center;padding:5px 18px;border-top:1px solid #F1F4F7">
+              <button onClick="{{ h.go }}" style="border:0;background:none;font:inherit;font-size:13px;font-weight:600;text-align:left;cursor:pointer;color:#0F151C;padding:4px 0" style-hover="color:#2B5F97">{{ h.n }}</button>
+              <span style="display:flex;gap:2px">
+                <sc-for list="{{ h.cells }}" as="c" hint-placeholder-count="31">
+                  <button onClick="{{ c.go }}" title="{{ c.title }}" style="flex:1;height:18px;border:0;border-radius:2px;padding:0;cursor:pointer;background:{{ c.bg }};box-shadow:{{ c.ring }}"></button>
+                </sc-for>
+              </span>
+              <span style="text-align:right;font-size:13px;font-variant-numeric:tabular-nums;font-weight:600;color:{{ h.avgInk }}">{{ h.avgTxt }}</span>
+            </div>
+          </sc-for>
+          <div style="display:flex;align-items:center;gap:8px;padding:11px 18px;background:#FBFCFD;font-size:12.5px;color:#4B5866;flex-wrap:wrap">
+            <span>낮음</span>
+            <span style="display:flex;gap:2px">
+              <i style="width:22px;height:11px;border-radius:2px;background:#DCE8F4;display:block"></i>
+              <i style="width:22px;height:11px;border-radius:2px;background:#B4CDE6;display:block"></i>
+              <i style="width:22px;height:11px;border-radius:2px;background:#7FAAD5;display:block"></i>
+              <i style="width:22px;height:11px;border-radius:2px;background:#4E86BE;display:block"></i>
+              <i style="width:22px;height:11px;border-radius:2px;background:#1F5187;display:block"></i>
+            </span>
+            <span>높음</span>
+            <span style="display:inline-flex;align-items:center;gap:6px;margin-left:16px">
+              <i style="width:22px;height:11px;border-radius:2px;background:transparent;box-shadow:inset 0 0 0 1px #DCE2E9;display:block"></i>시간 기록 없음
+            </span>
+          </div>
+        </div>
+      </div>
+    </sc-if>
+
+    <!-- ============ 리포트 (TB500 · Kendall) ============ -->
+    <sc-if value="{{ isReport }}">
+      <div>
+        <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:16px">
+          <h1 style="margin:0;font-size:22px;font-weight:700;letter-spacing:-.02em">리포트</h1>
+          <span style="font-size:12.5px;color:#5A6673">{{ rp.sub }}</span>
+          <div style="flex:1"></div>
+          <div style="display:inline-flex;border:1px solid #DCE2E9;border-radius:8px;overflow:hidden;background:#fff">
+            <sc-for list="{{ rp.spans }}" as="s" hint-placeholder-count="3">
+              <button onClick="{{ s.pick }}" style="border:0;border-left:1px solid #DCE2E9;padding:6px 13px;font:inherit;font-size:12.5px;font-weight:600;cursor:pointer;white-space:nowrap;background:{{ s.bg }};color:{{ s.ink }}">{{ s.label }}</button>
+            </sc-for>
+          </div>
+        </div>
+
+        <section style="display:grid;grid-template-columns:repeat(auto-fit,minmax(168px,1fr));background:#fff;border:1px solid #E1E6EC;border-radius:12px;overflow:hidden;margin-bottom:16px">
+          <sc-for list="{{ rp.stats }}" as="s" hint-placeholder-count="4">
+            <div style="padding:13px 16px;box-shadow:inset 1px 0 0 #EDF1F5;min-width:0">
+              <p style="margin:0;font-size:12.5px;color:#5A6673;white-space:nowrap">{{ s.k }}</p>
+              <p style="margin:2px 0 0;font-size:22px;font-weight:700;letter-spacing:-.02em;font-variant-numeric:tabular-nums;white-space:nowrap">{{ s.v }}</p>
+              <p style="margin:1px 0 0;font-size:12px;color:#5A6673;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ s.s }}</p>
+            </div>
+          </sc-for>
+        </section>
+
+        <div style="background:#fff;border:1px solid #E1E6EC;border-radius:13px;overflow:hidden">
+          <div style="display:grid;grid-template-columns:{{ rp.cols }};gap:10px;align-items:end;padding:9px 18px 7px;border-bottom:1px solid #EDF1F5;background:#FBFCFD;font-size:11.5px;font-weight:600;color:#5A6673">
+            <span>Job</span><span style="text-align:right" title="표본 / 전체 배치">배치</span><span style="text-align:right" title="회귀 절편 ± 표준오차">준비</span><span style="text-align:right" title="회귀 기울기 ± 표준오차">장당</span><span style="text-align:right" title="준비 + 장당 × 최빈 장수">환산</span><span style="text-align:right">Error</span><span style="text-align:right">Error 대기</span><span style="text-align:right">평균 fault</span>
+          </div>
+          <sc-for list="{{ rp.rows }}" as="j" hint-placeholder-count="8">
+            <div>
+              <button onClick="{{ j.toggle }}" title="{{ j.title }}" style="width:100%;display:grid;grid-template-columns:{{ rp.cols }};gap:10px;align-items:center;padding:10px 18px;border:0;border-top:1px solid #F1F4F7;background:{{ j.bg }};font:inherit;color:inherit;text-align:left;cursor:pointer;min-height:48px" style-hover="background:#F7F9FB">
+                <span style="display:block;min-width:0">
+                  <span style="display:flex;align-items:center;gap:7px;font-size:13.5px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis"><span style="color:#5A6673;font-size:11px;width:10px;display:inline-block;flex:none">{{ j.mark }}</span>{{ j.name }}</span>
+                  <span style="display:block;font-size:11.5px;color:#5A6673;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;padding-left:17px">{{ j.sub }}</span>
+                </span>
+                <span style="text-align:right;font-size:13px;font-variant-numeric:tabular-nums;color:#4B5866;white-space:nowrap">{{ j.n }}</span>
+                <span style="text-align:right;font-size:13px;font-weight:600;font-variant-numeric:tabular-nums;white-space:nowrap">{{ j.prep }}</span>
+                <span style="text-align:right;font-size:13px;font-weight:600;font-variant-numeric:tabular-nums;white-space:nowrap">{{ j.per }}</span>
+                <span style="text-align:right;min-width:0"><span style="display:block;font-size:13px;font-weight:600;font-variant-numeric:tabular-nums;white-space:nowrap">{{ j.conv }}</span><span style="display:block;font-size:11px;color:#5A6673;white-space:nowrap">{{ j.convSub }}</span></span>
+                <span style="text-align:right;font-size:13px;font-variant-numeric:tabular-nums;white-space:nowrap;color:{{ j.eInk }}">{{ j.err }}</span>
+                <span style="text-align:right;font-size:13px;font-variant-numeric:tabular-nums;white-space:nowrap;color:{{ j.eInk }}">{{ j.wait }}</span>
+                <span style="text-align:right;font-size:12px;color:#8A96A3;white-space:nowrap">수집 예정</span>
+              </button>
+              <sc-if value="{{ j.open }}">
+                <div style="animation:slideIn .2s cubic-bezier(.16,1,.3,1);background:#FBFCFD">
+                  <sc-for list="{{ j.devs }}" as="d" hint-placeholder-count="3">
+                    <div title="{{ d.title }}" style="display:grid;grid-template-columns:{{ rp.cols }};gap:10px;align-items:center;padding:7px 18px;border-top:1px solid #F1F4F7;font-size:12.5px">
+                      <span style="padding-left:17px;min-width:0;display:flex;gap:8px;align-items:baseline;white-space:nowrap;overflow:hidden;text-overflow:ellipsis"><span style="font-weight:600">{{ d.name }}</span></span>
+                      <span style="text-align:right;font-variant-numeric:tabular-nums;color:#4B5866;white-space:nowrap">{{ d.n }}</span>
+                      <span style="text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap">{{ d.prep }}</span>
+                      <span style="text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap">{{ d.per }}</span>
+                      <span style="text-align:right;min-width:0"><span style="display:block;font-variant-numeric:tabular-nums;white-space:nowrap">{{ d.conv }}</span><span style="display:block;font-size:11px;color:#5A6673;white-space:nowrap">{{ d.convSub }}</span></span>
+                      <span style="text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap;color:{{ d.eInk }}">{{ d.err }}</span>
+                      <span style="text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap;color:{{ d.eInk }}">{{ d.wait }}</span>
+                      <span style="text-align:right;font-size:12px;color:#8A96A3;white-space:nowrap">수집 예정</span>
+                    </div>
+                  </sc-for>
+                </div>
+              </sc-if>
+            </div>
+          </sc-for>
+          <p style="margin:0;padding:11px 18px;background:#FBFCFD;font-size:12px;color:#5A6673;border-top:1px solid #EDF1F5;text-wrap:pretty">{{ rp.note }}</p>
+        </div>
+      </div>
+    </sc-if>
+  </main>
+
+  <!-- ============ Error 유형 팝업 ============ -->
+  <sc-if value="{{ typeOn }}">
+    <div style="position:fixed;inset:0;z-index:55;display:flex;align-items:flex-start;justify-content:center;padding:44px 20px;background:rgba(15,21,28,.42);backdrop-filter:blur(2px);animation:fadeIn .12s ease-out;overflow:auto">
+      <button onClick="{{ tp.close }}" aria-label="닫기" style="position:fixed;inset:0;border:0;background:none;cursor:default;padding:0"></button>
+      <div role="dialog" aria-modal="true" style="position:relative;width:min(960px,100%);background:#fff;border-radius:16px;box-shadow:0 24px 70px rgba(15,21,28,.28);animation:popIn .16s cubic-bezier(.16,1,.3,1);overflow:hidden">
+        <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:16px 22px;border-bottom:1px solid #EDF1F5">
+          <h2 style="margin:0;font-size:18px;font-weight:700;letter-spacing:-.01em;word-break:break-all;font-family:{{ tp.mono }}">{{ tp.label }}</h2>
+          <span style="font-size:13px;color:#5A6673">{{ tp.n }}건 · 대기 시간 {{ tp.minTxt }} · {{ tp.range }}</span>
+          <sc-if value="{{ tp.hasAlias }}">
+            <span style="flex-basis:100%;font-size:12px;color:#5A6673;font-family:Consolas,'Cascadia Mono',ui-monospace,monospace;word-break:break-all">{{ tp.rawName }}</span>
+          </sc-if>
+          <div style="flex:1"></div>
+          <button onClick="{{ tp.close }}" title="닫기 (Esc)" style="width:32px;height:32px;border:1px solid #DCE2E9;background:#fff;border-radius:8px;cursor:pointer;color:#4B5866;font-size:15px;line-height:1">✕</button>
+        </div>
+        <div style="padding:16px 22px 0">
+          <section style="display:grid;grid-template-columns:repeat(auto-fit,minmax(124px,1fr));background:#fff;border:1px solid #E1E6EC;border-radius:12px;overflow:hidden;margin-bottom:16px">
+            <sc-for list="{{ tp.stats }}" as="s" hint-placeholder-count="4">
+              <div style="padding:12px 15px;box-shadow:inset 1px 0 0 #EDF1F5">
+                <p style="margin:0;font-size:12.5px;color:#5A6673;white-space:nowrap">{{ s.k }}</p>
+                <p style="margin:2px 0 0;font-size:20px;font-weight:700;letter-spacing:-.02em;font-variant-numeric:tabular-nums;white-space:nowrap">{{ s.v }}</p>
+              </div>
+            </sc-for>
+          </section>
+
+          <sc-if value="{{ tp.hasMembers }}">
+            <div style="margin-bottom:14px">
+              <button onClick="{{ tp.toggleMembers }}" title="묶인 이름들 보기" style="border:0;background:none;padding:2px 0;font:inherit;font-size:11.5px;color:#5A6673;cursor:pointer;text-decoration:underline;text-underline-offset:3px">{{ tp.memberTxt }}</button>
+              <sc-if value="{{ tp.showMembers }}">
+                <div style="margin-top:8px;padding:10px 12px;background:#F7F9FB;border:1px solid #E7ECF1;border-radius:10px">
+                  <sc-for list="{{ tp.members }}" as="mb" hint-placeholder-count="2">
+                    <p style="margin:0;display:flex;gap:10px;align-items:baseline;font-size:12.5px">
+                      <span style="flex:1;min-width:0;font-family:Consolas,'Cascadia Mono',ui-monospace,monospace;word-break:break-all">{{ mb.nm }}</span>
+                      <span style="color:#5A6673;font-variant-numeric:tabular-nums;white-space:nowrap">{{ mb.c }}</span>
+                    </p>
+                  </sc-for>
+                </div>
+              </sc-if>
+            </div>
+          </sc-if>
+          <sc-if value="{{ tp.showDays }}">
+          <div style="animation:slideIn .22s cubic-bezier(.16,1,.3,1)">
+          <h3 style="margin:0 0 9px;font-size:13px;font-weight:700">날짜별 대기 시간 <span style="font-weight:400;color:#5A6673;font-size:12px">{{ tp.spanLabel }}</span></h3>
+          <div style="display:flex;align-items:flex-end;justify-content:center;gap:3px;height:112px;border-bottom:1px solid #DCE2E9">
+            <sc-for list="{{ tp.dayBars }}" as="b" hint-placeholder-count="21">
+              <span title="{{ b.title }}" style="flex:1 1 0;min-width:0;max-width:96px;display:flex;flex-direction:column;justify-content:flex-end;height:100%">
+                <span style="display:block;font-size:10px;color:#4B5866;text-align:center;margin-bottom:2px;font-variant-numeric:tabular-nums">{{ b.vTxt }}</span>
+                <span style="display:block;height:{{ b.h }}%;background:{{ b.color }};border-radius:3px 3px 0 0;min-height:2px"></span>
+              </span>
+            </sc-for>
+          </div>
+          <div style="display:flex;gap:3px;margin-top:4px;margin-bottom:18px;justify-content:center">
+            <sc-for list="{{ tp.dayBars }}" as="b" hint-placeholder-count="21">
+              <span style="flex:1 1 0;min-width:0;max-width:96px;text-align:center;font-size:10px;color:#5A6673;white-space:nowrap;overflow:visible">{{ b.label }}</span>
+            </sc-for>
+          </div>
+
+          </div>
+          </sc-if>
+          <h3 style="margin:0 0 6px;font-size:13px;font-weight:700">장비별 대기 시간</h3>
+          <sc-for list="{{ tp.devBars }}" as="b" hint-placeholder-count="6">
+            <button onClick="{{ b.go }}" title="{{ b.title }}" style="width:100%;display:grid;grid-template-columns:88px 1fr 56px 72px;gap:10px;align-items:center;padding:5px 0;border:0;background:none;font:inherit;color:inherit;text-align:left;cursor:pointer" style-hover="opacity:.75">
+              <span style="font-size:12.5px;font-weight:600">{{ b.n }}</span>
+              <span style="display:block;height:10px;border-radius:5px;background:#F0F3F7;overflow:hidden"><i style="display:block;height:100%;border-radius:5px;background:#C5453C;width:{{ b.pct }}%"></i></span>
+              <span style="text-align:right;font-size:12.5px;color:#4B5866;font-variant-numeric:tabular-nums">{{ b.n2 }}</span>
+              <span style="text-align:right;font-size:12.5px;font-weight:600;font-variant-numeric:tabular-nums;white-space:nowrap">{{ b.v }}</span>
+            </button>
+          </sc-for>
+        </div>
+
+        <div style="display:grid;grid-template-columns:88px 66px 190px 1fr 66px;gap:10px;padding:16px 22px 8px;font-size:11.5px;font-weight:600;color:#5A6673;border-bottom:1px solid #EDF1F5;background:#FBFCFD;margin-top:14px">
+          <span>장비</span><span>날짜</span><span>Lot</span><span>원문</span><span style="text-align:right">대기 시간</span>
+        </div>
+        <div style="max-height:46vh;overflow:auto;animation:slideIn .26s cubic-bezier(.16,1,.3,1)">
+          <sc-for list="{{ tp.rows }}" as="p" hint-placeholder-count="8">
+            <button onClick="{{ p.go }}" title="{{ p.title }}" style="width:100%;display:grid;grid-template-columns:88px 66px 190px 1fr 66px;gap:10px;align-items:center;padding:9px 22px;border:0;border-bottom:1px solid #F1F4F7;background:none;font:inherit;color:inherit;text-align:left;cursor:pointer;min-height:42px" style-hover="background:#F7F9FB">
+              <span style="font-size:13px;font-weight:600">{{ p.dev }}</span>
+              <span style="font-size:12.5px;color:#4B5866;font-variant-numeric:tabular-nums">{{ p.day }}</span>
+              <span style="font-size:12.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-family:Consolas,'Cascadia Mono',ui-monospace,monospace">{{ p.lot }}</span>
+              <span style="font-size:12px;color:#4B5866;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-family:Consolas,'Cascadia Mono',ui-monospace,monospace">{{ p.status }}</span>
+              <span style="text-align:right;font-size:13px;font-variant-numeric:tabular-nums;font-weight:600;white-space:nowrap">{{ p.min }}</span>
+            </button>
+          </sc-for>
+        </div>
+        <p style="margin:0;padding:11px 22px;background:#FBFCFD;font-size:12.5px;color:#5A6673">줄을 누르면 그 장비의 그 날짜 Error 상세가 열립니다.</p>
+      </div>
+    </div>
+  </sc-if>
+
+  <!-- ============ Error 상세 팝업 (승인 시안 Err-Popup-A) ============ -->
+  <sc-if value="{{ errOn }}">
+    <div style="position:fixed;inset:0;z-index:60;display:flex;align-items:flex-start;justify-content:center;padding:34px 20px;background:rgba(15,21,28,.42);backdrop-filter:blur(2px);animation:fadeIn .12s ease-out;overflow:auto">
+      <button onClick="{{ ep.close }}" aria-label="닫기" style="position:fixed;inset:0;border:0;background:none;cursor:default;padding:0"></button>
+      <div role="dialog" aria-modal="true" style="position:relative;width:min(1000px,100%);background:#fff;border-radius:16px;box-shadow:0 24px 70px rgba(15,21,28,.28);animation:popIn .16s cubic-bezier(.16,1,.3,1);overflow:hidden">
+
+        <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:16px 22px;border-bottom:1px solid #EDF1F5">
+          <h2 style="margin:0;font-size:20px;font-weight:700;letter-spacing:-.02em">{{ ep.dev }}</h2>
+          <span style="display:inline-flex;align-items:center;gap:4px">
+            <button onClick="{{ ep.dayPrev }}" title="이전 날짜" style="width:26px;height:26px;border:1px solid #DCE2E9;background:#fff;border-radius:6px;cursor:pointer;color:#5A6673;font-size:14px;line-height:1;opacity:{{ ep.prevOp }}">‹</button>
+            <span style="font-size:13px;color:#5A6673;font-variant-numeric:tabular-nums;min-width:100px;text-align:center">{{ ep.dayLabel }}</span>
+            <button onClick="{{ ep.dayNext }}" title="다음 날짜" style="width:26px;height:26px;border:1px solid #DCE2E9;background:#fff;border-radius:6px;cursor:pointer;color:#5A6673;font-size:14px;line-height:1;opacity:{{ ep.nextOp }}">›</button>
+          </span>
+          <span style="padding:2px 9px;border-radius:999px;background:#FAE7E4;color:#9C3527;font-size:12px;font-weight:600;white-space:nowrap">Error {{ ep.nTxt }}</span>
+          <sc-if value="{{ ep.hasFilter }}">
+            <button onClick="{{ ep.clearFilter }}" title="필터 해제 — 이 장비의 모든 Error 보기" style="display:inline-flex;align-items:center;gap:6px;max-width:320px;padding:2px 9px;border:1px solid #DCE2E9;border-radius:999px;background:#F7F9FB;font:inherit;font-size:12px;color:#3D4854;cursor:pointer;font-family:{{ ep.filterFont }}"><span style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ ep.filterTxt }}</span><span style="color:#5A6673">✕</span></button>
+          </sc-if>
+          <div style="flex:1"></div>
+          <button onClick="{{ ep.goUtil }}" title="같은 날 이 장비의 가동률 팝업으로" style="padding:5px 11px;border:1px solid #DCE2E9;background:#fff;border-radius:7px;font:inherit;font-size:12.5px;cursor:pointer;color:#4B5866;white-space:nowrap">가동률 보기</button>
+          <button onClick="{{ ep.close }}" title="닫기 (Esc)" style="width:32px;height:32px;border:1px solid #DCE2E9;background:#fff;border-radius:8px;cursor:pointer;color:#4B5866;font-size:15px;line-height:1">✕</button>
+        </div>
+
+        <div style="padding:16px 22px 22px">
+          <section style="display:grid;grid-template-columns:repeat(auto-fit,minmax(124px,1fr));background:#fff;border:1px solid #E1E6EC;border-radius:12px;overflow:hidden;margin-bottom:18px">
+            <sc-for list="{{ ep.stats }}" as="s" hint-placeholder-count="5">
+              <div style="padding:12px 15px;box-shadow:inset 1px 0 0 #EDF1F5;min-width:0">
+                <p style="margin:0;font-size:12.5px;color:#5A6673;white-space:nowrap">{{ s.k }}</p>
+                <p style="margin:2px 0 0;font-size:19px;font-weight:700;letter-spacing:-.02em;font-variant-numeric:tabular-nums;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:{{ s.ink }}">{{ s.v }}</p>
+              </div>
+            </sc-for>
+          </section>
+
+          <h3 style="margin:0 0 8px;font-size:13.5px;font-weight:700">언제 났나</h3>
+          <div style="position:relative;height:15px;margin-bottom:3px">
+            <sc-for list="{{ hourTicks }}" as="h" hint-placeholder-count="5">
+              <span style="position:absolute;top:0;left:{{ h.l }}%;transform:{{ h.tx }};font-size:10.5px;color:#5A6673;white-space:nowrap">{{ h.t }}</span>
+            </sc-for>
+          </div>
+          <div style="position:relative;height:26px;border-radius:5px;background:#EEF2F6;overflow:hidden;margin-bottom:6px">
+            <sc-for list="{{ ep.marks }}" as="k" hint-placeholder-count="6">
+              <i title="{{ k.title }}" style="position:absolute;top:0;bottom:0;left:{{ k.l }}%;width:{{ k.w }}%;min-width:3px;background:{{ k.c }};border-radius:2px;animation:fadeIn .3s ease-out"></i>
+            </sc-for>
+          </div>
+          <p style="margin:0 0 18px;font-size:11.5px;color:#5A6673">{{ ep.markNote }}</p>
+
+          <h3 style="margin:0 0 8px;font-size:13.5px;font-weight:700">유형별</h3>
+          <sc-for list="{{ ep.types }}" as="c" hint-placeholder-count="3">
+            <div style="display:grid;grid-template-columns:190px 1fr 46px 72px;gap:10px;align-items:center;padding:4px 0">
+              <span title="{{ c.label }}" style="font-size:12.5px;font-family:Consolas,'Cascadia Mono',ui-monospace,monospace;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ c.label }}</span>
+              <span style="display:block;height:8px;border-radius:4px;background:#F0F3F7;overflow:hidden"><i style="display:block;height:100%;border-radius:4px;background:#C5453C;width:{{ c.pct }}%;transform-origin:left;animation:growX .35s cubic-bezier(.16,1,.3,1)"></i></span>
+              <span style="text-align:right;font-size:12.5px;font-variant-numeric:tabular-nums">{{ c.n }}건</span>
+              <span style="text-align:right;font-size:12.5px;font-weight:600;font-variant-numeric:tabular-nums;white-space:nowrap">{{ c.min }}</span>
+            </div>
+          </sc-for>
+          <sc-if value="{{ ep.noTypes }}">
+            <p style="margin:0;font-size:12.5px;color:#5A6673">이 날 이 장비의 Error 가 없습니다.</p>
+          </sc-if>
+
+          <h3 style="margin:18px 0 8px;font-size:13.5px;font-weight:700">최근 21일 이 장비의 Error <span style="font-weight:400;color:#5A6673;font-size:12px">막대를 누르면 그 날로</span></h3>
+          <div style="display:flex;align-items:flex-end;gap:3px;height:74px;border-bottom:1px solid #DCE2E9">
+            <sc-for list="{{ ep.trend }}" as="b" hint-placeholder-count="21">
+              <button onClick="{{ b.pick }}" title="{{ b.title }}" style="flex:1;display:flex;flex-direction:column;justify-content:flex-end;height:100%;border:0;background:none;padding:0;cursor:pointer;min-width:0">
+                <span style="display:block;font-size:10px;color:#4B5866;text-align:center;margin-bottom:2px;font-variant-numeric:tabular-nums">{{ b.v }}</span>
+                <span style="display:block;height:{{ b.h }}%;min-height:2px;background:{{ b.c }};border-radius:2px 2px 0 0"></span>
+              </button>
+            </sc-for>
+          </div>
+          <div style="display:flex;gap:3px;margin-top:4px;margin-bottom:6px">
+            <sc-for list="{{ ep.trend }}" as="b" hint-placeholder-count="21">
+              <span style="flex:1;text-align:center;font-size:10px;color:#5A6673;white-space:nowrap;overflow:visible;min-width:0">{{ b.label }}</span>
+            </sc-for>
+          </div>
+
+          <h3 style="margin:18px 0 8px;font-size:13.5px;font-weight:700">{{ ep.listTitle }}</h3>
+          <div style="border:1px solid #E7ECF1;border-radius:11px;overflow:hidden">
+            <div style="display:grid;grid-template-columns:58px 150px 1fr 60px;gap:10px;padding:8px 14px;background:#FBFCFD;border-bottom:1px solid #EDF1F5;font-size:11.5px;font-weight:600;color:#5A6673">
+              <span>시각</span><span>Lot</span><span>유형 · 원문</span><span style="text-align:right">대기</span>
+            </div>
+            <sc-for list="{{ ep.evts }}" as="e" hint-placeholder-count="6">
+              <button onClick="{{ e.go }}" title="{{ e.title }}" style="width:100%;display:grid;grid-template-columns:58px 150px 1fr 60px;gap:10px;align-items:start;padding:9px 14px;border:0;border-bottom:1px solid #F1F4F7;background:none;font:inherit;color:inherit;text-align:left;cursor:pointer" style-hover="background:#F7F9FB">
+                <span style="font-size:12.5px;font-variant-numeric:tabular-nums;color:#4B5866">{{ e.time }}</span>
+                <span title="{{ e.lot }}" style="font-size:12.5px;font-family:Consolas,'Cascadia Mono',ui-monospace,monospace;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ e.lot }}</span>
+                <span style="display:block;min-width:0">
+                  <span style="display:inline-block;padding:1px 7px;border-radius:999px;background:#FAE7E4;color:#9C3527;font-size:11px;font-weight:600;font-family:Consolas,'Cascadia Mono',ui-monospace,monospace">{{ e.type }}</span>
+                  <span style="display:block;margin-top:3px;font-size:11.5px;color:#4B5866;font-family:Consolas,'Cascadia Mono',ui-monospace,monospace;word-break:break-all">{{ e.status }}</span>
+                </span>
+                <span style="text-align:right;font-size:12.5px;font-weight:600;font-variant-numeric:tabular-nums;white-space:nowrap">{{ e.min }}</span>
+              </button>
+            </sc-for>
+            <sc-if value="{{ ep.noEvts }}">
+              <p style="margin:0;padding:12px 14px;font-size:12.5px;color:#5A6673">기록 없음</p>
+            </sc-if>
+          </div>
+        </div>
+      </div>
+    </div>
+  </sc-if>
+
+  <!-- ============ 장비 팝업 ============ -->
+  <sc-if value="{{ modalOn }}">
+    <div style="position:fixed;inset:0;z-index:50;display:flex;align-items:flex-start;justify-content:center;padding:34px 20px;background:rgba(15,21,28,.42);backdrop-filter:blur(2px);animation:fadeIn .12s ease-out;overflow:auto">
+      <button onClick="{{ m.close }}" aria-label="닫기" style="position:fixed;inset:0;border:0;background:none;cursor:default;padding:0"></button>
+      <div role="dialog" aria-modal="true" style="position:relative;width:min(1120px,100%);background:#fff;border-radius:16px;box-shadow:0 24px 70px rgba(15,21,28,.28);animation:popIn .16s cubic-bezier(.16,1,.3,1)">
+
+        <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:16px 22px;border-bottom:1px solid #EDF1F5">
+          <h2 style="margin:0;font-size:21px;font-weight:700;letter-spacing:-.02em">{{ m.n }}</h2>
+          <span style="font-size:13px;color:#5A6673;font-variant-numeric:tabular-nums">{{ m.dayLabel }}</span>
+          <span style="font-size:12.5px;color:#5A6673;font-family:Consolas,'Cascadia Mono',ui-monospace,monospace">{{ m.note }}</span>
+          <div style="flex:1"></div>
+          <sc-for list="{{ m.siblings }}" as="s" hint-placeholder-count="2">
+            <button onClick="{{ s.go }}" title="{{ s.title }}" style="padding:5px 10px;border:1px solid #DCE2E9;background:#fff;border-radius:7px;font:inherit;font-size:12.5px;cursor:pointer;white-space:nowrap;color:#4B5866">{{ s.label }}</button>
+          </sc-for>
+          <button onClick="{{ m.close }}" title="닫기 (Esc)" style="width:32px;height:32px;border:1px solid #DCE2E9;background:#fff;border-radius:8px;cursor:pointer;color:#4B5866;font-size:15px;line-height:1">✕</button>
+        </div>
+
+        <div style="padding:16px 22px 22px">
+          <section style="display:grid;grid-template-columns:repeat(auto-fit,minmax(124px,1fr));background:#fff;border:1px solid #E1E6EC;border-radius:12px;overflow:hidden;margin-bottom:18px">
+            <sc-for list="{{ m.stats }}" as="s" hint-placeholder-count="6">
+              <div style="padding:12px 15px;box-shadow:inset 1px 0 0 #EDF1F5">
+                <p style="margin:0;font-size:12.5px;color:#5A6673;white-space:nowrap">{{ s.k }}</p>
+                <p style="margin:2px 0 0;font-size:20px;font-weight:700;letter-spacing:-.02em;font-variant-numeric:tabular-nums;white-space:nowrap;color:{{ s.ink }}">{{ s.v }}</p>
+              </div>
+            </sc-for>
+          </section>
+
+          <sc-if value="{{ m.est }}">
+            <p style="margin:0 0 12px;font-size:11.5px;color:#5A6673;word-break:keep-all;text-wrap:pretty">{{ m.estNote }}</p>
+          </sc-if>
+          <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:10px">
+            <h3 style="margin:0;font-size:14px;font-weight:700">{{ m.lotLabel }}</h3>
+            <span style="font-size:12.5px;color:#5A6673">{{ m.lotHint }}</span>
+            <div style="flex:1"></div>
+            <div style="display:inline-flex;border:1px solid #DCE2E9;border-radius:8px;overflow:hidden">
+              <sc-for list="{{ m.lotFilters }}" as="f" hint-placeholder-count="2">
+                <button onClick="{{ f.pick }}" style="border:0;border-left:1px solid #DCE2E9;padding:5px 12px;font:inherit;font-size:12.5px;font-weight:600;cursor:pointer;white-space:nowrap;background:{{ f.bg }};color:{{ f.ink }}">{{ f.label }}</button>
+              </sc-for>
+            </div>
+          </div>
+
+          <div style="position:relative;height:16px;margin-bottom:4px">
+            <sc-for list="{{ hourTicks }}" as="h" hint-placeholder-count="5">
+              <span style="position:absolute;top:0;left:{{ h.l }}%;white-space:nowrap;transform:{{ h.tx }};font-size:10.5px;color:#5A6673;font-variant-numeric:tabular-nums">{{ h.t }}</span>
+            </sc-for>
+          </div>
+          <div style="position:relative;height:36px;border-radius:18px;background:#E9EDF2;overflow:hidden;background-image:{{ m.bar }}">
+            <sc-for list="{{ m.hits }}" as="H" hint-placeholder-count="6">
+              <button onClick="{{ H.pick }}" title="{{ H.title }}" style="position:absolute;top:0;bottom:0;left:{{ H.l }}%;width:{{ H.w }}%;min-width:3px;border:0;border-left:1px solid rgba(255,255,255,.9);border-right:1px solid rgba(15,21,28,.18);padding:0;background:{{ H.bg }};cursor:pointer;box-shadow:{{ H.ring }}"></button>
+            </sc-for>
+          </div>
+
+          <div style="position:relative;margin-top:0;height:{{ m.calloutH }}px">
+            <sc-for list="{{ m.callouts }}" as="c" hint-placeholder-count="6">
+              <span style="position:absolute;left:{{ c.x }}%;top:-18px;width:1px;height:18px;background:{{ c.inbar }};z-index:2"></span>
+              <span style="position:absolute;left:{{ c.x }}%;top:-20px;width:6px;height:6px;margin-left:-3px;border-radius:50%;background:{{ c.dot }};box-shadow:0 0 0 1.5px #fff;z-index:3"></span>
+              <span style="position:absolute;left:{{ c.x }}%;top:0;width:1px;height:{{ c.h }}px;background:{{ c.line }}"></span>
+              <button onClick="{{ c.pick }}" title="{{ c.title }}" style="position:absolute;left:{{ c.lx }}%;top:{{ c.ty }}px;display:flex;align-items:center;gap:6px;padding:3px 9px;border:1px solid {{ c.bd }};border-radius:999px;background:{{ c.bg }};font:inherit;font-size:11.5px;color:{{ c.ink }};cursor:pointer;white-space:nowrap;font-weight:{{ c.fw }}" style-hover="border-color:#2E6BA8">
+                <span style="width:6px;height:6px;border-radius:50%;background:{{ c.dot }};flex:none"></span>{{ c.label }}
+              </button>
+            </sc-for>
+          </div>
+
+          <sc-if value="{{ m.hasSel }}">
+            <div style="margin-top:12px;padding:14px 16px;background:#FBFCFD;border:1px solid #E7ECF1;border-radius:11px">
+              <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:10px">
+                <b style="font-size:14.5px">{{ m.sel.lot }}</b>
+                <sc-for list="{{ m.sel.types }}" as="ty" hint-placeholder-count="1">
+                  <span style="padding:2px 9px;border-radius:999px;background:#FAE7E4;color:#9C3527;font-size:12px;font-weight:600;white-space:nowrap;font-family:Consolas,'Cascadia Mono',ui-monospace,monospace">{{ ty.label }} {{ ty.n }}</span>
+                </sc-for>
+                <sc-if value="{{ m.sel.noType }}">
+                  <span style="padding:2px 9px;border-radius:999px;background:#E7F0EA;color:#276B48;font-size:12px;font-weight:600;white-space:nowrap">Error 없음</span>
+                </sc-if>
+                <div style="flex:1"></div>
+                <button onClick="{{ m.clearSel }}" style="border:0;background:none;font:inherit;font-size:12.5px;color:#5A6673;cursor:pointer">선택 해제</button>
+              </div>
+              <div style="display:grid;grid-template-columns:max-content 1fr;gap:4px 14px;font-size:12.5px">
+                <span style="color:#5A6673">시간</span><span style="font-variant-numeric:tabular-nums">{{ m.sel.time }}</span>
+                <span style="color:#5A6673">Wafer</span><span>{{ m.sel.count }}</span>
+                <span style="color:#5A6673">Job</span><span style="font-family:Consolas,'Cascadia Mono',ui-monospace,monospace;word-break:break-all">{{ m.sel.job }}</span>
+                <sc-if value="{{ m.sel.hasStatus }}">
+                  <span style="color:#5A6673">원문</span><span style="font-family:Consolas,'Cascadia Mono',ui-monospace,monospace;color:#4B5866;word-break:break-all">{{ m.sel.status }}</span>
+                </sc-if>
+                <span style="color:#5A6673">Report</span><span style="font-family:Consolas,'Cascadia Mono',ui-monospace,monospace;color:#4B5866;word-break:break-all">{{ m.sel.report }}</span>
+              </div>
+            </div>
+          </sc-if>
+          <sc-if value="{{ m.noLots }}">
+            <p style="margin:14px 0 0;font-size:13px;color:#5A6673">이 날 이 장비의 기록이 없습니다.</p>
+          </sc-if>
+        </div>
+      </div>
+    </div>
+  </sc-if>
+</div>
+
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:1440,&quot;height&quot;:1000},&quot;attentionUtil&quot;:{&quot;editor&quot;:&quot;int&quot;,&quot;default&quot;:40,&quot;min&quot;:0,&quot;max&quot;:100,&quot;unit&quot;:&quot;%&quot;,&quot;tsType&quot;:&quot;number&quot;,&quot;section&quot;:&quot;살펴볼 장비 기준&quot;},&quot;attentionErr&quot;:{&quot;editor&quot;:&quot;int&quot;,&quot;default&quot;:3,&quot;min&quot;:0,&quot;max&quot;:50,&quot;unit&quot;:&quot;건&quot;,&quot;tsType&quot;:&quot;number&quot;,&quot;section&quot;:&quot;살펴볼 장비 기준&quot;},&quot;showRepeat&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;막대 표시&quot;}}">
+const RUN="#2E6BA8", DUP="#8FB8DE", TEST="#B49BD6", ERR="#C5453C", STOP="#F1D3CE", IDLE="#E9EDF2";
+const SEGC={0:RUN,1:ERR,2:TEST,3:ERR,4:DUP};
+const HEAT=["#DCE8F4","#B4CDE6","#7FAAD5","#4E86BE","#1F5187"];
+const MONO="Consolas,'Cascadia Mono',ui-monospace,monospace";
+const JOB_ALIAS={
+  "R_TB500_LIVE_PI3":"TB500 PI3",
+  "R_TB500_LIVE_PI2":"TB500 PI2",
+  "R_TB500_LIVE_PI4":"TB500 PI4",
+  "R_ TB500 LIVE_0860154PD_BS UBM":"TB500 BS UBM",
+  "R_TB500 LIVE_FS":"TB500 FS",
+  "TB500_RDL4 - Multi":"TB500 RDL4",
+  "R_TB500 LIVE_0860154PD_R-ETCH":"TB500 R-ETCH",
+  "TB500_RDL3 - Multi":"TB500 RDL3",
+  "TB500_RDL2 - Multi":"TB500 RDL2",
+  "R_Kendall A0_PI4":"Kendall PI4",
+  "R_Kendall A0_PI3":"Kendall PI3",
+  "R_TB500 TOP D-DIE_0860312PD":"TB500 TOP D-DIE",
+  "TB500_RDL1 - Multi":"TB500 RDL1",
+  "TB500_RDL3 - Multi - Swelling":"TB500 RDL3 Swelling",
+  "TB500_RDL4 - Multi - Swelling":"TB500 RDL4 Swelling",
+  "R_TB500_LIVE_PI3 - Enhanced":"TB500 PI3 Enhanced",
+  "R_KENDALL_A0_PI5":"Kendall PI5",
+  "R_KENDALL_A0_FS":"Kendall FS",
+  "R_KENDALL_A0_PI2":"Kendall PI2",
+  "2D@RE-KENDALL A0 TOP DIE_0859659PD-0B":"Kendall TOP DIE",
+  "R_MSFT_Kendall_0859275PD_BS-CAMTEK":"Kendall BS"};
+
+const hm=m=>{m=Math.round(m);const h=Math.floor(m/60),x=m%60;return h?(x?h+"시간 "+x+"분":h+"시간"):x+"분";};
+const clock=m=>String(Math.floor(m/60)).padStart(2,"0")+":"+String(m%60).padStart(2,"0");
+const md=s=>s.slice(5).replace("-","/");
+const cut=(s,n)=>s.length>n?s.slice(0,n-1)+"…":s;
+const DATA_P=(window.__aoiFullP ||= new Promise(res=>{const t=()=>window.AOI_DATA?res(window.AOI_DATA):setTimeout(t,30);t();}));
+
+class Component extends DCLogic {
+  constructor(props){ super(props);
+    this.state={data:null,view:"home",dayI:null,sort:"name",floor:"all",
+      span:21,unit:"day",metric:"min",pickType:null,pickDay:undefined,   /* undefined = 위에서 고른 날짜를 따라감 */
+      modalDev:null,modalDayI:null,modalType:null,modalJob:null,selLot:null,lotFilter:"all",showMembers:false,
+      errDev:null,errDayI:null,errJob:null,errType:null,        /* Error 상세 팝업 (장비 · 날짜 · 선택 필터) */
+      rptSpan:0,rptOpen:null};                                   /* 리포트: 0 = 전체 기간, 펼친 Job */
+    DATA_P.then(data=>this.setState({data,dayI:data.days.indexOf(data.day)})).catch(e=>console.error("data load failed",e));
+    if(typeof window!=="undefined"&&!window.__aoiEsc){ window.__aoiEsc=true;
+      window.addEventListener("keydown",e=>{ if(e.key!=="Escape") return;
+        if(this.state.errDev) this.setState({errDev:null,errJob:null,errType:null});
+        else if(this.state.modalDev) this.setState({modalDev:null,selLot:null});
+        else if(this.state.modalType!=null||this.state.modalJob!=null) this.setState({modalType:null,modalJob:null}); }); } }
+
+  dayStr(){ return this.state.data.days[this.state.dayI]; }
+  at(day,dev){ const D=this.state.data.detail[day]; return (D&&D[dev])||null; }
+  /* 시각적으로만 매끄럽게 — 8분 이하 틈은 같은 종류끼리 이어 붙인다(수치는 원본 그대로) */
+  segsOf(t){ const s=(t.seg||[]).map(x=>({a:x[0],b:x[1],k:x[2]})), j=[];
+    for(const g of s){ const L=j[j.length-1];
+      if(L&&L.k===g.k&&g.a-L.b<=8) L.b=Math.max(L.b,g.b); else j.push({...g}); }
+    const out=[];
+    for(let i=0;i<j.length;i++){ out.push(j[i]);
+      if(j[i].k===1&&j[i+1]){ const g=j[i+1].a-j[i].b; if(g>0&&g<=240) out.push({a:j[i].b,b:j[i+1].a,k:3}); } }
+    return out; }
+  bar(t){ if(!t) return "none"; if(this.isEst(t)) return this.estBar(t);
+    let st=[],pos=0; const split=this.props.showRepeat!==false;
+    for(const s of this.segsOf(t)){ const A=s.a/14.4,B=s.b/14.4; const col=(!split&&s.k===4)?RUN:SEGC[s.k];
+      if(A>pos)st.push(IDLE+" "+pos+"%",IDLE+" "+A+"%"); st.push(col+" "+A+"%",col+" "+B+"%"); pos=Math.max(pos,B); }
+    st.push(IDLE+" "+pos+"%",IDLE+" 100%"); return "linear-gradient(90deg,"+st.join(",")+")"; }
+  measured(t){ return !!t && (t.r+t.x+t.t+t.d)>0; }
+  /* 시각이 확인된 기록이 절반에 못 미치면 Report 의 배치 시각으로 추정한다 */
+  isEst(t){ return !!t && (t.cv!==undefined) && (t.cv<50 || !this.measured(t)) && (t.be>0); }
+  util(t){ if(this.isEst(t)) return t.be/1440*100;
+    return this.measured(t)?((t.r+t.d)/1440*100):null; }
+  estBar(t){ let st=[],pos=0;
+    for(const [a,b] of (t.bseg||[])){ const A=a/14.4,B=b/14.4;
+      if(A>pos) st.push(IDLE+" "+pos+"%",IDLE+" "+A+"%");
+      st.push(RUN+" "+A+"%",RUN+" "+B+"%"); pos=Math.max(pos,B); }
+    st.push(IDLE+" "+pos+"%",IDLE+" 100%"); return "linear-gradient(90deg,"+st.join(",")+")"; }
+  thU(){ return this.props.attentionUtil ?? 40; }
+  thE(){ return this.props.attentionErr ?? 3; }
+  alert(t){ const u=this.util(t); return u===null||u<this.thU()||(t&&t.e||0)>=this.thE(); }
+  floorOf(n){ return n.indexOf("4F")===0?"4":"2"; }
+  devList(){ const f=this.state.floor; return this.state.data.devices.filter(n=>f==="all"||this.floorOf(n)===f); }
+  fleetUtil(day,devs){ const v=devs.map(n=>this.util(this.at(day,n))).filter(x=>x!==null);
+    return v.length?v.reduce((a,b)=>a+b,0)/v.length:0; }
+  segGroup(items,cur,on){ return items.map(it=>({label:it.label,pick:()=>on(it.k),
+    bg:cur===it.k?"#EAF0F7":"#fff", ink:cur===it.k?"#1D4E82":"#5A6673"})); }
+  go(view){ return ()=>{ this.setState({view,modalType:null,modalJob:null,errDev:null}); if(typeof window!=="undefined") window.scrollTo(0,0); }; }
+  open(dev,dayI){ return ()=>this.setState({modalDev:dev,modalDayI:dayI===undefined?this.state.dayI:dayI,selLot:null,modalType:null,modalJob:null,errDev:null}); }
+  /* Error 상세 팝업 — 모든 장비·날짜 공통. f={job:그룹번호, type:유형} 이면 그 Job/유형의 Error 만 (유형·Job 팝업에서 넘어올 때) */
+  openErr(dev,dayI,f){ return ()=>this.setState({errDev:dev,errDayI:dayI===undefined?this.state.dayI:dayI,
+    errJob:f&&f.job!=null?f.job:null,errType:f&&f.type?f.type:null,modalDev:null,selLot:null}); }
+  /* 1차 회귀 y = a + b·x — 절편 a = 준비, 기울기 b = 장당. 오차는 회귀 표준오차. 표본 3개 미만이거나 장수가 전부 같으면 null */
+  ols(pts){ const n=pts.length; if(n<3) return null; let mx=0,my=0; for(const [x,y] of pts){mx+=x;my+=y;} mx/=n; my/=n;
+    let sxx=0,sxy=0; for(const [x,y] of pts){sxx+=(x-mx)*(x-mx);sxy+=(x-mx)*(y-my);} if(sxx<=0) return null;
+    const b=sxy/sxx, a=my-b*mx; let sse=0; for(const [x,y] of pts){const e=y-(a+b*x);sse+=e*e;}
+    const s2=sse/(n-2); return {a,b,seA:Math.sqrt(s2*(1/n+mx*mx/sxx)),seB:Math.sqrt(s2/sxx),n}; }
+  modeOf(xs){ const c={}; let best=null; for(const x of xs){ c[x]=(c[x]||0)+1; if(best===null||c[x]>c[best]||(c[x]===c[best]&&x>best)) best=x; } return best; }
+
+  renderVals(){
+    const D=this.state.data, V=this.state.view;
+    const ticks=[0,6,12,18,24].map(h=>({t:h===24?"24시":h+"시",l:h/24*100,tx:h===0?"translateX(0)":(h===24?"translateX(-100%)":"translateX(-50%)")}));
+    const base={hourTicks:ticks,
+      goHome:this.go("home"), goErrors:this.go("errors"), goTrend:this.go("trend"), goReport:this.go("report"),
+      navRptBg:V==="report"?"#EAF0F7":"transparent", navRptInk:V==="report"?"#1D4E82":"#5A6673", isReport:V==="report",
+      navHomeBg:V==="home"?"#EAF0F7":"transparent", navHomeInk:V==="home"?"#1D4E82":"#5A6673",
+      navErrBg:V==="errors"?"#EAF0F7":"transparent", navErrInk:V==="errors"?"#1D4E82":"#5A6673",
+      navTrendBg:V==="trend"?"#EAF0F7":"transparent", navTrendInk:V==="trend"?"#1D4E82":"#5A6673",
+      isHome:V==="home",isErrors:V==="errors",isTrend:V==="trend"};
+    if(!D) return {...base,dayLabel:"—",stampTxt:"",avgTxt:"—",alertCount:"—",stopTxt:"—",errTotal:"—",
+      rows:[],floors:[],sorts:[],estNote:"",dayPrev:()=>{},dayNext:()=>{},dayLast:()=>{},prevOp:.4,nextOp:.4,prevCur:"default",nextCur:"default",
+      modalOn:false,m:{},err:{},tr:{},rp:{},ep:{},errOn:false};
+
+    const day=this.dayStr(), dt=new Date(day+"T00:00:00");
+    const devs=this.devList();
+    const floors=this.segGroup([{k:"all",label:"전체"},{k:"2",label:"2층"},{k:"4",label:"4층"}],this.state.floor,k=>this.setState({floor:k}));
+    const dayName=s=>{const x=new Date(s+"T00:00:00");return (x.getMonth()+1)+"월 "+x.getDate()+"일 ("+"일월화수목금토"[x.getDay()]+")";};
+    const head={dayLabel:dayName(day), stampTxt:D.generated+" 수집 기준",
+      dayPrev:()=>{ if(this.state.dayI>0) this.setState({dayI:this.state.dayI-1,pickDay:undefined}); },
+      dayNext:()=>{ if(this.state.dayI<D.days.length-1) this.setState({dayI:this.state.dayI+1,pickDay:undefined}); },
+      dayLast:()=>this.setState({dayI:D.days.length-1,pickDay:undefined}),
+      prevOp:this.state.dayI>0?1:.35, nextOp:this.state.dayI<D.days.length-1?1:.35,
+      prevCur:this.state.dayI>0?"pointer":"not-allowed", nextCur:this.state.dayI<D.days.length-1?"pointer":"not-allowed"};
+
+    /* ---------- 가동률 ---------- */
+    const items=devs.map(n=>({n,t:this.at(day,n)}));
+    const sorted=[...items];
+    if(this.state.sort==="low") sorted.sort((a,b)=>{const x=this.util(a.t),y=this.util(b.t);return (x===null?-1:x)-(y===null?-1:y);});
+    const HATCH="repeating-linear-gradient(135deg,rgba(255,255,255,.55) 0 3px,transparent 3px 7px)";
+    const rows=sorted.map(x=>{ const u=this.util(x.t), al=this.alert(x.t), es=this.isEst(x.t);
+      return {n:x.n,go:this.open(x.n),bar:this.bar(x.t),est:es,hatch:es?HATCH:"none",
+        title:x.n+" 하루 상세 팝업 열기"+(es?" · 시각 기록이 부족해 Report 의 배치 시각으로 추정한 값입니다":""),
+        dot:u===null?"#C9D1DA":(al?"#C5453C":(u>=70?"#2E6BA8":"#C9D1DA")),
+        uTxt:u===null?"—":u.toFixed(0)+"%", uInk:u===null?"#5A6673":(u<this.thU()?"#B4402F":"#0F151C"),
+        eTxt:x.t&&x.t.e?x.t.e+"건":"—", eInk:x.t&&x.t.e>=this.thE()?"#B4402F":"#4B5866"};});
+    const estN=items.filter(x=>this.isEst(x.t)).length;
+    const home={avgTxt:this.fleetUtil(day,devs).toFixed(1),
+      estNote:estN?("추정 "+estN+"대 포함"):"",
+      alertCount:items.filter(x=>this.alert(x.t)).length,
+      stopTxt:hm(items.reduce((a,b)=>a+(b.t?(b.t.x+b.t.s):0),0)),
+      errTotal:items.reduce((a,b)=>a+(b.t?b.t.e:0),0), rows, floors,
+      sorts:this.segGroup([{k:"name",label:"번호순"},{k:"low",label:"가동률 낮은 순"}],this.state.sort,k=>this.setState({sort:k}))};
+
+    /* ---------- 장비 팝업 ---------- */
+    let m={}; const mDev=this.state.modalDev;
+    if(mDev){
+      const mDay=D.days[this.state.modalDayI], t=this.at(mDay,mDev), P=D.pool;
+      const sc=D.scope.find(s=>s.n===mDev)||{}, i=D.devices.indexOf(mDev);
+      const sib=[{label:"Error 보기",title:"이 날 이 장비의 Error 상세",go:this.openErr(mDev,this.state.modalDayI)}];
+      if(D.devices[i-1]) sib.push({label:"‹ "+D.devices[i-1],title:D.devices[i-1]+" 로 바꾸기",go:this.open(D.devices[i-1],this.state.modalDayI)});
+      if(D.devices[i+1]) sib.push({label:D.devices[i+1]+" ›",title:D.devices[i+1]+" 로 바꾸기",go:this.open(D.devices[i+1],this.state.modalDayI)});
+      const u=this.util(t), idle=t?Math.max(0,1440-t.r-t.d-t.x-t.t-t.s):1440;
+      const onlyErr=this.state.lotFilter==="err";
+      const all=t?t.lots:[];
+      const shown=(onlyErr?all.filter(L=>L[5]>0):all);
+      const mEst=this.isEst(t);
+      const key=L=>L[0]+"|"+L[1]+"|"+L[2]+"|"+(L[11]||0);
+      const LA=L=>{const hasW=L[3]>L[2]; if(mEst&&L[12]>L[11]) return L[11]; return hasW?L[2]:(L[11]||0);};
+      const LB=L=>{const hasW=L[3]>L[2]; if(mEst&&L[12]>L[11]) return L[12]; return hasW?L[3]:Math.max((L[12]||0),(L[11]||0)+1);};
+      const sel=shown.find(L=>key(L)===this.state.selLot)||null;
+      /* 지시선 주석 배치: 라벨 폭을 재서 겹치지 않는 가장 위 단으로 내려 보낸다 */
+      /* 지시선: 시작 시각에서 수직으로 내려와 8px 꺾인 뒤 이름표. 오른쪽에 치우친 Lot 은 왼쪽으로 펴서 창을 넘지 않는다 */
+      const W=880, ROW=26, GAP=8/880*100, levels=[], split2=this.props.showRepeat!==false;
+      const textW=s=>{ let w=0; for(const ch of s) w+=(ch.charCodeAt(0)>0x2000?11.6:6.4); return w; };
+      const callouts=shown.map(L=>{
+        const lot=P.lot[L[1]]||"(Lot 확인 불가)";
+        const label=cut(lot,15)+" · "+L[4]+"장";
+        const wPct=(textW(label)+36)/W*100;
+        /* Error 가 있는 Lot 은 그 Error 가 난 지점에서, 없으면 구간 한가운데에서 선이 내려온다 */
+        const la=LA(L), lb=Math.max(LB(L),LA(L)+1);
+        let anchor=(la+lb)/2;
+        if(L[5]){ const eg=this.segsOf(t).find(g=>g.k===1&&g.b>la&&g.a<lb);
+          if(eg) anchor=(Math.max(eg.a,la)+Math.min(eg.b,lb))/2; }
+        const x=anchor/1440*100;
+        let l=x-wPct/2; if(l<0) l=0; if(l+wPct>100) l=Math.max(0,100-wPct);
+        const r=l+wPct;
+        let lv=0; while(lv<16 && levels[lv]!==undefined && l < levels[lv]+1.2) lv++;
+        if(lv>=16) lv=15;
+        levels[lv]=r;
+        const on=sel&&key(sel)===key(L);
+        const y=lv*ROW+10;
+        return {x:x.toFixed(2), lx:l.toFixed(2), h:y, ty:y,
+          line:on?"#2E6BA8":"#D5DDE5",
+          inbar:on?"#0F151C":"rgba(255,255,255,.85)",
+          bd:on?"#2E6BA8":"#E1E6EC", bg:on?"#EAF0F7":"#fff",
+          ink:on?"#1D4E82":"#3D4854", fw:on?"700":"500",
+          dot:L[5]?ERR:(L[7]?TEST:(L[6]>L[4]/2?DUP:RUN)),
+          label, title:lot+" · "+clock(la)+"–"+clock(lb)+" · 누르면 아래에 원문·Report 표시",
+          pick:()=>this.setState({selLot:on?null:key(L)})};});
+      const hits=shown.map(L=>{ const on=sel&&key(sel)===key(L); const la=LA(L), lb=Math.max(LB(L),la+1);
+        return {l:(la/1440*100).toFixed(2), w:Math.max(0.2,(lb-la)/1440*100).toFixed(2),
+          bg:on?"rgba(46,107,168,.22)":"transparent",
+          ring:on?"inset 0 0 0 2px #1D4E82":"none",
+          title:(P.lot[L[1]]||"Lot")+" · "+clock(la)+"–"+clock(lb),
+          pick:()=>this.setState({selLot:on?null:key(L)})};});
+      m={n:mDev, dayLabel:dayName(mDay), note:sc.note||"", siblings:sib, bar:this.bar(t),
+        est:mEst, estHatch:mEst?"repeating-linear-gradient(135deg,rgba(255,255,255,.55) 0 3px,transparent 3px 7px)":"none",
+        estNote:mEst?("이 날은 시각이 확인된 기록이 "+(t?t.cv:0)+"% 뿐이라, Report 의 배치 시작·종료 시각으로 추정했습니다. Scan·Rescan·Test 구분은 할 수 없습니다."):"",
+        close:()=>this.setState({modalDev:null,selLot:null}),
+        stats:mEst
+          ? [{k:"가동률 (추정)",v:u===null?"기록 없음":u.toFixed(1)+"%",ink:u!==null&&u<this.thU()?"#B4402F":"#0F151C"},
+             {k:"돌아간 시간 (추정)",v:hm(t.be),ink:"#0F151C"},
+             {k:"대기 (추정)",v:hm(Math.max(0,1440-t.be)),ink:"#4B5866"},
+             {k:"배치",v:(t.bseg?t.bseg.length:0)+"개",ink:"#0F151C"},
+             {k:"Error",v:t.e+"건",ink:t.e>=this.thE()?"#B4402F":"#0F151C"},
+             {k:"시각 확인",v:t.cv+"%",ink:"#B4402F"}]
+          : [{k:"가동률",v:u===null?"기록 없음":u.toFixed(1)+"%",ink:u!==null&&u<this.thU()?"#B4402F":"#0F151C"},
+             {k:"Scan",v:t?hm(t.r):"—",ink:"#0F151C"},
+             {k:"Rescan",v:t?hm(t.d):"—",ink:"#0F151C"},
+             {k:"Test",v:t?hm(t.t):"—",ink:t&&t.t?"#7A5BA8":"#4B5866"},
+             {k:"Error",v:t?(t.e+"건"+((t.x+t.s)?" · "+hm(t.x+t.s):"")):"—",ink:t&&t.e>=this.thE()?"#B4402F":"#0F151C"},
+             {k:"대기",v:hm(idle),ink:"#4B5866"}],
+        lotCount:all.length, lotLabel:"Lot "+all.length+"개",
+        lotHint:shown.length?"막대나 이름표를 누르면 그 Lot 을 봅니다":"",
+        lotFilters:this.segGroup([{k:"all",label:"전체"},{k:"err",label:"Error 있는 Lot"}],this.state.lotFilter,k=>this.setState({lotFilter:k,selLot:null})),
+        callouts, hits, calloutH:Math.max(30,(levels.length||1)*ROW+14),
+        noLots:shown.length===0, hasSel:!!sel, clearSel:()=>this.setState({selLot:null}),
+        sel:sel?{lot:P.lot[sel[1]]||"(Lot 확인 불가)", job:P.job[sel[0]]||"(Job 없음)",
+          types:Object.entries(sel[9]).sort((a,b)=>b[1][1]-a[1][1]).map(([k,v])=>({label:k,n:hm(v[1])})),
+          noType:Object.keys(sel[9]).length===0,
+          time:(()=>{const a=LA(sel),b=Math.max(LB(sel),a+1);return clock(a)+" – "+clock(b)+" ("+hm(b-a)+")";})(),
+          count:sel[4]+"장"+(sel[6]?" · Rescan "+sel[6]+"장":"")+(sel[7]?" · Test "+sel[7]+"장":""),
+          hasStatus:sel[10]>=0, status:sel[10]>=0?P.st[sel[10]]:"", report:P.rep[sel[8]]||"—"}:null};
+    }
+
+    /* ---------- Error ---------- */
+    let err={}, tp={}; const mt=this.state.modalType, mj=this.state.modalJob;
+    if(V==="errors"){
+      const P=D.pool;
+      const spanDays=this.state.span===0?D.days:D.days.slice(-this.state.span);
+      const pickDay=this.state.pickDay===undefined?day:this.state.pickDay;   /* 기본은 위에서 고른 날짜 */
+      const eDayI=pickDay?D.days.indexOf(pickDay):this.state.dayI;          /* Error 상세 팝업이 열릴 날짜 */
+      const useDays=pickDay?[pickDay]:spanDays;
+      const MET=this.state.metric==="min";
+      const add=(o,k,n,m)=>{const g=o[k]||[0,0];g[0]+=n;g[1]+=m;o[k]=g;};
+      const byDay={},byType={},byDev={},jobAgg={},lotRows={},jobRows={},pkDay={},pkDev={}; let exactM=0;
+      for(const dy of spanDays){ const dd=D.detail[dy]||{}; byDay[dy]=[0,0];
+        for(const n of devs){ const t=dd[n]; if(!t||!t.ct) continue;
+          for(const [c,v] of Object.entries(t.ct)){ add(byDay,dy,v[0],v[1]);
+            if(mt&&c===mt) add(pkDay,dy,v[0],v[1]); }
+          if(mj!=null) for(const L of t.lots){ if(!L[5]||D.jobG[L[0]]!==mj) continue;
+            for(const v of Object.values(L[9])) add(pkDay,dy,v[0],v[1]); } } }
+      for(const dy of useDays){ const dd=D.detail[dy]||{};
+        for(const n of devs){ const t=dd[n]; if(!t||!t.e) continue;
+          exactM+=t.x+t.s;
+          for(const [c,v] of Object.entries(t.ct||{})){ add(byType,c,v[0],v[1]); add(byDev,n,v[0],v[1]);
+            if(mt&&c===mt) add(pkDev,n,v[0],v[1]); }
+          for(const L of t.lots){
+            const gi=D.jobG[L[0]], lotTxt=P.lot[L[1]]||"(Lot 확인 불가)", st=L[10]>=0?P.st[L[10]]:"";
+            const A=jobAgg[gi]||(jobAgg[gi]={occ:0,lots:0,eLots:0,eN:0,eM:0,devs:{}});
+            A.occ+=Math.max(0,L[3]-L[2]); A.lots++; A.devs[n]=1;
+            if(!L[5]) continue;
+            A.eLots++;
+            let ln=0,lm=0;
+            for(const [c,v] of Object.entries(L[9])){ ln+=v[0]; lm+=v[1];
+              const k2=c+"|"+n+"|"+L[8]+"|"+dy;
+              const row=lotRows[k2]||(lotRows[k2]={type:c,dev:n,lot:lotTxt,n:0,min:0,status:st,day:dy});
+              row.n+=v[0]; row.min+=v[1]; }
+            A.eN+=ln; A.eM+=lm;
+            if(mj!=null&&gi===mj){ add(pkDev,n,ln,lm);
+              const k3=n+"|"+L[1]+"|"+dy;
+              const r2=jobRows[k3]||(jobRows[k3]={dev:n,lot:lotTxt,n:0,min:0,status:st,day:dy});
+              r2.n+=ln; r2.min+=lm; } } } }
+      const totalN=Object.values(byType).reduce((a,b)=>a+b[0],0);
+      const totalM=exactM;
+      const mi=MET?1:0;
+      const maxDay=Math.max(1,...spanDays.map(d=>(byDay[d]||[0,0])[mi]));
+      const typeArr=Object.entries(byType).sort((a,b)=>b[1][mi]-a[1][mi]);
+      const devArr=Object.entries(byDev).sort((a,b)=>b[1][mi]-a[1][mi]).slice(0,12);
+      const jobArr=Object.entries(jobAgg).filter(([,A])=>A.eN>0||A.occ>0)
+        .sort((a,b)=>MET?(b[1].eM-a[1].eM||b[1].eN-a[1].eN):(b[1].eN-a[1].eN||b[1].eM-a[1].eM)).slice(0,12);
+      const cmax=typeArr.length?Math.max(1,typeArr[0][1][mi]):1, dmax=devArr.length?Math.max(1,devArr[0][1][mi]):1;
+      const jmax=Math.max(1,...jobArr.map(([,A])=>MET?A.eM:A.eN));
+      const dayV=d=>(byDay[d]||[0,0])[mi];
+      const fmtV=v=>MET?(v>=60?(v/60).toFixed(0)+"h":v+"m"):String(v);
+      err={floors,
+        spans:[{k:-1,label:"일자별"},{k:7,label:"최근 7일"},{k:21,label:"최근 21일"},{k:0,label:"전체 "+D.days.length+"일"}]
+          .map(it=>{ const on=it.k===-1?!!pickDay:(!pickDay&&this.state.span===it.k);
+            return {label:it.label, bg:on?"#EAF0F7":"#fff", ink:on?"#1D4E82":"#5A6673",
+              pick:it.k===-1?(()=>this.setState({pickDay:undefined})):(()=>this.setState({span:it.k,pickDay:null}))}; }),
+        metrics:this.segGroup([{k:"n",label:"건수"},{k:"min",label:"대기 시간"}],this.state.metric,k=>this.setState({metric:k})),
+        metricLabel:MET?"대기 시간":"건수",
+        nW:MET?"400":"700", nInk:MET?"#5A6673":"#0F151C",
+        mW:MET?"700":"400", mInk:MET?"#0F151C":"#5A6673",
+        stats:[{k:"Error",v:totalN+"건",s:(totalN/useDays.length).toFixed(0)+"건 / 하루",font:"inherit"},
+          {k:"대기 시간",v:hm(totalM),s:"하루 평균 "+hm(totalM/useDays.length),font:"inherit"},
+          {k:MET?"시간이 가장 긴 유형":"가장 많은 유형",v:typeArr.length?typeArr[0][0]:"—",
+            s:typeArr.length?(typeArr[0][1][0]+"건 · "+hm(typeArr[0][1][1])):"",font:MONO},
+          {k:"Error 난 장비",v:Object.keys(byDev).length+"대",s:devs.length+"대 중",font:"inherit"}],
+        dayPickTxt:pickDay?(md(pickDay)+" 하루만 보는 중"):"전체 기간 합계",
+        hasDayPick:!!pickDay, clearDay:()=>this.setState({pickDay:null}),
+        bars:spanDays.map((d,i)=>({label:(i%Math.ceil(spanDays.length/11)===0||i===spanDays.length-1)?md(d):"",
+          vTxt:(spanDays.length<=22&&dayV(d))?fmtV(dayV(d)):(dayV(d)===maxDay?fmtV(dayV(d)):""),
+          h:(dayV(d)/maxDay*100).toFixed(1),
+          color:pickDay===d?"#8C2A1F":(d===day?"#C5453C":"#E0A9A2"),
+          title:md(d)+" · Error "+(byDay[d]||[0,0])[0]+"건 · 대기 시간 "+hm((byDay[d]||[0,0])[1]),
+          pick:()=>this.setState({pickDay:pickDay===d?null:d})})),
+        types:typeArr.map(([c,v])=>({label:c,n:v[0],minTxt:hm(v[1]),pct:Math.round(v[mi]/cmax*100),
+          bg:"transparent", mark:"›",
+          title:c+" · "+v[0]+"건 · 대기 시간 "+hm(v[1])+" · 눌러서 자세히",
+          pick:()=>this.setState({modalType:c})})),
+        devs:devArr.map(([n,v])=>({n,v:v[0],minTxt:hm(v[1]),pct:Math.round(v[mi]/dmax*100),
+          title:n+" Error 상세 열기",go:this.openErr(n,eDayI)})),
+        jobs:jobArr.map(([gk,A])=>{ const gi=+gk, G=D.jobGroups[gi], raw=P.job[G.l]||"(Job 없음)";
+          const nm=JOB_ALIAS[raw]||raw, al=!!JOB_ALIAS[raw];
+          return {label:cut(nm,34),font:al?"inherit":MONO,n:A.eN,minTxt:A.eN?hm(A.eM):"—", mark:"›",
+            sub:"Lot "+A.lots+"개 중 "+A.eLots+"개 Error",
+            pct:MET?0:Math.round(A.eN/jmax*100), pct2:MET?Math.round(A.eM/jmax*100):0,
+            nInk:A.eN?"#B4402F":"#5A6673",
+            title:raw+(G.m.length>1?(" (이름 "+G.m.length+"개 묶음)"):"")+" · Lot "+A.lots+"개 중 "+A.eLots+"개 Error · 점유 "+hm(A.occ)+" · 대기 "+hm(A.eM)+" · 눌러서 자세히",
+            pick:()=>this.setState({modalJob:gi,showMembers:false})}; })};
+      if(mt||mj!=null){
+        const hit=(mt?Object.values(lotRows).filter(r=>r.type===mt):Object.values(jobRows))
+          .sort((a,b)=>b.min-a.min||b.n-a.n);
+        const cap=300, rs=hit.slice(0,cap);
+        const dmx=Math.max(1,...spanDays.map(d=>(pkDay[d]||[0,0])[1]));
+        const dv=Object.entries(pkDev).sort((a,b)=>b[1][1]-a[1][1]).slice(0,10);
+        const dvmx=dv.length?Math.max(1,dv[0][1][1]):1;
+        const JA=mt?null:(jobAgg[mj]||{eN:0,eM:0,lots:0,eLots:0,occ:0});
+        const pv=mt?(byType[mt]||[0,0]):[JA.eN,JA.eM];
+        const sumN=pv[0], sumM=pv[1];
+        const G=mt?null:D.jobGroups[mj];
+        const jraw=G?(P.job[G.l]||"(Job 없음)"):"";
+        tp={label:mt||JOB_ALIAS[jraw]||jraw, isJob:mj!=null, mono:(mt||!JOB_ALIAS[jraw])?MONO:"inherit",
+          hasAlias:!!(G&&JOB_ALIAS[jraw]), rawName:jraw,
+          members:G&&G.m.length>1?G.m.map(([i,c])=>({nm:P.job[i]||"(Job 없음)",c:c+"회"})):[],
+          hasMembers:!!(G&&G.m.length>1), memberTxt:G&&G.m.length>1?("이름 "+G.m.length+"개를 묶었습니다 — 보기"):"",
+          showMembers:this.state.showMembers, toggleMembers:()=>this.setState({showMembers:!this.state.showMembers}), lots:hit.length, n:sumN, minTxt:hm(sumM),
+          range:(pickDay?md(pickDay)+" 하루":("최근 "+useDays.length+"일"))+(hit.length>cap?" · 상위 "+cap+"개만 표시":""),
+          close:()=>this.setState({modalType:null,modalJob:null}),
+          showDays:!pickDay,
+          spanLabel:spanDays.length===D.days.length?("전체 "+D.days.length+"일"):("최근 "+spanDays.length+"일"),
+          stats:[{k:"Error",v:sumN+"건"},{k:"대기 시간",v:hm(sumM)},
+            {k:"장비",v:Object.keys(pkDev).length+"대"},
+            {k:mt?"Lot 기록":"Lot",v:mt?(hit.length+"건"):(JA.eLots+" / "+JA.lots+"개")}],
+          dayBars:spanDays.map((d,i)=>({label:(i%Math.ceil(spanDays.length/11)===0||i===spanDays.length-1)?md(d):"",
+            h:((pkDay[d]||[0,0])[1]/dmx*100).toFixed(1),
+            vTxt:(pkDay[d]&&pkDay[d][1]>=dmx*0.75)?((pkDay[d][1]/60).toFixed(0)+"h"):"",
+            color:(pkDay[d]&&pkDay[d][1])?"#C5453C":"#EDF1F5",
+            title:md(d)+" · "+((pkDay[d]||[0,0])[0])+"건 · "+hm((pkDay[d]||[0,0])[1])})),
+          devBars:dv.map(([n,v])=>({n,pct:Math.round(v[1]/dvmx*100),v:hm(v[1]),n2:v[0]+"건",
+            title:n+" Error 상세 열기"+(mt?" (이 유형만)":" (이 Job 만)"),go:this.openErr(n,eDayI,{job:mj,type:mt})})),
+          rows:rs.map(r=>({dev:r.dev,day:md(r.day),lot:r.lot,status:r.status||"(원문 없음)",
+            n:r.n+"건",min:hm(r.min),
+            title:r.dev+" · "+md(r.day)+" Error 상세 열기",
+            go:this.openErr(r.dev,D.days.indexOf(r.day),{job:mj,type:mt})}))}; }
+    }
+
+    /* ---------- 추이 ---------- */
+    let tr={};
+    if(V==="trend"){
+      const U=this.state.unit; let buckets=[];
+      if(U==="day") buckets=D.days.map(d=>({label:md(d),v:this.fleetUtil(d,devs),day:d}));
+      else if(U==="week"){ const g={};
+        D.days.forEach(d=>{ const x=new Date(d+"T00:00:00"), wd=(x.getDay()+6)%7, mon=new Date(x.getTime()-wd*86400000);
+          const k2=mon.getFullYear()+"-"+String(mon.getMonth()+1).padStart(2,"0")+"-"+String(mon.getDate()).padStart(2,"0");
+          (g[k2]||=[]).push(d); });
+        buckets=Object.entries(g).map(([k2,ds])=>({label:md(k2)+" 주",day:null,v:ds.reduce((a,d)=>a+this.fleetUtil(d,devs),0)/ds.length})); }
+      else { const g={}; D.days.forEach(d=>{ (g[d.slice(0,7)]||=[]).push(d); });
+        buckets=Object.entries(g).map(([k2,ds])=>({label:(+k2.slice(5))+"월",day:null,v:ds.reduce((a,d)=>a+this.fleetUtil(d,devs),0)/ds.length})); }
+      const mx=Math.max(...buckets.map(b=>b.v),1)*1.12;
+      const avg=buckets.reduce((a,b)=>a+b.v,0)/buckets.length;
+      const best=[...buckets].sort((a,b)=>b.v-a.v)[0], low=[...buckets].sort((a,b)=>a.v-b.v)[0];
+      tr={floors, units:this.segGroup([{k:"day",label:"일"},{k:"week",label:"주"},{k:"month",label:"월"}],U,k=>this.setState({unit:k})),
+        chartTitle:U==="day"?"날짜별 평균 가동률":(U==="week"?"주별 평균 가동률":"월별 평균 가동률"),
+        avgTxt:avg.toFixed(1), avgLine:(avg/mx*100).toFixed(1), dayCount:D.days.length,
+        bars:buckets.map((b,i)=>({label:(i%Math.ceil(buckets.length/11)===0||i===buckets.length-1)?b.label:"",
+          vTxt:(buckets.length<=16||b===best||b===low||i===buckets.length-1)?b.v.toFixed(0):"",
+          h:(b.v/mx*100).toFixed(1), cur:b.day?"pointer":"default",
+          title:b.day?(md(b.day)+" · 평균 "+b.v.toFixed(1)+"% · 누르면 그 날 목록으로"):(b.label+" · 평균 "+b.v.toFixed(1)+"%"),
+          pick:b.day?(()=>{this.setState({view:"home",dayI:D.days.indexOf(b.day)}); if(typeof window!=="undefined") window.scrollTo(0,0);}):()=>{},
+          color:b.v<this.thU()?"#C5453C":(b.v<55?"#8FB8DE":"#2E6BA8")})),
+        heat:devs.map(n=>{ const vals=D.days.map(d=>this.util(this.at(d,n)));
+          const ok=vals.filter(v=>v!==null), a=ok.length?ok.reduce((x,y)=>x+y,0)/ok.length:null;
+          return {n, go:this.open(n),
+            avgTxt:a===null?"—":a.toFixed(0)+"%", avgInk:a!==null&&a<this.thU()?"#B4402F":"#0F151C",
+            cells:vals.map((v,i)=>({bg:v===null?"transparent":HEAT[Math.min(4,Math.floor(v/20))],
+              ring:v===null?"inset 0 0 0 1px #DCE2E9":"none",
+              title:md(D.days[i])+" · "+n+" · "+(v===null?"시간 기록 없음":v.toFixed(0)+"%")+" · 누르면 팝업",
+              go:this.open(n,i)}))};})};
+    }
+
+    /* ---------- Error 상세 팝업 (승인 시안 A — 언제·무엇이·얼마나) ---------- */
+    let ep={}; const eDev=this.state.errDev;
+    if(eDev){
+      const P=D.pool, eI=this.state.errDayI, eDay=D.days[eI], t=this.at(eDay,eDev)||{lots:[],ct:{},seg:[],e:0};
+      const fj=this.state.errJob, ft=this.state.errType, filtered=fj!=null||!!ft;
+      const la=L=>L[3]>L[2]?L[2]:(L[11]||0), lb=L=>L[3]>L[2]?L[3]:Math.max(L[12]||0,(L[11]||0)+1);
+      const lots=(t.lots||[]).filter(L=>fj==null||D.jobG[L[0]]===fj);
+      const eLots=lots.filter(L=>L[5]&&(!ft||L[9][ft]));
+      /* 유형별: 필터가 없으면 장비-일의 집계(ct) 그대로, 있으면 해당 Lot 의 사건만 합친다 */
+      let ctObj=t.ct||{};
+      if(filtered){ ctObj={}; for(const L of eLots) for(const [c,v] of Object.entries(L[9])){ if(ft&&c!==ft) continue; const g=ctObj[c]||[0,0]; g[0]+=v[0]; g[1]+=v[1]; ctObj[c]=g; } }
+      const ct=Object.entries(ctObj).sort((a,b)=>b[1][1]-a[1][1]||b[1][0]-a[1][0]);
+      const totN=ct.reduce((a,b)=>a+b[1][0],0), totM=ct.reduce((a,b)=>a+b[1][1],0), cmax=Math.max(1,...ct.map(c=>c[1][1]));
+      /* 언제 났나: Error 구간(진한 빨강) + 그 뒤 다음 기록까지의 대기(연한 빨강, 최대 240분). 필터 중이면 그 Lot 과 겹치는 구간만 */
+      const segs=(t.seg||[]).map(x=>({a:x[0],b:x[1],k:x[2]})), marks=[];
+      for(let i=0;i<segs.length;i++){ const g=segs[i]; if(g.k!==1) continue;
+        if(filtered&&!eLots.some(L=>g.b>la(L)&&g.a<lb(L))) continue;
+        marks.push({l:(g.a/14.4).toFixed(2),w:Math.max(0.25,(g.b-g.a)/14.4).toFixed(2),c:ERR,title:clock(g.a)+"–"+clock(g.b)+" Error"});
+        const nx=segs[i+1]; if(nx){ const gap=Math.min(240,nx.a-g.b);
+          if(gap>0) marks.push({l:(g.b/14.4).toFixed(2),w:(gap/14.4).toFixed(2),c:STOP,title:clock(g.b)+"–"+clock(g.b+gap)+" 대기 "+hm(gap)}); } }
+      const untimed=eLots.filter(L=>!(L[3]>L[2])).length;
+      /* Lot 별 목록: 대기 시간 긴 순. 누르면 가동률 팝업에서 그 Lot 이 선택된다 */
+      const evts=[];
+      for(const L of eLots) for(const [c,v] of Object.entries(L[9])){ if(ft&&c!==ft) continue;
+        const key=L[0]+"|"+L[1]+"|"+L[2]+"|"+(L[11]||0), a=la(L);
+        evts.push({at:a,time:clock(a),lot:P.lot[L[1]]||"(Lot 확인 불가)",type:c,status:L[10]>=0?P.st[L[10]]:"(원문 없음)",min:hm(v[1]),m:v[1],
+          title:"가동률 팝업에서 이 Lot 보기",go:()=>this.setState({errDev:null,modalDev:eDev,modalDayI:eI,selLot:key,lotFilter:"all"})}); }
+      evts.sort((a,b)=>b.m-a.m||a.at-b.at);
+      /* 최근 21일: 이 날을 끝으로 하는 21일 창(자료 끝에 가까우면 마지막 21일). 막대를 누르면 그 날로 */
+      const end=Math.min(D.days.length,Math.max(eI+1,21)), start=Math.max(0,end-21), win=D.days.slice(start,end);
+      const cnt=dy=>{ const x=this.at(dy,eDev); if(!x) return 0; if(!filtered) return x.e||0;
+        return (x.lots||[]).filter(L=>L[5]&&(fj==null||D.jobG[L[0]]===fj)&&(!ft||L[9][ft])).reduce((a,L)=>a+(ft?L[9][ft][0]:L[5]),0); };
+      const tr=win.map(cnt), tmax=Math.max(1,...tr);
+      const G=fj!=null?D.jobGroups[fj]:null, jraw=G?(P.job[G.l]||"(Job 없음)"):"";
+      ep={dev:eDev, dayLabel:dayName(eDay), nTxt:totN+"건 · 대기 "+hm(totM),
+        dayPrev:()=>{ if(eI>0) this.setState({errDayI:eI-1}); }, dayNext:()=>{ if(eI<D.days.length-1) this.setState({errDayI:eI+1}); },
+        prevOp:eI>0?1:.35, nextOp:eI<D.days.length-1?1:.35,
+        hasFilter:filtered, filterTxt:ft?("유형 "+ft):("Job "+(JOB_ALIAS[jraw]||jraw)), filterFont:(ft||(G&&!JOB_ALIAS[jraw]))?MONO:"inherit",
+        clearFilter:()=>this.setState({errJob:null,errType:null}),
+        goUtil:()=>this.setState({errDev:null,modalDev:eDev,modalDayI:eI,selLot:null}),
+        close:()=>this.setState({errDev:null,errJob:null,errType:null}),
+        stats:[{k:"Error",v:totN+"건",ink:totN?"#B4402F":"#0F151C"},{k:"대기 시간",v:hm(totM),ink:totM?"#B4402F":"#0F151C"},
+          {k:"유형",v:ct.length+"가지",ink:"#0F151C"},{k:"Error 난 Lot",v:eLots.length+" / "+lots.length+"개",ink:"#0F151C"},
+          {k:"가장 많은 유형",v:ct.length?ct[0][0].replace("_ERROR",""):"—",ink:"#0F151C"}],
+        marks, markNote:marks.length?("진한 빨강이 Error, 연한 빨강이 그 뒤 대기입니다."+(untimed?" 시각 미기록 Error "+untimed+"건은 막대에 없습니다.":"")):(totN?"시각이 기록된 Error 가 없어 막대를 그리지 않았습니다.":"Error 없음"),
+        types:ct.map(([c,v])=>({label:c,n:v[0],min:hm(v[1]),pct:Math.round(v[1]/cmax*100)})), noTypes:ct.length===0,
+        trend:win.map((dy,i)=>({label:(i%4===0||i===win.length-1)?md(dy):"",v:tr[i]||"",h:(tr[i]/tmax*100).toFixed(1),c:dy===eDay?ERR:"#E0A9A2",
+          title:md(dy)+" · Error "+tr[i]+"건 · 누르면 이 날로",pick:()=>this.setState({errDayI:D.days.indexOf(dy)})})),
+        evts, noEvts:evts.length===0, listTitle:"Lot 별 Error"+(evts.length?" · "+evts.length+"건":"")};
+    }
+
+    /* ---------- 리포트: TB500 · Kendall 표기명 Job 21개 — 배치시간 = 준비 + 장당 × 장수 (1차 회귀) ---------- */
+    let rp={};
+    if(V==="report"){
+      const P=D.pool, span=this.state.rptSpan, days=span?D.days.slice(-span):D.days;
+      const ABORT=/abort|cancel/i, aliasCache={};
+      const aliasOf=gi=>{ if(aliasCache[gi]!==undefined) return aliasCache[gi]; const G=D.jobGroups[gi]; let al=JOB_ALIAS[P.job[G.l]]||null;
+        if(!al) for(const [i] of G.m){ if(JOB_ALIAS[P.job[i]]){ al=JOB_ALIAS[P.job[i]]; break; } } return aliasCache[gi]=al; };
+      const blank=()=>({n:0,err:0,errMin:0,ex:{err:0,abort:0,small:0,noTime:0},pts:[]});
+      const byAlias={};
+      for(const dy of days) for(const n of D.devices){ const t=this.at(dy,n); if(!t) continue;
+        for(const L of t.lots){ const gi=D.jobG[L[0]], al=aliasOf(gi); if(!al) continue;
+          const A=byAlias[al]||(byAlias[al]={name:al,raw:{},all:blank(),devs:{}});
+          const rawName=P.job[L[0]]; A.raw[rawName]=(A.raw[rawName]||0)+1;
+          const dv=A.devs[n]||(A.devs[n]=blank());
+          let em=0; for(const v of Object.values(L[9])) em+=v[1];
+          for(const S of [A.all,dv]){ S.n++; S.err+=L[5]; S.errMin+=em; }
+          /* 표본에서 제외: Error 난 배치 · 중단된 배치 · 5장 미만 (Test Lot 은 포함). 배치시간은 Report 의 배치 시작~종료 */
+          const st=L[10]>=0?P.st[L[10]]:"";
+          const ex=L[5]?"err":(ABORT.test(st)?"abort":(L[4]<5?"small":((L[12]>L[11])?null:"noTime")));
+          if(ex){ A.all.ex[ex]++; dv.ex[ex]++; continue; }
+          A.all.pts.push([L[4],L[12]-L[11]]); dv.pts.push([L[4],L[12]-L[11]]); } }
+      /* 표본 5개 미만이거나 장수가 모두 같으면 회귀를 내지 않는다(3개로 낸 기울기는 부호까지 뒤집힌다 — 실측 TB500 PI3 Enhanced). 음수 기울기도 값 대신 표시만 */
+      const MIN_N=5;
+      const fit=S=>{ const r=S.pts.length>=MIN_N?this.ols(S.pts):null, mode=this.modeOf(S.pts.map(p=>p[0])), bad=r&&r.b<=0;
+        return {prep:r&&!bad?r.a.toFixed(1)+" ± "+r.seA.toFixed(1)+"분":"—", per:r&&!bad?r.b.toFixed(2)+" ± "+r.seB.toFixed(2)+"분":"—",
+          conv:r&&!bad&&mode?hm(Math.max(0,r.a+r.b*mode)):"—",
+          convSub:r&&!bad&&mode?(mode+"장 기준"):(bad?"기울기 음수 · 신뢰 불가":(S.pts.length<MIN_N?"표본 "+S.pts.length+"개 (5개 미만)":"장수가 모두 같음")),
+          n:S.pts.length+" / "+S.n, err:S.err?S.err+"건":"—", eInk:S.err?"#B4402F":"#5A6673", wait:S.errMin?hm(S.errMin):"—"}; };
+      const exTxt=S=>"제외 — Error "+S.ex.err+" · 중단 "+S.ex.abort+" · 5장 미만 "+S.ex.small+(S.ex.noTime?" · 배치 시각 없음 "+S.ex.noTime:"");
+      const names=Object.keys(byAlias).sort((a,b)=>a.localeCompare(b,"en"));
+      const rows=names.map(al=>{ const A=byAlias[al], f=fit(A.all), open=this.state.rptOpen===al, raws=Object.entries(A.raw).sort((a,b)=>b[1]-a[1]);
+        const devs=Object.keys(A.devs).sort((a,b)=>D.devices.indexOf(a)-D.devices.indexOf(b)).map(n=>{ const S=A.devs[n]; return {name:n,title:n+" · "+exTxt(S),...fit(S)}; });
+        return {...f, name:al, open, bg:open?"#F7F9FB":"transparent", mark:open?"▾":"▸", toggle:()=>this.setState({rptOpen:open?null:al}), devs,
+          sub:"표본 "+A.all.pts.length+"개 / 배치 "+A.all.n+"개 · 장비 "+devs.length+"대"+(raws.length>1?" · 이름 "+raws.length+"개":""),
+          title:raws.map(([k,c])=>k+" ("+c+")").join("\n")+"\n"+exTxt(A.all)}; });
+      const tot=rows.reduce((a,r)=>{ const S=byAlias[r.name].all; a.n+=S.n; a.s+=S.pts.length; a.e+=S.err; a.m+=S.errMin; return a; },{n:0,s:0,e:0,m:0});
+      rp={cols:"minmax(210px,1.3fr) 66px 122px 122px 132px 56px 92px 84px",
+        sub:"TB500 · Kendall 표기명 Job "+rows.length+"개 · 이름순",
+        spans:this.segGroup([{k:7,label:"최근 7일"},{k:21,label:"최근 21일"},{k:0,label:"전체 "+D.days.length+"일"}],span,k=>this.setState({rptSpan:k})),
+        stats:[{k:"Job",v:rows.length+"개",s:"표기명이 있는 것만"},{k:"표본 배치",v:tot.s+"개",s:"배치 "+tot.n+"개 중 (Error·중단·5장 미만 제외)"},
+          {k:"Error",v:tot.e+"건",s:"Lot 단위"},{k:"Error 대기",v:hm(tot.m),s:"Error 구간 + 그 뒤 공백"}],
+        rows, note:"배치시간 = 준비 + 장당 × 장수 로 1차 회귀 — 절편이 준비, 기울기가 장당, ± 는 회귀 표준오차. 환산은 최빈 장수 기준. 표본 5개 미만이면 내지 않음. 배치시간은 Report 의 배치 시작~종료. 평균 fault 는 수집 예정(faults 열 재수집 후)."};
+    }
+
+    return {...base,...head,...home,modalOn:!!mDev,m,err,tr,rp,errOn:!!eDev,ep,typeOn:(!!mt||mj!=null)&&!!tp.rows,tp};
+  }
+}
+
+</script>
+</body>
+</html>

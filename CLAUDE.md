@@ -62,6 +62,10 @@ Camtek AOI 장비의 BatchReport/WaferInfo.ini 를 읽어 장비별 가동률을
 ## 레이아웃
 - `main.py`(진입), `aoi_capacity/`(앱: `collect.py`, `cli.py`, `devices.py`, `scope.py`, `nas_guard.py`, `i18n/`, `utils/`, `workers/`,
   `ui/` — 수집 UI 만: `pages/collect_page.py`·`devices_page.py`·`settings_page.py`), `scripts/`(런처·빌드), `dev/`(테스트), `docs/`.
+- **결과 화면 재설계 프로토타입**은 `docs/design/dashboard-redesign/`(Claude Design handoff 9/19: `RULES.md`·`CHANGELOG.md`·`app/*.dc.html`·`aoi-data.json`).
+  DC 런타임(`support.js`) 위에서 도는 **별도 화면**이고 제품 `template.html` 과 계산 규칙이 여러 곳에서 다르다(추정·Error 단위·재스캔 정의·Job/Lot 이름) —
+  이식은 사용자 결정 뒤에만. 오프라인 단일 HTML 은 `python dev/tools/design_bundle.py`(표준 라이브러리, 가드 `test_design_bundle.py`)로 만들며 생성물은 커밋하지 않는다.
+  `docs/` 는 업데이트 payload 에 들어가지 않는다(`_UPDATE_SKIP_TOP`).
 - 코드 받기 도구는 `scripts/update_code.py`(+`update_code.bat`) — 브랜치는 파일 맨 위 `BRANCH` 상수.
   git 폴더면 fetch+ff-only(더티면 중단), zip 폴더면 바뀐 파일만 덮어쓰고 `_backup_…` 을 남긴다(가드: `test_update_code.py`).
 - 현장 샘플 수집 도구는 `scripts/collect_sample.py`(+`make_sample.bat`) — 표준 라이브러리만 쓰고 NAS 는 읽기만 하며

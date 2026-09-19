@@ -1,0 +1,317 @@
+최근 31일 · 장비당 최대 150건 · 2026-09-20 00:01
+========================================================================================================
+장비              검사      찾음     못찾음      Job없음   Setup없    Lot없음      번호없      초
+--------------------------------------------------------------------------------------------------------
+AOI-1          150     137      13         12        0        1       12     66
+AOI-2          150     143       7          1        0        6        1     94
+AOI-3           98      33      65         63        0        2       63     16
+AOI-4          108     102       6          4        0        2        4     45
+AOI-5          150     136      14          8        0        6        7    121
+AOI-6          137     133       4          4        0        0        0     42
+AOI-7          150     148       2          0        0        2        0    107
+AOI-8          150     148       2          1        0        1        1     82
+AOI-9          150     145       5          1        0        4        0     72
+AOI-10         150     146       4          1        0        3        0     81
+AOI-11          76      76       0          0        0        0        0     24
+AOI-12         150     148       2          0        0        2        0    113
+AOI-13           1       0       1          1        0        0        1      6
+AOI-14         150     144       6          4        0        2        0     76
+AOI-15      (예외 발생)
+    Traceback (most recent call last):
+      File "c:\Users\304236\Desktop\AOI가동률이얼마나될까요\# check_aoi4_paths.py", line 138, in <module>
+        cases.sort(reverse=True)
+    TypeError: '<' not supported between instances of 'str' and 'NoneType'
+    
+AOI-16         150      58      92         50       42        0       48     66
+AOI-17         150      24     126        125        0        1      122     20
+AOI-18         150      48     102        102        0        0       78     20
+AOI-19           0       0       0          0        0        0        0      1
+AOI-20         110      10     100        100        0        0       56      6
+AOI-21         100       0     100        100        0        0       95     13
+AOI-22         124      24     100         99        0        1       66     14
+AOI-23          71       0      71         71        0        0       53     10
+AOI-24          52       0      52         52        0        0       52      3
+AOI-25          58       0      58         58        0        0       58      7
+4F-AOI-01       25       0      25         25        0        0        3      1
+4F-AOI-02       16       0      16         16        0        0        0      0
+4F-AOI-03        5       0       5          5        0        0        5      0
+4F-AOI-04        0       0       0          0        0        0        0      0
+4F-AOI-05        6       0       6          6        0        0        6      0
+--------------------------------------------------------------------------------------------------------
+합계            2787    1803     984        909       42       33      731   1172
+끝낸 장비 29대: AOI-1, AOI-2, AOI-3, AOI-4, AOI-5, AOI-6, AOI-7, AOI-8, AOI-9, AOI-10, AOI-11, AOI-12, AOI-13, AOI-14, AOI-16, AOI-17, AOI-18, AOI-19, AOI-20, AOI-21, AOI-22, AOI-23, AOI-24, AOI-25, 4F-AOI-01, 4F-AOI-02, 4F-AOI-03, 4F-AOI-04, 4F-AOI-05
+
+[Report 파일명 형식] 설비번호 있음 45906 · 설비번호 없음 11153 · 아예 다른 형식 5
+    (형식 다름 예시) AOI-2 | INCI-PA006092117_0858531PD-0A.htm
+    (형식 다름 예시) AOI-3 | C.htm
+    (형식 다름 예시) AOI-9 | EXPORT.htm
+    (형식 다름 예시) AOI-12 | 2.htm
+    (형식 다름 예시) 4F-AOI-02 | .htm
+
+[폴더 읽기 오류]
+        8회  FileNotFoundError: 지정된 경로를 찾을 수 없습니다
+폴더 나열 호출 1877회
+
+[못 찾은 사례 — 장비당 최대 5건]
+    AOI-1       Job 폴더 없음 | R_TB500 LIVE_0860154PD_BS UBM_SET UP / (번호없음) / HGX
+            같은 위치에 있는 것: ['1111', '2D@R1-GCOLIABR_0857655PD-0B -COPY', '2D@R1-R_MSFT_Kendall_0859275PD_BS_CAMTEK', '2D@R2-$7781987B@Q-WUP_0856808PD-0A', '2D@R2-AST254_0857122AY-0C', '2D@R2-GVB4R3BQ_0858943PD-0A']
+    AOI-1       Job 폴더 없음 | R_TB500 LIVE_0860154PD_BS UBM_SET UP / (번호없음) / GUA 3D RE
+            같은 위치에 있는 것: ['1111', '2D@R1-GCOLIABR_0857655PD-0B -COPY', '2D@R1-R_MSFT_Kendall_0859275PD_BS_CAMTEK', '2D@R2-$7781987B@Q-WUP_0856808PD-0A', '2D@R2-AST254_0857122AY-0C', '2D@R2-GVB4R3BQ_0858943PD-0A']
+    AOI-1       Lot 폴더 없음 | INCI-UZ0056B-CB001_0859659PD-0B / 6000 / 0
+            같은 위치에 있는 것: ['6000', 'MetaData.ini']
+    AOI-1       Job 폴더 없음 | R_TB500 LIVE_0860154PD_BS UBM_SET UP / (번호없음) / MCV-3D RE
+            같은 위치에 있는 것: ['1111', '2D@R1-GCOLIABR_0857655PD-0B -COPY', '2D@R1-R_MSFT_Kendall_0859275PD_BS_CAMTEK', '2D@R2-$7781987B@Q-WUP_0856808PD-0A', '2D@R2-AST254_0857122AY-0C', '2D@R2-GVB4R3BQ_0858943PD-0A']
+    AOI-1       Job 폴더 없음 | R_TB500 LIVE_0860154PD_BS UBM_SET UP / (번호없음) / BGS-BS
+            같은 위치에 있는 것: ['1111', '2D@R1-GCOLIABR_0857655PD-0B -COPY', '2D@R1-R_MSFT_Kendall_0859275PD_BS_CAMTEK', '2D@R2-$7781987B@Q-WUP_0856808PD-0A', '2D@R2-AST254_0857122AY-0C', '2D@R2-GVB4R3BQ_0858943PD-0A']
+    AOI-2       Lot 폴더 없음 | INCI-W97253Z6BK16_0860752PD-0A / 6000 / UWC
+            같은 위치에 있는 것: ['6000', 'MetaData.ini']
+    AOI-2       Lot 폴더 없음 | INCI-W97218SGZ4BK16_0860463PD-0A / 6000 / YCA
+            같은 위치에 있는 것: ['6000']
+    AOI-2       Lot 폴더 없음 | INCI-W96749Z5BK16_0858522PD-0A / 6000 / UVS
+            같은 위치에 있는 것: []
+    AOI-2       Lot 폴더 없음 | INCI-88850TA3E-UW_0859993PD-0B / 6000 / WNS
+            같은 위치에 있는 것: ['6000', 'MetaData.ini']
+    AOI-2       Lot 폴더 없음 | INCI-88850TA3E-UW_0859993PD-0B / 6000 / VYN
+            같은 위치에 있는 것: ['6000', 'MetaData.ini']
+    AOI-3       Job 폴더 없음 | R_KENDALL_A0_PI4_SETUP / (번호없음) / CTU-PIDS7
+            같은 위치에 있는 것: ['2D@R4-AS-T254-A01_0857122AY-0B R-ETCH', '2D@R4-AS-T256-A01_ROTATION_0859253PD_R-ETCH', '2D@R5-4DT-T254-H-M1_0858711PD-0A', '2D@R5-AS-T254-A01_0856927AY-0B BS CUP', '2D@R5-AS-T256-A01_0859253PD-0A BS CUP', '2D@RE-4DT-T256-H-M1_0859253PD-0B']
+    AOI-3       Job 폴더 없음 | R_KENDALL_A0_PI4_SETUP / (번호없음) / CTN-PIDS7
+            같은 위치에 있는 것: ['2D@R4-AS-T254-A01_0857122AY-0B R-ETCH', '2D@R4-AS-T256-A01_ROTATION_0859253PD_R-ETCH', '2D@R5-4DT-T254-H-M1_0858711PD-0A', '2D@R5-AS-T254-A01_0856927AY-0B BS CUP', '2D@R5-AS-T256-A01_0859253PD-0A BS CUP', '2D@RE-4DT-T256-H-M1_0859253PD-0B']
+    AOI-3       Job 폴더 없음 | R_KENDALL_A0_PI4_SETUP / (번호없음) / CTL-PIDS7
+            같은 위치에 있는 것: ['2D@R4-AS-T254-A01_0857122AY-0B R-ETCH', '2D@R4-AS-T256-A01_ROTATION_0859253PD_R-ETCH', '2D@R5-4DT-T254-H-M1_0858711PD-0A', '2D@R5-AS-T254-A01_0856927AY-0B BS CUP', '2D@R5-AS-T256-A01_0859253PD-0A BS CUP', '2D@RE-4DT-T256-H-M1_0859253PD-0B']
+    AOI-3       Job 폴더 없음 | R_KENDALL_A0_PI4_SETUP / (번호없음) / AVS-PIDS7
+            같은 위치에 있는 것: ['2D@R4-AS-T254-A01_0857122AY-0B R-ETCH', '2D@R4-AS-T256-A01_ROTATION_0859253PD_R-ETCH', '2D@R5-4DT-T254-H-M1_0858711PD-0A', '2D@R5-AS-T254-A01_0856927AY-0B BS CUP', '2D@R5-AS-T256-A01_0859253PD-0A BS CUP', '2D@RE-4DT-T256-H-M1_0859253PD-0B']
+    AOI-3       Job 폴더 없음 | R_ TB500 LIVE_0860154PD_R-ETCH_SETUP / (번호없음) / KDN-REWORK-0831
+            같은 위치에 있는 것: ['2D@R4-AS-T254-A01_0857122AY-0B R-ETCH', '2D@R4-AS-T256-A01_ROTATION_0859253PD_R-ETCH', '2D@R5-4DT-T254-H-M1_0858711PD-0A', '2D@R5-AS-T254-A01_0856927AY-0B BS CUP', '2D@R5-AS-T256-A01_0859253PD-0A BS CUP', '2D@RE-4DT-T256-H-M1_0859253PD-0B']
+    AOI-4       Lot 폴더 없음 | 2D@RE-GA276BER_0856645PD-0D / 6412 / 0
+            같은 위치에 있는 것: []
+    AOI-4       Lot 폴더 없음 | 2D@R2-15966PA0-BW2_0859654PD-0B / 6321 / 15966 BALL DROP TEST_0828S
+            같은 위치에 있는 것: []
+    AOI-4       Job 폴더 없음 | No pattern_No pattern_SRD-8 CLEAN / (번호없음) / 0827S
+            같은 위치에 있는 것: ['2D@R2-W97113Z6B1K16_0858956PD-0A', '2D@R2-W97254Z6B1K16_0860699PD-0A', '2D@RE-88850ITA0-SM-INT-BW_0857982PD-0A', '2D@RE-88850TA3E-UW_0857778PD-0B', '2D@RE-WB90-35183-61A_0861336PD-0A', '2D@RE-WB90-74053-11C_0860101PD-0A']
+    AOI-4       Job 폴더 없음 | No pattern_No pattern_SRD-4 CLEAN / (번호없음) / 0827S
+            같은 위치에 있는 것: ['2D@R2-W97113Z6B1K16_0858956PD-0A', '2D@R2-W97254Z6B1K16_0860699PD-0A', '2D@RE-88850ITA0-SM-INT-BW_0857982PD-0A', '2D@RE-88850TA3E-UW_0857778PD-0B', '2D@RE-WB90-35183-61A_0861336PD-0A', '2D@RE-WB90-74053-11C_0860101PD-0A']
+    AOI-4       Job 폴더 없음 | No pattern_No pattern_SPT LTX PARTICXLE / (번호없음) / 0827S
+            같은 위치에 있는 것: ['2D@R2-W97113Z6B1K16_0858956PD-0A', '2D@R2-W97254Z6B1K16_0860699PD-0A', '2D@RE-88850ITA0-SM-INT-BW_0857982PD-0A', '2D@RE-88850TA3E-UW_0857778PD-0B', '2D@RE-WB90-35183-61A_0861336PD-0A', '2D@RE-WB90-74053-11C_0860101PD-0A']
+    AOI-5       Lot 폴더 없음 | 2D@RE-GUS0E2AQ_0858170PD-0D / 6412 / PLN-3D
+            같은 위치에 있는 것: ['6412']
+    AOI-5       Lot 폴더 없음 | 2D@RE-GUS0E2AQ_0858170PD-0D / 6412 / LXF
+            같은 위치에 있는 것: ['6412']
+    AOI-5       Lot 폴더 없음 | 2D@RE-GUS0E2AQ_0858170PD-0D / 6412 / KLN
+            같은 위치에 있는 것: ['6412']
+    AOI-5       Lot 폴더 없음 | 2D@R5-4DT-TB500-H-M1_0860154PD-0B / 6324 / LCG-PIDV2
+            같은 위치에 있는 것: ['6324', 'MetaData.ini']
+    AOI-5       Lot 폴더 없음 | 2D@RE-W96801Z5B1K15_0857127PD-0A / 6412 / SIM
+            같은 위치에 있는 것: []
+    AOI-6       Job 폴더 없음 | 2D@RE-88850TA3E-UW_0857778PD-0B / 6412 / WNG 3D RE
+            같은 위치에 있는 것: ['2D@R2-$7781987B-WUP_0856808PD-0A', '2D@R2-78900TB1-BW_0858324PD-0B', '2D@R2-DT-GH10N-BIN1-H-U1_0858092PD-0A', '2D@R2-GA276IPR_0858128PD-0A', '2D@R2-GA285AAB_0859840PD-0A', '2D@R2-GUS0E2AQ_0858170DPD-0D']
+    AOI-6       Job 폴더 없음 | 2D@RE-88850TA3E-UW_0857778PD-0B / 6412 / VYM
+            같은 위치에 있는 것: ['2D@R2-$7781987B-WUP_0856808PD-0A', '2D@R2-78900TB1-BW_0858324PD-0B', '2D@R2-DT-GH10N-BIN1-H-U1_0858092PD-0A', '2D@R2-GA276IPR_0858128PD-0A', '2D@R2-GA285AAB_0859840PD-0A', '2D@R2-GUS0E2AQ_0858170DPD-0D']
+    AOI-6       Job 폴더 없음 | 2D@RE-88850TA3E-UW_0857778PD-0B / 6412 / VYL 3D RE
+            같은 위치에 있는 것: ['2D@R2-$7781987B-WUP_0856808PD-0A', '2D@R2-78900TB1-BW_0858324PD-0B', '2D@R2-DT-GH10N-BIN1-H-U1_0858092PD-0A', '2D@R2-GA276IPR_0858128PD-0A', '2D@R2-GA285AAB_0859840PD-0A', '2D@R2-GUS0E2AQ_0858170DPD-0D']
+    AOI-6       Job 폴더 없음 | 2D@RE-88850TA3E-UW_0857778PD-0B / 6412 / NXY
+            같은 위치에 있는 것: ['2D@R2-$7781987B-WUP_0856808PD-0A', '2D@R2-78900TB1-BW_0858324PD-0B', '2D@R2-DT-GH10N-BIN1-H-U1_0858092PD-0A', '2D@R2-GA276IPR_0858128PD-0A', '2D@R2-GA285AAB_0859840PD-0A', '2D@R2-GUS0E2AQ_0858170DPD-0D']
+    AOI-7       Lot 폴더 없음 | 2D@R2-DT-GH10N-BIN1-H-U1_0858092PD-0B / 6321 / LDA
+            같은 위치에 있는 것: ['6321']
+    AOI-7       Lot 폴더 없음 | 2D@RE-DT-T256S-A01_0859475PD-0A / 6412 / XFU
+            같은 위치에 있는 것: []
+    AOI-8       Lot 폴더 없음 | 2D@R2-W96799Z5B1K16_0857261PD-0A / 6321 / FAG SRD
+            같은 위치에 있는 것: []
+    AOI-8       Job 폴더 없음 | _6321 / (번호없음) / UWK
+            같은 위치에 있는 것: ['2D@R2-$7781987B17-WUP_0856808PD-0A', '2D@R2-103367-001_0857289PD-0B', '2D@R2-15966PA0-BW2_0859654PD-0B', '2D@R2-15968PA0-BW_0859956PD-0A', '2D@R2-3000000_0861101PD-0A', '2D@R2-3000011_0861275PD-0A']
+    AOI-9       Job 폴더 없음 | 2D@RE-$7781539A@Q_0858562PD-00A / 6412 / SHT
+            같은 위치에 있는 것: ['1111', '2D@R2-$7781987B-WUP_0856808PD-0A', '2D@R2-15966PA0-BW2_0859654PD-0B', '2D@R2-15968PA0-BW_0859776PD-0A', '2D@R2-15968PA0-BW_0859956PD-0A', '2D@R2-3000011_0861275PD-0A']
+    AOI-9       Lot 폴더 없음 | 2D@RE-GA276BER_0856645PD-0D / 6412 / UUK-DVPO2
+            같은 위치에 있는 것: ['6412', 'MetaData.ini']
+    AOI-9       Lot 폴더 없음 | 2D@RE-GA276BER_0856645PD-0D / 6412 / UAF-3D
+            같은 위치에 있는 것: ['6412', 'MetaData.ini']
+    AOI-9       Lot 폴더 없음 | 2D@RE-WB90-PV325-15D_0854445PD-0A / 6412 / HWG
+            같은 위치에 있는 것: ['6412']
+    AOI-9       Lot 폴더 없음 | 2D@R2-$7781987B-WUP_0856808PD-0A / 6321 / UDF-REWORK_0326N
+            같은 위치에 있는 것: ['6321', 'MetaData.ini']
+    AOI-10      Lot 폴더 없음 | 2D@R2-GUS0E2AQ_0858170PD-0D / 6321 / LKP-3D
+            같은 위치에 있는 것: ['6321']
+    AOI-10      Job 폴더 없음 | 2D@RE-AD81050BCDB-PNAU1Z_0858164PD-0B / 6412 / UPL
+            같은 위치에 있는 것: ['12inch Cycle', '2D@R2-$7781987B17-WUP_0856808PD-0A', '2D@R2-$7781987B@Q-WUP_0856808PD-0A', '2D@R2-103367-001_0857289PD-0B', '2D@R2-15966PA0-BW2_0859654PD-0B', '2D@R2-15968PA0-BW_0859776PD-0A']
+    AOI-10      Lot 폴더 없음 | 2D@R2-$7781987B17-WUP_0856808PD-0A / 6321 / SHF SRD
+            같은 위치에 있는 것: ['6321']
+    AOI-10      Lot 폴더 없음 | 2D@R2-GUS0E2AQ_0858170PD-0D / 6321 / THY
+            같은 위치에 있는 것: ['6321']
+    AOI-12      Lot 폴더 없음 | 2D@RE-W97218SGB1K16_0860463PD-0A / 6412 / WDH
+            같은 위치에 있는 것: ['6412']
+    AOI-12      Lot 폴더 없음 | INCI-SAF8544@3B1-0R001B K5_0857386PD-0A / 6000 / GPP
+            같은 위치에 있는 것: []
+    AOI-13      Job 폴더 없음 | R_KENDALL_A0_PI4_SETUP / (번호없음) / CTS-PIDS7
+            같은 위치에 있는 것: ['2D@R2-3000011_0861275PD-0A', '2D@R3-DT-GH10N-BIN1-H-U1_0858092PD-0A', '2D@R4-AS-T254-A01_0857122AY-0B', '2D@RE-4DT-TB500-H-M1_0860154PD-0B', '2D@RE-78900TB1-BW_0858324PD-0B', '2D@RE-DT-T254G-A01_0859006PD-0B']
+    AOI-14      Lot 폴더 없음 | 2D@R2-$7781987B-WUP_0856808PD-0A / 6321 / GGB
+            같은 위치에 있는 것: ['6321', 'MetaData.ini']
+    AOI-14      Job 폴더 없음 | 2D@RE-W15007SHZ5B1K16_0860970PD-0A / 0420 / 6412_FTY
+            같은 위치에 있는 것: ['2D@R2-$7781987B-WUP_0856808PD-0A', '2D@R2-G0BC435XXX3_0859023PD-0C', '2D@R2-KA11P63K_0858303PD-0D', '2D@R2-SAF8544@3B1-0R001B K5_0861365PD-0A', '2D@R2-THUNDERBIRD^P1_0860386PD-0C', '2D@RE-$7781539A-WUP_0858562PD-0A']
+    AOI-14      Lot 폴더 없음 | INCI-88850ITA0-SM-INT-BW_0857982PD-0A / 6000 / WTN
+            같은 위치에 있는 것: []
+    AOI-14      Job 폴더 없음 | INCI-$7781987B-WUP_0856808PD-0A / 6000 / NFL
+            같은 위치에 있는 것: ['2D@R2-$7781987B-WUP_0856808PD-0A', '2D@R2-G0BC435XXX3_0859023PD-0C', '2D@R2-KA11P63K_0858303PD-0D', '2D@R2-SAF8544@3B1-0R001B K5_0861365PD-0A', '2D@R2-THUNDERBIRD^P1_0860386PD-0C', '2D@RE-$7781539A-WUP_0858562PD-0A']
+    AOI-14      Job 폴더 없음 | INCI-$7781987B-WUP_0856808PD-0A / 6000 / NFG-SRD
+            같은 위치에 있는 것: ['2D@R2-$7781987B-WUP_0856808PD-0A', '2D@R2-G0BC435XXX3_0859023PD-0C', '2D@R2-KA11P63K_0858303PD-0D', '2D@R2-SAF8544@3B1-0R001B K5_0861365PD-0A', '2D@R2-THUNDERBIRD^P1_0860386PD-0C', '2D@RE-$7781539A-WUP_0858562PD-0A']
+    AOI-16      Job 폴더 없음 | R_TB500 LIVE_0860154PD_R-ETCH_SETUP / (번호없음) / NNM
+            같은 위치에 있는 것: ['2D@R4-AS-T254-A01_0857122AY-0B', '2D@R4-AS-T256-A01_ROTATION_0859253PD_R-ETCH', '2D@R5-AS-T254-A01_0857122AY-0B', '2D@R5-AS-T256-A01_0859253PD-0A BS CUP', '2D@RE-DT-TB500C-A01_0860314PD-0B', '2D@RE-GA285ABB_0859840PD-0A']
+    AOI-16      Job 폴더 없음 | R_TB500 LIVE_0860154PD_R-ETCH_SETUP / (번호없음) / MVX
+            같은 위치에 있는 것: ['2D@R4-AS-T254-A01_0857122AY-0B', '2D@R4-AS-T256-A01_ROTATION_0859253PD_R-ETCH', '2D@R5-AS-T254-A01_0857122AY-0B', '2D@R5-AS-T256-A01_0859253PD-0A BS CUP', '2D@RE-DT-TB500C-A01_0860314PD-0B', '2D@RE-GA285ABB_0859840PD-0A']
+    AOI-16      Job 폴더 없음 | 2D@R4-AS-T256-A01_ROTATION_0859253PD_R-ETCH_REVERSE / (번호없음) / LWH
+            같은 위치에 있는 것: ['2D@R4-AS-T254-A01_0857122AY-0B', '2D@R4-AS-T256-A01_ROTATION_0859253PD_R-ETCH', '2D@R5-AS-T254-A01_0857122AY-0B', '2D@R5-AS-T256-A01_0859253PD-0A BS CUP', '2D@RE-DT-TB500C-A01_0860314PD-0B', '2D@RE-GA285ABB_0859840PD-0A']
+    AOI-16      Job 폴더 없음 | R_TB500 LIVE_0860154PD_R-ETCH_SETUP / (번호없음) / NBW
+            같은 위치에 있는 것: ['2D@R4-AS-T254-A01_0857122AY-0B', '2D@R4-AS-T256-A01_ROTATION_0859253PD_R-ETCH', '2D@R5-AS-T254-A01_0857122AY-0B', '2D@R5-AS-T256-A01_0859253PD-0A BS CUP', '2D@RE-DT-TB500C-A01_0860314PD-0B', '2D@RE-GA285ABB_0859840PD-0A']
+    AOI-16      Job 폴더 없음 | R_Kendall A0_0859275PD_REVERSE_SETUP / (번호없음) / 7HF
+            같은 위치에 있는 것: ['2D@R4-AS-T254-A01_0857122AY-0B', '2D@R4-AS-T256-A01_ROTATION_0859253PD_R-ETCH', '2D@R5-AS-T254-A01_0857122AY-0B', '2D@R5-AS-T256-A01_0859253PD-0A BS CUP', '2D@RE-DT-TB500C-A01_0860314PD-0B', '2D@RE-GA285ABB_0859840PD-0A']
+    AOI-17      Job 폴더 없음 | R_TB500_LIVE_PI4_Setup1 / (번호없음) / GFT-PIDS3
+            같은 위치에 있는 것: ['2D@R2-15966PA0-BW2_0859654PD-0B', '2D@RE-AST254-AG2S1-2CAA_0857352AY-0B', '2D@RE-ASTB500-SP822-8MAY_0857984AY-0A', 'R_AMD Venice_0861405PD_RDL2__1-TEST', 'R_AMD Venice_0861405PD_RDL2__1-TEST_5x', 'R_Kendall A0_PI3']
+    AOI-17      Job 폴더 없음 | R_TB500_LIVE_PI3_Setup1 / (번호없음) / FKA-PIDS5
+            같은 위치에 있는 것: ['2D@R2-15966PA0-BW2_0859654PD-0B', '2D@RE-AST254-AG2S1-2CAA_0857352AY-0B', '2D@RE-ASTB500-SP822-8MAY_0857984AY-0A', 'R_AMD Venice_0861405PD_RDL2__1-TEST', 'R_AMD Venice_0861405PD_RDL2__1-TEST_5x', 'R_Kendall A0_PI3']
+    AOI-17      Job 폴더 없음 | R_TB500_LIVE_PI2_Setup1 / (번호없음) / FFL-PIDS7
+            같은 위치에 있는 것: ['2D@R2-15966PA0-BW2_0859654PD-0B', '2D@RE-AST254-AG2S1-2CAA_0857352AY-0B', '2D@RE-ASTB500-SP822-8MAY_0857984AY-0A', 'R_AMD Venice_0861405PD_RDL2__1-TEST', 'R_AMD Venice_0861405PD_RDL2__1-TEST_5x', 'R_Kendall A0_PI3']
+    AOI-17      Job 폴더 없음 | R_TB500_LIVE_PI2_Setup1 / (번호없음) / DXW-PIDS7
+            같은 위치에 있는 것: ['2D@R2-15966PA0-BW2_0859654PD-0B', '2D@RE-AST254-AG2S1-2CAA_0857352AY-0B', '2D@RE-ASTB500-SP822-8MAY_0857984AY-0A', 'R_AMD Venice_0861405PD_RDL2__1-TEST', 'R_AMD Venice_0861405PD_RDL2__1-TEST_5x', 'R_Kendall A0_PI3']
+    AOI-17      Job 폴더 없음 | R_TB500_LIVE_PI2_Setup1 / (번호없음) / CNB-PIDS7
+            같은 위치에 있는 것: ['2D@R2-15966PA0-BW2_0859654PD-0B', '2D@RE-AST254-AG2S1-2CAA_0857352AY-0B', '2D@RE-ASTB500-SP822-8MAY_0857984AY-0A', 'R_AMD Venice_0861405PD_RDL2__1-TEST', 'R_AMD Venice_0861405PD_RDL2__1-TEST_5x', 'R_Kendall A0_PI3']
+    AOI-18      Job 폴더 없음 | R_TB500_LIVE_PI4 AOI-21 Copy / 0614 / Setup1_XHV-PIDS3
+            같은 위치에 있는 것: ['12inch AutoCycle', '2D@R1-KENDALL_A0_PI5', '2D@R2-ASTB500-SP822-8MAY_0857984AY-0A', '2D@RE-ASTB500-SP822-8MAY_0857984AY-0A', 'INCI-GA276IEB_0856645PD-0D', 'LD_Test_NC']
+    AOI-18      Job 폴더 없음 | R_TB500_LIVE_PI2_Setup1 / (번호없음) / LoadPort A
+            같은 위치에 있는 것: ['12inch AutoCycle', '2D@R1-KENDALL_A0_PI5', '2D@R2-ASTB500-SP822-8MAY_0857984AY-0A', '2D@RE-ASTB500-SP822-8MAY_0857984AY-0A', 'INCI-GA276IEB_0856645PD-0D', 'LD_Test_NC']
+    AOI-18      Job 폴더 없음 | R_TB500_LIVE_PI2_Setup1 / (번호없음) / FCT-PIDS7
+            같은 위치에 있는 것: ['12inch AutoCycle', '2D@R1-KENDALL_A0_PI5', '2D@R2-ASTB500-SP822-8MAY_0857984AY-0A', '2D@RE-ASTB500-SP822-8MAY_0857984AY-0A', 'INCI-GA276IEB_0856645PD-0D', 'LD_Test_NC']
+    AOI-18      Job 폴더 없음 | R_TB500_LIVE_PI2_Setup1 / (번호없음) / DYK-PIDS7
+            같은 위치에 있는 것: ['12inch AutoCycle', '2D@R1-KENDALL_A0_PI5', '2D@R2-ASTB500-SP822-8MAY_0857984AY-0A', '2D@RE-ASTB500-SP822-8MAY_0857984AY-0A', 'INCI-GA276IEB_0856645PD-0D', 'LD_Test_NC']
+    AOI-18      Job 폴더 없음 | R_TB500_LIVE_PI2_Setup1 / (번호없음) / DYF-PIDS7
+            같은 위치에 있는 것: ['12inch AutoCycle', '2D@R1-KENDALL_A0_PI5', '2D@R2-ASTB500-SP822-8MAY_0857984AY-0A', '2D@RE-ASTB500-SP822-8MAY_0857984AY-0A', 'INCI-GA276IEB_0856645PD-0D', 'LD_Test_NC']
+    AOI-20      Job 폴더 없음 | TB500_RDL2 - Multi - Swelling_Setup1 / (번호없음) / DXS-RDL2 Swelling
+            같은 위치에 있는 것: ['12inch Cycle Test', '2D@R2-ASTB500-SP822-8MAY_0857984AY-0A', '2D@RE-$7781987B-WUP_0856808PD-0A', '2D@RE-AST254-AG2S1-2CAA_0857352AY-0B', '2D@RE-ASTB500-SP822-8MAY_0857984AY-0A', 'INCI-78900TB1-BW_0858324PD-0B']
+    AOI-20      Job 폴더 없음 | R_TB500_LIVE_PI2 AOI-21 Copy  / 0614 / Setup1_DXY-PIDS7
+            같은 위치에 있는 것: ['12inch Cycle Test', '2D@R2-ASTB500-SP822-8MAY_0857984AY-0A', '2D@RE-$7781987B-WUP_0856808PD-0A', '2D@RE-AST254-AG2S1-2CAA_0857352AY-0B', '2D@RE-ASTB500-SP822-8MAY_0857984AY-0A', 'INCI-78900TB1-BW_0858324PD-0B']
+    AOI-20      Job 폴더 없음 | R_TB500_LIVE_PI2 AOI-21 Copy  / 0614 / Setup1_DXU-PIDS7
+            같은 위치에 있는 것: ['12inch Cycle Test', '2D@R2-ASTB500-SP822-8MAY_0857984AY-0A', '2D@RE-$7781987B-WUP_0856808PD-0A', '2D@RE-AST254-AG2S1-2CAA_0857352AY-0B', '2D@RE-ASTB500-SP822-8MAY_0857984AY-0A', 'INCI-78900TB1-BW_0858324PD-0B']
+    AOI-20      Job 폴더 없음 | R_TB500_LIVE_PI2 AOI-21 Copy  / 0614 / Setup1_DBN-PIDS7
+            같은 위치에 있는 것: ['12inch Cycle Test', '2D@R2-ASTB500-SP822-8MAY_0857984AY-0A', '2D@RE-$7781987B-WUP_0856808PD-0A', '2D@RE-AST254-AG2S1-2CAA_0857352AY-0B', '2D@RE-ASTB500-SP822-8MAY_0857984AY-0A', 'INCI-78900TB1-BW_0858324PD-0B']
+    AOI-20      Job 폴더 없음 | TB500_RDL2 - Multi_Setup1 / (번호없음) / BCS-RDL2
+            같은 위치에 있는 것: ['12inch Cycle Test', '2D@R2-ASTB500-SP822-8MAY_0857984AY-0A', '2D@RE-$7781987B-WUP_0856808PD-0A', '2D@RE-AST254-AG2S1-2CAA_0857352AY-0B', '2D@RE-ASTB500-SP822-8MAY_0857984AY-0A', 'INCI-78900TB1-BW_0858324PD-0B']
+    AOI-21      Job 폴더 없음 | R_TB500_LIVE_PI2_Setup1 / (번호없음) / FFN-PIDS7
+            같은 위치에 있는 것: ['2D@RE-GA285ABB_0859840PD-0A', 'Kendall_PI3_X', 'MetaData.ini', 'R_Kendall A0_PI3', 'R_Kendall A0_PI4', 'R_Kendall A0_PI5']
+    AOI-21      Job 폴더 없음 | R_TB500_LIVE_PI2_Setup1 / (번호없음) / FDU-PIDS7
+            같은 위치에 있는 것: ['2D@RE-GA285ABB_0859840PD-0A', 'Kendall_PI3_X', 'MetaData.ini', 'R_Kendall A0_PI3', 'R_Kendall A0_PI4', 'R_Kendall A0_PI5']
+    AOI-21      Job 폴더 없음 | R_TB500_LIVE_PI2_Setup1 / (번호없음) / DXX-PIDS7
+            같은 위치에 있는 것: ['2D@RE-GA285ABB_0859840PD-0A', 'Kendall_PI3_X', 'MetaData.ini', 'R_Kendall A0_PI3', 'R_Kendall A0_PI4', 'R_Kendall A0_PI5']
+    AOI-21      Job 폴더 없음 | R_TB500_LIVE_PI2_Setup1 / (번호없음) / DXH-PIDS7
+            같은 위치에 있는 것: ['2D@RE-GA285ABB_0859840PD-0A', 'Kendall_PI3_X', 'MetaData.ini', 'R_Kendall A0_PI3', 'R_Kendall A0_PI4', 'R_Kendall A0_PI5']
+    AOI-21      Job 폴더 없음 | R_Kendall A0_PI4_Setup1 / (번호없음) / CTC-PIDS7
+            같은 위치에 있는 것: ['2D@RE-GA285ABB_0859840PD-0A', 'Kendall_PI3_X', 'MetaData.ini', 'R_Kendall A0_PI3', 'R_Kendall A0_PI4', 'R_Kendall A0_PI5']
+    AOI-22      Job 폴더 없음 | TB500_RDL3 - Multi_Setup1 / (번호없음) / VGT-RDL3
+            같은 위치에 있는 것: ['2D@R3-DT-GH10N-BIN1-H-U1_0858092PD-0B', '2D@RE-15966PA0-BW2_0859654PD-0C', '2D@RE-15968PA0-BW_0859956', '2D@RE-15968PA0-BW_0859956PD-0A', '2D@RE-3000006_0861414PD-0A', '2D@RE-4DT-TB500-H-M1_0860154PD-0B']
+    AOI-22      Job 폴더 없음 | TB500_RDL2 - Multi_Setup1 / (번호없음) / FHD-RDL2
+            같은 위치에 있는 것: ['2D@R3-DT-GH10N-BIN1-H-U1_0858092PD-0B', '2D@RE-15966PA0-BW2_0859654PD-0C', '2D@RE-15968PA0-BW_0859956', '2D@RE-15968PA0-BW_0859956PD-0A', '2D@RE-3000006_0861414PD-0A', '2D@RE-4DT-TB500-H-M1_0860154PD-0B']
+    AOI-22      Lot 폴더 없음 | INCI-78900TC1NM-BW_0858324PD-0B / 6000 / NLT
+            같은 위치에 있는 것: ['6000', 'MetaData.ini']
+    AOI-22      Job 폴더 없음 | TB500_RDL2 - Multi_Setup1 / (번호없음) / BCV-RDL2
+            같은 위치에 있는 것: ['2D@R3-DT-GH10N-BIN1-H-U1_0858092PD-0B', '2D@RE-15966PA0-BW2_0859654PD-0C', '2D@RE-15968PA0-BW_0859956', '2D@RE-15968PA0-BW_0859956PD-0A', '2D@RE-3000006_0861414PD-0A', '2D@RE-4DT-TB500-H-M1_0860154PD-0B']
+    AOI-22      Job 폴더 없음 | R_TB500_LIVE_PI2 AOI-21 Copy  / 0614 / Setup1_VGK-PIDS7
+            같은 위치에 있는 것: ['2D@R3-DT-GH10N-BIN1-H-U1_0858092PD-0B', '2D@RE-15966PA0-BW2_0859654PD-0C', '2D@RE-15968PA0-BW_0859956', '2D@RE-15968PA0-BW_0859956PD-0A', '2D@RE-3000006_0861414PD-0A', '2D@RE-4DT-TB500-H-M1_0860154PD-0B']
+    AOI-23      Job 폴더 없음 | R_TB500_LIVE_PI3 AOI-22 Copy / 0614 / Setup1_FSC-PIDS5
+            같은 위치에 있는 것: ['0406_TB500 C DIE LF thickness TEST', 'MetaData.ini', 'R_Kendall A0_PI3', 'R_Kendall A0_PI4', 'R_TB500_LIVE_PI2', 'R_TB500_LIVE_PI2_copy']
+    AOI-23      Job 폴더 없음 | R_TB500_LIVE_PI3 AOI-22 Copy / 0614 / Setup1_FPY-PIDS5
+            같은 위치에 있는 것: ['0406_TB500 C DIE LF thickness TEST', 'MetaData.ini', 'R_Kendall A0_PI3', 'R_Kendall A0_PI4', 'R_TB500_LIVE_PI2', 'R_TB500_LIVE_PI2_copy']
+    AOI-23      Job 폴더 없음 | R_TB500_LIVE_PI3 AOI-22 Copy / 0614 / Setup1_FNG-PIDS5
+            같은 위치에 있는 것: ['0406_TB500 C DIE LF thickness TEST', 'MetaData.ini', 'R_Kendall A0_PI3', 'R_Kendall A0_PI4', 'R_TB500_LIVE_PI2', 'R_TB500_LIVE_PI2_copy']
+    AOI-23      Job 폴더 없음 | R_TB500_LIVE_PI2_Setup1 / (번호없음) / FKC-PIDS7
+            같은 위치에 있는 것: ['0406_TB500 C DIE LF thickness TEST', 'MetaData.ini', 'R_Kendall A0_PI3', 'R_Kendall A0_PI4', 'R_TB500_LIVE_PI2', 'R_TB500_LIVE_PI2_copy']
+    AOI-23      Job 폴더 없음 | R_TB500_LIVE_PI2_Setup1 / (번호없음) / DBU-PIDS7
+            같은 위치에 있는 것: ['0406_TB500 C DIE LF thickness TEST', 'MetaData.ini', 'R_Kendall A0_PI3', 'R_Kendall A0_PI4', 'R_TB500_LIVE_PI2', 'R_TB500_LIVE_PI2_copy']
+    AOI-24      Job 폴더 없음 | R_TB500_LIVE_PI4_Setup1 / (번호없음) / XHU-PIDS3
+            같은 위치에 있는 것: ['2D@RE-GA285ABB_0859840PD-0A', 'INCI-GUS0E2BQ_0858170PD-0D', 'R_Kendall A0_PI4', 'R_TB500_LIVE_PI2', 'R_TB500_LIVE_PI2 AOI-21 Copy _0614', 'R_TB500_LIVE_PI3']
+    AOI-24      Job 폴더 없음 | R_TB500_LIVE_PI4_Setup1 / (번호없음) / GFS-PIDS3
+            같은 위치에 있는 것: ['2D@RE-GA285ABB_0859840PD-0A', 'INCI-GUS0E2BQ_0858170PD-0D', 'R_Kendall A0_PI4', 'R_TB500_LIVE_PI2', 'R_TB500_LIVE_PI2 AOI-21 Copy _0614', 'R_TB500_LIVE_PI3']
+    AOI-24      Job 폴더 없음 | R_TB500_LIVE_PI2_Setup1 / (번호없음) / FCU-PIDS7
+            같은 위치에 있는 것: ['2D@RE-GA285ABB_0859840PD-0A', 'INCI-GUS0E2BQ_0858170PD-0D', 'R_Kendall A0_PI4', 'R_TB500_LIVE_PI2', 'R_TB500_LIVE_PI2 AOI-21 Copy _0614', 'R_TB500_LIVE_PI3']
+    AOI-24      Job 폴더 없음 | R_TB500_LIVE_PI2_Setup1 / (번호없음) / DYN-PIDS7
+            같은 위치에 있는 것: ['2D@RE-GA285ABB_0859840PD-0A', 'INCI-GUS0E2BQ_0858170PD-0D', 'R_Kendall A0_PI4', 'R_TB500_LIVE_PI2', 'R_TB500_LIVE_PI2 AOI-21 Copy _0614', 'R_TB500_LIVE_PI3']
+    AOI-24      Job 폴더 없음 | R_TB500_LIVE_PI2_Setup1 / (번호없음) / DXV-PIDS7
+            같은 위치에 있는 것: ['2D@RE-GA285ABB_0859840PD-0A', 'INCI-GUS0E2BQ_0858170PD-0D', 'R_Kendall A0_PI4', 'R_TB500_LIVE_PI2', 'R_TB500_LIVE_PI2 AOI-21 Copy _0614', 'R_TB500_LIVE_PI3']
+    AOI-25      Job 폴더 없음 | TB500_RDL2 - Multi - Swelling only copy_Setup1 / (번호없음) / DXS-RDL3
+            같은 위치에 있는 것: ['2D@R2-DT-GH10N-BIN1-H-U1_0858092PD-0B', '2D@R2_TB500 RDL2 TEST', 'ChuckMappingNotchdown', 'INCI-GA276IPR_0858128PD-0A', 'R_ AMD Venice CCD_0861473PD_UBM DUMMY', 'R_AMD MOBULA TOP DIE_0860598PD_UBM']
+    AOI-25      Job 폴더 없음 | R_TB500_LIVE_PI4_Setup1 / (번호없음) / UTH-PIDS3
+            같은 위치에 있는 것: ['2D@R2-DT-GH10N-BIN1-H-U1_0858092PD-0B', '2D@R2_TB500 RDL2 TEST', 'ChuckMappingNotchdown', 'INCI-GA276IPR_0858128PD-0A', 'R_ AMD Venice CCD_0861473PD_UBM DUMMY', 'R_AMD MOBULA TOP DIE_0860598PD_UBM']
+    AOI-25      Job 폴더 없음 | R_TB500_LIVE_PI4_Setup1 / (번호없음) / GFV-PIDS3
+            같은 위치에 있는 것: ['2D@R2-DT-GH10N-BIN1-H-U1_0858092PD-0B', '2D@R2_TB500 RDL2 TEST', 'ChuckMappingNotchdown', 'INCI-GA276IPR_0858128PD-0A', 'R_ AMD Venice CCD_0861473PD_UBM DUMMY', 'R_AMD MOBULA TOP DIE_0860598PD_UBM']
+    AOI-25      Job 폴더 없음 | R_TB500_LIVE_PI4_Setup1 / (번호없음) / GDU-PIDS3
+            같은 위치에 있는 것: ['2D@R2-DT-GH10N-BIN1-H-U1_0858092PD-0B', '2D@R2_TB500 RDL2 TEST', 'ChuckMappingNotchdown', 'INCI-GA276IPR_0858128PD-0A', 'R_ AMD Venice CCD_0861473PD_UBM DUMMY', 'R_AMD MOBULA TOP DIE_0860598PD_UBM']
+    AOI-25      Job 폴더 없음 | TB500_RDL2 - Multi_Setup1 / (번호없음) / BCK-RDL2 RE
+            같은 위치에 있는 것: ['2D@R2-DT-GH10N-BIN1-H-U1_0858092PD-0B', '2D@R2_TB500 RDL2 TEST', 'ChuckMappingNotchdown', 'INCI-GA276IPR_0858128PD-0A', 'R_ AMD Venice CCD_0861473PD_UBM DUMMY', 'R_AMD MOBULA TOP DIE_0860598PD_UBM']
+    4F-AOI-01   Job 폴더 없음 | R_AMD Sepio_0861630PD_TMI_SET UP / 0831 / AMD Sepio SFR1-2_TMI
+            같은 위치에 있는 것: ['12 inch Cycle Test', '2D@R2-3L781987B17-WUP_0858675PD', '2D@R2-DT-GH10N-BIN1-H-U1_0858092PD', '2D@RE-$7781539A-WUP_0858562PD', '2D@RE-$7781987B17-WUP_0856808PD', '2D@RE-88850ITA0-SM-INT-BW_0857982PD']
+    4F-AOI-01   Job 폴더 없음 | R_AMD Sepio_0861630PD_TMI_SET UP / 0831 / AMD Sepio Function Lot_TMI
+            같은 위치에 있는 것: ['12 inch Cycle Test', '2D@R2-3L781987B17-WUP_0858675PD', '2D@R2-DT-GH10N-BIN1-H-U1_0858092PD', '2D@RE-$7781539A-WUP_0858562PD', '2D@RE-$7781987B17-WUP_0856808PD', '2D@RE-88850ITA0-SM-INT-BW_0857982PD']
+    4F-AOI-01   Job 폴더 없음 | 2D@R2-DT-GH10N-BIN1-H-U1_0858092PD_0B / 6321 / NTD
+            같은 위치에 있는 것: ['12 inch Cycle Test', '2D@R2-3L781987B17-WUP_0858675PD', '2D@R2-DT-GH10N-BIN1-H-U1_0858092PD', '2D@RE-$7781539A-WUP_0858562PD', '2D@RE-$7781987B17-WUP_0856808PD', '2D@RE-88850ITA0-SM-INT-BW_0857982PD']
+    4F-AOI-01   Job 폴더 없음 | 2D@R2-DT-GH10N-BIN1-H-U1_0858092PD_0B / 6321 / NMF
+            같은 위치에 있는 것: ['12 inch Cycle Test', '2D@R2-3L781987B17-WUP_0858675PD', '2D@R2-DT-GH10N-BIN1-H-U1_0858092PD', '2D@RE-$7781539A-WUP_0858562PD', '2D@RE-$7781987B17-WUP_0856808PD', '2D@RE-88850ITA0-SM-INT-BW_0857982PD']
+    4F-AOI-01   Job 폴더 없음 | 2D@R2-DT-GH10N-BIN1-H-U1_0858092PD_0B / 6321 / LDA
+            같은 위치에 있는 것: ['12 inch Cycle Test', '2D@R2-3L781987B17-WUP_0858675PD', '2D@R2-DT-GH10N-BIN1-H-U1_0858092PD', '2D@RE-$7781539A-WUP_0858562PD', '2D@RE-$7781987B17-WUP_0856808PD', '2D@RE-88850ITA0-SM-INT-BW_0857982PD']
+    4F-AOI-02   Job 폴더 없음 | R_TB500_LIVE_PI3 AOI-13 Copy / 0702 / 6324_GFF-PIDS5
+            같은 위치에 있는 것: ['12 inch Cycle Test', '2D@R2-3L781987B17-WUP_0858675PD', '2D@R2-DT-GH10N-BIN1-H-U1_0858092PD', '2D@R2-W96816ZK16_0857248PD', '2D@RE $7781987B17-WUP_0856808PD_0A', '2D@RE-$7781987B17-WUP_0856808PD']
+    4F-AOI-02   Job 폴더 없음 | R_AMD Sepio_0861630PD_TMI_SET UP / 0831 / AMD Sepio SFR1-2_2D
+            같은 위치에 있는 것: ['12 inch Cycle Test', '2D@R2-3L781987B17-WUP_0858675PD', '2D@R2-DT-GH10N-BIN1-H-U1_0858092PD', '2D@R2-W96816ZK16_0857248PD', '2D@RE $7781987B17-WUP_0856808PD_0A', '2D@RE-$7781987B17-WUP_0856808PD']
+    4F-AOI-02   Job 폴더 없음 | R_TB500_LIVE_PI3 AOI-13 Copy / 0702 / 6324_VHL-PIDS5
+            같은 위치에 있는 것: ['12 inch Cycle Test', '2D@R2-3L781987B17-WUP_0858675PD', '2D@R2-DT-GH10N-BIN1-H-U1_0858092PD', '2D@R2-W96816ZK16_0857248PD', '2D@RE $7781987B17-WUP_0856808PD_0A', '2D@RE-$7781987B17-WUP_0856808PD']
+    4F-AOI-02   Job 폴더 없음 | R_TB500_LIVE_PI3 AOI-13 Copy / 0702 / 6324_FHM
+            같은 위치에 있는 것: ['12 inch Cycle Test', '2D@R2-3L781987B17-WUP_0858675PD', '2D@R2-DT-GH10N-BIN1-H-U1_0858092PD', '2D@R2-W96816ZK16_0857248PD', '2D@RE $7781987B17-WUP_0856808PD_0A', '2D@RE-$7781987B17-WUP_0856808PD']
+    4F-AOI-02   Job 폴더 없음 | R_TB500_LIVE_PI3 AOI-13 Copy / 0702 / 6324_CNT-PIDS5
+            같은 위치에 있는 것: ['12 inch Cycle Test', '2D@R2-3L781987B17-WUP_0858675PD', '2D@R2-DT-GH10N-BIN1-H-U1_0858092PD', '2D@R2-W96816ZK16_0857248PD', '2D@RE $7781987B17-WUP_0856808PD_0A', '2D@RE-$7781987B17-WUP_0856808PD']
+    4F-AOI-03   Job 폴더 없음 | TB500_RDL4 - Multi - JJ_Setup1 / (번호없음) / XKK
+            같은 위치에 있는 것: ['SEQ_TB500_R-ETCH_0857830AY', 'TB500_RDL4 - Multi', 'TB500_RDL4 - Multi - JJ', 'TB500_RDL4 - Multi - JJ - SZ - Approved Job - Do Not Touch', 'TB500_RDL4 - Multi - JJ_BU', 'TB500_RDL4 - Multi_Final']
+    4F-AOI-03   Job 폴더 없음 | TB500_RDL4 - Multi - JJ_Setup1 / (번호없음) / GFW-again1
+            같은 위치에 있는 것: ['SEQ_TB500_R-ETCH_0857830AY', 'TB500_RDL4 - Multi', 'TB500_RDL4 - Multi - JJ', 'TB500_RDL4 - Multi - JJ - SZ - Approved Job - Do Not Touch', 'TB500_RDL4 - Multi - JJ_BU', 'TB500_RDL4 - Multi_Final']
+    4F-AOI-03   Job 폴더 없음 | TB500_RDL4 - Multi - JJ_Setup1 / (번호없음) / GFW
+            같은 위치에 있는 것: ['SEQ_TB500_R-ETCH_0857830AY', 'TB500_RDL4 - Multi', 'TB500_RDL4 - Multi - JJ', 'TB500_RDL4 - Multi - JJ - SZ - Approved Job - Do Not Touch', 'TB500_RDL4 - Multi - JJ_BU', 'TB500_RDL4 - Multi_Final']
+    4F-AOI-03   Job 폴더 없음 | TB500_RDL4 - Multi_Setup1 / (번호없음) / XKK-RDL4
+            같은 위치에 있는 것: ['SEQ_TB500_R-ETCH_0857830AY', 'TB500_RDL4 - Multi', 'TB500_RDL4 - Multi - JJ', 'TB500_RDL4 - Multi - JJ - SZ - Approved Job - Do Not Touch', 'TB500_RDL4 - Multi - JJ_BU', 'TB500_RDL4 - Multi_Final']
+    4F-AOI-03   Job 폴더 없음 | TB500_RDL4 - Multi_Setup1 / (번호없음) / GFW-RDL4
+            같은 위치에 있는 것: ['SEQ_TB500_R-ETCH_0857830AY', 'TB500_RDL4 - Multi', 'TB500_RDL4 - Multi - JJ', 'TB500_RDL4 - Multi - JJ - SZ - Approved Job - Do Not Touch', 'TB500_RDL4 - Multi - JJ_BU', 'TB500_RDL4 - Multi_Final']
+    4F-AOI-05   Job 폴더 없음 | TB500_RDL4 - Multi - JJ_Setup1 / (번호없음) / XKK
+            같은 위치에 있는 것: ['R_TB500_LIVE_PI4-x5', 'R_TB500_LIVE_PI4_Enhanced', 'TB500_RDL4 - Multi', 'TB500_RDL4 - Multi - JJ', 'TB500_RDL4 - Multi - JJ - SZ', 'TB500_RDL4 - Multi - JJ_BU']
+    4F-AOI-05   Job 폴더 없음 | TB500_RDL4 - Multi - JJ_Setup1 / (번호없음) / GFW-again2
+            같은 위치에 있는 것: ['R_TB500_LIVE_PI4-x5', 'R_TB500_LIVE_PI4_Enhanced', 'TB500_RDL4 - Multi', 'TB500_RDL4 - Multi - JJ', 'TB500_RDL4 - Multi - JJ - SZ', 'TB500_RDL4 - Multi - JJ_BU']
+    4F-AOI-05   Job 폴더 없음 | TB500_RDL4 - Multi - JJ_Setup1 / (번호없음) / GFW-again
+            같은 위치에 있는 것: ['R_TB500_LIVE_PI4-x5', 'R_TB500_LIVE_PI4_Enhanced', 'TB500_RDL4 - Multi', 'TB500_RDL4 - Multi - JJ', 'TB500_RDL4 - Multi - JJ - SZ', 'TB500_RDL4 - Multi - JJ_BU']
+    4F-AOI-05   Job 폴더 없음 | TB500_RDL4 - Multi - JJ_Setup1 / (번호없음) / 0
+            같은 위치에 있는 것: ['R_TB500_LIVE_PI4-x5', 'R_TB500_LIVE_PI4_Enhanced', 'TB500_RDL4 - Multi', 'TB500_RDL4 - Multi - JJ', 'TB500_RDL4 - Multi - JJ - SZ', 'TB500_RDL4 - Multi - JJ_BU']
+    4F-AOI-05   Job 폴더 없음 | TB500_RDL4 - Multi_Setup1 / (번호없음) / XKK-RDL4
+            같은 위치에 있는 것: ['R_TB500_LIVE_PI4-x5', 'R_TB500_LIVE_PI4_Enhanced', 'TB500_RDL4 - Multi', 'TB500_RDL4 - Multi - JJ', 'TB500_RDL4 - Multi - JJ - SZ', 'TB500_RDL4 - Multi - JJ_BU']
+
+[환경]
+    AOI-1       Report=['Reports'] / Scanresult계열=['Scanresult']
+    AOI-2       Report=['Reports'] / Scanresult계열=['Scanresult', 'Scanresult_BACKUP_260827', 'Scanresult_Backup_260614', 'Scanresult_Backup_260805']
+    AOI-3       Report=['Reports'] / Scanresult계열=['Scanresult', 'Scanresult Backup_260707']
+    AOI-4       Report=['Report'] / Scanresult계열=['Scanresult', 'Scanresult_Back up_260416', 'Scanresult_Back up_260918']
+    AOI-5       Report=['Report'] / Scanresult계열=['Scanresult', 'Scanresult_0901', 'Scanresult_Back up_260607', 'Scanresult_Backup_250324', 'Scanresult_Backup_250623', 'Scanresult_Backup_251115', 'Scanresult_Backup_260528']
+    AOI-6       Report=['Report'] / Scanresult계열=['Scanresult', 'Scanresult_260820']
+    AOI-7       Report=['Report'] / Scanresult계열=['Scanresult', 'Scanresult backup260904', 'Scanresult_260606', 'Scanresult_Backup_260425']
+    AOI-8       Report=['Report'] / Scanresult계열=['Scanresult', 'Scanresult_260601']
+    AOI-9       Report=['Report'] / Scanresult계열=['Scanresult', 'Scanresult_260401']
+    AOI-10      Report=['Report'] / Scanresult계열=['Scanresult']
+    AOI-11      Report=['Report'] / Scanresult계열=['Scanresult', 'Scanresult_BACKUP']
+    AOI-12      Report=['Report'] / Scanresult계열=['Scanresult', 'Scanresult - 5.9.3', 'Scanresult - BACKTUP 0827', 'Scanresult_BACKUP']
+    AOI-13      Report=['Report'] / Scanresult계열=['Scanresult', 'Scanresult_Backup_260413', 'Scanresult_Backup_268020']
+    AOI-14      Report=['Report'] / Scanresult계열=['Scanresult', 'Scanresult_BACKUP', 'Scanresult_BACKUP0719']
+    AOI-15      Report=['Report'] / Scanresult계열=['Scanresult', 'Scanresult_BACKUP_260423']
+    AOI-16      Report=['Report'] / Scanresult계열=['Scanresult', 'Scanresult_BAKCUP_260429', 'Scanresult_Backup_260613']
+    AOI-17      Report=['Reports'] / Scanresult계열=['Scanresult', 'Scanresult_260521']
+    AOI-18      Report=['Reports'] / Scanresult계열=['Scanresult']
+    AOI-19      Report=['Reports'] / Scanresult계열=['Scanresult']
+    AOI-20      Report=['Reports'] / Scanresult계열=['Scanresult', 'Scanresult_Backup_0421']
+    AOI-21      Report=['Reports'] / Scanresult계열=['Scanresult']
+    AOI-22      Report=['Reports'] / Scanresult계열=['Scanresult']
+    AOI-23      Report=['Reports'] / Scanresult계열=['Scanresult']
+    AOI-24      Report=['Reports'] / Scanresult계열=['Scanresult']
+    AOI-25      Report=['Reports'] / Scanresult계열=['Scanresult']
+    4F-AOI-01   Report=['Reports'] / Scanresult계열=['Scanresult']
+    4F-AOI-02   Report=['Reports'] / Scanresult계열=['Scanresult']
+    4F-AOI-03   Report=['Reports'] / Scanresult계열=['Scanresult']
+    4F-AOI-04   Report=['Reports'] / Scanresult계열=['Scanresult']
+    4F-AOI-05   Report=['Reports'] / Scanresult계열=['Scanresult']

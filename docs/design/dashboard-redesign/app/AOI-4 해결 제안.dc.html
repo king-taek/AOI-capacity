@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>INI 복구 제안 — 검증 완료</title>
+<style>
+  body{margin:0;background:#F4F6F8;-webkit-font-smoothing:antialiased}
+  a{color:#2B5F97;text-decoration:none}a:hover{color:#1C4470;text-decoration:underline}
+  *{box-sizing:border-box}
+  code{font-family:Consolas,'Cascadia Mono',ui-monospace,monospace}
+</style>
+</helmet>
+<div style="min-height:100vh;background:#F4F6F8;color:#0F151C;font:14px/1.6 'Segoe UI','Malgun Gothic','Apple SD Gothic Neo',system-ui,sans-serif">
+  <div style="max-width:1080px;margin:0 auto;padding:28px 24px 90px">
+
+    <p style="margin:0 0 4px;font-size:12.5px;color:#5A6673">30대 전수 조사 3회 · 2026-09-19 ~ 09-20</p>
+    <h1 style="margin:0 0 8px;font-size:27px;font-weight:700;letter-spacing:-.025em">읽을 수 있는 시각 기록이 2.2배가 됩니다</h1>
+    <p style="margin:0 0 22px;font-size:15px;color:#3D4854;max-width:66ch;word-break:keep-all;text-wrap:pretty">INI 는 지워진 게 아니라 <b>백업 폴더로 옮겨져</b> 있었습니다. 수집기가 <code>Scanresult</code> 한 곳만 보던 것을 고치면 됩니다. 실제로 사라진 기록은 <b>2.7%</b> 뿐입니다.</p>
+
+    <section style="display:grid;grid-template-columns:repeat(auto-fit,minmax(215px,1fr));background:#fff;border:1px solid #E1E6EC;border-radius:13px;overflow:hidden;margin-bottom:18px">
+      <div style="padding:16px 18px;box-shadow:inset 1px 0 0 #EDF1F5">
+        <p style="margin:0;font-size:12.5px;color:#5A6673">읽을 수 있는 WaferInfo.ini</p>
+        <p style="margin:3px 0 0;font-size:26px;font-weight:700;letter-spacing:-.02em;font-variant-numeric:tabular-nums;white-space:nowrap">{{ iniNow }} <span style="color:#276B48">→ {{ iniAfter }}</span></p>
+        <p style="margin:1px 0 0;font-size:12.5px;color:#276B48;font-weight:600">{{ iniGain }}</p>
+      </div>
+      <div style="padding:16px 18px;box-shadow:inset 1px 0 0 #EDF1F5">
+        <p style="margin:0;font-size:12.5px;color:#5A6673">백업에서 찾은 Lot</p>
+        <p style="margin:3px 0 0;font-size:26px;font-weight:700;letter-spacing:-.02em;font-variant-numeric:tabular-nums">{{ bkLots }}<span style="font-size:15px;color:#5A6673">개</span></p>
+        <p style="margin:1px 0 0;font-size:12.5px;color:#5A6673">검사한 {{ chk }}개 중 {{ bkPct }}%</p>
+      </div>
+      <div style="padding:16px 18px;box-shadow:inset 1px 0 0 #EDF1F5">
+        <p style="margin:0;font-size:12.5px;color:#5A6673">실제로 사라진 기록</p>
+        <p style="margin:3px 0 0;font-size:26px;font-weight:700;letter-spacing:-.02em;font-variant-numeric:tabular-nums;color:#B4402F">2.7<span style="font-size:15px;color:#5A6673">%</span></p>
+        <p style="margin:1px 0 0;font-size:12.5px;color:#5A6673">75건 / 2,787건 · 3차 검수</p>
+      </div>
+    </section>
+
+    <section style="background:#fff;border:1px solid #E1E6EC;border-radius:14px;padding:20px 22px;margin-bottom:18px">
+      <h2 style="margin:0 0 12px;font-size:15px;font-weight:700">무엇을 확인했나</h2>
+      <sc-for list="{{ facts }}" as="f" hint-placeholder-count="4">
+        <div style="display:grid;grid-template-columns:24px 1fr;gap:12px;padding:12px 0;border-top:1px solid #F1F4F7">
+          <span style="font-size:15px;color:#276B48;font-weight:700">✓</span>
+          <span style="display:block">
+            <b style="font-size:14px">{{ f.t }}</b>
+            <span style="display:block;font-size:13px;color:#4B5866;margin-top:3px;word-break:keep-all;text-wrap:pretty">{{ f.b }}</span>
+            <sc-if value="{{ f.mono }}">
+              <span style="display:block;margin-top:6px;padding:8px 11px;background:#FBFCFD;border:1px solid #EDF1F5;border-radius:8px;font-size:11.5px;font-family:Consolas,'Cascadia Mono',ui-monospace,monospace;word-break:break-all;color:#3D4854;white-space:pre-line">{{ f.mono }}</span>
+            </sc-if>
+          </span>
+        </div>
+      </sc-for>
+    </section>
+
+    <section style="background:#fff;border:1px solid #E1E6EC;border-radius:14px;padding:20px 22px;margin-bottom:18px">
+      <h2 style="margin:0 0 3px;font-size:15px;font-weight:700">장비별로 얼마나 늘어나나</h2>
+      <div style="display:flex;gap:16px;flex-wrap:wrap;font-size:12.5px;color:#4B5866;margin:6px 0 12px">
+        <span><i style="display:inline-block;width:11px;height:11px;border-radius:2px;background:#2E6BA8;vertical-align:-1px;margin-right:6px"></i>지금 읽는 INI</span>
+        <span><i style="display:inline-block;width:11px;height:11px;border-radius:2px;background:#3F9E6E;vertical-align:-1px;margin-right:6px"></i>백업에서 복구되는 INI</span>
+        <span style="margin-left:auto;color:#5A6673">숫자는 지금 시각 확인 비율</span>
+      </div>
+      <sc-for list="{{ rows }}" as="r" hint-placeholder-count="30">
+        <div style="display:grid;grid-template-columns:82px 44px 1fr 104px;gap:9px;align-items:center;padding:2px 0">
+          <span style="font-size:12.5px;font-weight:600;color:{{ r.ink }}">{{ r.n }}</span>
+          <span style="font-size:12px;text-align:right;font-variant-numeric:tabular-nums;color:{{ r.ink }}">{{ r.covTxt }}</span>
+          <span style="display:flex;gap:2px;align-items:center;min-width:0">
+            <i title="{{ r.t1 }}" style="height:13px;border-radius:2px 0 0 2px;background:#2E6BA8;width:{{ r.p1 }}%"></i>
+            <i title="{{ r.t2 }}" style="height:13px;border-radius:0 2px 2px 0;background:#3F9E6E;width:{{ r.p2 }}%"></i>
+          </span>
+          <span style="font-size:11.5px;color:#4B5866;text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap">{{ r.note }}</span>
+        </div>
+      </sc-for>
+    </section>
+
+    <section style="background:#fff;border:1px solid #E1E6EC;border-radius:14px;padding:20px 22px;margin-bottom:18px">
+      <h2 style="margin:0 0 3px;font-size:15px;font-weight:700">백업은 날짜로 잘립니다 — 확인은 한 번이면 됩니다</h2>
+      <p style="margin:0 0 14px;font-size:13px;color:#4B5866;max-width:70ch;word-break:keep-all;text-wrap:pretty">어느 날짜를 기준으로 <b>그 이전 것을 통째로 옮기는</b> 방식이라, 폴더 이름의 날짜가 곧 경계선입니다. 배치 날짜만 보면 어느 폴더인지 정해지므로 전부 뒤질 필요가 없습니다.</p>
+      <div style="border:1px solid #E7ECF1;border-radius:11px;overflow:hidden;margin-bottom:12px">
+        <div style="display:grid;grid-template-columns:1fr 160px 84px;gap:10px;padding:9px 14px;background:#FBFCFD;border-bottom:1px solid #EDF1F5;font-size:11.5px;font-weight:600;color:#5A6673">
+          <span>AOI-4 의 폴더</span><span>담고 있는 기간</span><span style="text-align:right">Job 폴더</span>
+        </div>
+        <sc-for list="{{ routes }}" as="r" hint-placeholder-count="3">
+          <div style="display:grid;grid-template-columns:1fr 160px 84px;gap:10px;padding:9px 14px;border-bottom:1px solid #F1F4F7;align-items:center;background:{{ r.bg }}">
+            <span style="font-size:12.5px;font-family:Consolas,'Cascadia Mono',ui-monospace,monospace;word-break:break-all">{{ r.f }}</span>
+            <span style="font-size:12.5px;color:#4B5866;font-variant-numeric:tabular-nums">{{ r.range }}</span>
+            <span style="text-align:right;font-size:12.5px;font-weight:600;font-variant-numeric:tabular-nums">{{ r.j }}</span>
+          </div>
+        </sc-for>
+      </div>
+      <p style="margin:0;font-size:13px;color:#4B5866;word-break:keep-all;text-wrap:pretty">폴더 이름은 <code>Scanresult_Back up_260918</code> · <code>Scanresult backup260904</code> · <code>Scanresult_BAKCUP_260429</code> · <code>Scanresult - 5.9.3</code> 처럼 공백과 오타가 섞여 있어서, <b><code>Scanresult</code> 로 시작하면 전부 후보</b>로 잡고 이름 속 날짜로 순서만 정합니다.</p>
+    </section>
+
+    <section style="background:#fff;border:1px solid #E1E6EC;border-radius:14px;padding:20px 22px;margin-bottom:18px">
+      <h2 style="margin:0 0 4px;font-size:15px;font-weight:700">고칠 곳은 두 군데</h2>
+      <p style="margin:0 0 14px;font-size:13px;color:#5A6673">재귀 탐색을 늘리는 게 아니라 <b>확인할 루트만 늘립니다</b>. 정확 경로만 확인하는 원칙과 NAS 읽기 전용 원칙은 그대로입니다.</p>
+      <div style="display:grid;gap:12px">
+        <div style="border:1px solid #E7ECF1;border-radius:11px;overflow:hidden">
+          <p style="margin:0;padding:9px 14px;background:#FBFCFD;border-bottom:1px solid #EDF1F5;font-size:12.5px;font-weight:600"><code>aoi_capacity/devices.py</code> — 후보 폴더를 모으고 날짜순으로</p>
+          <pre style="margin:0;padding:13px 15px;font-size:12px;line-height:1.55;overflow:auto;font-family:Consolas,'Cascadia Mono',ui-monospace,monospace;color:#1E2833">def cutoff_of(name, path):
+    """폴더 이름의 날짜 = 그 이전 것을 담아 둔 경계. 못 읽으면 폴더 수정시각."""
+    m = re.search(r"(\d{6})(?!\d)", name)          # 260918 · 250324
+    if m:
+        try:    return datetime.strptime(m.group(1), "%y%m%d")
+        except ValueError: pass                     # 268020 같은 잘못된 날짜
+    m = re.search(r"(?&lt;!\d)(\d{4})(?!\d)", name)    # 0901 · 0421
+    if m:
+        try:
+            y = datetime.fromtimestamp(os.path.getmtime(path)).year
+            return datetime.strptime(f"{y}{m.group(1)}", "%Y%m%d")
+        except (ValueError, OSError): pass
+    return None                                     # "Scanresult - 5.9.3"
+
+def scan_dirs_of(root, primary):
+    try:
+        names = [n for n in os.listdir(root)
+                 if n.lower().startswith("scanresult")
+                 and os.path.isdir(os.path.join(root, n))]
+    except OSError:
+        return [primary]
+    others = sorted((n for n in names if n != primary),
+                    key=lambda n: cutoff_of(n, os.path.join(root, n)) or datetime.max)
+    return [primary] + others
+
+dev["scan_dirs"] = scan_dirs_of(str(dev["path"]), dev["scan_dir"])</pre>
+        </div>
+        <div style="border:1px solid #E7ECF1;border-radius:11px;overflow:hidden">
+          <p style="margin:0;padding:9px 14px;background:#FBFCFD;border-bottom:1px solid #EDF1F5;font-size:12.5px;font-weight:600"><code>aoi_capacity/collect.py</code> — 배치 날짜로 고른 폴더부터 확인</p>
+          <pre style="margin:0;padding:13px 15px;font-size:12px;line-height:1.55;overflow:auto;font-family:Consolas,'Cascadia Mono',ui-monospace,monospace;color:#1E2833">rel = os.path.join(rep["equipment"], rep["process_code"],
+                   w["lot"], w["wafer_id"], "WaferInfo.ini")
+ini_path = None
+for sr in roots_for(rep["batch_start"], scan_roots):   # 배치 날짜 &lt; 경계 → 그 백업 먼저
+    cand = os.path.join(sr, rel)
+    if nas_guard.exists(cand):
+        ini_path = cand
+        if sr is not scan_roots[0]:
+            r["data_issue"] = "백업 폴더에서 찾음: " + os.path.basename(sr)
+        break
+if ini_path is None:
+    r["ini_match"], r["data_issue"] = "NOT_FOUND", "예상 경로에 WaferInfo.ini 없음"</pre>
+        </div>
+      </div>
+      <p style="margin:12px 0 0;padding:11px 14px;background:#F7F9FB;border:1px solid #E7ECF1;border-radius:10px;font-size:13px;color:#3D4854;word-break:keep-all;text-wrap:pretty">같이 넣을 것 하나 — 폴더는 있는데 <code>MoveResultFlag</code> 만 있고 INI 가 없으면 “파일을 못 찾음”이 아니라 <b>“이동만 되고 스캔 안 함”</b> 입니다(AOI-4 <code>XBL WBG\24</code> 에서 확인). 지금은 둘이 섞여 품질 지표가 실제보다 나빠 보입니다.</p>
+    </section>
+
+    <section style="background:#fff;border:1px solid #E1E6EC;border-radius:14px;padding:20px 22px;margin-bottom:18px">
+      <h2 style="margin:0 0 4px;font-size:15px;font-weight:700">남는 문제와 한계</h2>
+      <p style="margin:0 0 6px;font-size:13px;color:#5A6673">검증 과정에서 확인된 것만 적었습니다.</p>
+      <sc-for list="{{ gaps }}" as="g" hint-placeholder-count="3">
+        <div style="display:grid;grid-template-columns:22px 1fr;gap:12px;padding:11px 0;border-top:1px solid #F1F4F7">
+          <span style="font-size:15px;color:{{ g.c }};font-weight:700">{{ g.m }}</span>
+          <span style="display:block">
+            <b style="font-size:14px">{{ g.t }}</b>
+            <span style="display:block;font-size:13px;color:#4B5866;margin-top:2px;word-break:keep-all;text-wrap:pretty">{{ g.b }}</span>
+          </span>
+        </div>
+      </sc-for>
+    </section>
+
+    <section style="background:#fff;border:1px solid #E1E6EC;border-radius:14px;padding:20px 22px">
+      <h2 style="margin:0 0 6px;font-size:15px;font-weight:700">진행 순서</h2>
+      <sc-for list="{{ steps }}" as="s" hint-placeholder-count="4">
+        <div style="display:grid;grid-template-columns:28px 1fr;gap:13px;padding:12px 0;border-top:1px solid #F1F4F7">
+          <span style="font-size:14px;font-weight:700;color:#5A6673">{{ s.no }}</span>
+          <span style="display:block">
+            <b style="font-size:14.5px">{{ s.title }}</b>
+            <span style="display:block;font-size:13px;color:#4B5866;margin-top:3px;word-break:keep-all;text-wrap:pretty">{{ s.body }}</span>
+            <sc-if value="{{ s.cmd }}">
+              <span style="display:inline-block;margin-top:7px;padding:5px 10px;background:#F3F6F9;border:1px solid #E1E6EC;border-radius:7px;font-size:12px;font-family:Consolas,'Cascadia Mono',ui-monospace,monospace">{{ s.cmd }}</span>
+            </sc-if>
+          </span>
+        </div>
+      </sc-for>
+      <div style="margin-top:16px;padding:14px 16px;background:#EAF0F7;border-radius:11px">
+        <p style="margin:0 0 4px;font-size:13.5px;font-weight:700;color:#1D4E82">정해주실 것 하나</p>
+        <p style="margin:0;font-size:13.5px;color:#1D4E82;word-break:keep-all;text-wrap:pretty">복구 뒤에도 남는 2.7% 와 4층 5대는 배치 시각으로 추정해 메울 수 있습니다. <b>①~③ 을 먼저 하고 남는 것만 추정할지</b>, <b>추정을 지금 임시로 넣어둘지</b> 알려주세요.</p>
+      </div>
+    </section>
+  </div>
+</div>
+
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:1120,&quot;height&quot;:1000}}">
+const P=(window.__aoiRec ||= fetch("aoi-recovery.json").then(r=>r.json()));
+const nf=n=>n.toLocaleString();
+
+class Component extends DCLogic {
+  constructor(props){ super(props); this.state={d:null}; P.then(d=>this.setState({d})).catch(e=>console.error(e)); }
+  renderVals(){
+    const D=this.state.d;
+    const steps=[
+      {no:"1",title:"수집기 두 군데 수정",body:"백업 폴더를 후보 루트로 넣고, 배치 날짜로 순서를 정합니다. 위 코드가 전부입니다.",cmd:""},
+      {no:"2",title:"과거치 다시 채우기",body:"캐시를 버리고 31일치를 다시 읽습니다. NAS 는 읽기만 하지만 시간이 걸리니 업무 시간 외에 돌리세요.",cmd:"python -m aoi_capacity.cli --full"},
+      {no:"3",title:"복구율 확인 — 이게 진짜 검증입니다",body:"장비별 시각 확인 비율이 얼마나 올랐는지 비교합니다. 지금 AOI-4 4% · 4F-AOI-01 15% · AOI-7 43% · AOI-5 53% 가 어디까지 오르는지가 답입니다.",cmd:""},
+      {no:"4",title:"매일 자동 수집 걸기",body:"백업으로 옮겨지기 전에 읽어두면 앞으로는 이 문제가 생기지 않습니다. 작업 스케줄러에 하루 1~2회.",cmd:"scripts\\run_collect.bat"}];
+    const facts=[
+      {t:"1차 — 사라진 게 아니라 옮겨져 있었다",
+       b:"AOI-4 에서 9/18 에 못 읽었던 파일을 백업 폴더에서 그대로 찾았습니다.",
+       mono:"X:\\AOI-4\\Scanresult_Back up_260918\\2D@RE-WB90-74053-11C_0860101PD-0A\\6412\\ATH-DIA\\UNR431-25F3\\WaferInfo.ini\n915 bytes · 수정 2026-09-18 15:19:55"},
+      {t:"2차 — 30대 중 16대에 백업, Job 폴더 5,078개가 잠겨 있다",
+       b:"이름이 제각각이라 목록으로는 못 잡고, Scanresult 로 시작하는지로만 걸러야 합니다. 검사한 Lot 4,107개 중 1,840개(44.8%)가 백업에서 발견됐습니다.",mono:""},
+      {t:"3차 — 못 찾은 것의 74% 는 검수 스크립트의 파싱 오류였다",
+       b:"못 찾은 984건 중 731건이 설비번호 없는 파일명입니다. 제 스크립트가 Job·Lot 을 잘못 쪼갠 탓이고, 수집기는 파일명이 아니라 Report 안의 Job·Setup 을 읽으므로 해당 없습니다.",
+       mono:"R_TB500 LIVE_0860154PD_BS UBM_SET UP / (번호없음) / HGX\n   → Setup 이 Job 에 붙어버림\nR_TB500_LIVE_PI4 AOI-21 Copy / 0614 / Setup1_XHV-PIDS3\n   → 실제 Lot 은 XHV-PIDS3"},
+      {t:"반증 — 100% 못 찾았다던 장비들이 실제로는 잘 읽히고 있다",
+       b:"AOI-21·22·24·25 는 3차 검수에서 못찾음 100% 로 나왔지만 실제 수집에서는 INI 를 79%·76%·78%·66% 읽고 있습니다. 폴더가 없다면 불가능한 수치라, 스크립트 쪽 오류가 확정됩니다.",mono:""}];
+    const gaps=[
+      {m:"·",c:"#B4402F",t:"실제로 사라진 기록 75건 (2.7%)",
+       b:"Lot 폴더 없음 33건 · Setup 폴더 없음 42건. 파싱이 맞았는데도 없는 경우라 실제 삭제로 봅니다. 배치 시각 추정으로만 메울 수 있습니다."},
+      {m:"·",c:"#B4402F",t:"4층 5대는 백업 폴더가 없습니다",
+       b:"4F-AOI-01~05 에는 Scanresult 하나뿐입니다. 이번 수정으로 얻는 게 없고, 보존 기간을 늘리거나 매일 수집으로만 해결됩니다."},
+      {m:"·",c:"#5A6673",t:"파일명으로 하는 검증은 여기까지입니다",
+       b:"수집기는 Report 안의 Job·Setup 을 읽는데 검수 스크립트는 파일명에서 뽑으므로 계속 어긋납니다. 확실한 검증은 수정 후 재수집해서 시각 확인 비율을 비교하는 것뿐입니다."}];
+    if(!D) return {iniNow:"—",iniAfter:"—",iniGain:"",bkLots:"—",chk:"—",bkPct:"—",rows:[],routes:[],facts,gaps,steps};
+    const T=D.total, after=T.iniLive+T.iniBk;
+    const mx=Math.max(...D.rows.map(r=>r.iniLive+r.iniBk),1);
+    return {
+      iniNow:nf(T.iniLive), iniAfter:nf(after), iniGain:"+"+nf(T.iniBk)+" · "+(after/T.iniLive).toFixed(1)+"배",
+      bkLots:nf(T.bk), chk:nf(T.chk), bkPct:(T.bk/T.chk*100).toFixed(1),
+      routes:D.routes, facts, gaps, steps,
+      rows:D.rows.map(r=>({n:r.n, covTxt:r.cov===null?"—":r.cov+"%",
+        ink:r.cov!==null&&r.cov<50?"#B4402F":"#0F151C",
+        p1:(r.iniLive/mx*100).toFixed(1), p2:(r.iniBk/mx*100).toFixed(1),
+        t1:"지금 읽는 INI "+nf(r.iniLive)+"개",
+        t2:r.iniBk?("백업에서 복구 "+nf(r.iniBk)+"개 (백업 폴더 "+r.bkFolders+"개)"):"복구분 없음",
+        note:r.chk===0?"측정 못 함":(r.iniBk?("+"+nf(r.iniBk)):(r.bkFolders?"변화 없음":"백업 없음"))}))};
+  }
+}
+
+</script>
+</body>
+</html>
