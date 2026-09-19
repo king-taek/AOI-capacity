@@ -33,6 +33,11 @@ Camtek AOI 장비의 BatchReport/WaferInfo.ini 를 읽어 장비별 가동률을
    실물: AOI-10 은 Setup 이 `SETUP` 이라 4자리 규칙에 걸리지 않아 job 이 비었고, INI 경로가 통째로 어긋나
    9/15 하루에만 8.8시간이 '미가동' 으로 보였다. job 이 비면 경로를 만들지 않는다(빈 칸은 사라져 남의 INI 를 가리킨다). Report·Scanresult 폴더 이름은 장비마다 달라(`Reports`)
    `devices.find_subdir` 이 후보 몇 개의 존재만 확인해 고른다.
+   **Scanresult 백업 폴더도 같은 정확 경로로 확인한다**(재귀가 아니라 **루트를 늘리는 것**): 현장은 어느 날짜 기준 그 이전 Scanresult 를 통째로
+   `Scanresult_Back up_260918` 같은 폴더로 옮긴다(30대 중 16대, 이름 규칙 제각각 → `Scanresult` 로 시작하는 폴더 전부, `devices.scan_dirs_of`).
+   폴더 이름의 날짜가 경계(그 이전 것을 담음)라 배치 시작일로 1순위 폴더를 바로 고르고(`collect.ini_roots_for`, 확인 횟수는 예전과 같은 1번),
+   거기 없을 때만 나머지를 본다. 어디에도 없는데 Wafer 폴더에 `MoveResultFlag` 만 있으면 `ini_match="MOVED_ONLY"`(이동만 되고 스캔 안 함, 누락 복구 대상).
+   4층 5대는 백업 폴더가 없다. 검증 도구는 조사 결과 읽을 수 있는 INI 가 24,050 → 53,069 개 — **실장비 재수집(`--full`) 전후 비교는 아직 안 했다**.
 5. **시각은 근거가 있을 때만 쓴다.** `WaferInfo.ini` 는 다시 검사하면 **같은 경로에 덮어써진다**(실물 확인:
    AOI-25 9/14 `00NSP049XYG7`). 그래서 옛 Report 행에도 나중 시각이 붙는다 — INI 시각이 그 Report 의
    `Batch Start~End` 밖이면 `ini_match="STALE"` 로 두고 **시간을 쓰지 않는다**(지어내지 않는다).
@@ -73,11 +78,12 @@ Camtek AOI 장비의 BatchReport/WaferInfo.ini 를 읽어 장비별 가동률을
   **`TEST` 는 분모(24시간)에는 들어가되 분자(실가동)에서만 뺀다**(사용자 확정 — 양산을 위해 돈 게 아니다).
   오류 건수에도 넣지 않는다. 화면에서 사라지지는 않는다: 타임라인에 분홍 점무늬 띠, 제목에 'Test n건 제외',
   Lot 목록에 '시험 · 제외' 표. 빼는 것과 없었던 것은 다르다.
-- 행 데이터 계약(`collect.OUT_COLS`, 21열 · `ROW_SCHEMA_VERSION` 4): `kind`("" = Wafer 한 장 · "batch" = 통째로 실패한 시도 · "slot" = 일부 성공한
+- 행 데이터 계약(`collect.OUT_COLS`, 24열 · `ROW_SCHEMA_VERSION` 5): `kind`("" = Wafer 한 장 · "batch" = 통째로 실패한 시도 · "slot" = 일부 성공한
   배치의 자리표시 행 Error 를 Report 당 1건으로 합성한 사건, D38), `batch_end`,
   `job`·`setup`(Report 안의 `Job/Setup`, 없으면 파일명 규칙), `report`(BatchReport 파일 이름 — 화면에서 그 파일을 다시 여는 근거),
   `cause`(원인 코드들, 규칙 순 세미콜론) · `outcome`(종료 결과) · `norm_status`(호환: 원인이 있으면 첫 원인, 없으면 결과) — **원인과 결과는 다른 축**(D43),
-  `scan_type`("" · RESCAN · REWORK · TEST — 겹치면 TEST → RESCAN → REWORK 순), `ini_match`(EXACT · NOT_FOUND · NO_WAFER_ID · READ_ERROR · STALE · BATCH_FAILED · BATCH · BATCH_SLOT),
+  `scan_type`("" · RESCAN · REWORK · TEST — 겹치면 TEST → RESCAN → REWORK 순), `ini_match`(EXACT · NOT_FOUND · MOVED_ONLY · NO_WAFER_ID · READ_ERROR · STALE · BATCH_FAILED · BATCH · BATCH_SLOT),
+  `faults` · `scanned_dice` · `yield`(Report 표의 Faults · Scanned Dice · Yield **원문 그대로**, 합성 행은 빈 값 — 옛 캐시 행에는 없어 `--full` 재수집으로만 채워진다),
   `time_basis`(STRICT_IN_BATCH · TOLERANCE_ONLY · OUTSIDE_BATCH · BATCH_ONLY · MISSING · INVALID · UNKNOWN_BATCH), `slots`(slot 행의 영향 Slot 수).
   열은 **이름으로** 읽는다(고정 인덱스 금지) — 옛 17열 파일도 화면이 `status` 원문에서 원인·결과를 다시 계산하고(`prepareRows`) 합성 행을 같은 규칙으로 다시 만든다(`synthesizeRows` = `collect.synthesize_rows`, idempotent).
   캐시는 `PARSER_VERSION` 이 다르면 `_rederive_rows` 가 NAS 없이 재분류·재합성한다. 옛 standalone HTML 파일 자체는 옛 JS 를 실행한다 — 최신 규칙으로 보려면 재생성(재수집 또는 `write_html`).

@@ -426,6 +426,6 @@ def test_error_analysis_view_contract():
 
 def test_quality_view_contract():
     assert 'id="v-quality"' in HTML and "const QUAL_META=[" in HTML and "function renderQuality(" in HTML
-    for rid in ("NOT_FOUND", "READ_ERROR", "STALE", "NOT_OWNER", "AMBIGUOUS", "SLOT", "BATCH", "UNMAPPED", "NOJOB"):
+    for rid in ("NOT_FOUND", "READ_ERROR", "MOVED_ONLY", "STALE", "NOT_OWNER", "AMBIGUOUS", "SLOT", "BATCH", "UNMAPPED", "NOJOB"):
         assert f'{{id:"{rid}"' in HTML, rid
     assert 'id="detBackQ"' in HTML and 'id="detBackE"' in HTML                                   # 돌아오기(필터 유지)

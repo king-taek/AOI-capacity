@@ -19,6 +19,7 @@ NAS 는 읽기만 한다(`nas_guard.read_bytes/scandir`, `os.path.isdir`). CSV �
 from __future__ import annotations
 
 import csv
+import datetime as dt
 import logging
 import os
 import re
@@ -168,6 +169,62 @@ def find_subdir(path: str, configured: str, defaults) -> str:
     return ""
 
 
+#: 현장은 **어느 날짜를 기준으로 그 이전 Scanresult 를 통째로 백업 폴더로 옮긴다**(30대 조사: 16대에 백업, Job 폴더 5,078개가 거기 잠겨 있었다).
+#: 옮겨진 순간부터 그 Wafer 들의 INI 는 정확 경로에 없어 전부 NOT_FOUND 가 됐다(AOI-4 시각 확인 4%, AOI-7 0건).
+#: 폴더 이름은 제각각이라(`Scanresult_Back up_260918` · `Scanresult Backup_260707` · `Scanresult backup260904` · `Scanresult_BAKCUP_260429` ·
+#: `Scanresult - BACKTUP 0827` · `Scanresult_0901` · `Scanresult - 5.9.3`) 목록으로는 못 잡고 **`Scanresult` 로 시작하는지**로만 거른다.
+_SCAN_PREFIX = "scanresult"
+_YYMMDD_RE = re.compile(r"(?<!\d)(\d{6})(?!\d)")
+_MMDD_RE = re.compile(r"(?<!\d)(\d{4})(?!\d)")
+
+
+def backup_cutoff(name: str, year_hint: Optional[int] = None) -> Optional[dt.date]:
+    """백업 폴더 이름의 날짜 = **그 이전 것을 담아 둔 경계**. `…_260918` → 2026-09-18, `…_0901` → (해 힌트)-09-01.
+    못 읽으면(`Scanresult - 5.9.3`, `…_268020` 같은 있을 수 없는 날짜) None — 후보 맨 뒤로 간다."""
+    n = str(name or "")
+    m = _YYMMDD_RE.search(n)
+    if m:
+        try:
+            return dt.datetime.strptime(m.group(1), "%y%m%d").date()
+        except ValueError:
+            pass                                             # 268020 — 날짜가 아니다
+    m = _MMDD_RE.search(n)
+    if m and year_hint:
+        try:
+            return dt.datetime.strptime(f"{year_hint}{m.group(1)}", "%Y%m%d").date()
+        except ValueError:
+            pass
+    return None
+
+
+def scan_dirs_of(path: str, primary: str) -> List[Dict[str, str]]:
+    """이 장비 폴더 안의 `Scanresult*` 폴더 전부 — 맨 앞은 지금 쓰는 폴더, 뒤는 백업들(경계 이른 순, 경계를 못 읽은 것은 맨 뒤).
+
+    각 항목은 `{"name": 폴더 이름, "cutoff": "YYYY-MM-DD" 또는 ""}`. 장비 폴더 **하나를 한 번** 나열한다 — 여기 오는 장비는
+    이미 수집 범위 안이라 나열해도 규칙(범위 밖 접근 금지·공유 나열 금지)을 어기지 않는다. 나열에 실패하면 primary 만 돌려준다.
+    INI 탐색을 재귀로 넓히는 게 아니라 **정확 경로를 확인할 루트를 늘리는 것**이다(CLAUDE.md 규칙 4 그대로)."""
+    out = [{"name": primary, "cutoff": ""}]
+    try:
+        names = sorted(e.name for e in nas_guard.scandir(path)
+                       if e.is_dir() and e.name.lower().startswith(_SCAN_PREFIX) and e.name != primary)
+    except OSError:
+        return out
+    dated, undated = [], []
+    for n in names:
+        year = None
+        if not _YYMMDD_RE.search(n) and _MMDD_RE.search(n):
+            try:
+                year = dt.datetime.fromtimestamp(os.path.getmtime(os.path.join(path, n))).year
+            except OSError:
+                year = None
+        c = backup_cutoff(n, year)
+        (dated if c else undated).append((c, n))
+    dated.sort(key=lambda x: (x[0], x[1]))
+    out.extend({"name": n, "cutoff": c.isoformat()} for c, n in dated)
+    out.extend({"name": n, "cutoff": ""} for _, n in undated)
+    return out
+
+
 def _has_report(path: str, cfg: dict) -> bool:
     return bool(find_subdir(path, cfg.get("report_dir", ""), REPORT_DIR_NAMES))
 
@@ -182,6 +239,7 @@ def with_dirs(dev: Dict[str, object], cfg: dict) -> Dict[str, object]:
     """이 장비에서 실제로 쓰는 Report·Scanresult 폴더 이름을 붙인다(장비마다 다르다)."""
     dev["report_dir"] = find_subdir(str(dev["path"]), cfg.get("report_dir", ""), REPORT_DIR_NAMES) or str(cfg.get("report_dir") or "Report")
     dev["scan_dir"] = find_subdir(str(dev["path"]), cfg.get("scan_dir", ""), SCAN_DIR_NAMES) or str(cfg.get("scan_dir") or "Scanresult")
+    dev["scan_dirs"] = scan_dirs_of(str(dev["path"]), str(dev["scan_dir"]))   # 백업 폴더까지(맨 앞이 지금 폴더)
     return dev
 
 
@@ -251,6 +309,10 @@ def _attach_dirs(devs: List[Dict[str, object]], cfg: dict, log: Optional[LogFn] 
         with_dirs(d, cfg)
         if d["report_dir"] != (cfg.get("report_dir") or "Report"):
             _log(log, f"[{d['name']}] Report 폴더 이름이 '{d['report_dir']}' 입니다")
+        backups = [x for x in d.get("scan_dirs") or [] if x["name"] != d["scan_dir"]]
+        if backups:
+            _log(log, f"[{d['name']}] Scanresult 백업 폴더 {len(backups)}개도 조회합니다: "
+                      + ", ".join(f"{b['name']}(~{b['cutoff']})" if b["cutoff"] else b["name"] for b in backups))
     return devs
 
 

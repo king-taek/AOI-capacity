@@ -70,3 +70,52 @@ def test_discover_devices_fallback_without_csv(tmp_path, fake_nas):
     nas, csv_path = fake_nas
     cfg = make_cfg(tmp_path, tmp_path / "missing.csv", nas_roots=[str(nas / "X")])
     assert [d["name"] for d in devices.resolve_devices(cfg)] == ["AOI-9", "AOI-10"]
+
+
+# ── Scanresult 백업 폴더 (30대 실물 이름 그대로) ─────────────────────────────
+import datetime as dt
+import os
+import pytest
+
+
+@pytest.mark.parametrize("name,year,expected", [
+    ("Scanresult_Back up_260918", None, dt.date(2026, 9, 18)),
+    ("Scanresult Backup_260707", None, dt.date(2026, 7, 7)),
+    ("Scanresult backup260904", None, dt.date(2026, 9, 4)),
+    ("Scanresult_BAKCUP_260429", None, dt.date(2026, 4, 29)),
+    ("Scanresult_Backup_250324", None, dt.date(2025, 3, 24)),
+    ("Scanresult - BACKTUP 0827", 2026, dt.date(2026, 8, 27)),
+    ("Scanresult_0901", 2026, dt.date(2026, 9, 1)),
+    ("Scanresult_260820", None, dt.date(2026, 8, 20)),
+    ("Scanresult_Backup_268020", None, None),     # 있을 수 없는 날짜
+    ("Scanresult - 5.9.3", 2026, None),           # 백업이 아니라 버전명
+    ("Scanresult_BACKUP", 2026, None),            # 날짜 없음
+])
+def test_backup_cutoff_reads_every_folder_name_seen_on_30_machines(name, year, expected):
+    assert devices.backup_cutoff(name, year) == expected
+
+
+def test_scan_dirs_of_lists_the_live_folder_first_then_backups_by_cutoff(tmp_path):
+    dev = make_device(tmp_path / "X", "AOI-5")
+    for n in ("Scanresult_Backup_250324", "Scanresult_0901", "Scanresult_Back up_260607", "Scanresult - 5.9.3", "Scanresult_Backup_268020"):
+        (dev / n).mkdir()
+    (dev / "Scanresult_0901" / "x").write_text("", encoding="utf-8")
+    t = dt.datetime(2026, 9, 1, 12, 0).timestamp()
+    os.utime(dev / "Scanresult_0901", (t, t))
+    (dev / "ScanresultNotes.txt").write_text("", encoding="utf-8")          # 파일은 후보가 아니다
+    out = devices.scan_dirs_of(str(dev), "Scanresult")
+    assert out[0] == {"name": "Scanresult", "cutoff": ""}
+    assert [x["name"] for x in out[1:4]] == ["Scanresult_Backup_250324", "Scanresult_Back up_260607", "Scanresult_0901"]
+    assert [x["cutoff"] for x in out[1:4]] == ["2025-03-24", "2026-06-07", "2026-09-01"]
+    assert {x["name"] for x in out[4:]} == {"Scanresult - 5.9.3", "Scanresult_Backup_268020"} and all(x["cutoff"] == "" for x in out[4:])
+    assert devices.scan_dirs_of(str(tmp_path / "nowhere"), "Scanresult") == [{"name": "Scanresult", "cutoff": ""}]
+
+
+def test_with_dirs_attaches_backups_and_collect_uses_them(tmp_path):
+    dev = make_device(tmp_path / "X", "AOI-4")
+    (dev / "Scanresult_Back up_260918").mkdir()
+    d = devices.with_dirs({"name": "AOI-4", "path": str(dev), "id": "x"}, _cfg())
+    assert [x["name"] for x in d["scan_dirs"]] == ["Scanresult", "Scanresult_Back up_260918"]
+    from aoi_capacity import collect
+    roots = collect._backup_roots(d, str(dev / "Scanresult"))
+    assert roots == [(str(dev / "Scanresult_Back up_260918"), dt.date(2026, 9, 18))]

@@ -71,7 +71,8 @@ INI_KEYS = {
 PARSER_VERSION = 5
 #: 누락 복구가 다시 읽는 대상 — INI 를 못 찾았거나 읽다 실패한 행이 있는 Report 만.
 #: STALE(다른 시도가 덮어쓴 INI)은 다시 읽어도 되돌아오지 않고, NO_WAFER_ID(자리표시)·BATCH_FAILED 는 경로 자체가 없다.
-RECOVERABLE_INI = ("NOT_FOUND", "READ_ERROR")
+#: MOVED_ONLY(폴더에 `MoveResultFlag` 만 있고 INI 가 없음 = 이동만 되고 아직 스캔 안 함, 실물 AOI-4 `XBL WBG\24`)는 뒤에 스캔되면 INI 가 생긴다.
+RECOVERABLE_INI = ("NOT_FOUND", "READ_ERROR", "MOVED_ONLY")
 #: 장비별 수집 상태(`dev_meta[].status`) — 화면이 '데이터 없음' 과 '수집 실패' 를 구분해 보여 주는 근거.
 DEV_OK, DEV_NO_DATA, DEV_PARTIAL, DEV_UNREACHABLE = "ok", "no_data", "partial", "unreachable"
 #: kind = "" (Wafer 한 장) · "batch" (통째로 실패한 배치 한 건 — Wafer 시각이 하나도 없는 시도)
@@ -80,9 +81,13 @@ DEV_OK, DEV_NO_DATA, DEV_PARTIAL, DEV_UNREACHABLE = "ok", "no_data", "partial", 
 #: `time_basis`(D37) — INI 의 Wafer 시각이 그 Report 의 Batch 구간에 어떻게 들어가는가(STRICT_IN_BATCH · TOLERANCE_ONLY · BATCH_ONLY · MISSING …).
 #: 시간의 주인(같은 INI 시각을 여러 Report 가 참조할 때)은 화면이 원천 행 전체에서 정한다 — 이 열은 사람이 CSV 로 볼 근거다.
 #: `slots`(D38) — kind="slot" 합성 행의 영향 Slot 수(서로 다른 LoadPort/Slot 조합). 다른 행은 빈 값.
-ROW_SCHEMA_VERSION = 4
+#: `faults` · `scanned_dice` · `yield`(ROW_SCHEMA_VERSION 5) — Report 표의 Faults · Scanned Dice · Yield 원문 그대로(`100%` 포함). 리포트 화면의 평균 fault 근거.
+#: 캐시에 든 옛 행에는 이 세 열이 없다(빈 값으로 나간다) — 채우려면 `--full` 재수집(Report 를 다시 읽어야 한다).
+ROW_SCHEMA_VERSION = 5
 OUT_COLS = ["device", "kind", "job", "setup", "lot", "wafer_id", "status", "norm_status", "cause", "outcome", "scan_type", "recipe",
+            "faults", "scanned_dice", "yield",
             "wafer_start_time", "wafer_end_time", "batch_start", "batch_end", "report", "ini_match", "time_basis", "slots", "data_issue"]
+QUALITY_COLS = ("faults", "scanned_dice", "yield")
 #: 합성 행의 종류 — "batch"(통째로 실패한 시도, D06) · "slot"(일부 성공한 배치의 자리표시 행 Error, Report 당 1건, D38)
 SYNTHETIC_KINDS = ("batch", "slot")
 #: HTML 에 박아 넣는 JSON 에서 문자열 풀로 접는 열 — 같은 값이 수없이 되풀이되는 열들이다.
@@ -315,7 +320,8 @@ def parse_report(name: str, text: str) -> dict:
             def idx(k):
                 return next((i for i, h in enumerate(head) if h.startswith(k)), -1)
 
-            ix = {"status": idx("pass"), "recipe": idx("recipe")}
+            ix = {"status": idx("pass"), "recipe": idx("recipe"),
+                  "faults": idx("fault"), "scanned_dice": idx("scanned"), "yield": idx("yield")}
             for row in tb[1:]:
                 if len(row) <= iw:
                     continue
@@ -324,7 +330,9 @@ def parse_report(name: str, text: str) -> dict:
                     return row[i] if 0 <= i < len(row) else ""
 
                 rep["wafers"].append({"lot": row[il], "wafer_id": row[iw],
-                                      "status": g(ix["status"]), "recipe": g(ix["recipe"])})
+                                      "status": g(ix["status"]), "recipe": g(ix["recipe"]),
+                                      "faults": g(ix["faults"]).strip(), "scanned_dice": g(ix["scanned_dice"]).strip(),
+                                      "yield": g(ix["yield"]).strip()})
         else:
             for row in tb:
                 for i in range(0, len(row) - 1, 2):
@@ -418,6 +426,7 @@ class _IniMemo:
         self._lock = threading.Lock()
         self._done: Dict[str, tuple] = {}
         self._busy: Dict[str, threading.Event] = {}
+        self._flags: Dict[str, bool] = {}
         self.asked = 0
 
     def get(self, path: str) -> tuple:
@@ -447,6 +456,16 @@ class _IniMemo:
         ev.set()
         return res
 
+    def exists(self, path: str) -> bool:
+        """파일 존재만(`MoveResultFlag`) — 같은 경로는 한 번만 stat 한다. 읽기 전용."""
+        with self._lock:
+            hit = self._flags.get(path)
+        if hit is None:
+            hit = os.path.isfile(path)
+            with self._lock:
+                self._flags[path] = hit
+        return hit
+
     def stats(self) -> Dict[str, int]:
         with self._lock:
             kinds = [k for k, _ in self._done.values()]
@@ -464,8 +483,32 @@ def _is_placeholder(w: dict) -> bool:
                 or not wid.strip() or not lot.strip())
 
 
-def rows_for_report(dev_name: str, rep: dict, scan_root: str, memo: Optional[_IniMemo] = None) -> List[dict]:
+ScanRoots = List[Tuple[str, Optional[dt.date]]]   # (백업 폴더 경로, 경계 날짜 또는 None) — 우선순위 순
+
+
+def ini_roots_for(batch_start: Optional[dt.datetime], scan_root: str, backups: Optional[ScanRoots]) -> List[str]:
+    """이 배치의 INI 가 있을 폴더부터 — 현장은 어느 날짜 기준 **그 이전** Scanresult 를 통째로 백업 폴더로 옮기므로,
+    배치 시작일이 경계보다 이른 첫 백업이 1순위다(확인 횟수는 지금과 같은 1번). 거기 없을 때만 나머지를 순서대로 본다.
+    경계를 모르는 백업(`Scanresult - 5.9.3`)은 맨 뒤. 백업이 없으면 예전 그대로 `[scan_root]`."""
+    backups = list(backups or [])
+    if not backups:
+        return [scan_root]
+    first = scan_root
+    if batch_start is not None:
+        for root, cut in sorted((b for b in backups if b[1]), key=lambda b: (b[1], b[0])):
+            if batch_start.date() < cut:
+                first = root
+                break
+    rest = [scan_root] + [root for root, _ in backups]
+    return [first] + [r for r in rest if r != first]
+
+
+def rows_for_report(dev_name: str, rep: dict, scan_root: str, memo: Optional[_IniMemo] = None,
+                    backups: Optional[ScanRoots] = None) -> List[dict]:
     """Report 한 장 → Wafer 행들(+ 통째로 실패한 배치면 배치 행 하나).
+
+    `backups` 가 있으면 INI 를 `ini_roots_for` 순서로 찾는다(정확 경로만, 재귀 없음). 백업에서 찾은 행은 `data_issue` 에 폴더 이름을 남긴다.
+    어느 폴더에도 INI 가 없는데 1순위 폴더의 Wafer 자리에 `MoveResultFlag` 만 있으면 `MOVED_ONLY`(이동만 되고 스캔 안 함) — NOT_FOUND 와 섞지 않는다.
 
     ★ WaferInfo.ini 는 재검사 때 **같은 경로에 덮어써진다**(실물 확인: AOI-25 9/14 00NSP049XYG7).
       그래서 옛 시도의 Report 행에도 '나중 시도의 시각' 이 붙는다. 이를 그대로 쓰면 같은 시간이
@@ -482,16 +525,27 @@ def rows_for_report(dev_name: str, rep: dict, scan_root: str, memo: Optional[_In
              "norm_status": norm_status(w["status"]), "cause": cause_field(causes), "outcome": norm_outcome(w["status"]),
              "scan_type": scan_type(w["lot"]),
              "recipe": w["recipe"] or s.get("Recipe", ""),
+             "faults": w.get("faults", ""), "scanned_dice": w.get("scanned_dice", ""), "yield": w.get("yield", ""),
              "wafer_start_time": "", "wafer_end_time": "", "batch_start": s.get("Batch Start", ""),
              "batch_end": s.get("Batch End", ""), "ini_match": "", "time_basis": "MISSING", "slots": "", "data_issue": ""}
         if _is_placeholder(w):
             r["ini_match"], r["data_issue"] = "NO_WAFER_ID", "LoadPort/Slot 행이라 INI 경로를 만들 수 없음"
         else:
-            ini_path = os.path.join(scan_root, rep["equipment"], rep["process_code"], w["lot"], w["wafer_id"], "WaferInfo.ini")
+            rel = os.path.join(rep["equipment"], rep["process_code"], w["lot"], w["wafer_id"])
+            roots = ini_roots_for(b_start, scan_root, backups)
             # 존재 확인(stat) 없이 바로 연다 — SMB 왕복이 행마다 2번에서 1번으로 준다. 없으면 open 이 알려 준다.
-            kind, got = memo.get(ini_path)
+            kind, got, found_in = "missing", None, roots[0]
+            for root in roots:
+                kind, got = memo.get(os.path.join(root, rel, "WaferInfo.ini"))
+                if kind != "missing":
+                    found_in = root
+                    break
             if kind == "missing":
-                r["ini_match"], r["data_issue"] = "NOT_FOUND", "예상 경로에 WaferInfo.ini 없음"
+                if memo.exists(os.path.join(roots[0], rel, "MoveResultFlag")):
+                    r["ini_match"], r["data_issue"] = "MOVED_ONLY", "Wafer 폴더에 MoveResultFlag 만 있고 WaferInfo.ini 없음 — 이동만 되고 스캔 안 함"
+                else:
+                    r["ini_match"], r["data_issue"] = "NOT_FOUND", ("예상 경로에 WaferInfo.ini 없음" if len(roots) == 1
+                                                                  else f"예상 경로와 백업 폴더 {len(roots) - 1}개 어디에도 WaferInfo.ini 없음")
             elif kind == "error":
                 r["ini_match"], r["data_issue"] = "READ_ERROR", f"{type(got).__name__}: {got}"
             else:
@@ -512,6 +566,8 @@ def rows_for_report(dev_name: str, rep: dict, scan_root: str, memo: Optional[_In
                         iss.append("Lot 불일치")
                     if a.get("UseWaferID") and a["UseWaferID"] != w["wafer_id"]:
                         iss.append("Wafer ID 불일치")
+                    if found_in != scan_root:
+                        iss.append(f"백업 폴더에서 찾음: {os.path.basename(found_in.rstrip(chr(92) + '/'))}")
                     r["data_issue"] = "; ".join(iss)
                 except Exception as e:  # noqa: BLE001
                     r["ini_match"], r["data_issue"] = "READ_ERROR", f"{type(e).__name__}: {e}"
@@ -613,7 +669,7 @@ def _batch_from_rows(rows: List[dict]) -> Optional[dict]:
             "report": _first(rows, "report"), "lot": lot, "wafer_id": "",
             "status": lead["status"], "norm_status": norm_status(lead["status"]), "cause": cause_field(union),
             "outcome": norm_outcome(lead["status"]), "scan_type": scan_type(lot),
-            "recipe": lead.get("recipe", ""), "wafer_start_time": b_start,
+            "recipe": lead.get("recipe", ""), "faults": "", "scanned_dice": "", "yield": "", "wafer_start_time": b_start,
             "wafer_end_time": b_end, "batch_start": b_start,
             "batch_end": b_end, "ini_match": "BATCH", "time_basis": "BATCH_ONLY", "slots": "",
             "data_issue": f"검사된 Wafer 없음 — 배치 시각으로만 표시 (행 {len(rows)}개 중 오류 {len(errs)}개)"}
@@ -645,6 +701,7 @@ def slot_error_row(rows: List[dict]) -> Optional[dict]:
             "report": _first(src, "report"), "lot": lot, "wafer_id": "",
             "status": lead["status"], "norm_status": norm_status(lead["status"]), "cause": cause_field(union),
             "outcome": norm_outcome(lead["status"]), "scan_type": scan_type(lot), "recipe": lead.get("recipe", ""),
+            "faults": "", "scanned_dice": "", "yield": "",
             "wafer_start_time": "", "wafer_end_time": "", "batch_start": b_start, "batch_end": b_end,
             "ini_match": "BATCH_SLOT", "time_basis": "MISSING", "slots": str(len(slots)),
             "data_issue": f"자리표시 행 Error — Report 당 1건 · 영향 Slot {len(slots)}개 · 시간 미확인(Batch 범위 추정)" + (" · " + " · ".join(note) if note else "")}
@@ -714,6 +771,8 @@ def _rederive_rows(cache: dict) -> int:
                 r.update(new)
                 changed += 1
             r.setdefault("slots", "")
+            for c in QUALITY_COLS:
+                r.setdefault(c, "")
         before = json.dumps([r for r in rows if r.get("kind") in SYNTHETIC_KINDS], sort_keys=True, ensure_ascii=False)
         rebuilt = synthesize_rows(rows)
         after = json.dumps([r for r in rebuilt if r.get("kind") in SYNTHETIC_KINDS], sort_keys=True, ensure_ascii=False)
@@ -948,6 +1007,21 @@ def _advance_cursor(last: dict, did: str, ok_mtimes, blocked_mtimes) -> None:
         last[did] = cur
 
 
+def _backup_roots(d: dict, scan_root: str) -> ScanRoots:
+    """장비 dict 의 `scan_dirs`(devices.with_dirs 가 붙임) → (경로, 경계 날짜) 목록. 맨 앞(지금 폴더)은 뺀다."""
+    out: ScanRoots = []
+    for x in list(d.get("scan_dirs") or [])[1:]:
+        path = os.path.join(str(d["path"]), str(x.get("name") or ""))
+        if not x.get("name") or path == scan_root:
+            continue
+        try:
+            cut = dt.date.fromisoformat(str(x.get("cutoff"))) if x.get("cutoff") else None
+        except ValueError:
+            cut = None
+        out.append((path, cut))
+    return out
+
+
 def collect(cfg: dict, full: bool = False, backfill: bool = False, *, recover: bool = False,
             progress: Optional[ProgressFn] = None, log: Optional[LogFn] = None,
             should_stop: Optional[Callable[[], bool]] = None,
@@ -997,16 +1071,17 @@ def collect(cfg: dict, full: bool = False, backfill: bool = False, *, recover: b
         left[str(d["id"])] = len(pick)
         on_device(d["name"], "parsing", "")
         scan_root = os.path.join(d["path"], str(d.get("scan_dir") or cfg["scan_dir"]))
-        jobs.extend((d, dm, e, scan_root) for e in pick)
+        backups = _backup_roots(d, scan_root)
+        jobs.extend((d, dm, e, scan_root, backups) for e in pick)
 
     def read_one(job):
-        d, _dm, e, scan_root = job
+        d, _dm, e, scan_root, backups = job
         _check(should_stop)
         t_job = clock()
         mtime = e.stat().st_mtime
         try:
             rep = parse_report(e.name, nas_guard.read_text(e.path))
-            out = (job, mtime, rows_for_report(d["name"], rep, scan_root, memo), None, clock() - t_job)
+            out = (job, mtime, rows_for_report(d["name"], rep, scan_root, memo, backups), None, clock() - t_job)
         except CollectCancelled:
             raise
         except Exception as ex:  # noqa: BLE001
@@ -1024,7 +1099,7 @@ def collect(cfg: dict, full: bool = False, backfill: bool = False, *, recover: b
 
     by_dev: Dict[str, dict] = {str(d["id"]): {"ok": list(known), "blocked": []}
                                for d, dm, _pick, known in plan if not dm["error"]}
-    for (d, _dm, e, _scan), mtime, rows_of, err, sec in _run(cfg, jobs, read_one, should_stop):
+    for (d, _dm, e, _scan, _bk), mtime, rows_of, err, sec in _run(cfg, jobs, read_one, should_stop):
         did = str(d["id"])
         _dm["read_sum_ms"] = _dm.get("read_sum_ms", 0) + int(sec * 1000)   # 병렬로 겹치는 시간의 **합**(경과시간 아님)
         if err is None:

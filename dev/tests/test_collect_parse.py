@@ -461,3 +461,92 @@ def test_rederive_rebuilds_synthetic_rows_from_an_old_cache():
     assert rows[2]["cause"] == "ID_READ_ERROR" and all(r["ini_match"] == "BATCH_FAILED" for r in rows[:2])
     again = json.loads(json.dumps(cache))
     assert collect._rederive_rows(again) == 0 and again["reports"]["/x/r.htm"]["rows"] == rows
+
+
+# ── Scanresult 백업 폴더 조회 (30대 조사: 16대에 백업, 읽을 수 있는 INI 24,050 → 53,069) ──────────
+def _backup_ini(tmp_path, folder: str, start: str, end: str, wafer: str = "54265662EWE7") -> None:
+    d = tmp_path / folder / "TB500_RDL2 - Multi" / "Setup1" / "FUK-RDL2" / wafer
+    d.mkdir(parents=True, exist_ok=True)
+    (d / "WaferInfo.ini").write_text(WAFER_INI.replace("UseLot=KLK-3D", "UseLot=FUK-RDL2")
+                                     .replace("UseWaferID=K625407-01B0", f"UseWaferID={wafer}")
+                                     .replace("WaferStartTime=13-Sep-26 05:31:04 PM", f"WaferStartTime={start}")
+                                     .replace("WaferEndTime=13-Sep-26 05:32:02 PM", f"WaferEndTime={end}"),
+                                     encoding="utf-8")
+
+
+def test_ini_roots_start_with_the_backup_whose_cutoff_is_after_the_batch():
+    """배치 시작일이 경계보다 이른 **첫** 백업이 1순위, 그다음 지금 폴더, 나머지 백업, 경계 없는 백업은 맨 뒤."""
+    live = "X/AOI-5/Scanresult"
+    bk = [("X/AOI-5/Scanresult_Backup_250324", dt.date(2025, 3, 24)), ("X/AOI-5/Scanresult_Back up_260607", dt.date(2026, 6, 7)),
+          ("X/AOI-5/Scanresult_0901", dt.date(2026, 9, 1)), ("X/AOI-5/Scanresult - 5.9.3", None)]
+    b = dt.datetime(2026, 7, 2, 10, 0)
+    order = collect.ini_roots_for(b, live, bk)
+    assert order[0] == "X/AOI-5/Scanresult_0901"                   # 7/2 < 9/1 경계 → 그 백업에 있다
+    assert order[1] == live and order[-1] == "X/AOI-5/Scanresult - 5.9.3" and len(order) == 5
+    assert collect.ini_roots_for(dt.datetime(2026, 9, 15), live, bk)[0] == live       # 모든 경계 뒤 → 지금 폴더
+    assert collect.ini_roots_for(None, live, bk)[0] == live                          # 배치 시각 모름 → 지금 폴더부터
+    assert collect.ini_roots_for(b, live, None) == [live]                            # 백업 없음 → 예전 그대로
+
+
+def test_ini_is_found_in_the_backup_folder_with_one_lookup(tmp_path):
+    """9/15 배치인데 INI 가 `Scanresult_Back up_260918`(9/18 이전을 옮긴 곳)에만 있다 — 첫 확인에 찾고 백업 이름을 남긴다."""
+    _backup_ini(tmp_path, "Scanresult_Back up_260918", "15-Sep-26 07:30:00 PM", "15-Sep-26 07:44:00 PM")
+    (tmp_path / "Scanresult").mkdir()
+    rep = collect.parse_report(LIVE_NAME, LIVE_HTML)
+    memo = collect._IniMemo()
+    backups = [(str(tmp_path / "Scanresult_Back up_260918"), dt.date(2026, 9, 18))]
+    rows = collect.rows_for_report("AOI-4", rep, str(tmp_path / "Scanresult"), memo, backups)
+    r = next(x for x in rows if x["wafer_id"] == "54265662EWE7")
+    assert r["ini_match"] == "EXACT" and r["wafer_start_time"] == "15-Sep-26 07:30:00 PM"
+    assert "백업 폴더에서 찾음: Scanresult_Back up_260918" in r["data_issue"]
+    # 54265662EWE7 은 1순위(백업)에서 바로 찾아 1회, 54265684EWA2 는 없어서 백업 → 지금 폴더 2회 = 3회(확인 횟수는 있는 것엔 예전과 같은 1번)
+    assert memo.asked == 3
+    r2 = next(x for x in rows if x["wafer_id"] == "54265684EWA2")
+    assert r2["ini_match"] == "NOT_FOUND" and "백업 폴더 1개" in r2["data_issue"]
+
+
+def test_missing_ini_falls_back_to_every_root_and_a_move_flag_means_moved_only(tmp_path):
+    """어느 폴더에도 INI 가 없다: 1순위 폴더의 Wafer 자리에 `MoveResultFlag` 만 있으면 '이동만 되고 스캔 안 함'(MOVED_ONLY), 아니면 NOT_FOUND."""
+    live = tmp_path / "Scanresult"
+    bk = tmp_path / "Scanresult_Backup_260827"
+    wafer_dir = bk / "TB500_RDL2 - Multi" / "Setup1" / "FUK-RDL2" / "54265662EWE7"
+    wafer_dir.mkdir(parents=True)
+    (wafer_dir / "MoveResultFlag").write_text("", encoding="utf-8")
+    live.mkdir()
+    rep = collect.parse_report(LIVE_NAME, LIVE_HTML)      # 배치 9/15 < 경계 8/27 이 아니다 → 1순위는 지금 폴더
+    backups = [(str(bk), dt.date(2026, 8, 27))]
+    by = {r["wafer_id"]: r for r in collect.rows_for_report("AOI-4", rep, str(live), collect._IniMemo(), backups)}
+    assert by["54265662EWE7"]["ini_match"] == "NOT_FOUND"          # 표식은 백업(2순위)에 있고 1순위(지금 폴더)에는 없다
+    backups = [(str(bk), dt.date(2026, 9, 30))]                     # 경계가 9/30 이면 백업이 1순위 → 거기 표식이 보인다
+    by = {r["wafer_id"]: r for r in collect.rows_for_report("AOI-4", rep, str(live), collect._IniMemo(), backups)}
+    assert by["54265662EWE7"]["ini_match"] == "MOVED_ONLY" and "스캔 안 함" in by["54265662EWE7"]["data_issue"]
+    assert by["54265662EWE7"]["wafer_start_time"] == "" and by["54265662EWE7"]["time_basis"] == "MISSING"
+    assert "MOVED_ONLY" in collect.RECOVERABLE_INI                  # 뒤에 스캔되면 INI 가 생기므로 누락 복구가 다시 본다
+
+
+def test_rows_without_backups_behave_exactly_as_before(tmp_path):
+    _live_ini(tmp_path, "15-Sep-26 07:30:00 PM", "15-Sep-26 07:44:00 PM")
+    rep = collect.parse_report(LIVE_NAME, LIVE_HTML)
+    a = collect.rows_for_report("AOI-25", rep, str(tmp_path / "Scanresult"))
+    b = collect.rows_for_report("AOI-25", rep, str(tmp_path / "Scanresult"), collect._IniMemo(), [])
+    assert a == b and a[0]["ini_match"] == "EXACT" and "백업" not in a[0]["data_issue"]
+
+
+# ── faults · scanned_dice · yield (ROW_SCHEMA_VERSION 5) ──────────────────────────────
+def test_wafer_rows_carry_faults_scanned_dice_and_yield_verbatim(tmp_path):
+    """리포트 화면의 '평균 fault' 근거 — Report 표의 값을 원문 그대로 싣는다(`77.5%` 도 그대로). 합성 행은 빈 값."""
+    assert collect.ROW_SCHEMA_VERSION == 5 and len(collect.OUT_COLS) == 24
+    for c in ("faults", "scanned_dice", "yield"):
+        assert c in collect.OUT_COLS and c in collect.POOLED_COLS
+    rep = collect.parse_report(LIVE_NAME, LIVE_HTML)
+    by = {r["wafer_id"]: r for r in collect.rows_for_report("AOI-25", rep, str(tmp_path / "Scanresult"))}
+    assert (by["54265662EWE7"]["faults"], by["54265662EWE7"]["scanned_dice"], by["54265662EWE7"]["yield"]) == ("10", "40", "77.5%")
+    assert (by["54265684EWA2"]["faults"], by["54265684EWA2"]["yield"]) == ("-", "-")
+    rows = collect.rows_for_report("AOI-25", collect.parse_report(LIVE_NAME, FAILED_BATCH_HTML), str(tmp_path / "Scanresult"))
+    batch = next(r for r in rows if r["kind"] == "batch")
+    assert (batch["faults"], batch["scanned_dice"], batch["yield"]) == ("", "", "")
+    old = collect.parse_report(REPORT_NAME, REPORT_HTML.replace("<th>Faults</th><th>Scanned Dice</th><th>Bad Dice</th><th>Good Dice</th><th>Yield</th>", "")
+                               .replace("<td>0</td><td>45</td><td>0</td><td>45</td><td>100%</td>", "")
+                               .replace("<td>0</td><td>0</td><td>0</td><td>0</td><td>0%</td>", "")
+                               .replace("<td></td><td></td><td></td><td></td><td></td>", ""))
+    assert all(w["faults"] == "" and w["yield"] == "" for w in old["wafers"])      # 열이 없는 옛 Report 는 빈 값

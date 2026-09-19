@@ -1001,8 +1001,8 @@ function homeList(){return visDevs().map(n=>({n,m:dayMetrics(D[n],day)}));}
 /* 수집 범위 밖이라 이번에 읽지 않은 장비 — 화면에서 '수집 안 함' 으로만 보여 준다(데이터 없음과 구분) */
 function scopeOut(){return(meta.devices||[]).filter(d=>d.scope==="out"&&!devNames.includes(d.name)).sort((a,b)=>cmpDev(a.name,b.name));}
 /* 데이터 품질 요약 — 수집 상태와는 별개다(수집 ok 라도 STALE·NOT_FOUND 행은 있다). 행 수이지 시간이 아니다. */
-function qualitySummary(){const q={stale:0,missing:0,unresolved:(D&&D._index)?D._index.nUnresolved:0,notOwner:D?D._notOwner||0:0,ambiguous:D?D._ambiguous||0:0,batch:0,slot:0,unmapped:0};
-  for(const r of rows){if(r.kind==="batch")q.batch++;else if(r.kind==="slot")q.slot++;if(r.ini_match==="STALE")q.stale++;else if(r.ini_match==="NOT_FOUND"||r.ini_match==="READ_ERROR")q.missing++;if(isUnmappedStatus(r.status))q.unmapped++;}return q;}
+function qualitySummary(){const q={stale:0,missing:0,moved:0,unresolved:(D&&D._index)?D._index.nUnresolved:0,notOwner:D?D._notOwner||0:0,ambiguous:D?D._ambiguous||0:0,batch:0,slot:0,unmapped:0};
+  for(const r of rows){if(r.kind==="batch")q.batch++;else if(r.kind==="slot")q.slot++;if(r.ini_match==="STALE")q.stale++;else if(r.ini_match==="NOT_FOUND"||r.ini_match==="READ_ERROR")q.missing++;else if(r.ini_match==="MOVED_ONLY")q.moved++;if(isUnmappedStatus(r.status))q.unmapped++;}return q;}
 const devId=n=>"dev-"+String(n).replace(/[^A-Za-z0-9_-]/g,c=>"_"+c.charCodeAt(0).toString(16));
 /* 상세 패널은 하나뿐 — 렌더 전에 주차장(#detPark)으로 빼 두었다가 선택한 장비의 자리로 옮긴다(innerHTML 이 지우지 않게) */
 function parkDetail(){const d=$("#detail"),p=$("#detPark");if(d&&p&&d.parentNode!==p)p.appendChild(d);}
@@ -1020,14 +1020,14 @@ function renderHome(){
   const list=homeList();const vd=visDevs();const out=scopeOut();
   const cur=fleetAvg([day],vd);const q=qualitySummary();
   const alerts=list.filter(x=>isAlert(x.m)),nod=list.filter(x=>!x.m.hasData),errs=list.filter(x=>x.m.nErr>0);
-  const rep=cur.dup+cur.rescan+cur.rework;const nErr=errs.reduce((a,x)=>a+x.m.nErr,0);const noTime=q.stale+q.missing+q.notOwner;const nAbortRun=list.reduce((a,x)=>a+(x.m.nAbort-x.m.nAbortErr),0);
+  const rep=cur.dup+cur.rescan+cur.rework;const nErr=errs.reduce((a,x)=>a+x.m.nErr,0);const noTime=q.stale+q.missing+q.moved+q.notOwner;const nAbortRun=list.reduce((a,x)=>a+(x.m.nAbort-x.m.nAbortErr),0);
   const bad=Object.values(devStatus).filter(s=>s.status==="unreachable"||s.status==="partial").length;
   $("#rangeLine").innerHTML=rangeLineHtml();
   /* 핵심 카드 4개(V02): 평균 가동률 · 확인된 가동시간 · Error 사건 · 시간 근거 상태. 카드마다 기간·장비 범위를 적는다 */
   $("#homeSum").innerHTML=`<div class="card ss hero"><div class="k">평균 가동률 · ${fmtDay(day)}${isToday(day)?" · 마지막 스캔 기준":""}</div><div class="v">${cur.util==null?"—":cur.util.toFixed(1)+"<small>%</small>"}</div><div class="s">데이터 있는 장비 ${cur.n}대 산술평균${nod.length?` · 데이터 없음 ${nod.length}대`:""}<br>${isToday(day)?"00:00 ~ 장비별 마지막 스캔(수집 시각 기준)":"00:00 ~ 24:00"} · 가동시간 ÷ 경과시간</div></div>
     <div class="card ss"><div class="k">확인된 가동시간 · ${fmtDay(day)}</div><div class="v num">${fmtSecS(cur.run)}</div><div class="s">장비 ${cur.n}대 합계 · 그중 반복 가동 ${cur.run>0?(rep/cur.run*100).toFixed(1):"0.0"}% (${fmtSecS(rep)})${nAbortRun?`<br>가동 중단 ${fmtN(nAbortRun)}건 포함(정상 스캔이 있는 Report 의 중단)`:""}</div></div>
     <button class="card ss" onclick="EQ.preset='custom';EQ.start=day;EQ.end=day;EQsel=null;go('errors')" title="Error 분석(이 날짜)으로 이동"><div class="k">Error 사건 · ${fmtDay(day)}</div><div class="v num" style="color:${nErr?"var(--crit-ink)":"inherit"}">${fmtN(nErr)}<small>건</small></div><div class="s">장비 ${errs.length}대 · Error·정지(추정) ${fmtSecS(list.reduce((a,x)=>a+x.m.stop+x.m.err,0))}<br>주의 장비 ${alerts.length}대(가동률 ${th.util}% 미만 또는 Error ${th.err}건↑)</div></button>
-    <button class="card ss" onclick="go('quality')" title="시간 근거·미확인 목록으로 이동"><div class="k">시간 근거 상태 · 파일 전체</div><div class="v num">${fmtN(noTime)}<small>행 미확인</small></div><div class="s">INI 없음 ${fmtN(q.missing)} · 덮어써짐 ${fmtN(q.stale+q.notOwner)}${q.ambiguous?` · 소유권 보류 ${q.ambiguous}묶음`:""}${q.unresolved?` · 판정 보류 ${q.unresolved}건`:""}${q.unmapped?` · 미분류 ${q.unmapped}행`:""}${bad?`<br><span class="chip warn">수집 실패·일부 누락 ${bad}대</span>`:""}</div></button>`;
+    <button class="card ss" onclick="go('quality')" title="시간 근거·미확인 목록으로 이동"><div class="k">시간 근거 상태 · 파일 전체</div><div class="v num">${fmtN(noTime)}<small>행 미확인</small></div><div class="s">INI 없음 ${fmtN(q.missing)}${q.moved?` · 스캔 안 함 ${fmtN(q.moved)}`:""} · 덮어써짐 ${fmtN(q.stale+q.notOwner)}${q.ambiguous?` · 소유권 보류 ${q.ambiguous}묶음`:""}${q.unresolved?` · 판정 보류 ${q.unresolved}건`:""}${q.unmapped?` · 미분류 ${q.unmapped}행`:""}${bad?`<br><span class="chip warn">수집 실패·일부 누락 ${bad}대</span>`:""}</div></button>`;
   renderLoss(list,vd);renderRep(list);
   const key=x=>x.m.hasData?x.m.util:999;
   list.sort((a,b)=>ui.sort==="name"?cmpDev(a.n,b.n):ui.sort==="err"?(b.m.nErr-a.m.nErr)||(key(a)-key(b)):(key(a)-key(b)));
@@ -1297,6 +1297,7 @@ document.addEventListener("keydown",e=>{if(e.key==="Escape"&&!$("#drawer").hidde
 const QUAL_META=[
   {id:"NOT_FOUND",label:"INI 없음",help:"예상 경로에 WaferInfo.ini 가 없음(NOT_FOUND) — 시간 미확인",test:r=>r.kind===""&&r.ini_match==="NOT_FOUND"},
   {id:"READ_ERROR",label:"INI 읽기 실패",help:"INI 를 열었지만 읽지 못함 — 시간 미확인",test:r=>r.kind===""&&r.ini_match==="READ_ERROR"},
+  {id:"MOVED_ONLY",label:"이동만 되고 스캔 안 함",help:"Wafer 폴더에 MoveResultFlag 만 있고 WaferInfo.ini 가 없음(MOVED_ONLY) — 스캔 기록이 아니라 시간 미확인(실물 AOI-4)",test:r=>r.kind===""&&r.ini_match==="MOVED_ONLY"},
   {id:"STALE",label:"INI 덮어써짐(배치 밖)",help:"INI 시각이 이 Report 의 Batch 구간 밖 — 다시 검사하며 덮어써진 것(STALE), 시간 미사용",test:r=>r.kind===""&&r.ini_match==="STALE"},
   {id:"NOT_OWNER",label:"INI 덮어써짐(소유권 없음)",help:"같은 INI 시각을 Batch 구간에 엄격히 담은 다른 Report 가 시간을 가짐(D37) — 사건은 남고 시간은 0",test:r=>r.ownership==="NOT_OWNER"},
   {id:"AMBIGUOUS",label:"시간 소유권 보류",help:"같은 INI 시각을 여러 Report 가 참조하는데 엄격 포함 Report 가 하나가 아님 — 시간은 한 번만 세고 확인된 소유로 표시하지 않음",test:r=>r.ownership==="AMBIGUOUS"},
@@ -1528,7 +1529,7 @@ function renderDetail(){
 /* ---------- 고정 상세(클릭·Enter) ----------
    hover 에서 뺀 것들 — 원문 메시지·파일명·INI 확인 상태·Report 목록·복사·자재 이력 — 를 여기서 본다. 툴팁과 달리 버튼이 있다. */
 const OWN_KO={NOT_OWNER:"시간 미확인 · INI 가 나중 검사로 덮어써짐 — 같은 시각을 Batch 구간에 담은 다른 Report 가 시간을 가짐(D37)",AMBIGUOUS:"같은 시각을 여러 Report 가 참조 — 엄격 포함 Report 가 하나가 아니어서 소유권 보류(시간은 한 번만 계산)"};
-const INI_KO={EXACT:"시각 확인됨",NOT_FOUND:"시간 미확인 · INI 없음",STALE:"시간 미확인 · INI 가 다시 검사로 덮어써짐",READ_ERROR:"시간 미확인 · INI 읽기 실패",
+const INI_KO={EXACT:"시각 확인됨",NOT_FOUND:"시간 미확인 · INI 없음",STALE:"시간 미확인 · INI 가 다시 검사로 덮어써짐",READ_ERROR:"시간 미확인 · INI 읽기 실패",MOVED_ONLY:"시간 미확인 · 이동만 되고 스캔 안 함(MoveResultFlag 만 있음)",
   NO_WAFER_ID:"자리표시 행(LoadPort/Slot)",BATCH_FAILED:"실패한 배치의 행 — 배치 1건으로 셈",BATCH:"스캔된 Wafer 없음 · Batch 시각으로 표시",BATCH_SLOT:"자리표시 행 Error — Report 당 1건 · 시간 미확인(Batch 범위 추정)"};
 const reportsOf=parts=>{const seen=new Set(),out=[];for(const p of parts){const r=p.g.r;if(r.report&&!seen.has(r.report)){seen.add(r.report);out.push(r);}}return out;};
 const kindKo=g=>g.test?"Test":g.err?(g.abort&&!g.r.causes.length?"중단(Error) · ":"")+(ERR_KO[g.r.norm_status]||"Error"):g.unk?"분류 미확인 · "+(ERR_KO[g.r.outcome]||g.r.outcome):g.abort?"중단(가동) · "+(ERR_KO[g.r.outcome]||"중단됨"):DM(g.disp).label;
