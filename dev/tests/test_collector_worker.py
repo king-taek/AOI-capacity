@@ -93,7 +93,7 @@ def test_csv_lock_completes_with_warnings_not_failed(qapp, fake_nas, tmp_path, m
     line = res.warning_lines[0]
     assert line.startswith(i18n.KO.COLLECT_DONE_CSV_FAILED_FMT.split("{")[0]) and "PermissionError" in line
     assert any(line == m for _t, m in got["log"])                    # 로그에도 같은 문장이 남는다
-    assert res.cache_status == "ok"
+    assert res.cache_status == "missing"                              # 첫 수집(캐시 파일 없음) — 손상(corrupt)이 아니다
 
 
 def test_html_lock_is_still_reported_as_failure(qapp, fake_nas, tmp_path, monkeypatch):

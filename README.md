@@ -139,23 +139,29 @@ Lot 이름은 Report 파일명에서 뽑아 정리해 보여 주고(`Setup1_FKC-
 
 ## 자동 업데이트
 
-실행할 때 GitHub 저장소 기본 브랜치의 최신 커밋 SHA 를 `app/VERSION` 과 비교해 새 버전을 안내합니다. 동의하면 브랜치 zip 을 받아
-새 트리를 만들고 검증한 뒤 `app.new` 로 준비해 두며, **다음 실행 때** 런처(`AOI_Capacity.exe`)가 `app/` 을 교체합니다.
-새 버전이 다른 패키지를 요구하면 동봉 파이썬에 먼저 설치하고, 설치에 실패하면 업데이트를 적용하지 않습니다.
-api.github.com 이 막히면 github.com Atom 피드로, 회사 SSL 검사 프록시에서 인증서 검증이 실패하면 검증 없이 한 번 더 시도합니다.
+실행할 때 GitHub 저장소 기본 브랜치의 최신 커밋 SHA 를 `app/VERSION` 과 비교해 새 버전을 안내합니다. **그 커밋의 GitHub Actions 테스트(`tests`)가 성공한 경우에만** 받습니다 —
+테스트가 아직 돌고 있거나 실패했거나 조회할 수 없으면 '보류' 로 이유를 보여 주고 지금 버전을 그대로 씁니다. 동의하면 그 커밋의 zip(`archive/<SHA>.zip`)을 받아
+내용을 검사한 뒤 새 트리를 만들고 검증해 `app.new` 로 준비해 두며, **다음 실행 때** 런처(`AOI_Capacity.exe`)가 `app/` 을 교체합니다. 교체 중 어느 파일에서든 실패하면 앞서 바꾼 파일까지 되돌립니다.
+새 버전이 다른 패키지를 요구하면 동봉 파이썬에 먼저 설치하고(10분 상한), 설치에 실패하면 업데이트를 적용하지 않습니다.
+api.github.com 이 막히면 github.com Atom 피드로 커밋을 찾습니다. **인증서 검증이 실패하면 확인도 적용도 멈춥니다**(검증 없이 받지 않습니다) — 회사 SSL 검사 프록시라면 그 루트 인증서를 Windows 인증서 저장소에 넣어 주세요(truststore 가 읽습니다).
 git 작업 폴더에서 실행 중이면 자동 적용을 하지 않습니다(`git pull` 사용).
 
-새 버전 배포는 기본 브랜치에 푸시하기만 하면 됩니다. `requirements.txt` 를 바꾸는 변경은 사용자 PC 의 첫 업데이트에서 패키지 설치가 필요하니 주의하세요.
+새 버전 배포는 기본 브랜치에 푸시하고 **Actions 의 `tests` 가 초록이 되면** 끝입니다. `requirements.txt` 를 바꾸는 변경은 사용자 PC 의 첫 업데이트에서 패키지 설치가 필요하니 주의하세요.
 
 ## 창 없이 수집 (콘솔)
 
 GUI 를 띄우지 않고 같은 수집을 돌릴 수 있습니다. **설정·장비 목록·캐시·결과 HTML 이 GUI 와 완전히 같습니다.**
 
 ```
-python -m aoi_capacity.cli            # 진행률이 콘솔에 찍힙니다
-python -m aoi_capacity.cli --backfill # 수집 기간(backfill_days) 안의 Report 를 전부 다시
-python -m aoi_capacity.cli --full     # 캐시를 버리고 처음부터
+python -m aoi_capacity.cli                      # 증분 — 새 Report 만 읽습니다. 진행률이 콘솔에 찍힙니다
+python -m aoi_capacity.cli --backfill           # 검색 창만 수집 기간(backfill_days)으로 넓힙니다. 이미 캐시된 파일은 건너뜁니다
+python -m aoi_capacity.cli --refresh-window 30  # 최근 30일은 캐시에 있어도 다시 읽습니다(그 밖의 이력은 그대로). 실패한 파일은 이전 내용을 유지하고 다음에 재시도
+python -m aoi_capacity.cli --rebuild-all        # 보관 기간 전부를 새로 읽어 검증한 뒤 캐시를 교체합니다. 실패하면 기존 캐시를 그대로 둡니다
+python -m aoi_capacity.cli --full               # --rebuild-all 과 같습니다(이력을 지우지 않습니다)
+python -m aoi_capacity.cli --recover            # 시간 미확인 Report 다시 읽기
 ```
+
+종료 코드: 0 성공 · 3 부분 성공(HTML 은 새로 썼고 CSV 만 못 씀 — Excel 이 열어 둔 경우) · 1 실패.
 
 작업 스케줄러처럼 화면 없이 돌릴 때는 `scripts/run_collect.bat` (로그를 `%LOCALAPPDATA%\AOI_Capacity\collect.log` 에 남깁니다).
 `--config` 로 `docs/config.example.json` 형식의 설정 파일을 줄 수도 있습니다.

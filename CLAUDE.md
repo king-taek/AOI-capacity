@@ -38,7 +38,7 @@ Camtek AOI 장비의 BatchReport/WaferInfo.ini 를 읽어 장비별 가동률을
    `Scanresult_Back up_260918` 같은 폴더로 옮긴다(30대 중 16대, 이름 규칙 제각각 → `Scanresult` 로 시작하는 폴더 전부, `devices.scan_dirs_of`).
    폴더 이름의 날짜가 경계(그 이전 것을 담음)라 배치 시작일로 1순위 폴더를 바로 고르고(`collect.ini_roots_for`, 확인 횟수는 예전과 같은 1번),
    거기 없을 때만 나머지를 본다. 어디에도 없는데 Wafer 폴더에 `MoveResultFlag` 만 있으면 `ini_match="MOVED_ONLY"`(이동만 되고 스캔 안 함, 누락 복구 대상).
-   4층 5대는 백업 폴더가 없다. 검증 도구는 조사 결과 읽을 수 있는 INI 가 24,050 → 53,069 개 — **실장비 재수집(`--full`) 전후 비교는 아직 안 했다**.
+   4층 5대는 백업 폴더가 없다. 검증 도구는 조사 결과 읽을 수 있는 INI 가 24,050 → 53,069 개 — **실장비 재수집(`--rebuild-all`) 전후 비교는 아직 안 했다**.
    **4층은 Job 폴더 이름이 Report 의 Job 값과 다르다**(사용자가 NAS 에서 확인 9/20): Report `2D@RE $7781539A-WUP_0858562PD_0A` ↔ 폴더
    `2D@RE-$7781539A-WUP_0858562PD`(`2D@XX` 뒤 공백→하이픈, 끝 `_0A`/`_0B` 없음). `collect.job_folder_variants` 가 원문 · 하이픈 · 접미 뗌 · 둘 다
    네 후보를 **정확 경로로만** 차례로 본다(원문에서 찾으면 나머지는 열지 않는다). 행의 `job` 은 Report 원문 그대로, 찾은 폴더 이름은 `data_issue` 에만.
@@ -73,7 +73,7 @@ Camtek AOI 장비의 BatchReport/WaferInfo.ini 를 읽어 장비별 가동률을
   이식은 D47·D48(진행상황) 대로 진행한다. 데이터 `aoi-data.json` 은 `scripts/make_aoi_data.js`(디자인 세션 원본 그대로, Node, 표준 라이브러리 없음 — 9/20 원본 입력으로
   바이트 동일 재현 확인)가 수집 결과 HTML 의 embedded JSON 에서 만든다. 규칙의 **원본 정의는 이 JS** 다(RULES.md 와 다른 곳은 `scripts/README.md`).
   오프라인 단일 HTML 은 `python dev/tools/design_bundle.py`(표준 라이브러리, 가드 `test_design_bundle.py`)로 만들며 생성물은 커밋하지 않는다.
-  `docs/` 는 업데이트 payload 에 들어가지 않는다(`_UPDATE_SKIP_TOP`).
+  업데이트 payload 는 **허용 목록**(`updater._UPDATE_TOP_ALLOW`: `main.py` · `requirements.txt` · `aoi_capacity` · `scripts`(`_UPDATE_KEEP_ONLY` 로 다시 거름) + 생성한 `VERSION`)뿐이다 — `docs/`·`dev/`·`진행상황.md` 는 들어가지 않는다(S01, 가드 `test_update_payload.py`).
 - 코드 받기 도구는 `scripts/update_code.py`(+`update_code.bat`) — 브랜치는 파일 맨 위 `BRANCH` 상수.
   git 폴더면 fetch+ff-only(더티면 중단), zip 폴더면 바뀐 파일만 덮어쓰고 `_backup_…` 을 남긴다(가드: `test_update_code.py`).
 - 현장 샘플 수집 도구는 `scripts/collect_sample.py`(+`make_sample.bat`) — 표준 라이브러리만 쓰고 NAS 는 읽기만 하며
@@ -95,7 +95,7 @@ Camtek AOI 장비의 BatchReport/WaferInfo.ini 를 읽어 장비별 가동률을
   `job`·`setup`(Report 안의 `Job/Setup`, 없으면 파일명 규칙), `report`(BatchReport 파일 이름 — 화면에서 그 파일을 다시 여는 근거),
   `cause`(원인 코드들, 규칙 순 세미콜론) · `outcome`(종료 결과) · `norm_status`(호환: 원인이 있으면 첫 원인, 없으면 결과) — **원인과 결과는 다른 축**(D43),
   `scan_type`("" · RESCAN · REWORK · TEST — 겹치면 TEST → RESCAN → REWORK 순), `ini_match`(EXACT · NOT_FOUND · MOVED_ONLY · NO_WAFER_ID · READ_ERROR · STALE · BATCH_FAILED · BATCH · BATCH_SLOT),
-  `faults` · `scanned_dice` · `yield`(Report 표의 Faults · Scanned Dice · Yield **원문 그대로**, 합성 행은 빈 값 — 옛 캐시 행에는 없어 `--full` 재수집으로만 채워진다),
+  `faults` · `scanned_dice` · `yield`(Report 표의 Faults · Scanned Dice · Yield **원문 그대로**, 합성 행은 빈 값 — 옛 캐시 행에는 없어 `--rebuild-all`(또는 `--refresh-window N`) 재수집으로만 채워진다),
   `time_basis`(STRICT_IN_BATCH · TOLERANCE_ONLY · OUTSIDE_BATCH · BATCH_ONLY · MISSING · INVALID · UNKNOWN_BATCH), `slots`(slot 행의 영향 Slot 수).
   열은 **이름으로** 읽는다(고정 인덱스 금지) — 화면(template)은 `status` 원문에서 첫 원인(`causeOf` = 유형)만 쓰고, 합성 행(batch: 배치 시각을 Wafer 시각으로 가진 Error 1건 · slot: 시각 없는 Error)은
   다른 행과 같은 규칙으로 모델에 들어간다(디자인 데이터도 제품 HTML 에서 그대로 뽑았다). 캐시는 `PARSER_VERSION` 이 다르면 `_rederive_rows` 가 NAS 없이 재분류·재합성한다.
@@ -148,11 +148,25 @@ Camtek AOI 장비의 BatchReport/WaferInfo.ini 를 읽어 장비별 가동률을
 ## 빌드·업데이트
 - `python scripts\build.py exe-lite` → `dist/AOI_Capacity_Lite/` (런처 exe + `python/` + `app/`, `.deps_installed` **없음**), `make_release_zip.py --lite` 가 검증 통과 시에만 zip 을 만든다.
 - `requirements.txt` 는 PyQt6 와 truststore 뿐이다(QtWebEngine 제거 — 결과 화면이 브라우저로 옮겨갔다).
-- `utils/updater.py`: 기본 브랜치 SHA 비교 → 브랜치 zip → `app.new.part` 스테이징 → `_verify_staged`(필수 파일, template `__DATA__`, style.qss 렌더) → `app.new` rename. `_UPDATE_KEEP_ONLY` 의 이름은 실재해야 한다(`test_update_payload.py`).
+- `utils/updater.py`(D61, P1 9/20): 기본 브랜치 SHA 비교 → **CI 게이트** `_ci_gate`(그 SHA 에 워크플로 파일 `tests.yml`·이름 `tests` 가 `completed/success` 인 run 이 있어야 함 — 없음·진행 중·실패·조회 불가는 전부 **보류(`held`)** 로 이유를 말하고 현재 버전 유지) →
+  `archive/<40자 SHA>.zip`(브랜치 HEAD zip 이 아니다) → `_check_zip_entries`·`_safe_extract`(루트 폴더 하나 · 절대/`..`/드라이브/심링크/대소문자 충돌 거부 · 파일 수·용량 상한, 쓰기 전에 검사) →
+  `app.new.part` 스테이징(허용 목록만) → `_verify_staged`(필수 파일, template `__DATA__`, style.qss 렌더, 예상 밖 최상위 항목 거부) → `app.new` rename. `_UPDATE_KEEP_ONLY` 의 이름은 실재해야 한다(`test_update_payload.py`).
+  **TLS 는 검증만 한다** — 인증서 검증 실패는 확인·적용 모두 `TlsVerifyError` 로 중단(무검증 재시도 없음, C01). 런처의 교체(`_promote_in_place`)는 파일마다 저널(prepared → old_moved → new_moved)을 남기고
+  어느 단계에서 실패하든 그 항목과 앞 항목을 되돌린다(N02, 되돌리기까지 실패하면 `RollbackError` 가 파일 이름과 백업 이름을 적는다). pip 은 `PIP_TIMEOUT_SEC`(600) 상한·취소 콜백(C10).
+  워크플로 이름이 바뀌면 `REQUIRED_WORKFLOW_FILE`/`REQUIRED_WORKFLOW_NAME` 도 같이 바꾼다.
 - `updater.DEFAULT_BRANCH` 는 오프라인 폴백 — GitHub 기본 브랜치가 바뀌면 함께 갱신한다.
+
+## 수집 모드(D60, P1 9/20)
+`collect.collect(cfg, full, backfill, *, recover, refresh_window_days, rebuild_all)` 하나를 GUI·CLI·예약이 같이 쓴다.
+증분(기본) · `--backfill`(검색 창만 `backfill_days` 로 넓힘, **캐시된 파일은 건너뜀**) · `--refresh-window N`(최근 N일은 캐시에 있어도 다시 읽음, 창 밖 이력 보존, 실패한 파일은 이전 행 유지 + 다음 수집에서 재시도) ·
+`--rebuild-all`(보관 기간 전부를 **후보 캐시**로 새로 읽고 검증 뒤 교체 — 실패하면 기존 캐시 그대로, `RebuildRejected`) · `--full` 은 `--rebuild-all` 의 별칭(**이력 삭제 없음**) · `--recover`(시간 미확인 Report 다시 읽기).
+GUI 체크 '최근 N일 다시 읽기(이력 보존)' 은 `refresh_window_days`(N 은 '처음 수집 기간' 스핀 값). 캐시 저장은 고유 tmp → fsync → strict 재읽기 검증 → `os.replace`, 손상 캐시는 덮어쓰지 않고 `aoi_cache.json.bad-<시각>` 으로 보존(C15).
+CSV 를 못 쓰는 OS 오류(Excel 잠금)는 실패가 아니라 **부분 성공**(`warnings`, CLI exit 3, 워커 `completed_with_warnings`) — HTML 이 주 산출물이다(C06). 회귀 가드: `test_collect_incremental.py` · `test_collector_worker.py`.
 
 ## 테스트
 `QT_QPA_PLATFORM=offscreen python -m pytest -q` (빠른 확인: `-m "not ui and not slow"`, `slow` = 30일치 샘플 전수). PyQt6 가 없는 환경에서는 ui 테스트가 skip 된다.
+CI 는 `.github/workflows/tests.yml`(이름 `tests`, main 푸시·PR) — `core` 잡이 전체 스위트(Linux · Qt offscreen · Node 22), `browser` 잡이 `-m browser`(Playwright Chromium). 이 워크플로의 성공이 업데이터의 배포 조건(D61)이므로 이름·파일명을 바꾸면 `updater.py` 도 같이 바꾼다.
+dev 의존성은 `dev/requirements-dev.txt`(pyyaml · playwright — 런타임 `requirements.txt` 에는 넣지 않는다). 테스트는 저장소 안 파일을 다시 쓰지 않는다(S04 — `design_bundle.py`·`graphify_build.py` 는 출력 경로를 인자로 받고, 가드가 전후 지문을 비교한다).
 보관 샘플에서 행을 꺼낼 때는 `dev/tests/sample_rows.py`(이름 기반 열 복원·풀 검증), 집계 수치를 잴 때는 `python dev/tools/measure.py <샘플> [--design-rules]`(새 모델의 장비-일 합과 일별 평균 가동률),
 단계별 전후는 `dev/samples/ledger_2026-09-18.md` 에 적는다 — 예상치에 맞추어 규칙·테스트를 고치지 않는다.
 테스트는 실제 pip·네트워크를 절대 실행하지 않는다(`test_updater.py` 의 autouse 가드). 유일한 예외는 `test_dashboard_js.py` —

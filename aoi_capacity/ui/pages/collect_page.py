@@ -200,14 +200,28 @@ class CollectPage(QWidget):
         self._plan.setText(i18n.KO.COLLECT_PLAN_LOADING)
         w = _PlanWorker(token, cfg, self._opt_full.isChecked(), self._opt_backfill.isChecked(), self._opt_recover.isChecked(), self)
         w.result.connect(self._on_plan)
-        w.finished.connect(w.deleteLater)
+        w.finished.connect(lambda w=w: self._plan_done(w))
         self._plan_worker = w
         w.start()
+
+    def _plan_done(self, w: "_PlanWorker") -> None:
+        # deleteLater 뒤에도 self._plan_worker 가 죽은 래퍼를 쥐고 있으면 closeEvent 의 isRunning() 이
+        # RuntimeError 를 내고 PyQt 가 qFatal 로 프로세스를 죽인다(Linux CI 에서 실측). 참조를 먼저 지운다.
+        if self._plan_worker is w:
+            self._plan_worker = None
+        w.deleteLater()
 
     def wait_for_plan(self, ms: int = 10_000) -> None:
         """테스트·종료용 — 진행 중인 계획 조회를 기다린다."""
         w = self._plan_worker
-        if w is not None and w.isRunning():
+        if w is None:
+            return
+        try:
+            running = w.isRunning()
+        except RuntimeError:                            # 이미 삭제된 래퍼
+            self._plan_worker = None
+            return
+        if running:
             w.wait(ms)
 
     def _refresh_option_label(self) -> None:
