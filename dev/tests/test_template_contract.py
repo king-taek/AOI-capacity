@@ -103,6 +103,12 @@ def test_report_tab_follows_d49():
     assert len(re.findall(r'^\s*"[^"]+":"[^"]+"(?:,|\};)$', HTML[HTML.index("const JOB_ALIAS={"):HTML.index("const PROPS=")], re.M)) == 21
 
 
+def test_error_popup_shows_the_text_of_each_type_not_the_lot_representative():
+    """같은 Lot 에 유형이 둘이면(30일치 175 Lot) 줄마다 그 유형의 원문 — 모델의 `st` 는 Lot 당 하나라 화면이 로드한 행에서 유형별로 찾는다."""
+    assert "function causeText(dev,rep,c)" in HTML
+    assert 'status:causeText(eDev,P.rep[L[8]]||"",c)||(L[10]>=0?P.st[L[10]]:"(원문 없음)")' in HTML
+
+
 def test_home_cards_sort_with_cmp_dev_not_alphabetically():
     assert "localeCompare" not in HTML
     assert "sorted.sort((a,b)=>cmpDev(a.n,b.n))" in HTML
