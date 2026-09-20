@@ -129,7 +129,7 @@ def page(page_factory, tmp_path):
     requests: list = []
     pg.on("request", lambda r: requests.append(r.url) if not r.url.startswith("file:") else None)
     pg.goto(html.as_uri())
-    pg.wait_for_selector("main")
+    pg.wait_for_selector('main[data-key^="view:"]')          # 로더(main) 가 먼저 그려지고 다음 틱에 화면이 온다
     yield pg, errors, requests
     ctx.close()
 
@@ -320,4 +320,36 @@ def test_motion_hooks_lottie_countup_sweep_and_recede(page):
     pg.keyboard.press("Escape")
     pg.wait_for_selector('.dlg[data-dlg="dev"]', state="detached")
     assert pg.evaluate("!document.querySelector('#app>.stage').classList.contains('behind')")
+    assert errors == []
+
+
+def test_popup_deck_click_behind_brings_it_to_front_and_stackbar_lists_them(page):
+    """팝업 위의 팝업: 뒤 카드는 새 카드의 왼쪽 뒤로 물러나고, scrim 의 그 자리를 누르거나 스택 바의 칩을 누르면 그 팝업이 앞으로 온다."""
+    pg, errors, _ = page
+    pg.locator('button.rowbtn[data-fk="dev:AOI-1"]').click()
+    pg.wait_for_selector('.dlg[data-dlg="dev"]')
+    pg.locator('.dlg[data-dlg="dev"] button', has_text="Error 보기").click()
+    pg.wait_for_selector('.dlg[data-dlg="err"]')
+    pg.wait_for_timeout(500)
+    # 뒤 카드(dev)는 앞 카드보다 왼쪽에 있다
+    lx = pg.evaluate("[document.querySelector('.ov.behind .dlg').getBoundingClientRect().left, document.querySelector('.ov:not(.behind) .dlg').getBoundingClientRect().left]")
+    assert lx[0] < lx[1] - 40
+    assert pg.evaluate("[...document.querySelectorAll('.stackbar .sb')].map(e => e.classList.contains('cur'))") == [False, True]
+    # 스택 바의 첫 칩(장비 팝업) → 앞으로
+    pg.locator('.stackbar button.sb').first.click()
+    pg.wait_for_timeout(500)
+    st = pg.evaluate("[...document.querySelectorAll('.ov:not([data-leaving])')].map(o => o.dataset.key + ':' + (o.classList.contains('behind') ? 'behind' : 'top'))")
+    assert st == ["ov:err:behind", "ov:dev:top"]
+    # scrim 을 뒤 카드가 있는 자리에서 누르면 그 카드가 앞으로, 빈 자리를 누르면 맨 위가 닫힌다
+    # 뒤 카드가 보이는 띠(뒤 카드의 왼쪽 ~ 앞 카드의 왼쪽) 가운데를 누른다 — 뷰포트 밖으로 밀린 부분은 뺀다
+    r = pg.evaluate("(() => { const b = document.querySelector('.ov.behind .dlg').getBoundingClientRect(), t = document.querySelector('.ov:not(.behind) .dlg').getBoundingClientRect(); return [(Math.max(b.left, 0) + t.left) / 2, Math.max(b.top, 0) + 120]; })()")
+    assert r[0] > 8
+    pg.mouse.click(r[0], r[1])
+    pg.wait_for_timeout(500)
+    assert pg.evaluate("document.querySelector('.ov:not(.behind):not([data-leaving]) .dlg').dataset.dlg") == "err"
+    pg.mouse.click(5, 700)                                   # 빈 scrim
+    pg.wait_for_selector('.dlg[data-dlg="err"]', state="detached")
+    assert pg.evaluate("[...document.querySelectorAll('.ov:not([data-leaving]) .dlg')].map(d => d.dataset.dlg)") == ["dev"]
+    pg.keyboard.press("Escape")
+    pg.wait_for_selector('.dlg[data-dlg="dev"]', state="detached")
     assert errors == []
