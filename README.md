@@ -1,7 +1,7 @@
 # AOI Capacity — AOI 장비 가동률
 
-Camtek AOI 장비의 NAS `Report/*_BatchReport.htm` 과 `Scanresult/.../WaferInfo.ini` 를 읽어 장비별 가동률(가동 / Error / 미가동)을
-내는 프로그램입니다. 두 조각으로 나뉩니다.
+Camtek AOI 장비의 NAS `Report/*_BatchReport.htm` 과 `Scanresult/.../WaferInfo.ini` 를 읽어 장비별 가동률을 내는 프로그램입니다
+(하루 24시간 막대를 Scan · Rescan · Test · Error · 에러 후 대기 · 대기 로 나눕니다). 두 조각으로 나뉩니다.
 
 | | 하는 일 |
 |---|---|
@@ -36,13 +36,15 @@ Camtek AOI 장비의 NAS `Report/*_BatchReport.htm` 과 `Scanresult/.../WaferInf
 | 가동률 | 선택한 날짜의 평균 가동률 · 살펴볼 장비 · Error 3칸과 30대 24시간 막대 목록(Scan · Rescan · Test · Error · 에러 후 대기 · 대기). 층 필터 · 정렬 · 날짜 이동. 줄을 누르면 **장비 팝업**(통계 6칸 · 24시간 막대 · Lot 이름표 · Lot 원문 · Report 열기) |
 | Error | 기간(일자별 / 최근 7·21일 / 전체) · 층 · 지표(건수 / 대기 시간) → 날짜별 차트 → 유형별 · 장비별 · Job별. 장비 줄은 **Error 상세 팝업**(언제 났나 · 유형별 · 최근 21일 · Lot 별 원문), 유형·Job 은 그 팝업 |
 | 추이 | 일 · 주 · 월 평균 + 장비별 히트맵. 선택한 기간의 값만 보여 주며 전 기간 대비는 두지 않습니다 |
-| 리포트 | TB500 · Kendall 표기명 Job 21개. 배치시간 = 준비 + 장당 × 장수 회귀(± 표준오차), 최빈 장수 환산, Error, Error 대기, 평균 fault(수집 예정). Job 을 펼치면 장비별 |
+| TB500 · Kendall | 표기명 Job 21개만 보는 탭(옛 이름 '리포트'). 배치시간 = 준비 + 장당 × 장수 회귀(± 표준오차, 표본 5개 미만은 생략), 최빈 장수 환산, Error, Error 대기, 평균 fault(`faults` 열이 있는 행의 장당 평균 — 옛 캐시는 재수집해야 채워짐). Job 을 펼치면 장비별 |
 
 가동률 = (Scan + Rescan) ÷ 24시간. 수집한 날(오늘)만 00:00 부터 **모든 장비의 마지막 기록**까지로 나눕니다(아직 오지 않은 시간을 대기로 세지 않기 위해). '오늘' 은 브라우저의 오늘이 아니라 **수집 시각의 날짜**입니다 — 같은 파일을 며칠 뒤 열어도 숫자가 같습니다(화면 위에 '2026-09-18 12:59 수집 기준').
 한 장비의 1분은 한 번만 셉니다: INI 로 시각이 확실한 구간을 먼저 놓고(겹치면 Error > Scan > Rescan > Test), Report 의 배치 시작~종료에서 남은 빈 시간을 INI 가 없는 Wafer 들이 똑같이 나눠 갖습니다(장비 팝업에 '배치 시각으로 추정' 표).
 Lot 이름에 `TEST` 가 있는 배치는 전부 Test 로 보고 분모에는 들어가고 분자에서만 뺍니다(그 안의 Error 도 세지 않습니다). 같은 자재(Job 병합 키 · Lot · Wafer ID)를 **앞선 시도가 Pass 였는데** 다시 스캔한 것은 장비와 무관하게 **Rescan** 이고, 앞선 시도가 Error·Skipped·중단이었으면 정상 Scan 입니다. Rescan 도 가동시간에 들어갑니다.
 Error 는 **Lot 단위**로 셉니다(같은 Lot 의 같은 유형은 1건). INI 가 없는 Error 는 그 배치의 빈 시간을 Error 시간으로 받습니다. Error 를 담은 배치가 끝난 뒤 다음 기록까지의 공백이 '에러 후 대기' 이고(배치 안에서 Error 뒤 스캔이 이어지면 그 사이는 스캔), 그날 마지막 것은 관측 종료(로드한 데이터의 마지막 시각)까지만 셉니다. 자정을 넘는 배치는 시간만 두 날로 나뉩니다.
-Lot 이름은 Report 파일명에서 뽑아 정리해 보여 주고(`Setup1_FKC-PIDS5` → `FKC`), Job 은 통계에서만 이름 변형(`_Copy` · `LIVE` · 장비별 복사본 · 날짜 접미)을 묶고 표기는 원문 그대로 둡니다. 규칙의 원본은 `docs/design/dashboard-redesign/scripts/make_aoi_data.js` 입니다.
+Lot 이름은 Report 파일명에서 뽑아 정리해 보여 주고(`Setup1_FKC-PIDS5` → `FKC`), Job 은 통계에서만 이름 변형(`_Copy` · `LIVE` · 장비별 복사본 · 날짜 접미)을 묶고 표기는 원문 그대로 둡니다.
+화면 규칙의 정본은 `CLAUDE.md` 의 '레이아웃' 절입니다. 디자인 세션의 스크립트(`docs/design/dashboard-redesign/scripts/make_aoi_data.js`)는 Job 병합·Lot 이름 규칙의 출처이자
+legacy 프로필 동일성의 근거일 뿐이며, 제품과 다른 곳(장비-일 50% 추정 없음 · 대기 상한 없음 · 오늘 분모 등)은 `docs/design/dashboard-redesign/STATUS.md` 에 있습니다.
 
 ## 설치 (사용자)
 
@@ -97,9 +99,10 @@ Lot 이름은 Report 파일명에서 뽑아 정리해 보여 주고(`Setup1_FKC-
 목록에 없는 이름(오타·새 장비)에는 목록 조회조차 하지 않으며, 화면에는 "수집 안 함" 으로 표시됩니다.
 `devices.csv` 의 다른 행과 이전에 모아 둔 캐시는 **지우지 않고** 그대로 둡니다(`prefs.json` 의 `scope_devices`, `["*"]` 이면 제한 없음).
 
-> ⚠️ `devices.csv` 의 **`폴더` 칸이 `*`(자동 탐색)인 행은 범위 제한 중 통째로 건너뜁니다** — 어떤 장비가 있는지 알려면
-> 공유 폴더를 나열해야 하고, 그 나열 자체가 범위 밖 접근이기 때문입니다. 그래서 기본 목록에서는 4층도 5줄로 또박또박 적습니다.
-> 예전 `devices.csv` 에 `4층 / I:\ / *` 행이 남아 있으면 그 5대는 수집되지 않으니, 장비 목록 화면에서 5줄로 바꿔 주세요.
+> `devices.csv` 의 **`폴더` 칸이 `*`(자동 탐색)인 행도 범위 제한 중에 동작합니다** — 다만 공유 폴더를 나열하지 않고,
+> 허용 목록의 이름만 `NAS경로\<장비명>` 으로 만들어 **존재만 확인**합니다(`devices._discover_under`). 만지는 경로가 전부 허용 장비라
+> 범위 규칙을 지키면서도 `4층 / I:\ / *` 한 줄로 4층 5대가 잡힙니다. (이 길이 없던 9/16 이전에는 `*` 행이 통째로 건너뛰어져 4층이 3일 내내 빠졌습니다.)
+> 제한을 풀면(`["*"]`) 예전처럼 Report 폴더가 있는 하위 폴더를 모두 나열해 등록합니다.
 
 ## 장비 목록 (devices.csv)
 
@@ -109,14 +112,16 @@ Lot 이름은 Report 파일명에서 뽑아 정리해 보여 주고(`Setup1_FKC-
 |---|---|---|---|---|
 | AOI-9 | M:\ | AOI-9 | Y | Camtek 8~9 |
 | AOI-24 | \\10.142.80.88\Camtek24-25 | AOI-24 | Y | UNC 경로도 됨 |
-| 4F-AOI-01 | I:\ | 4F-AOI-01 | Y | `*` 로도 쓸 수 있지만 **수집 범위 제한 중에는 건너뜁니다** |
+| 4층 | I:\ | * | Y | 자동 탐색 — 제한 중에는 허용 목록의 이름만 정확 경로로 확인해 등록 |
 
-- 폴더를 비우면 NAS경로 자체가 장비 폴더입니다. `*` 면 Report 폴더가 있는 하위 폴더를 모두 자동 등록하므로 장비가 늘어나도 CSV 를 고칠 필요가 없습니다.
+- 폴더를 비우면 NAS경로 자체가 장비 폴더입니다. `*` 면 자동 등록입니다 — 수집 범위 제한 중에는 허용 목록의 이름만 정확 경로로 확인하고(공유 나열 없음),
+  제한이 없을 때는 Report 폴더가 있는 하위 폴더를 모두 등록합니다. 새 장비는 어느 쪽이든 먼저 `aoi_capacity/scope.py` 의 허용 목록에 넣어야 수집됩니다.
 - 사용이 `N` 이면 수집하지 않습니다. 접근할 수 없는 행은 로그에 남기고 건너뜁니다.
 
 ## 수집 기간
 
-- 처음 수집(캐시 없음)이나 '과거 이력 다시 채우기' 는 수정시각이 최근 `처음 수집 기간`(기본 30일) 안인 Report 를 전부 읽습니다.
+- 처음 수집(캐시 없음)은 수정시각이 최근 `처음 수집 기간`(기본 30일) 안인 Report 를 전부 읽습니다. '검색 창 넓히기(backfill)' 는 같은 창을 다시 훑되 캐시된 파일은 건너뛰고,
+  '최근 N일 다시 읽기(이력 보존)' 는 그 창의 Report 를 캐시에 있어도 다시 읽습니다(아래 '창 없이 수집' 의 모드와 같습니다).
 - 이후에는 장비마다 **마지막으로 가져온 Report 이후에 생긴 파일을 전부** 읽습니다. 처음 보는 장비는 30일치로 읽습니다.
 - 캐시는 `이력 보관 기간`(기본 90일) 동안 유지되어 주·월 추이가 쌓입니다.
 - Scanresult 는 재귀 검색하지 않고 Wafer 마다 계산된 정확 경로의 WaferInfo.ini 만 확인합니다.
@@ -181,8 +186,13 @@ NAS 가 되레 느려지면 숫자를 낮추고(1 = 예전처럼 한 줄로), �
 ```
 pip install -r requirements.txt -r dev/requirements-dev.txt
 python main.py                                   # 개발 실행
-QT_QPA_PLATFORM=offscreen python -m pytest -q    # 테스트 (빠른 확인: -m "not ui")
+QT_QPA_PLATFORM=offscreen python -m pytest -q                       # 전체 — 기본 명령에 slow(30일치 샘플 전수)가 **포함**된다
+QT_QPA_PLATFORM=offscreen python -m pytest -q -m "not ui and not slow"   # 빠른 확인(수 초)
+QT_QPA_PLATFORM=offscreen python -m pytest -q -m browser              # Playwright Chromium 으로 화면 클릭 경로 실측(없으면 skip)
 ```
+
+마커(`pytest.ini`): `ui`(Qt) · `slow`(30일치 샘플 전수 — 합쳐 10초 안팎) · `browser`(Chromium). CI 의 `core` 잡은 전체 스위트를(slow 포함),
+`browser` 잡은 `-m browser` 를 돌린다 — 이 워크플로(`tests`)의 성공이 자동 업데이트의 배포 조건이다.
 
 빌드(Windows + 인터넷):
 
@@ -193,5 +203,6 @@ python scripts\make_release_zip.py --lite
 ```
 
 폴더 구성: `main.py`(진입) · `aoi_capacity/`(`collect.py` 수집 코어, `devices.py`, `nas_guard.py`, `i18n/`, `utils/`, `workers/`, `ui/`) ·
-`scripts/`(런처·빌드) · `dev/`(테스트) · `docs/`(브라우저 데모 `aoi_collector_demo.html`, 설정 예시, 스크린샷).
+`scripts/`(런처·빌드) · `dev/`(테스트 · 샘플 · 도구) · `docs/`(설정 예시 `config.example.json`, 재설계 프로토타입 `design/`, 감사 계획 `audit/`) ·
+`archive/`(지우지 않기로 한 옛 스크린샷·옛 데모·반영된 디자인 시안 — 참조되지 않으며 배포에 들어가지 않는다, `archive/README.md`).
 작업 규칙은 `CLAUDE.md` 를 보세요.

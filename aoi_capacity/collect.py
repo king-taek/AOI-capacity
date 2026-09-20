@@ -89,7 +89,7 @@ INI_KEYS = {
                       "ActiveStation", "ActiveSlot", "FillID", "CarrierID", "UseLot", "UseWaferID"],
     "BatchInfo": ["GlobalLotId", "OperatorId"],
 }
-#: ★ 행을 만드는 규칙(`_STATUS_RULES`·`scan_type`·`_is_placeholder`·`_job_setup_by_table_lot`·`rows_for_report`)을
+#: ★ 행을 만드는 규칙(`_CAUSE_RULES`·`_OUTCOME_RULES`·`scan_type`·`_is_placeholder`·`_job_setup_by_table_lot`·`rows_for_report`)을
 #: 바꾸면 올린다. 캐시는 Report 의 수정시각만 보고 재파싱을 건너뛰므로, 이 번호가 다르면 캐시를 읽을 때
 #: `norm_status`·`scan_type` 을 원문(status·lot)에서 **NAS 접근 없이** 다시 계산한다(`_rederive_rows`).
 #: INI 경로가 바뀌는 수정(빈 job 되찾기 등)은 Report 를 다시 읽어야 하므로 '누락 복구'(`recover`)가 따로 있다.
@@ -217,8 +217,6 @@ _CAUSE_RX = [(c, re.compile(p, re.I)) for c, p in _CAUSE_RULES]
 _OUTCOME_RX = [(c, re.compile(p, re.I)) for c, p in _OUTCOME_RULES]
 #: 원인 코드가 있으면 설비 Error(사용자 확정 D43). 결과만 있는 것(중단·건너뜀·취소·미확인)은 여기서 판단하지 않는다.
 CAUSE_CODES = tuple(c for c, _ in _CAUSE_RULES)
-#: 회귀 가드용 — 옛 이름. 코드 순서 = (원인들, 결과들) 을 이은 것.
-_STATUS_RULES = [(c, rx) for c, rx in _CAUSE_RX] + [(c, rx) for c, rx in _OUTCOME_RX if c not in ("PASS", "UNKNOWN")]
 
 
 def norm_causes(s) -> List[str]:
@@ -282,19 +280,8 @@ def scan_type(lot) -> str:
     return "REWORK" if found else ""
 
 
-def norm_lot(lot) -> str:
-    """자재 키용 Lot 정규화(D39) — 구분자를 지우고 작업 표기 토큰(RE·RESCAN·REWORK·TEST)만 뺀 뒤 대문자. 화면 표시·Lot 막대에는 쓰지 않는다."""
-    return "".join(x for x in lot_tokens(lot) if x.upper() not in _LOT_MARKS).upper()
-
-
-def norm_wafer(wafer) -> str:
-    """자재 키용 Wafer ID 정규화 — 구분자·대소문자만. 앞자리 0·숫자 접미사는 그대로. 작업 표기 토큰을 지우지 않는다."""
-    return "".join(lot_tokens(wafer)).upper()
-
-
-def material_key(lot, wafer) -> str:
-    """[정규화 Lot, 정규화 Wafer ID] 의 충돌 없는 직렬화(JSON 배열). 장비명은 넣지 않는다. template 의 `materialKey` 와 같다."""
-    return json.dumps([norm_lot(lot), norm_wafer(wafer)], ensure_ascii=False, separators=(",", ":"))
+#: 자재 동일성(중복·Rescan 판정)은 화면 모델(template `matKey` = jobKey|Lot 토큰|Wafer ID, D63)만 계산한다 — 수집기 쪽 `material_key`·`norm_lot` 은
+#: 호출부가 없어 지웠다(C11, 9/20). 조사표 `dev/samples/material_merge_2026-09-18.tsv` 의 열 이름만 그 이름을 남긴다.
 
 
 def norm_status(s) -> str:
@@ -706,7 +693,8 @@ def failed_batch_row(dev_name: str, rep: dict, rows: List[dict]) -> Optional[dic
     그래서 ① 시간을 아는 유일한 근거는 Report 의 `Batch Start~End` 이고,
     ② 오류는 'Slot 행 24건' 이 아니라 '배치 중단 1건' 으로 세는 게 맞다(사용자 확정).
     정상적으로 일부라도 스캔한 배치는 만들지 않는다. 대표 행·원인 합집합은 `_lead_error_row` 가 결정적으로 고른다.
-    `rep` 는 옛 호출 호환용(값은 행에서 읽는다) — 캐시 재구축(`synthesize_rows`)도 같은 규칙을 쓴다."""
+    `rep` 는 옛 호출 호환용(값은 행에서 읽는다) — 캐시 재구축(`synthesize_rows`)도 같은 규칙을 쓴다.
+    ★ 호환 API: 저장소 안에는 호출부가 없다(C11, 9/20). 새 코드는 `synthesize_rows`/`_batch_from_rows` 를 쓴다."""
     return _batch_from_rows([r for r in rows if r.get("kind", "") == ""])
 
 

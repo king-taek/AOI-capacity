@@ -3,7 +3,7 @@
     python dev/tools/measure.py [샘플 경로] [--design-rules] [--json 출력.json]
 
 - 입력 지문(sha256)·코드 SHA(git HEAD)·MODEL_VERSION·규칙(RULES)을 결과에 함께 적는다.
-- `--design-rules` 는 D48 제품 유지 두 규칙을 끄고 디자인 스크립트(make_aoi_data.js)와 같은 규칙으로 잰다.
+- `--design-rules` 는 legacy 프로필(네 스위치 전부 끔)로 재어 디자인 스크립트(make_aoi_data.js)와 같은 규칙이 된다 — 디자인 동일성 근거일 뿐 제품 정답이 아니다.
 - 네트워크·NAS·쓰기 없음(--json 을 주면 그 파일만 쓴다). Node 가 필요하다(dev/tests/js_harness.js).
 - 예상치를 맞추는 도구가 아니다: 지금 코드가 내는 값을 그대로 적는다.
 """
@@ -42,7 +42,7 @@ def measure(path: Path, design_rules: bool = False) -> dict:
         raise SystemExit("node 가 필요합니다")
     html = sample_rows.read_bytes(path).decode("utf-8")
     emb = sample_rows.embedded(html)
-    rules = {"waitToObsEnd": False, "denomToday": False, "abortIsError": False, "estimateFromBatch": False} if design_rules else None
+    rules = {"profile": "legacy", "waitToObsEnd": False, "denomToday": False, "abortIsError": False, "estimateFromBatch": False} if design_rules else None
     payload = json.dumps({"embedded": emb, **({"rules": rules} if rules else {})}, ensure_ascii=False)
     out = subprocess.run([node, "--max-old-space-size=4096", str(ROOT / "dev" / "tests" / "js_harness.js")], input=payload,
                          capture_output=True, text=True, timeout=900, cwd=str(ROOT))
@@ -88,7 +88,7 @@ def measure(path: Path, design_rules: bool = False) -> dict:
 def main() -> None:
     ap = argparse.ArgumentParser(description="보관 샘플을 화면 모델로 집계해 요약 수치를 낸다")
     ap.add_argument("sample", nargs="?", default=str(ROOT / "dev" / "samples" / DEFAULT))
-    ap.add_argument("--design-rules", action="store_true", help="D48 제품 유지 두 규칙을 끄고 디자인 스크립트와 같은 규칙으로")
+    ap.add_argument("--design-rules", action="store_true", help="legacy 프로필(네 스위치 끔)로 재어 디자인 스크립트와 같은 규칙으로")
     ap.add_argument("--json", default="", help="결과를 이 파일에 쓴다(없으면 표준 출력)")
     a = ap.parse_args()
     res = measure(Path(a.sample), a.design_rules)

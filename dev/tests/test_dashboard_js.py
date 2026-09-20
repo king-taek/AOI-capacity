@@ -9,6 +9,7 @@
 from __future__ import annotations
 
 import json
+import re
 import shutil
 import subprocess
 from pathlib import Path
@@ -267,3 +268,176 @@ def test_job_groups_merge_copies_but_keep_r_prefix_and_step_apart():
     D = run(rows)
     g = D["jobG"]
     assert g[0] == g[1] and g[2] != g[0] and g[3] != g[0]
+
+
+# ── 12. 화면 함수 · 전역 상수 (하네스 screen/globals 모드 — S05 로 글자 검사를 대신한다) ────────────
+def run_raw(payload):
+    return subprocess.run([NODE, str(HARNESS)], input=json.dumps(payload, ensure_ascii=False), capture_output=True, text=True, timeout=120, cwd=str(ROOT))
+
+
+def globals_(*names):
+    out = run_raw({"globals": list(names)})
+    assert out.returncode == 0, out.stderr[-2000:]
+    return json.loads(out.stdout)
+
+
+def screen(rows, mt, calls, state=None):
+    """init() 과 같은 준비를 한 뒤 전역 함수들을 차례로 부른 반환값 목록."""
+    out = run_raw({"screen": {"rows": rows, "meta": mt, "state": state or {}, "calls": calls}})
+    assert out.returncode == 0, out.stderr[-2000:]
+    return json.loads(out.stdout)
+
+
+def _hhmm(base: str, plus: int) -> str:
+    h, m = map(int, base.split(":"))
+    t = h * 60 + m + plus
+    return f"{t // 60:02d}:{t % 60:02d}"
+
+
+def test_default_profile_is_product_with_the_four_rules_on_and_constants_match():
+    """기본 buildModel 은 product 프로필(네 스위치 켬)이고, 상수(MODEL_VERSION · JOB_ALIAS 21개 · CAUSE_CODES)는 정규식 추출값·디자인 표·파이썬과 같다."""
+    import sys
+    sys.path.insert(0, str(ROOT / "dev" / "tests"))
+    import template_facts  # noqa: E402
+    from aoi_capacity import collect
+
+    D = run([w("AOI-1", "W1", "08:00", "08:10")])
+    assert D["rules"] == {"profile": "product", "waitToObsEnd": True, "denomToday": True, "abortIsError": True, "estimateFromBatch": True}
+    g = globals_("RULES", "MODEL_VERSION", "JOB_ALIAS", "CAUSE_CODES", "PROPS")
+    assert g["RULES"] == D["rules"] and D["modelVersion"] == g["MODEL_VERSION"] == template_facts.model_version()
+    assert g["CAUSE_CODES"] == [c for c, _ in collect._CAUSE_RULES]
+    design_alias = template_facts.job_alias((ROOT / "docs" / "design" / "dashboard-redesign" / "scripts" / "job_alias.js").read_text(encoding="utf-8"))
+    assert g["JOB_ALIAS"] == template_facts.job_alias() == design_alias and len(g["JOB_ALIAS"]) == 21
+    assert g["PROPS"] == {"attentionUtil": 40, "attentionErr": 3}
+
+
+def test_home_lists_devices_in_device_order_with_collect_chips_and_the_no_record_count():
+    """홈 목록은 cmpDev 순(AOI-2 → AOI-3 → AOI-10 → 4F, 사전순이 아니다), 수집 상태 칩은 meta.devices[].status 에서, 기록 없는 장비는 '기록 없음 n대' 로 따로(D06)."""
+    mt = meta("AOI-10", "AOI-2", "4F-AOI-01", "AOI-3")
+    for d in mt["devices"]:
+        if d["name"] == "AOI-3":
+            d.update(status="unreachable", error="timeout")
+        if d["name"] == "AOI-2":
+            d.update(status="partial", read_errors=2)
+    rows = [w("AOI-10", "W1", "08:00", "08:10"), w("AOI-2", "W2", "09:00", "09:10"), w("4F-AOI-01", "W3", "10:00", "10:10")]
+    home, chip_ok, chip_partial, chip_bad = screen(rows, mt, [["homeHtml"], ["collectChip", "AOI-10"], ["collectChip", "AOI-2"], ["collectChip", "AOI-3"]])
+    assert re.findall(r'data-fk="dev:([^"]+)"', home) == ["AOI-2", "AOI-3", "AOI-10", "4F-AOI-01"]   # 번호순, 사전순이면 AOI-10 이 AOI-2 앞
+    assert chip_ok == "" and "일부 누락" in chip_partial and "수집 실패" in chip_bad
+    assert "일부 누락" in home and "수집 실패" in home and "기록 없음 1대" in home
+    for term in (">Scan<", ">Rescan<", ">Test<", ">Error<", ">에러 후 대기<", ">대기<"):
+        assert term in home, term
+
+
+def test_foot_shows_scope_and_out_of_scope_devices_from_meta():
+    mt = meta("AOI-1", more=[{"name": "AOI-26", "note": "X:\\AOI-26", "report_dir": "Report", "scope": "out"}])
+    (foot,) = screen([w("AOI-1", "W1", "08:00", "08:10")], mt, [["footHtml"]])
+    assert "수집 범위" in foot and "AOI-1, AOI-2" in foot
+    assert "수집 안 함" in foot and "AOI-26" in foot
+
+
+def test_report_url_is_built_only_from_meta_for_drive_and_unc_paths():
+    mt = meta("AOI-1", "AOI-24")
+    mt["devices"][1].update(note="\\\\10.142.80.88\\Camtek24-25\\AOI-24", report_dir="Reports")
+    rep = "J1_6321_LOT A_18-Sep-26_(00.00.00)_BatchReport.htm"
+    drive, unc, none, unknown = screen([w("AOI-1", "W1", "08:00", "08:10")], mt, [
+        ["reportUrl", {"device": "AOI-1", "report": rep}], ["reportUrl", {"device": "AOI-24", "report": rep}],
+        ["reportUrl", {"device": "AOI-1", "report": ""}], ["reportUrl", {"device": "AOI-99", "report": rep}]])
+    assert drive == "file:///X:/AOI-1/Report/J1_6321_LOT%20A_18-Sep-26_(00.00.00)_BatchReport.htm"
+    assert unc == "file://10.142.80.88/Camtek24-25/AOI-24/Reports/J1_6321_LOT%20A_18-Sep-26_(00.00.00)_BatchReport.htm"
+    assert none == "" and unknown == ""
+
+
+def _clean_batches(n_batches):
+    """표기명 Job(R_TB500_LIVE_PI3) 의 정상 배치 n개 — 장수 5,6,7… · 배치시간 = 10 + 5×장수 분(완전 적합)."""
+    rows = []
+    for i in range(n_batches):
+        n = 5 + i
+        bs = f"{8 + 2 * i:02d}:00"
+        be = _hhmm(bs, 10 + 5 * n)
+        lot = f"LOT-{i + 1}"
+        rep = f"R_TB500_LIVE_PI3_6321_{lot}_18-Sep-26_({bs.replace(':', '.')}.00)_BatchReport.htm"
+        for k in range(n):
+            rows.append(w("AOI-1", f"W{i}{k}", _hhmm(bs, k + 1), _hhmm(bs, k + 2), lot=lot, job="R_TB500_LIVE_PI3", report=rep, bs=bs, be=be))
+    return rows
+
+
+def test_report_tab_regresses_only_with_five_or_more_clean_batches_and_lists_exclusions():
+    """D49·D59: 표본 5개 이상이면 준비·장당 회귀(여기선 10 + 5×장수 완전 적합), 원인 Error 가 있는 배치는 표본에서 뺀다. 4개면 '5개 미만' 으로 생략."""
+    rows = _clean_batches(5)
+    err_rep = "R_TB500_LIVE_PI3_6321_LOT-E_18-Sep-26_(18.00.00)_BatchReport.htm"
+    for k in range(5):
+        rows.append(w("AOI-1", f"E{k}", _hhmm("18:00", k + 1), _hhmm("18:00", k + 2), lot="LOT-E", job="R_TB500_LIVE_PI3", report=err_rep, bs="18:00", be="18:30"))
+    rows.append(w("AOI-1", "E9", "18:20", "18:22", lot="LOT-E", job="R_TB500_LIVE_PI3", report=err_rep, bs="18:00", be="18:30", status="Alignment Error."))
+    (html,) = screen(rows, meta("AOI-1"), [["reportHtml"]], state={"view": "report"})
+    assert "<h1>TB500 · Kendall</h1>" in html and "표기명 21개 Job 만 봅니다" in html
+    assert "TB500 PI3" in html and "10.0 ± 0.0분" in html and "5.00 ± 0.00분" in html
+    assert "표본 5개 / 배치 6개" in html and "제외 — Error 1 · 5장 미만 0" in html
+    (html4,) = screen(_clean_batches(4), meta("AOI-1"), [["reportHtml"]], state={"view": "report"})
+    assert "표본 4개 (5개 미만)" in html4 and "10.0 ± 0.0분" not in html4
+
+
+def test_error_popup_shows_each_types_own_phrase_when_one_lot_has_two_types():
+    """한 Lot 에 유형이 둘이면(30일치 175 Lot) 줄마다 그 유형의 원문 — 모델의 대표 원문(st) 하나를 두 줄에 붙이지 않는다."""
+    rep = "J1_6321_LOT-A_18-Sep-26_(08.00.00)_BatchReport.htm"
+    rows = [w("AOI-1", "W1", "08:00", "08:03", status="Alignment Error.", report=rep),
+            w("AOI-1", "W2", "08:10", "08:12", status="Scan 2D Error.", report=rep),
+            w("AOI-1", "W3", "08:20", "08:30", report=rep), w("AOI-2", "W9", "12:00", "12:10", lot="LOT-B")]
+    html, a, s = screen(rows, meta("AOI-1", "AOI-2"), [["errPopupHtml"], ["causeText", "AOI-1", rep, "ALIGN_ERROR"], ["causeText", "AOI-1", rep, "SCAN_ERROR"]],
+                        state={"errDev": "AOI-1", "errDayI": 0})
+    assert (a, s) == ("Alignment Error.", "Scan 2D Error.")
+    assert 'data-dlg="err"' in html and html.count("Alignment Error.") == 1 and html.count("Scan 2D Error.") == 1
+
+
+def test_lot_key_separates_two_reports_of_the_same_lot_on_the_same_day():
+    """D16: Lot 선택 키에 Report 번호(L[8])가 들어간다."""
+    L1 = [0, 0, 480, 490, 1, 0, 0, 0, 3, {}, -1, 480, 490]
+    L2 = list(L1)
+    L2[8] = 4
+    k1, k2, k3 = screen([w("AOI-1", "W1", "08:00", "08:10")], meta("AOI-1"), [["lotKey", L1], ["lotKey", L2], ["lotKey", list(L1)]])
+    assert k1 == k3 and k1 != k2
+
+
+def test_dashboard_settings_override_the_attention_thresholds():
+    """D14: meta.dashboard_settings 의 같은 이름 숫자만 PROPS 를 바꾼다 — 음수·문자열은 무시."""
+    rows = [w("AOI-1", "W1", "08:00", "08:10")]
+    mt = meta("AOI-1")
+    mt["dashboard_settings"] = {"attentionUtil": 60, "attentionErr": 1}
+    (home,) = screen(rows, mt, [["homeHtml"]])
+    assert "가동률 60% 미만 또는 Error 1건 이상" in home
+    mt["dashboard_settings"] = {"attentionUtil": -5, "attentionErr": "x"}
+    (home2,) = screen(rows, mt, [["homeHtml"]])
+    assert "가동률 40% 미만 또는 Error 3건 이상" in home2
+
+
+def test_unfold_rejects_out_of_range_pool_index_and_duplicate_columns():
+    """D09 로더: 풀 번호 범위 밖·열 이름 중복은 빈 문자열로 숨기지 않고 예외다(loadDemo 가 오류 패널로 보여 준다)."""
+    cols = ["device", "kind", "job", "setup", "lot", "wafer_id", "status", "wafer_start_time", "wafer_end_time", "batch_start", "batch_end", "report", "ini_match", "scan_type"]
+    good = {"cols": cols, "pooled": ["device", "status"], "pool": ["AOI-1", "Pass"],
+            "rows": [[0, "", "J1", "6321", "LOT-A", "W1", 1, ts(DAY, "08:00"), ts(DAY, "08:10"), ts(DAY, "08:00"), ts(DAY, "08:10"), "r.htm", "EXACT", ""]],
+            "meta": meta("AOI-1")}
+    ok = run_raw({"embedded": good})
+    assert ok.returncode == 0 and at(json.loads(ok.stdout), "AOI-1")["r"] == 10
+    bad = dict(good, rows=[[0, "", "J1", "6321", "LOT-A", "W1", 7, ts(DAY, "08:00"), ts(DAY, "08:10"), "", "", "r.htm", "EXACT", ""]])
+    r = run_raw({"embedded": bad})
+    assert r.returncode != 0 and "풀 번호가 범위 밖" in r.stderr
+    dup = dict(good, cols=cols[:-1] + ["device"])
+    r2 = run_raw({"embedded": dup})
+    assert r2.returncode != 0 and "중복" in r2.stderr
+
+
+def test_header_has_four_tabs_and_each_popup_renders_an_accessible_dialog():
+    """D59 탭 이름 · 사본 저장 버튼 · 장비/Error/유형 팝업이 role=dialog + aria-labelledby 로 그려진다(포커스 이동은 browser 테스트)."""
+    rows = [w("AOI-1", "W1", "08:00", "08:03", status="Alignment Error."), w("AOI-1", "W2", "09:00", "09:10", lot="LOT-B")]
+    head, dev, err, closed, _, typ = screen(rows, meta("AOI-1"), [
+        ["headerHtml", "home"],
+        ["devPopupHtml"], ["errPopupHtml"], ["typePopupHtml"],
+        ["errorsHtml"], ["typePopupHtml"]],
+        state={"modalDev": "AOI-1", "modalDayI": 0, "errDev": "AOI-1", "errDayI": 0})
+    assert re.findall(r'data-fk="nav:([a-z]+)"', head) == ["home", "errors", "trend", "report"]
+    for label in (">가동률<", ">Error<", ">추이<", ">TB500 · Kendall<", ">사본 저장<"):
+        assert label in head, label
+    assert 'data-dlg="dev"' in dev and 'aria-labelledby="dlg-dev-title"' in dev and 'role="dialog"' in dev
+    assert 'data-dlg="err"' in err and 'aria-labelledby="dlg-err-title"' in err
+    assert closed == ""                                   # 유형 팝업은 state.modalType 이 없으면 그리지 않는다
+    (typ2,) = screen(rows, meta("AOI-1"), [["errorsHtml"], ["typePopupHtml"]], state={"view": "errors", "modalType": "ALIGN_ERROR"})[1:]
+    assert 'data-dlg="type"' in typ2 and 'aria-labelledby="dlg-type-title"' in typ2 and "ALIGN_ERROR" in typ2
