@@ -23,11 +23,14 @@ from __future__ import annotations
 import csv
 import datetime as dt
 import logging
+import ntpath
 import os
 import re
-from typing import Callable, Dict, List, Optional
+from concurrent.futures import ThreadPoolExecutor
+from typing import Callable, Dict, List, Optional, Tuple
 
 from . import nas_guard, scope
+from .utils import config as _config
 
 _LOG = logging.getLogger("aoi.devices")
 
@@ -50,12 +53,45 @@ FLOOR4_PREFIX = "4F-AOI-"
 NORMAL_PREFIX = "AOI-"
 
 LogFn = Callable[[str], None]
+StopFn = Callable[[], bool]
+#: 취소 뒤 **시작하지 않은** 확인 작업의 자리 — 결과에 넣지 않는다(부르는 쪽이 이어서 취소를 확인한다).
+SKIPPED = object()
+_POOL_DEFAULT, _POOL_MAX = 8, 32
 
 
 def _log(log: Optional[LogFn], msg: str) -> None:
     _LOG.info(msg)
     if log:
         log(msg)
+
+
+def _pool_size(cfg: dict, n_tasks: int) -> int:
+    n = _config.parse_int((cfg or {}).get("read_workers", _POOL_DEFAULT))
+    n = _POOL_DEFAULT if n is None else n
+    return max(1, min(n, _POOL_MAX, max(1, n_tasks)))
+
+
+def _pmap(cfg: dict, items, fn, should_stop: Optional[StopFn] = None) -> list:
+    """장비 확인 작업들을 `read_workers` 개씩 동시에 돌리고 **입력 순서 그대로** 결과를 돌려준다(C08).
+
+    ★ 스레드는 **읽기만** 한다(isdir · 나열 · getmtime). 결과·로그를 합치는 일은 부르는 쪽(메인 스레드)이 입력 순서대로 하므로
+      1개로 돌리든 32개로 돌리든 결과와 로그 순서가 같다. 취소(`should_stop`)되면 **아직 시작하지 않은** 작업은 `SKIPPED` 로 남긴다 —
+      이미 SMB 호출에 들어간 작업을 끊는다고 주장하지 않는다(끝나면 버릴 뿐이다). 동시성 예산은 하나다: 이 풀 안에서 다시 풀을 만들지 않고,
+      Report 읽기 단계(`collect._run`)는 이 풀이 닫힌 뒤에 시작한다."""
+    items = list(items)
+    if not items:
+        return []
+
+    def guarded(item):
+        if should_stop and should_stop():
+            return SKIPPED
+        return fn(item)
+
+    n = _pool_size(cfg, len(items))
+    if n == 1:
+        return [guarded(it) for it in items]
+    with ThreadPoolExecutor(max_workers=n, thread_name_prefix="aoi-check") as pool:
+        return list(pool.map(guarded, items))
 
 
 # ----------------------------------------------------------------------------- 표시명 · 정렬
@@ -153,10 +189,26 @@ REPORT_DIR_NAMES = ("Report", "Reports")
 SCAN_DIR_NAMES = ("Scanresult", "ScanResult", "Scanresults")
 
 
+def dir_key(name) -> str:
+    """폴더 이름·경로의 **Windows 의미** 비교 키 — 대소문자 · `/`↔`\\` · 끝 구분자 차이를 지운다(C05).
+
+    NAS 는 대소문자를 구분하지 않아 `ScanResult` · `Scanresult` · `SCANRESULT` · `Scanresult\\` 는 같은 폴더다.
+    `os.path.normcase` 는 Linux 에서 아무것도 하지 않으므로 어느 OS 에서 돌든 `ntpath` 로 판정한다(테스트가 Linux 에서도 같은 결과)."""
+    n = str(name or "").strip()
+    if not n:
+        return ""
+    return ntpath.normcase(ntpath.normpath(n))
+
+
+def same_dir(a, b) -> bool:
+    """두 폴더 이름(또는 경로)이 Windows 의미로 같은 곳인가."""
+    return dir_key(a) == dir_key(b)
+
+
 def _candidates(configured: str, defaults) -> List[str]:
     out, seen = [], set()
     for n in [str(configured or "").strip(), *defaults]:
-        k = n.lower()
+        k = dir_key(n)
         if n and k not in seen:
             seen.add(k)
             out.append(n)
@@ -207,10 +259,23 @@ def scan_dirs_of(path: str, primary: str) -> List[Dict[str, str]]:
     INI 탐색을 재귀로 넓히는 게 아니라 **정확 경로를 확인할 루트를 늘리는 것**이다(CLAUDE.md 규칙 4 그대로)."""
     out = [{"name": primary, "cutoff": ""}]
     try:
-        names = sorted(e.name for e in nas_guard.scandir(path)
-                       if e.is_dir() and e.name.lower().startswith(_SCAN_PREFIX) and e.name != primary)
+        listed = sorted(e.name for e in nas_guard.scandir(path) if e.is_dir() and e.name.lower().startswith(_SCAN_PREFIX))
     except OSError:
         return out
+    # ★ C05: 비교는 Windows 의미(`dir_key`)로 — 실제 폴더가 `ScanResult` 이고 설정이 `Scanresult` 면 isdir 은 참이지만 이름이 달라
+    #   같은 폴더가 '백업' 으로 한 번 더 잡혀 없는 INI 마다 확인 횟수가 두 배가 됐다. 맨 앞에는 **실제 나열된 철자**를 쓰고,
+    #   대소문자·끝 구분자만 다른 항목은 하나로 센다.
+    pk = dir_key(primary)
+    real = next((n for n in listed if dir_key(n) == pk), None)
+    if real is not None:
+        out[0]["name"] = real
+    names, seen = [], {pk}
+    for n in listed:
+        k = dir_key(n)
+        if k in seen:
+            continue
+        seen.add(k)
+        names.append(n)
     dated, undated = [], []
     for n in names:
         year = None
@@ -237,11 +302,19 @@ def _entry(folder: str, path: str, *hints) -> Dict[str, object]:
             "aliases": [a for a in (folder, *[str(h) for h in hints if h]) if a]}
 
 
+def _dirs_of(path: str, cfg: dict) -> Dict[str, object]:
+    """장비 폴더 하나의 Report·Scanresult 폴더 이름과 백업 목록 — **읽기만** 한다(isdir 몇 번 + 나열 1번 + getmtime).
+
+    `scan_dir` 은 나열에서 찾은 **실제 철자**로 맞춘다(설정 `Scanresult` · 실제 `ScanResult` 면 `ScanResult`, C05)."""
+    report_dir = find_subdir(path, cfg.get("report_dir", ""), REPORT_DIR_NAMES) or str(cfg.get("report_dir") or "Report")
+    scan_dir = find_subdir(path, cfg.get("scan_dir", ""), SCAN_DIR_NAMES) or str(cfg.get("scan_dir") or "Scanresult")
+    scan_dirs = scan_dirs_of(path, scan_dir)                                  # 백업 폴더까지(맨 앞이 지금 폴더)
+    return {"report_dir": report_dir, "scan_dir": str(scan_dirs[0]["name"]), "scan_dirs": scan_dirs}
+
+
 def with_dirs(dev: Dict[str, object], cfg: dict) -> Dict[str, object]:
     """이 장비에서 실제로 쓰는 Report·Scanresult 폴더 이름을 붙인다(장비마다 다르다)."""
-    dev["report_dir"] = find_subdir(str(dev["path"]), cfg.get("report_dir", ""), REPORT_DIR_NAMES) or str(cfg.get("report_dir") or "Report")
-    dev["scan_dir"] = find_subdir(str(dev["path"]), cfg.get("scan_dir", ""), SCAN_DIR_NAMES) or str(cfg.get("scan_dir") or "Scanresult")
-    dev["scan_dirs"] = scan_dirs_of(str(dev["path"]), str(dev["scan_dir"]))   # 백업 폴더까지(맨 앞이 지금 폴더)
+    dev.update(_dirs_of(str(dev["path"]), cfg))
     return dev
 
 
@@ -296,6 +369,29 @@ def path_aliases(path: str, cfg: Optional[dict] = None) -> List[str]:
     return uniq
 
 
+def _probe_auto(root: str, cfg: dict, hint: str = "") -> Tuple[List[Dict[str, object]], List[str]]:
+    """`_discover_under` 의 읽기 부분 — (찾은 장비들, 로그 문장들). 스레드에서 돌 수 있게 로그를 부르지 않고 돌려준다."""
+    if not os.path.isdir(root):
+        return [], []
+    if _has_report(root, cfg):
+        folder = os.path.basename(root.rstrip("\\/")) or root
+        return [_entry(folder, root, hint)], []
+    out: List[Dict[str, object]] = []
+    if not scope.unrestricted(cfg):
+        for name in scope.scope_list(cfg):
+            path = os.path.join(root, name)
+            if os.path.isdir(path) and _has_report(path, cfg):
+                out.append(_entry(name, path, hint))
+        return out, []
+    try:
+        for e in nas_guard.scandir(root):
+            if e.is_dir() and _has_report(e.path, cfg):
+                out.append(_entry(e.name, e.path, hint))
+    except OSError as ex:
+        return out, [f"[건너뜀] {root}: {ex}"]
+    return out, []
+
+
 def _discover_under(root: str, cfg: dict, log: Optional[LogFn] = None, hint: str = "") -> List[Dict[str, object]]:
     """root 자체가 장비 폴더면 그것 하나, 아니면 root 바로 아래의 장비 폴더들(한 단계, 재귀 없음).
 
@@ -303,25 +399,10 @@ def _discover_under(root: str, cfg: dict, log: Optional[LogFn] = None, hint: str
       대신 허용 목록의 이름만 `root/<이름>` 으로 정확히 만들어 존재를 확인한다. 만지는 경로가 전부
       허용 장비라서 규칙을 지키면서도 `폴더 *` 행이 그대로 동작한다.
       (이 길이 없을 때 실장비에서 4층 5대가 3일 내내 한 번도 수집되지 않았다.)"""
-    if not os.path.isdir(root):
-        return []
-    if _has_report(root, cfg):
-        folder = os.path.basename(root.rstrip("\\/")) or root
-        return [_entry(folder, root, hint)]
-    out = []
-    if not scope.unrestricted(cfg):
-        for name in scope.scope_list(cfg):
-            path = os.path.join(root, name)
-            if os.path.isdir(path) and _has_report(path, cfg):
-                out.append(_entry(name, path, hint))
-        return out
-    try:
-        for e in nas_guard.scandir(root):
-            if e.is_dir() and _has_report(e.path, cfg):
-                out.append(_entry(e.name, e.path, hint))
-    except OSError as ex:
-        _log(log, f"[건너뜀] {root}: {ex}")
-    return out
+    found, msgs = _probe_auto(root, cfg, hint)
+    for m in msgs:
+        _log(log, m)
+    return found
 
 
 def _share_label(path: str) -> str:
@@ -352,12 +433,21 @@ def _dedupe_sort(devs: List[Dict[str, object]]) -> List[Dict[str, object]]:
     return uniq
 
 
-def _attach_dirs(devs: List[Dict[str, object]], cfg: dict, log: Optional[LogFn] = None) -> List[Dict[str, object]]:
-    for d in devs:
-        with_dirs(d, cfg)
+def _attach_dirs(devs: List[Dict[str, object]], cfg: dict, log: Optional[LogFn] = None,
+                 should_stop: Optional[StopFn] = None) -> List[Dict[str, object]]:
+    """장비마다 Report·Scanresult 폴더 이름과 백업 목록을 붙인다 — 확인은 `read_workers` 개씩 동시에(C08), 붙이기·로그는 순서대로.
+
+    여기 오는 장비는 전부 범위 게이트를 지난 것들이다. 취소로 확인하지 못한 장비는 설정 기본 이름을 붙여 둔다(부르는 쪽이 곧 취소를 확인한다)."""
+    results = _pmap(cfg, devs, lambda d: _dirs_of(str(d["path"]), cfg), should_stop)
+    for d, r in zip(devs, results):
+        if r is SKIPPED:
+            scan = str(cfg.get("scan_dir") or "Scanresult")
+            d.update({"report_dir": str(cfg.get("report_dir") or "Report"), "scan_dir": scan, "scan_dirs": [{"name": scan, "cutoff": ""}]})
+            continue
+        d.update(r)
         if d["report_dir"] != (cfg.get("report_dir") or "Report"):
             _log(log, f"[{d['name']}] Report 폴더 이름이 '{d['report_dir']}' 입니다")
-        backups = [x for x in d.get("scan_dirs") or [] if x["name"] != d["scan_dir"]]
+        backups = [x for x in (d.get("scan_dirs") or [])[1:] if not same_dir(x["name"], d["scan_dir"])]
         if backups:
             _log(log, f"[{d['name']}] Scanresult 백업 폴더 {len(backups)}개도 조회합니다: "
                       + ", ".join(f"{b['name']}(~{b['cutoff']})" if b["cutoff"] else b["name"] for b in backups))
@@ -365,11 +455,15 @@ def _attach_dirs(devs: List[Dict[str, object]], cfg: dict, log: Optional[LogFn] 
 
 
 # ----------------------------------------------------------------------------- 장비 목록 풀기
-def devices_from_rows(rows: List[Dict[str, object]], cfg: dict, log: Optional[LogFn] = None) -> List[Dict[str, object]]:
+def devices_from_rows(rows: List[Dict[str, object]], cfg: dict, log: Optional[LogFn] = None,
+                      should_stop: Optional[StopFn] = None) -> List[Dict[str, object]]:
     """CSV 행을 실제 장비 폴더 목록으로 푼다. 접근할 수 없는 행은 로그에 남기고 건너뛴다.
 
-    ★ 수집 허용 범위 밖 행은 파일시스템을 건드리기 전에 걸러낸다."""
-    devs: List[Dict[str, object]] = []
+    ★ 수집 허용 범위 밖 행은 파일시스템을 건드리기 전에 걸러낸다. 범위·폴더 이름 설정이 잘못돼 있으면(`ConfigError`) 아무것도 만지지 않는다(C13).
+    ① 파일을 만지지 않고 행마다 할 일을 정하고(범위 밖은 여기서 끝) ② 게이트를 지난 행의 확인만 `read_workers` 개씩 동시에(C08)
+    ③ 결과·로그는 행 순서대로 합친다 — 1개로 돌리든 32개로 돌리든 같다."""
+    _config.assert_valid(cfg)
+    tasks: List[tuple] = []
     for row in rows:
         if not row.get("on", True):
             continue
@@ -378,18 +472,40 @@ def devices_from_rows(rows: List[Dict[str, object]], cfg: dict, log: Optional[Lo
         label = str(row.get("name") or sub or root)
         hint = f"{row.get('name', '')} {row.get('memo', '')}"
         if sub in (AUTO, "auto", "AUTO"):
-            found = _discover_under(root, cfg, log, hint)      # 제한 중이면 허용 이름만 정확 경로로 확인
-            if not found:
-                _log(log, f"[건너뜀] {label}: NAS 접근 불가 또는 장비 폴더 없음 ({root})")
-            devs.extend(found)
-            continue
-        if not scope.allows_row(cfg, row):
+            tasks.append(("auto", root, hint, label, row))         # 제한 중이면 허용 이름만 정확 경로로 확인
+        elif not scope.allows_row(cfg, row):
+            tasks.append(("out", root, hint, label, row))          # 파일 접근 없음
+        else:
+            tasks.append(("explicit", os.path.join(root, sub) if sub else root, hint, label, row))
+
+    def probe(t):
+        kind, path, hint, _label, _row = t
+        if kind == "auto":
+            return _probe_auto(path, cfg, hint)
+        if kind == "explicit":
+            return _has_report(path, cfg), []
+        return None, []
+
+    results = _pmap(cfg, tasks, probe, should_stop)
+    devs: List[Dict[str, object]] = []
+    for (kind, path, hint, label, row), res in zip(tasks, results):
+        if kind == "out":
             _log(log, f"[범위 밖] {label}: 현재 수집 범위({scope.describe(cfg)}) 가 아니라 접근하지 않습니다")
             continue
-        path = os.path.join(root, sub) if sub else root
-        if not _has_report(path, cfg):
+        if res is SKIPPED:
+            continue                                                # 취소 — 확인하지 않은 행은 결과에 넣지 않는다
+        found, msgs = res
+        for m in msgs:
+            _log(log, m)
+        if kind == "auto":
+            if not found:
+                _log(log, f"[건너뜀] {label}: NAS 접근 불가 또는 장비 폴더 없음 ({path})")
+            devs.extend(found)
+            continue
+        if not found:
             _log(log, f"[건너뜀] {label}: Report 폴더 없음/접근 불가 ({path})")
             continue
+        sub = str(row.get("sub", "")).strip()
         folder = sub or os.path.basename(path.rstrip("\\/")) or path
         d = _entry(folder, path, hint)
         if row.get("name") and not _AOI_RE.search(str(row["name"])):
@@ -419,35 +535,44 @@ def skipped_by_scope(rows: List[Dict[str, object]], cfg: dict) -> List[Dict[str,
     return out
 
 
-def devices_from_csv(cfg: dict, log: Optional[LogFn] = None) -> List[Dict[str, object]]:
-    return devices_from_rows(read_devices_csv(cfg["devices_csv"]), cfg, log)
+def devices_from_csv(cfg: dict, log: Optional[LogFn] = None, should_stop: Optional[StopFn] = None) -> List[Dict[str, object]]:
+    return devices_from_rows(read_devices_csv(cfg["devices_csv"]), cfg, log, should_stop)
 
 
-def discover_devices(cfg: dict, log: Optional[LogFn] = None) -> List[Dict[str, object]]:
+def discover_devices(cfg: dict, log: Optional[LogFn] = None, should_stop: Optional[StopFn] = None) -> List[Dict[str, object]]:
     """devices.csv 가 없을 때의 폴백: nas_roots 각각을 `*` 로 본다.
 
-    범위 제한 중에는 `_discover_under` 가 공유를 나열하지 않고 허용 이름만 정확 경로로 확인한다."""
+    범위 제한 중에는 `_probe_auto` 가 공유를 나열하지 않고 허용 이름만 정확 경로로 확인한다. 루트 여러 개는 동시에 확인한다(C08)."""
+    _config.assert_valid(cfg)
+    roots = [_norm_root(r) for r in (cfg.get("nas_roots") or [])]
+    results = _pmap(cfg, roots, lambda r: _probe_auto(r, cfg), should_stop)
     devs: List[Dict[str, object]] = []
-    for root in cfg.get("nas_roots") or []:
-        root = _norm_root(root)
-        found = _discover_under(root, cfg, log)
+    for root, res in zip(roots, results):
+        if res is SKIPPED:
+            continue
+        found, msgs = res
+        for m in msgs:
+            _log(log, m)
         if not found:
             _log(log, f"[건너뜀] NAS 접근 불가 또는 장비 폴더 없음: {root}")
         devs.extend(found)
     return _dedupe_sort(devs)
 
 
-def resolve_devices(cfg: dict, log: Optional[LogFn] = None) -> List[Dict[str, object]]:
-    """설정에 맞는 장비 목록. devices.csv 가 있으면 그것, 없으면 nas_roots 자동 탐색."""
+def resolve_devices(cfg: dict, log: Optional[LogFn] = None, should_stop: Optional[StopFn] = None) -> List[Dict[str, object]]:
+    """설정에 맞는 장비 목록. devices.csv 가 있으면 그것, 없으면 nas_roots 자동 탐색.
+
+    `should_stop` 이 참이 되면 아직 시작하지 않은 확인 작업을 건너뛰고 돌아온다 — 부르는 쪽(`collect.collect`)이 이어서 취소를 확인한다."""
+    _config.assert_valid(cfg)                                   # 범위·폴더 이름 설정이 잘못됐으면 파일을 만지기 전에 막는다(C13)
     if not scope.unrestricted(cfg):
         _log(log, f"수집 범위: {scope.describe(cfg)} (다른 장비에는 접근하지 않습니다)")
     path = cfg.get("devices_csv") or ""
     if path and os.path.isfile(path):
-        devs = _attach_dirs(devices_from_csv(cfg, log), cfg, log)
+        devs = _attach_dirs(devices_from_csv(cfg, log, should_stop), cfg, log, should_stop)
         _log(log, f"devices.csv 기준 장비 {len(devs)}대: {', '.join(str(d['name']) for d in devs)}")
         return devs
     _log(log, f"devices.csv 가 없어 nas_roots 를 자동 탐색합니다 ({path or '경로 미지정'})")
-    devs = _attach_dirs(discover_devices(cfg, log), cfg, log)
+    devs = _attach_dirs(discover_devices(cfg, log, should_stop), cfg, log, should_stop)
     _log(log, f"장비 {len(devs)}대 발견: {', '.join(str(d['name']) for d in devs)}")
     return devs
 
@@ -455,22 +580,21 @@ def resolve_devices(cfg: dict, log: Optional[LogFn] = None) -> List[Dict[str, ob
 def check_rows(rows: List[Dict[str, object]], cfg: dict) -> List[Dict[str, object]]:
     """UI 의 '연결 확인': 행마다 상태 문자열 키를 돌려준다(ok / auto:<n> / no_report / unreachable / out_of_scope).
 
-    ★ 범위 밖 행은 연결 확인에서도 접근하지 않는다 — 상태만 out_of_scope 로 알려 준다."""
-    out = []
-    for row in rows:
+    ★ 범위 밖 행은 연결 확인에서도 접근하지 않는다 — 상태만 out_of_scope 로 알려 준다. 나머지 행은 `read_workers` 개씩 동시에 확인한다(C08)."""
+    _config.assert_valid(cfg)
+
+    def probe(row) -> str:
         sub = str(row.get("sub", "")).strip()
         auto = sub in (AUTO, "auto", "AUTO")
         if not auto and not scope.allows_row(cfg, row):
-            out.append({**row, "status": "out_of_scope"})
-            continue
+            return "out_of_scope"                                   # 파일 접근 없음
         root = _norm_root(str(row.get("root", "")))
         if not os.path.isdir(root):
-            out.append({**row, "status": "unreachable"})
-            continue
+            return "unreachable"
         if auto:
-            n = len(_discover_under(root, cfg))
-            out.append({**row, "status": f"auto:{n}" if n else "no_report"})
-            continue
+            n = len(_probe_auto(root, cfg)[0])
+            return f"auto:{n}" if n else "no_report"
         path = os.path.join(root, sub) if sub else root
-        out.append({**row, "status": "ok" if _has_report(path, cfg) else "no_report"})
-    return out
+        return "ok" if _has_report(path, cfg) else "no_report"
+
+    return [{**row, "status": st} for row, st in zip(rows, _pmap(cfg, rows, probe))]

@@ -15,6 +15,7 @@ from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
 from .. import scope as _scope
+from . import config as _config
 from . import paths
 
 PREFS_VERSION = 3
@@ -46,12 +47,36 @@ class Prefs:
 
     @classmethod
     def from_dict(cls, d: Dict[str, Any]) -> "Prefs":
-        names = {f.name for f in dataclasses.fields(cls)}
-        known = {k: v for k, v in (d or {}).items() if k in names}
-        p = cls(**known)
-        if not isinstance(p.extra, dict):
-            p.extra = {}
-        return p
+        """모르는 키는 버리고, 아는 키는 **형을 검사해** 받는다(C13) — 잘못된 값 하나 때문에 파일 전체를 기본값으로 되돌리지 않는다.
+
+        정수·참/거짓·문자열 필드는 `utils.config` 의 같은 규칙으로 읽고, 못 읽으면 그 필드만 기본값이다.
+        `prefs_version` 이 잘못돼도 장비 목록(`scope_devices`)은 그대로 둔다(현재 버전으로 간주해 이동하지 않는다).
+        `scope_devices` 는 목록/문자열이면 그대로 두어 실행 시점의 `normalize_config` 가 판정한다(잘못된 항목을 조용히 넓히지 않는다)."""
+        fields = {f.name: f for f in dataclasses.fields(cls)}
+        raw = d if isinstance(d, dict) else {}
+        known: Dict[str, Any] = {}
+        for k, v in raw.items():
+            f = fields.get(k)
+            if f is None:
+                continue
+            default = f.default if f.default is not dataclasses.MISSING else f.default_factory()  # type: ignore[misc]
+            if k == "scope_devices":
+                if isinstance(v, str):
+                    v = [v]
+                known[k] = v if isinstance(v, list) else (default if v is None else v)
+            elif k == "extra":
+                known[k] = v if isinstance(v, dict) else {}
+            elif isinstance(default, bool):
+                b = _config.parse_bool(v)
+                known[k] = default if b is None else b
+            elif isinstance(default, int):
+                n = _config.parse_int(v)
+                known[k] = default if n is None else n
+            elif isinstance(default, str):
+                known[k] = v if isinstance(v, str) else default
+            else:
+                known[k] = v
+        return cls(**known)
 
 
 def migrate(p: Prefs) -> Prefs:
@@ -117,15 +142,20 @@ def to_collect_cfg(p: Prefs) -> Dict[str, Any]:
         "nas_roots": [],
         "report_dir": p.report_dir or "Report",
         "scan_dir": p.scan_dir or "Scanresult",
-        "backfill_days": int(p.backfill_days),
-        "read_workers": int(p.read_workers),
-        "retention_days": int(p.retention_days),
+        "backfill_days": p.backfill_days,
+        "read_workers": p.read_workers,
+        "retention_days": p.retention_days,
         "output_dir": str(paths.output_dir(p.output_dir)),
         "output_name": "AOI_capacity.html",
-        "write_csv": bool(p.write_csv),
+        "write_csv": p.write_csv,
         "cache_file": str(paths.cache_file()),
-        "scope_devices": list(p.scope_devices or _scope.DEFAULT_SCOPE),
-        "refresh_window_days": max(0, int(p.refresh_window_days or 0)),
+        "scope_devices": list(p.scope_devices) if isinstance(p.scope_devices, list) and p.scope_devices else
+                         (p.scope_devices if p.scope_devices else list(_scope.DEFAULT_SCOPE)),
+        "refresh_window_days": p.refresh_window_days,
         "rebuild_all": False,          # GUI 의 '전체 다시 만들기' 는 워커 인자(full)로 넘긴다 — 설정에 남기지 않는다
+        "attention_util": p.threshold_util,   # D14: 결과 HTML 의 meta.dashboard_settings 로 나간다(prefs 의 이름은 옛 그대로 threshold_*)
+        "attention_err": p.threshold_err,
     })
+    # ★ CLI(config.json)와 같은 규칙으로 정규화한다 — 성능·기간 값은 고치고, 범위·경로 문제는 그대로 두어 수집 진입점이 막는다(C13)
+    cfg, _problems = _config.normalize_config(cfg)
     return cfg

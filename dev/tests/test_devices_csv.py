@@ -119,3 +119,144 @@ def test_with_dirs_attaches_backups_and_collect_uses_them(tmp_path):
     from aoi_capacity import collect
     roots = collect._backup_roots(d, str(dev / "Scanresult"))
     assert roots == [(str(dev / "Scanresult_Back up_260918"), dt.date(2026, 9, 18))]
+
+
+# ── C05: 지금 쓰는 Scanresult 폴더를 '백업' 으로 한 번 더 세지 않는다 (Windows 경로 의미로 비교) ──────────
+@pytest.mark.parametrize("a,b", [
+    ("Scanresult", "SCANRESULT"), ("Scanresult", "ScanResult"), ("Scanresult", "Scanresult\\"), ("Scanresult", "Scanresult/"),
+    ("X:\\AOI-1\\Scanresult\\", "x:/aoi-1/SCANRESULT"), ("\\\\host\\share\\AOI-1\\Scanresult", "\\\\HOST\\Share\\AOI-1\\scanresult\\"),
+])
+def test_dir_key_treats_case_and_trailing_separator_as_one(a, b):
+    """`os.path.normcase` 는 Linux 에서 아무것도 하지 않는다 — 판정은 `ntpath` 로 하므로 어느 OS 에서 돌려도 같다."""
+    assert devices.dir_key(a) == devices.dir_key(b) and devices.same_dir(a, b)
+    assert not devices.same_dir("Scanresult", "Scanresult_Backup_260918")
+    assert devices.dir_key("") == "" and not devices.same_dir("", "Scanresult")
+
+
+def _case_insensitive_isdir(monkeypatch):
+    """Windows 의 대소문자 무시 파일시스템을 Linux 에서 흉내 낸다 — 마지막 조각을 대소문자 무시로 찾는다(명시적 시뮬레이션)."""
+    real = os.path.isdir
+
+    def ci_isdir(p):
+        if real(p):
+            return True
+        parent, leaf = os.path.split(str(p).rstrip("\\/"))
+        if not leaf or not real(parent):
+            return False
+        return any(n.lower() == leaf.lower() and real(os.path.join(parent, n)) for n in os.listdir(parent))
+
+    monkeypatch.setattr(devices.os.path, "isdir", ci_isdir)
+
+
+def test_live_folder_spelled_differently_is_one_root_not_a_backup(tmp_path, monkeypatch):
+    """실제 폴더 `ScanResult` · 설정 `Scanresult`: isdir 은 참이라 예전엔 `ScanResult` 가 backups 에 한 번 더 들어가
+    없는 INI 마다 확인이 두 배였다. 이제 맨 앞은 나열된 실제 철자, 백업은 0개."""
+    dev = make_device(tmp_path / "X", "AOI-5")
+    (dev / "Scanresult").rename(dev / "ScanResult")
+    _case_insensitive_isdir(monkeypatch)
+    d = devices.with_dirs({"name": "AOI-5", "path": str(dev), "id": "x"}, _cfg())
+    assert d["scan_dir"] == "ScanResult" and d["scan_dirs"] == [{"name": "ScanResult", "cutoff": ""}]
+    from aoi_capacity import collect
+    assert collect._backup_roots(d, str(dev / "Scanresult")) == []           # 설정 철자로 만든 루트와도 같은 폴더
+    assert collect._backup_roots(d, str(dev / "ScanResult")) == []
+
+
+def test_backups_that_differ_only_by_case_or_separator_are_deduped_and_live_folder_kept_first(tmp_path):
+    dev = make_device(tmp_path / "X", "AOI-6")
+    (dev / "Scanresult_Backup_260918").mkdir()
+    (dev / "SCANRESULT_BACKUP_260918").mkdir()                              # Windows 에서는 같은 폴더(Linux 픽스처라 둘 다 만든다)
+    (dev / "Scanresult - 5.9.3").mkdir()
+    out = devices.scan_dirs_of(str(dev), "SCANRESULT")                       # 설정 철자가 달라도 맨 앞은 나열된 실제 철자
+    assert out[0] == {"name": "Scanresult", "cutoff": ""}
+    assert [x["name"] for x in out[1:]] == ["SCANRESULT_BACKUP_260918", "Scanresult - 5.9.3"]   # 사전순 첫 철자 하나만
+    assert out[1]["cutoff"] == "2026-09-18"
+    assert len({devices.dir_key(x["name"]) for x in out}) == len(out)
+    # 우선순위(정확 경로 → 경계 이른 백업 → 경계 모르는 백업)는 그대로다
+    from aoi_capacity import collect
+    d = devices.with_dirs({"name": "AOI-6", "path": str(dev), "id": "y"}, _cfg())
+    roots = collect._backup_roots(d, str(dev / "Scanresult"))
+    assert [c for _, c in roots] == [dt.date(2026, 9, 18), None]
+    assert collect.ini_roots_for(dt.datetime(2026, 9, 1), str(dev / "Scanresult"), roots)[0] == str(dev / "SCANRESULT_BACKUP_260918")
+
+
+# ── C08: 장비 확인 단계를 read_workers 개씩 동시에 — 결과·로그 순서는 1개로 돌린 것과 같다 ──────────
+def _many_devices(tmp_path):
+    nas = tmp_path / "nas"
+    for i in range(1, 13):
+        make_device(nas / "X", f"AOI-{i}")
+    make_device(nas / "M", "AOI-13")
+    (nas / "M" / "AOI-13" / "Report").rename(nas / "M" / "AOI-13" / "Reports")           # 폴더 이름이 다른 장비
+    (nas / "X" / "AOI-3" / "Scanresult_Backup_260918").mkdir()
+    csv_path = tmp_path / "devices.csv"
+    csv_path.write_text(
+        "장비명,NAS경로,폴더,사용,메모\n"
+        + "".join(f"AOI-{i},{nas / 'X'},AOI-{i},Y,\n" for i in range(1, 13))
+        + f"열셋,{nas / 'M'},AOI-13,Y,\n"
+        f"엑스전체,{nas / 'X'},*,Y,\n"
+        f"없음,{nas / 'none'},AOI-1,Y,접근불가\n"
+        f"AOI-99,{nas / 'X'},AOI-99,Y,폴더 없음\n",
+        encoding="utf-8-sig")
+    return nas, csv_path
+
+
+def _snapshot(cfg, csv_path):
+    logs = []
+    devs = devices.resolve_devices(cfg, logs.append)
+    rows = devices.read_devices_csv(csv_path)
+    return devs, logs, devices.check_rows(rows, cfg)
+
+
+@pytest.mark.parametrize("workers", [2, 8, 32])
+def test_device_check_pool_gives_identical_results_and_log_order(tmp_path, workers):
+    nas, csv_path = _many_devices(tmp_path)
+    base = _snapshot(make_cfg(tmp_path, csv_path, read_workers=1), csv_path)
+    many = _snapshot(make_cfg(tmp_path, csv_path, read_workers=workers), csv_path)
+    assert many == base
+    devs, logs, checks = base
+    assert [d["name"] for d in devs] == [f"AOI-{i}" for i in range(1, 13)] + ["열셋"]     # 사용자가 붙인 이름은 그대로
+    assert next(d for d in devs if d["name"] == "열셋")["report_dir"] == "Reports"
+    assert [x["name"] for x in next(d for d in devs if d["name"] == "AOI-3")["scan_dirs"]] == ["Scanresult", "Scanresult_Backup_260918"]
+    assert [l for l in logs if l.startswith("[건너뜀]")] == [f"[건너뜀] 없음: Report 폴더 없음/접근 불가 ({nas / 'none' / 'AOI-1'})",
+                                                        f"[건너뜀] AOI-99: Report 폴더 없음/접근 불가 ({nas / 'X' / 'AOI-99'})"]
+    assert {r["name"]: r["status"] for r in checks}["엑스전체"] == "auto:12" and {r["name"]: r["status"] for r in checks}["없음"] == "unreachable"
+    # 범위 제한 + 32개 — 범위 밖 행의 로그도 행 순서 그대로
+    restricted = dict(scope_devices=["AOI-2", "AOI-13"])
+    a = _snapshot(make_cfg(tmp_path, csv_path, read_workers=1, **restricted), csv_path)
+    b = _snapshot(make_cfg(tmp_path, csv_path, read_workers=workers, **restricted), csv_path)
+    assert a == b and [d["name"] for d in a[0]] == ["AOI-2", "열셋"]
+    assert sum(1 for l in a[1] if l.startswith("[범위 밖]")) == 13                      # AOI-1·3~12 · 없음(AOI-1) · AOI-99 행
+
+
+def test_pool_size_follows_read_workers_and_task_count():
+    assert devices._pool_size({"read_workers": 8}, 30) == 8 and devices._pool_size({"read_workers": 8}, 3) == 3
+    assert devices._pool_size({"read_workers": 1}, 30) == 1 and devices._pool_size({}, 30) == 8
+    assert devices._pool_size({"read_workers": "abc"}, 30) == 8 and devices._pool_size({"read_workers": 999}, 100) == 32
+    assert devices._pool_size({"read_workers": 0}, 30) == 1
+
+
+def test_cancel_stops_submitting_new_checks(tmp_path, monkeypatch):
+    """취소되면 아직 시작하지 않은 확인은 하지 않는다 — 이미 들어간 SMB 호출을 끊는다고 주장하지는 않는다."""
+    nas, csv_path = _many_devices(tmp_path)
+    probes = []
+    real = os.path.isdir
+    monkeypatch.setattr(devices.os.path, "isdir", lambda p: (probes.append(str(p)), real(p))[1])
+    cfg = make_cfg(tmp_path, csv_path, read_workers=8)
+    assert devices.resolve_devices(cfg, should_stop=lambda: True) == []
+    assert [p for p in probes if str(nas) in p] == []                                    # 장비 폴더는 하나도 만지지 않았다
+    # 한 줄로 돌릴 때 첫 확인 뒤 취소 → 그 행만 확인하고 나머지는 건너뛴다(결정적)
+    probes.clear()
+    seen = {"n": 0}
+
+    def stop_after_first() -> bool:
+        seen["n"] += 1
+        return seen["n"] > 1
+
+    devs = devices.devices_from_rows(devices.read_devices_csv(csv_path), make_cfg(tmp_path, csv_path, read_workers=1),
+                                     should_stop=stop_after_first)
+    assert [d["name"] for d in devs] == ["AOI-1"]
+    assert all(str(nas / "X" / "AOI-1") in p for p in probes if str(nas) in p)
+    # collect 는 취소를 이어받아 CollectCancelled 로 끝난다(캐시 없음)
+    from aoi_capacity import collect
+    with pytest.raises(collect.CollectCancelled):
+        collect.collect(cfg, should_stop=lambda: True)
+    assert not (tmp_path / "out" / "aoi_cache.json").exists()

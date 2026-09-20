@@ -11,8 +11,10 @@ from aoi_capacity.utils import paths
 ROOT = paths._project_root()
 TARGETS = [
     "aoi_capacity/ui", "aoi_capacity/workers", "aoi_capacity/utils/updater.py",
-    "aoi_capacity/utils/bootstrap.py", "main.py",
+    "aoi_capacity/utils/bootstrap.py", "aoi_capacity/utils/config.py", "aoi_capacity/cli.py", "main.py",
 ]
+# collect.py · devices.py 의 한글은 로그 문장(예외)과 원문 데이터라 검사하지 않는다 — 행 데이터의 비고는 C12 로 코드(issue_codes)가 됐고
+# 문장은 ko.py 의 ISSUE_TEXTS 에서 출력 때 만든다(test_collect_parse 가 rows_for_report 의 data_issue 가 비어 있음을 본다).
 # scripts/exe_launcher.py 는 표준 라이브러리만 쓰는 계약이라 i18n 을 import 할 수 없다 — 유일한 예외.
 HANGUL = re.compile(r"[가-힣]")
 

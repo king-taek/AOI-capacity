@@ -115,7 +115,8 @@ def test_ini_outside_the_batch_window_is_not_used(tmp_path):
              if x["wafer_id"] == "54265662EWE7")
     assert r["ini_match"] in ("STALE", "BATCH_FAILED")
     assert r["wafer_start_time"] == "" and r["wafer_end_time"] == ""
-    assert "덮어써짐" in r["data_issue"]
+    assert "INI_STALE" in r["issue_codes"] and r["data_issue"] == ""            # 캐시에는 코드만(C12)
+    assert "덮어써짐" in collect.issue_text(r["issue_codes"])
 
 
 FAILED_BATCH_HTML = LIVE_HTML.replace(
@@ -221,7 +222,9 @@ def test_rows_for_report_flags_mismatch_and_reversed_time(tmp_path):
                    .replace("WaferEndTime=13-Sep-26 05:32:02 PM", "WaferEndTime=13-Sep-26 05:30:00 PM"), encoding="utf-8")
     rep = collect.parse_report(REPORT_NAME, REPORT_HTML)
     r = next(x for x in collect.rows_for_report("AOI-9", rep, str(dev / "Scanresult")) if x["wafer_id"] == "K625407-01B0")
-    assert "역전" in r["data_issue"] and "Lot 불일치" in r["data_issue"]
+    assert r["issue_codes"] == "TIME_MISSING_OR_REVERSED;LOT_MISMATCH"
+    text = collect.issue_text(r["issue_codes"])
+    assert "역전" in text and "Lot 불일치" in text
 
 
 # ── 30대 전수 샘플(Report 55,717개)에서 새로 드러난 것들 ────────────────────────
@@ -422,7 +425,7 @@ def test_partial_batch_slot_errors_become_one_event_per_report(tmp_path):
     assert s["slots"] == "2" and s["cause"] == "ID_READ_ERROR" and s["outcome"] == "SKIPPED"   # Slot 3·4 (4 는 중복 행) — 원인 없는 Slot 5 는 세지 않음
     assert s["wafer_start_time"] == "" and s["wafer_end_time"] == "" and s["time_basis"] == "MISSING"   # 시간 미확인 — Batch 시간을 복사하지 않는다
     assert s["batch_start"] == "15-Sep-26 06:23:14 PM" and s["ini_match"] == "BATCH_SLOT" and s["lot"] == "FUK-RDL2" and s["wafer_id"] == ""
-    assert "Slot 2개" in s["data_issue"]
+    assert s["issue_codes"] == "SLOT_ERROR=2" and "Slot 2개" in collect.issue_text(s["issue_codes"])
     # 자리표시 원천 행은 그대로 남는다(지우지 않는다) — 화면이 따로 세지 않을 뿐
     assert sum(1 for r in rows if r["ini_match"] == "NO_WAFER_ID") == 4
 
@@ -498,11 +501,13 @@ def test_ini_is_found_in_the_backup_folder_with_one_lookup(tmp_path):
     rows = collect.rows_for_report("AOI-4", rep, str(tmp_path / "Scanresult"), memo, backups)
     r = next(x for x in rows if x["wafer_id"] == "54265662EWE7")
     assert r["ini_match"] == "EXACT" and r["wafer_start_time"] == "15-Sep-26 07:30:00 PM"
-    assert "백업 폴더에서 찾음: Scanresult_Back up_260918" in r["data_issue"]
+    assert r["issue_codes"] == "FOUND_IN_BACKUP=Scanresult_Back up_260918"
+    assert "백업 폴더에서 찾음: Scanresult_Back up_260918" in collect.issue_text(r["issue_codes"])
     # 54265662EWE7 은 1순위(백업)에서 바로 찾아 1회, 54265684EWA2 는 없어서 백업 → 지금 폴더 2회 = 3회(확인 횟수는 있는 것엔 예전과 같은 1번)
     assert memo.asked == 3
     r2 = next(x for x in rows if x["wafer_id"] == "54265684EWA2")
-    assert r2["ini_match"] == "NOT_FOUND" and "백업 폴더 1개" in r2["data_issue"]
+    assert r2["ini_match"] == "NOT_FOUND" and r2["issue_codes"] == "INI_NOT_FOUND_BACKUPS=1"
+    assert "백업 폴더 1개" in collect.issue_text(r2["issue_codes"])
 
 
 def test_missing_ini_falls_back_to_every_root_and_a_move_flag_means_moved_only(tmp_path):
@@ -519,7 +524,8 @@ def test_missing_ini_falls_back_to_every_root_and_a_move_flag_means_moved_only(t
     assert by["54265662EWE7"]["ini_match"] == "NOT_FOUND"          # 표식은 백업(2순위)에 있고 1순위(지금 폴더)에는 없다
     backups = [(str(bk), dt.date(2026, 9, 30))]                     # 경계가 9/30 이면 백업이 1순위 → 거기 표식이 보인다
     by = {r["wafer_id"]: r for r in collect.rows_for_report("AOI-4", rep, str(live), collect._IniMemo(), backups)}
-    assert by["54265662EWE7"]["ini_match"] == "MOVED_ONLY" and "스캔 안 함" in by["54265662EWE7"]["data_issue"]
+    assert by["54265662EWE7"]["ini_match"] == "MOVED_ONLY" and by["54265662EWE7"]["issue_codes"] == "MOVED_ONLY"
+    assert "스캔 안 함" in collect.issue_text(by["54265662EWE7"]["issue_codes"])
     assert by["54265662EWE7"]["wafer_start_time"] == "" and by["54265662EWE7"]["time_basis"] == "MISSING"
     assert "MOVED_ONLY" in collect.RECOVERABLE_INI                  # 뒤에 스캔되면 INI 가 생기므로 누락 복구가 다시 본다
 
@@ -529,13 +535,13 @@ def test_rows_without_backups_behave_exactly_as_before(tmp_path):
     rep = collect.parse_report(LIVE_NAME, LIVE_HTML)
     a = collect.rows_for_report("AOI-25", rep, str(tmp_path / "Scanresult"))
     b = collect.rows_for_report("AOI-25", rep, str(tmp_path / "Scanresult"), collect._IniMemo(), [])
-    assert a == b and a[0]["ini_match"] == "EXACT" and "백업" not in a[0]["data_issue"]
+    assert a == b and a[0]["ini_match"] == "EXACT" and "FOUND_IN_BACKUP" not in a[0]["issue_codes"]
 
 
 # ── faults · scanned_dice · yield (ROW_SCHEMA_VERSION 5) ──────────────────────────────
 def test_wafer_rows_carry_faults_scanned_dice_and_yield_verbatim(tmp_path):
     """리포트 화면의 '평균 fault' 근거 — Report 표의 값을 원문 그대로 싣는다(`77.5%` 도 그대로). 합성 행은 빈 값."""
-    assert collect.ROW_SCHEMA_VERSION == 5 and len(collect.OUT_COLS) == 24
+    assert collect.ROW_SCHEMA_VERSION == 6 and len(collect.OUT_COLS) == 25
     for c in ("faults", "scanned_dice", "yield"):
         assert c in collect.OUT_COLS and c in collect.POOLED_COLS
     rep = collect.parse_report(LIVE_NAME, LIVE_HTML)
@@ -581,7 +587,8 @@ def test_ini_is_found_under_the_machines_own_job_folder_name(tmp_path):
     r = by["54265662EWE7"]
     assert r["ini_match"] == "EXACT" and r["wafer_start_time"] == "15-Sep-26 07:30:00 PM"
     assert r["job"] == "2D@RE $7781539A-WUP_0858562PD_0A"            # 행의 Job 도 원문 — 폴더 이름은 비고에만
-    assert "Job 폴더 이름이 Report 와 다름: 2D@RE-$7781539A-WUP_0858562PD" in r["data_issue"]
+    assert r["issue_codes"] == "JOB_FOLDER_DIFFERS=2D@RE-$7781539A-WUP_0858562PD"
+    assert "Job 폴더 이름이 Report 와 다름: 2D@RE-$7781539A-WUP_0858562PD" in collect.issue_text(r["issue_codes"])
     # 원문 → 하이픈 → 접미 뗌 → 둘 다 순으로 4번째에 찾았다. 못 찾은 두 번째 Wafer 는 후보 4개를 다 본다
     assert memo.asked == 4 + 4
     assert by["54265684EWA2"]["ini_match"] == "NOT_FOUND"
@@ -603,5 +610,6 @@ def test_report_without_any_job_keeps_its_rows_and_builds_no_ini_path(tmp_path):
            "summary": {"Batch Start": "15-Sep-26 01:00:00 PM", "Batch End": "15-Sep-26 01:10:00 PM"},
            "wafers": [{"lot": "LOT-A", "wafer_id": "W1", "status": "Pass", "recipe": "", "faults": "", "scanned_dice": "", "yield": ""}]}
     rows = collect.rows_for_report("AOI-1", rep, str(tmp_path))
-    assert len(rows) == 1 and rows[0]["ini_match"] == "NOT_FOUND" and "Job" in rows[0]["data_issue"]
+    assert len(rows) == 1 and rows[0]["ini_match"] == "NOT_FOUND" and rows[0]["issue_codes"] == "JOB_UNKNOWN"
+    assert "Job" in collect.issue_text(rows[0]["issue_codes"])
     assert rows[0]["wafer_start_time"] == ""
