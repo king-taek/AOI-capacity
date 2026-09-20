@@ -74,7 +74,10 @@ class CollectPage(QWidget):
         self._opt_backfill = QCheckBox(i18n.KO.COLLECT_OPT_BACKFILL, top)
         self._opt_full = QCheckBox(i18n.KO.COLLECT_OPT_FULL, top)
         self._opt_recover = QCheckBox(i18n.KO.COLLECT_OPT_RECOVER, top)
+        # D60: 최근 N일 다시 읽기(이력 보존) — N 은 아래 '처음 수집 기간' 값을 같이 쓴다. prefs.refresh_window_days → cfg 로 간다.
+        self._opt_refresh = QCheckBox("", top)
         opts = QHBoxLayout()
+        opts.addWidget(self._opt_refresh)
         opts.addWidget(self._opt_backfill)
         opts.addWidget(self._opt_full)
         opts.addWidget(self._opt_recover)
@@ -96,6 +99,8 @@ class CollectPage(QWidget):
         self._backfill.setRange(1, 3650)
         self._backfill.setSuffix(i18n.KO.COLLECT_DAYS_SUFFIX)
         self._backfill.setValue(int(p.backfill_days))
+        self._opt_refresh.setChecked(int(p.refresh_window_days or 0) > 0)
+        self._refresh_option_label()
         self._retention = QSpinBox(card)
         self._retention.setRange(1, 3650)
         self._retention.setSuffix(i18n.KO.COLLECT_DAYS_SUFFIX)
@@ -163,7 +168,8 @@ class CollectPage(QWidget):
         self._b_run.clicked.connect(self._on_run)
         self._b_stop.clicked.connect(self.stop_requested.emit)
         self._b_out.clicked.connect(self._browse_out)
-        self._backfill.valueChanged.connect(lambda v: (prefs.patch(backfill_days=int(v)), self.refresh_plan()))
+        self._backfill.valueChanged.connect(lambda v: (prefs.patch(backfill_days=int(v)), self._apply_refresh_option(), self.refresh_plan()))
+        self._opt_refresh.toggled.connect(lambda _x: (self._apply_refresh_option(), self.refresh_plan()))
         self._retention.valueChanged.connect(lambda v: prefs.patch(retention_days=int(v)))
         self._csv.toggled.connect(lambda on: prefs.patch(write_csv=bool(on)))
         self._out.editingFinished.connect(self._apply_out)
@@ -204,6 +210,19 @@ class CollectPage(QWidget):
         if w is not None and w.isRunning():
             w.wait(ms)
 
+    def _refresh_option_label(self) -> None:
+        self._opt_refresh.setText(i18n.KO.COLLECT_OPT_REFRESH_FMT.format(days=int(self._backfill.value())))
+
+    def _apply_refresh_option(self) -> None:
+        """체크 상태 → prefs.refresh_window_days(켜면 '처음 수집 기간' 일수, 끄면 0) → to_collect_cfg 가 cfg 로 넘긴다."""
+        self._refresh_option_label()
+        days = int(self._backfill.value()) if self._opt_refresh.isChecked() else 0
+        if int(prefs.load().refresh_window_days or 0) != days:
+            prefs.patch(refresh_window_days=days)
+
+    def refresh_days(self) -> int:
+        return int(self._backfill.value()) if self._opt_refresh.isChecked() else 0
+
     def _on_plan(self, token: int, plan) -> None:
         if token != self._plan_token:
             return                                      # 늦게 온 옛 조회
@@ -211,7 +230,10 @@ class CollectPage(QWidget):
             self._plan.setText("")
             return
         if self._opt_full.isChecked():
-            text = i18n.KO.COLLECT_PLAN_FULL_FMT.format(days=plan.backfill_days)
+            text = i18n.KO.COLLECT_PLAN_FULL_FMT.format(days=plan.retention_days)
+        elif plan.refresh_days > 0 and not plan.first_run:
+            text = i18n.KO.COLLECT_PLAN_REFRESH_FMT.format(days=plan.refresh_days, reread=plan.reread_reports,
+                                                           keep=plan.keep_reports)
         elif self._opt_backfill.isChecked():
             text = i18n.KO.COLLECT_PLAN_BACKFILL_FMT.format(days=plan.backfill_days)
         elif plan.first_run:
@@ -228,14 +250,16 @@ class CollectPage(QWidget):
         self._b_run.setEnabled(not running)
         self._b_stop.setVisible(running)
         self._b_stop.setEnabled(running)
-        for w in (self._opt_backfill, self._opt_full, self._opt_recover, self._backfill, self._retention, self._out,
-                  self._b_out, self._csv):
+        for w in (self._opt_refresh, self._opt_backfill, self._opt_full, self._opt_recover, self._backfill, self._retention,
+                  self._out, self._b_out, self._csv):
             w.setEnabled(not running)
         self._status.setText(i18n.KO.COLLECT_RUNNING if running else i18n.KO.COLLECT_IDLE)
         if not running:
             self._opt_backfill.setChecked(False)
             self._opt_full.setChecked(False)
             self._opt_recover.setChecked(False)
+            self._opt_refresh.setChecked(False)         # 한 번 실행하는 옵션 — 끄면서 prefs 도 0 으로 되돌린다
+            self._apply_refresh_option()
             self.refresh_plan()
 
     def set_status(self, text: str) -> None:

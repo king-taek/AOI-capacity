@@ -37,6 +37,7 @@ class Prefs:
     window_maximized: bool = False
     last_view: str = "collect"
     scope_devices: List[str] = field(default_factory=lambda: list(_scope.DEFAULT_SCOPE))  # ★ 수집 허용 장비
+    refresh_window_days: int = 0      # D60: 최근 N일 안의 Report 는 캐시에 있어도 다시 읽기(0 = 끔). 수집 페이지 체크박스가 켜고 끈다
     prefs_version: int = PREFS_VERSION
     extra: Dict[str, Any] = field(default_factory=dict)
 
@@ -124,5 +125,7 @@ def to_collect_cfg(p: Prefs) -> Dict[str, Any]:
         "write_csv": bool(p.write_csv),
         "cache_file": str(paths.cache_file()),
         "scope_devices": list(p.scope_devices or _scope.DEFAULT_SCOPE),
+        "refresh_window_days": max(0, int(p.refresh_window_days or 0)),
+        "rebuild_all": False,          # GUI 의 '전체 다시 만들기' 는 워커 인자(full)로 넘긴다 — 설정에 남기지 않는다
     })
     return cfg

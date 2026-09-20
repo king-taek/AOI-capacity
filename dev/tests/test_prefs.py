@@ -46,3 +46,15 @@ def test_to_collect_cfg_fills_every_default_key(tmp_path):
     assert cfg["devices_csv"] == str(paths.devices_csv_path())
     assert cfg["output_dir"] == str(tmp_path / "o") and cfg["write_csv"] is True
     assert cfg["cache_file"] == str(paths.cache_file())
+
+
+def test_refresh_window_days_is_off_by_default_and_flows_into_cfg():
+    """D60: 수집 페이지 체크박스 → prefs.refresh_window_days → cfg["refresh_window_days"]. rebuild_all 은 설정에 남기지 않는다."""
+    p = prefs.load()
+    assert p.refresh_window_days == 0
+    cfg = prefs.to_collect_cfg(p)
+    assert cfg["refresh_window_days"] == 0 and cfg["rebuild_all"] is False
+    prefs.patch(refresh_window_days=30)
+    assert prefs.to_collect_cfg(prefs.load())["refresh_window_days"] == 30
+    assert prefs.to_collect_cfg(prefs.Prefs(refresh_window_days=-5))["refresh_window_days"] == 0
+    assert set(collect.DEFAULT_CONFIG) <= set(prefs.to_collect_cfg(prefs.load()))

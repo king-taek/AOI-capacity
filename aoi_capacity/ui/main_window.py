@@ -267,8 +267,8 @@ class MainWindow(QMainWindow):
         self.collect_page.append_log(toast)
         self._refresh_last_collect()
         unreachable, partial = result.unreachable_devices, result.partial_devices
-        if unreachable or partial or result.errors:
-            lines = []
+        if unreachable or partial or result.errors or result.warnings:
+            lines = list(result.warning_lines)          # C06: HTML 은 정상, CSV 만 못 썼을 때의 사유
             if unreachable:
                 lines.append(i18n.KO.COLLECT_DONE_UNREACHABLE_FMT.format(n=len(unreachable), names=", ".join(unreachable)))
             if partial:
