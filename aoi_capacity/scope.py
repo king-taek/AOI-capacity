@@ -78,12 +78,5 @@ def allows_row(cfg: Dict[str, object] | None, row: Dict[str, object]) -> bool:
     return is_allowed(cfg, *row_candidates(row))
 
 
-def lists_share(cfg: Dict[str, object] | None = None) -> bool:
-    """`폴더 *` 에서 **공유를 통째로 나열해도** 되는가 — 제한이 없을 때만.
-
-    제한 중에는 대신 허용 목록의 이름만 정확 경로로 확인한다(`devices._discover_under`)."""
-    return unrestricted(cfg)
-
-
 def describe(cfg: Dict[str, object] | None = None) -> str:
     return "제한 없음" if unrestricted(cfg) else ", ".join(scope_list(cfg))

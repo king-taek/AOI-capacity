@@ -236,6 +236,9 @@ def test_tests_workflow_contract_textually():
     assert "playwright install --with-deps chromium" in text and "-m browser" in text
     assert re.search(r'-eq 5', text), "browser 테스트가 아직 없으면 exit 5 를 통과로 처리"
     assert "-m \"not slow\"" not in text and "-m 'not slow'" not in text and "not slow" not in text
+    # S14: PR 에서 코드 변경에 진행상황.md 동반 검사 — merge-base 를 구하려면 전체 이력, 규칙은 도구 한 곳
+    assert "dev/tools/progress_doc_check.py" in text and "fetch-depth: 0" in text
+    assert "github.event.pull_request.base.sha" in text and "github.event.pull_request.head.sha" in text
 
 
 def test_browser_marker_is_registered():
@@ -291,7 +294,11 @@ def test_tests_workflow_structure():
     assert doc["permissions"] == {"contents": "read"}
     assert doc["concurrency"]["cancel-in-progress"] is True
     jobs = doc["jobs"]
-    assert set(jobs) == {"core", "browser"}
+    assert set(jobs) == {"core", "browser", "progress-doc"}
+    pd = jobs["progress-doc"]
+    assert pd["if"] == "github.event_name == 'pull_request'" and "permissions" not in pd
+    assert any(s.get("with", {}).get("fetch-depth") == 0 for s in pd["steps"] if str(s.get("uses", "")).startswith("actions/checkout@"))
+    assert any("progress_doc_check.py" in str(s.get("run", "")) for s in pd["steps"])
     for name in ("core", "browser"):
         assert jobs[name]["runs-on"] == "ubuntu-latest"
         uses = [s.get("uses", "") for s in jobs[name]["steps"]]

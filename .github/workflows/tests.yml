@@ -3,6 +3,8 @@
 # - core   : Linux + Python 3.11 + Node 22 + Qt offscreen 으로 전체 스위트(slow 포함, pytest.ini 의 -q 그대로).
 #            필수 의존성(yaml·PyQt6·node)이 없으면 사전 점검에서 실패한다 — 조용한 skip 으로 초록불이 되지 않게.
 # - browser: Playwright Chromium 으로 `browser` 마커 테스트. 아직 그런 테스트가 없으면(pytest exit 5) 통과로 처리한다.
+# - progress-doc(PR 만): merge-base → PR head 범위에 코드 변경이 있으면 진행상황.md 도 함께 바뀌었어야 한다(CLAUDE.md '커밋' 규칙, S14).
+#            문서만 바뀐 PR 은 통과. 로컬 옵트인 후크(dev/hooks/pre-commit)와 같은 규칙 — dev/tools/progress_doc_check.py.
 # 권한은 읽기만. 이 워크플로는 어디에도 푸시하지 않는다.
 name: tests
 
@@ -123,3 +125,19 @@ jobs:
             exit 0
           fi
           exit "$rc"
+
+  progress-doc:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0          # merge-base 를 구하려면 base 브랜치 이력이 필요하다
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: 코드 변경에 진행상황.md 동반 확인 (merge-base → PR head, 문서만이면 통과)
+        run: python dev/tools/progress_doc_check.py --base "${{ github.event.pull_request.base.sha }}" --head "${{ github.event.pull_request.head.sha }}"
