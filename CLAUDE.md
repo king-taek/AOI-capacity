@@ -133,8 +133,12 @@ Camtek AOI 장비의 BatchReport/WaferInfo.ini 를 읽어 장비별 가동률을
   옛 용어(가동·중복스캔·재스캔·Rework·중단·미가동·정지)를 화면 JS 에 다시 쓰지 않는다(가드 `test_screen_terms…`). 원본 상태 문구·Job·Report 파일명은 바꾸지 않는다.
 - **화면 구조**(`AOI-Dashboard.dc.html` 의 로직을 순수 JS 렌더로 — React·DC 런타임 없음, `render()` 가 `#app` 을 통째로 다시 그리고 `data-h` 핸들러 표를 위임 클릭으로 받는다):
   가동률(카드 3 · 층 필터 · 정렬 · 24시간 막대 목록) → **장비 팝업**(통계 6 · 막대 · Lot 이름표 지시선 · 선택 Lot 원문 · **Report 열기**) ↔ **Error 상세 팝업**(언제 났나 · 유형별 · 최근 21일 · Lot 별, 유형/Job 팝업에서 오면 필터 칩, D51) ·
-  Error(기간 · 층 · 지표 → 날짜별 → 유형별·장비별·Job별 → 유형/Job 팝업) · 추이(일·주·월 + 히트맵, 전 기간 대비 없음) · 리포트(D49: 표기명 21개, 배치시간 = Report 배치 시작~종료 회귀, 표본 5개 미만 생략).
-  살펴볼 장비 = 가동률 40% 미만 또는 Error 3건 이상(`PROPS`). 팝업은 ESC 로 닫힌다(Error 팝업 → 장비 팝업 → 유형/Job 팝업 순).
+  Error(기간 · 층 · 지표 → 날짜별 → 유형별·장비별·Job별 → 유형/Job 팝업) · 추이(일·주·월 + 히트맵, 전 기간 대비 없음) · **TB500 · Kendall**(D59, 옛 이름 '리포트' — 표기명 21개 Job 만 보는 탭이라 이름을 바꿨고
+  '표기명 n개 Job 만(이 기간 Lot 의 p%)' 안내 한 줄을 둔다. D49: 배치시간 = Report 배치 시작~종료 회귀, 표본 5개 미만 생략, 제외 = 원인 Error 있는 Report · 5장 미만 · 배치 시각 없음. 평균 fault = `faults` 열이 있는 행의 장당 평균, `lots[13]`·`[14]`, D08).
+  살펴볼 장비 = 가동률 40% 미만 또는 Error 3건 이상(`PROPS` — `meta.dashboard_settings` 의 같은 이름 숫자가 있으면 그것으로, D14). **기록 없음은 살펴볼 장비가 아니라 별도 대수**(`S.noRec`, D06·D57).
+  Lot 선택 키는 `lotKey`(Job·Lot·시작·배치시작·**Report**, D16 — 같은 Lot 이 하루에 Report 두 장이면 갈린다). 팝업은 ESC 로 닫힌다(Error 팝업 → 장비 팝업 → 유형/Job 팝업 순).
+  접근성(D05): `render()` 는 그리기 전 포커스(`data-fk`)·창/팝업 스크롤을 적어 두고 되돌린다, 팝업이 열리면 아래는 `inert`, Tab 은 맨 위 팝업 안에서만(`trapTab`), 열리면 제목(`aria-labelledby`)으로·닫히면 열었던 버튼으로 포커스.
+  Lot 이 40개를 넘는 날은 이름표를 Error·Test·선택 Lot 만 그린다(막대 클릭 영역은 전부, D10). 화면 어디에도 열람 시계는 없다 — 수집 시각 정보가 없으면 모든 날 분모 24시간(D11).
 - **Report 열기**는 장비 팝업의 선택 Lot 에서만(`reportUrl` · `openReport`). 경로는 `meta.devices[].note` + `report_dir` + `report` 로만 만들고 드라이브 문자와 UNC(`\\10.x`) 를 모두 다룬다.
   여는 주체는 사람이 연 그 탭이지 이 화면이 아니다 — 화면은 여전히 바깥으로 요청을 한 건도 보내지 않는다. 수집 상태 칩(`collectChip`: 수집 실패 · 일부 누락)과 '수집 범위 / 수집 안 함' 은 `meta` 에서 그린다. **사본 저장**(`saveHtml`)은 수집기가 준 열·풀 구조 그대로 다시 접는다.
 - 추이 화면에 **전 기간 대비(전주·전월·전일)는 두지 않는다**(사용자 확정, 가드: `test_no_period_over_period_comparison_anywhere`). 선택한 기간의 값만 보여 준다.
@@ -172,7 +176,8 @@ dev 의존성은 `dev/requirements-dev.txt`(pyyaml · playwright — 런타임 `
 테스트는 실제 pip·네트워크를 절대 실행하지 않는다(`test_updater.py` 의 autouse 가드). 유일한 예외는 `test_dashboard_js.py` —
 `dev/tests/js_harness.js` 가 template 의 스크립트를 **로컬 Node(vm, DOM 대역)** 에서 실행해 `buildModel` 을 검사한다(네트워크·파일 쓰기 없음, Node 가 없으면 skip):
 slow 한 개가 30일치로 디자인 스크립트와의 동일성을, 나머지가 D48 규칙을 작은 fixture 로 본다. `test_status_mapping.py` 는 하네스의 classify 모드로 Python·JS 분류를 대조한다.
-문자열 검사(`test_template_contract.py`)만으로 화면 로직을 '완료' 라고 하지 않는다. 화면은 Chromium(Playwright, `/opt/pw-browsers`)으로 클릭 경로를 실측한다.
+문자열 검사(`test_template_contract.py`)만으로 화면 로직을 '완료' 라고 하지 않는다. 화면은 Chromium(Playwright)으로 클릭 경로를 실측한다 — `dev/tests/test_dashboard_browser.py`(마커 `browser`, S06: 작은 fixture 를 template 에 박아 file:// 로 열고
+가동률 → 장비 팝업(포커스·inert·Tab·ESC) → Error·유형 팝업 → 추이 → TB500 · Kendall 을 누른다, 바깥 요청 0건·콘솔 오류 0 확인; Playwright 나 Chromium 이 없으면 skip, `/opt/pw-browsers` 도 찾는다). 30일치 전수는 스크래치 스크립트로 따로 본다.
 
 ## 커밋
 한국어로 "무엇을·왜". PR 은 요청받을 때만. 저장소 산출물에 내부 모델 식별자를 남기지 않는다.

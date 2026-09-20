@@ -299,7 +299,8 @@ for(let i=0;i<rowsIn.length;i++){const r=rowsIn[i];
   const an=ws||bs; if(!an){bad++;continue;}
   const st=String(val(r,'status')||'').trim(), rl=String(val(r,'lot')||''), wid=String(val(r,'wafer_id')||''), rp=String(val(r,'report')||'');
   const job=String(val(r,'job')||''), lot=lotName(rp,rl,true), test=/TEST/i.test(rl);
-  all.push({idx:i,dev:val(r,'device'),t:an.getTime(),s:ws?ws.getTime():null,e:(ws&&we&&we.getTime()>ws.getTime())?we.getTime():null,timed:!!ws,
+  const fv=String(val(r,'faults')??'').replace(/,/g,'').trim(), f=/^\d+$/.test(fv)?+fv:null;   /* Report 표 Faults 원문 — 숫자일 때만(옛 캐시 행은 빈 값) */
+  all.push({idx:i,f,dev:val(r,'device'),t:an.getTime(),s:ws?ws.getTime():null,e:(ws&&we&&we.getTime()>ws.getTime())?we.getTime():null,timed:!!ws,
     bs:bs?bs.getTime():null, bend:be?be.getTime():(bs?bs.getTime():null),
     c:test?null:causeOf(st),status:st,report:rp,job,lot,test,key:matKey(job,lot,wid),day:dk(an),pass:isPass(st)});
 }
@@ -395,7 +396,8 @@ if(all.length){
         if(!(b>a)&&!n&&!(bb>ba)&&!rowsHere.length)continue;
         ne+=rowsHere.filter(w=>w.alloc&&!w.c).length;
         const st=(R.rows.find(w=>w.c)||{}).status||'';
-        lots.push({a:b>a?a:1441,b:b>a?b:0,ba,bb,arr:[put('job',R.job),put('lot',R.lot),b>a?a:1441,b>a?b:0,rowsHere.length,n,rowsHere.filter(w=>w.rel).length,rowsHere.filter(w=>w.test).length,put('rep',R.rep),cs,causes.length?put('st',st):-1,ba,bb>ba?bb:ba]});
+        lots.push({a:b>a?a:1441,b:b>a?b:0,ba,bb,arr:[put('job',R.job),put('lot',R.lot),b>a?a:1441,b>a?b:0,rowsHere.length,n,rowsHere.filter(w=>w.rel).length,rowsHere.filter(w=>w.test).length,put('rep',R.rep),cs,causes.length?put('st',st):-1,ba,bb>ba?bb:ba,
+          rowsHere.reduce((q,w)=>w.f==null?q:q+w.f,0),rowsHere.filter(w=>w.f!=null).length]});   /* [13] faults 합 · [14] faults 가 있는 행 수(D08) */
       }
       lots.sort((p,q)=>(p.a<1441?p.a:p.ba)-(q.a<1441?q.a:q.ba));
       const rct={};for(const[k,v]of Object.entries(ct))rct[k]=[v[0],Math.round(v[1])];
@@ -556,7 +558,8 @@ const JOB_ALIAS={
   "R_KENDALL_A0_PI2":"Kendall PI2",
   "2D@RE-KENDALL A0 TOP DIE_0859659PD-0B":"Kendall TOP DIE",
   "R_MSFT_Kendall_0859275PD_BS-CAMTEK":"Kendall BS"};
-const PROPS={attentionUtil:40,attentionErr:3,showRepeat:true};
+const PROPS={attentionUtil:40,attentionErr:3};   /* 살펴볼 장비 문턱 — meta.dashboard_settings 의 같은 이름 숫자가 있으면 그것으로(D14) */
+function applySettings(m){const o=(m&&m.dashboard_settings)||{};for(const k of Object.keys(PROPS)){const v=Number(o[k]);if(o[k]!==undefined&&Number.isFinite(v)&&v>=0)PROPS[k]=v;}}
 let D=null;
 const state={view:"home",dayI:null,sort:"name",floor:"all",span:21,unit:"day",metric:"min",pickDay:undefined,
   modalDev:null,modalDayI:null,modalType:null,modalJob:null,selLot:null,lotFilter:"all",showMembers:false,
@@ -565,10 +568,11 @@ let H=[];const h=fn=>{H.push(fn);return H.length-1;};
 function setState(p){Object.assign(state,p);render();}
 function init(){
   for(const d of (meta.devices||[]))if(d.status)devStatus[d.name]={status:d.status,error:d.error||"",readErrors:d.read_errors||0};
+  applySettings(meta);
   D=buildModel(rows,meta);
   state.dayI=D.day?D.days.indexOf(D.day):-1;
   document.addEventListener("click",e=>{const el=e.target.closest("[data-h]");if(!el)return;const fn=H[+el.dataset.h];if(fn){e.preventDefault();fn(e);}});
-  document.addEventListener("keydown",e=>{if(e.key!=="Escape")return;
+  document.addEventListener("keydown",e=>{if(e.key==="Tab"){trapTab(e);return;}if(e.key!=="Escape")return;
     if(state.errDev)setState({errDev:null,errJob:null,errType:null});
     else if(state.modalDev)setState({modalDev:null,selLot:null});
     else if(state.modalType!=null||state.modalJob!=null)setState({modalType:null,modalJob:null});});
@@ -583,23 +587,20 @@ const S={
     for(const g of s){const L=j[j.length-1];if(L&&L.k===g.k&&g.k!==3&&g.a-L.b<=8&&!s.some(o=>o!==g&&o.a>=L.b&&o.b<=g.a&&o.k!==g.k))L.b=Math.max(L.b,g.b);else j.push({...g});}
     return j;},   /* 모델이 1분 단위로 배타 배정한 seg(0 Scan · 1 Error · 2 Test · 3 대기 · 4 Rescan)를 그대로 — 같은 종류의 8분 이하 틈만 시각적으로 잇는다(수치 불변) */
   den(t){return t&&t.den!=null?t.den:1440;},
-  bar(t){if(!t)return"none";if(S.isEst(t))return S.estBar(t);
-    let st=[],pos=0;const split=PROPS.showRepeat!==false;
-    for(const s of S.segsOf(t)){const A=s.a/14.4,B=s.b/14.4;const col=(!split&&s.k===4)?RUN:SEGC[s.k];
+  bar(t){if(!t)return"none";
+    let st=[],pos=0;
+    for(const s of S.segsOf(t)){const A=s.a/14.4,B=s.b/14.4;const col=SEGC[s.k];
       if(A>pos)st.push(IDLE+" "+pos+"%",IDLE+" "+A+"%");st.push(col+" "+A+"%",col+" "+B+"%");pos=Math.max(pos,B);}
     return S.tail(st,pos,t);},
   tail(st,pos,t){const den=S.den(t);if(den<1440){const E=den/14.4;if(E>pos)st.push(IDLE+" "+pos+"%",IDLE+" "+E+"%");st.push(FUTURE+" "+Math.max(pos,E)+"%",FUTURE+" 100%");}
     else st.push(IDLE+" "+pos+"%",IDLE+" 100%");return"linear-gradient(90deg,"+st.join(",")+")";},
   measured(t){return !!t&&(t.r+t.x+t.t+t.d)>0;},
-  isEst(t){return !!t&&!(D.rules&&D.rules.estimateFromBatch)&&(t.cv!==undefined)&&(t.cv<50||!S.measured(t))&&(t.be>0);},   /* 옛 D48-① 장비-일 추정 — D54 뒤에는 행 단위(ne)라 쓰지 않는다 */
-  hasEst(t){return !!t&&(t.ne||0)>0;},   /* D54: INI 없는 Pass 행을 배치 시각으로 추정한 장비-일 */
-  util(t){const den=S.den(t);if(!t||den<=0)return null;if(S.isEst(t))return Math.min(100,t.be/den*100);
+  hasEst(t){return !!t&&(t.ne||0)>0;},   /* D56②·D58: INI 없는 행이 배치 창의 빈 분을 나눠 가진 장비-일 */
+  util(t){const den=S.den(t);if(!t||den<=0)return null;
     return S.measured(t)?Math.min(100,(t.r+t.d)/den*100):null;},
-  estBar(t){let st=[],pos=0;
-    for(const [a,b] of (t.bseg||[])){const A=a/14.4,B=b/14.4;if(A>pos)st.push(IDLE+" "+pos+"%",IDLE+" "+A+"%");st.push(RUN+" "+A+"%",RUN+" "+B+"%");pos=Math.max(pos,B);}
-    return S.tail(st,pos,t);},
   thU(){return PROPS.attentionUtil;},thE(){return PROPS.attentionErr;},
-  alert(t){const u=S.util(t);return u===null||u<S.thU()||(t&&t.e||0)>=S.thE();},
+  noRec(t){return S.util(t)===null;},   /* 기록 없음 — '살펴볼 장비' 와 다른 축(D06·D57) */
+  alert(t){const u=S.util(t);return u!==null&&(u<S.thU()||(t&&t.e||0)>=S.thE());},
   floorOf(n){return n.indexOf("4F")===0?"4":"2";},
   devList(){const f=state.floor;return D.devices.filter(n=>f==="all"||S.floorOf(n)===f);},
   fleetUtil(day,devs){const v=devs.map(n=>S.util(S.at(day,n))).filter(x=>x!==null);return v.length?v.reduce((a,b)=>a+b,0)/v.length:0;},
@@ -640,21 +641,44 @@ function saveHtml(){if(!rows.length){toast("저장할 데이터가 없습니다"
   const a=document.createElement("a");a.href=url;a.download="AOI_capacity_"+stamp()+".html";document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),4000);toast("사본을 저장했습니다");}
 
 /* ── 렌더 ── */
-const segHtml=(items,extra="")=>`<div class="seg" ${extra}>${items.map(it=>`<button class="${it.on?"on":""}" data-h="${h(it.pick)}">${esc(it.label)}</button>`).join("")}</div>`;
+const segHtml=(items,extra="")=>`<div class="seg" ${extra}>${items.map(it=>`<button class="${it.on?"on":""}" data-h="${h(it.pick)}" data-fk="seg:${esc(it.label)}">${esc(it.label)}</button>`).join("")}</div>`;
 const ticksHtml=()=>`<span class="ticks">${[0,6,12,18,24].map(x=>`<span style="left:${x/24*100}%;transform:${x===0?"translateX(0)":(x===24?"translateX(-100%)":"translateX(-50%)")}">${x===24?"24시":x+"시"}</span>`).join("")}</span>`;
 const barsHtml=(bars,height,btn)=>`<div class="chart" style="height:${height}px">${bars.map(b=>btn?`<button data-h="${h(b.pick)}" title="${esc(b.title)}" style="max-width:${b.maxW||104}px;cursor:${b.cur||"pointer"}"><span class="v num">${esc(b.vTxt)}</span><span class="f" style="height:${b.h}%;background:${b.color}"></span></button>`
   :`<span class="b" title="${esc(b.title)}" style="max-width:${b.maxW||104}px"><span class="v num">${esc(b.vTxt)}</span><span class="f" style="height:${b.h}%;background:${b.color}"></span></span>`).join("")}</div>
   <div class="xl">${bars.map(b=>`<span style="max-width:${b.maxW||104}px">${esc(b.label)}</span>`).join("")}</div>`;
 
+/* D05: render 는 #app 을 통째로 다시 그리므로, 그리기 전에 포커스(data-fk)·창/팝업 스크롤을 적어 두고 그린 뒤 되돌린다.
+   팝업이 열리면 그 아래(헤더·본문·아래 팝업)는 inert 로 막고 Tab 은 맨 위 팝업 안에서만 돈다. 팝업이 새로 열리면 제목으로, 닫히면 열었던 버튼으로 포커스. */
+let _lastTop=null,_openerFk=null;
+function topDlg(){const d=[...document.querySelectorAll(".dlg[data-dlg]")];return d.length?d[d.length-1]:null;}
 function render(){
   H=[];
   const app=$("#app");
+  const ae=document.activeElement,fk=ae&&ae.getAttribute?ae.getAttribute("data-fk"):null;
+  const winY=window.scrollY,dbY={};for(const d of document.querySelectorAll(".dlg[data-dlg]")){const b=d.querySelector(".db");if(b)dbY[d.dataset.dlg]=b.scrollTop;}
+  const prevTop=_lastTop;
   if(!D||!D.days.length){app.innerHTML=headerHtml(null)+`<main><div class="panel" style="padding:28px 24px"><h2>아직 수집한 데이터가 없습니다</h2><p class="muted" style="margin-top:6px">수집 프로그램에서 '수집' 을 실행한 뒤 이 파일을 다시 여세요.</p></div></main>`+footHtml();return;}
   const V=state.view;
   let body="";
   if(V==="home")body=homeHtml();else if(V==="errors")body=errorsHtml();else if(V==="trend")body=trendHtml();else body=reportHtml();
   app.innerHTML=headerHtml(V)+`<main>${body}</main>`+footHtml()+typePopupHtml()+devPopupHtml()+errPopupHtml();
+  const top=topDlg(),topK=top?top.dataset.dlg:null;
+  for(const el of app.querySelectorAll(":scope>header,:scope>main,:scope>.foot"))el.inert=!!top;
+  for(const d of app.querySelectorAll(".dlg[data-dlg]")){const ov=d.parentElement;ov.inert=d!==top;}
+  for(const d of app.querySelectorAll(".dlg[data-dlg]")){const b=d.querySelector(".db");if(b&&dbY[d.dataset.dlg]!=null)b.scrollTop=dbY[d.dataset.dlg];}
+  if(!top)window.scrollTo(0,winY);
+  let target=null;
+  if(topK&&topK!==prevTop){if(!prevTop&&fk&&!/^x:/.test(fk))_openerFk=fk;target=top.querySelector("h2[tabindex]");}
+  else if(!topK&&prevTop){target=_openerFk?app.querySelector(`[data-fk="${CSS.escape(_openerFk)}"]`):null;_openerFk=null;}
+  else if(fk){const c=(top||app).querySelector(`[data-fk="${CSS.escape(fk)}"]`);if(c&&!c.disabled)target=c;}
+  if(target)try{target.focus({preventScroll:true});}catch(e){}
+  _lastTop=topK;
 }
+function trapTab(e){const top=topDlg();if(!top)return;
+  const f=[...top.querySelectorAll('button:not([disabled]),[href],input,select,textarea,[tabindex]:not([tabindex="-1"])')].filter(x=>x.offsetParent!==null);
+  if(!f.length){e.preventDefault();return;}const a=f[0],z=f[f.length-1];
+  if(e.shiftKey&&(document.activeElement===a||!top.contains(document.activeElement))){e.preventDefault();z.focus();}
+  else if(!e.shiftKey&&document.activeElement===z){e.preventDefault();a.focus();}}
 function headerHtml(V){
   const hasD=!!(D&&D.days.length);
   const day=hasD?S.dayStr():null;
@@ -662,25 +686,28 @@ function headerHtml(V){
   const gen=meta.generated||"";
   let stampTxt=gen?gen+" 수집 기준":"";
   if(meta.mode==="saved")stampTxt+=" · 사본";
-  if(!fixed&&gen)stampTxt+=" · 열람 시각 기준(비고정)";
-  const nav=[["home","가동률"],["errors","Error"],["trend","추이"],["report","리포트"]];
+  if(!fixed&&gen)stampTxt+=" · 수집 시각 정보 없음";
+  const nav=[["home","가동률"],["errors","Error"],["trend","추이"],["report","TB500 · Kendall"]];
   return `<header class="hdr"><div class="brand"><i></i>AOI 가동 현황</div>
-    <nav class="nav">${nav.map(([k,l])=>`<button class="${V===k?"on":""}" data-h="${h(S.go(k))}">${l}</button>`).join("")}</nav>
+    <nav class="nav">${nav.map(([k,l])=>`<button class="${V===k?"on":""}" data-h="${h(S.go(k))}" data-fk="nav:${k}">${l}</button>`).join("")}</nav>
     <div class="spacer"></div>
-    ${hasD?`<div class="daynav"><button class="ib" data-h="${h(()=>{if(state.dayI>0)setState({dayI:state.dayI-1,pickDay:undefined});})}" title="이전 날짜" ${state.dayI>0?"":"disabled"}>‹</button>
+    ${hasD?`<div class="daynav"><button class="ib" data-h="${h(()=>{if(state.dayI>0)setState({dayI:state.dayI-1,pickDay:undefined});})}" title="이전 날짜" data-fk="day:prev" ${state.dayI>0?"":"disabled"}>‹</button>
       <span class="daylab num">${dayName(day)}</span>
-      <button class="ib" data-h="${h(()=>{if(state.dayI<D.days.length-1)setState({dayI:state.dayI+1,pickDay:undefined});})}" title="다음 날짜" ${state.dayI<D.days.length-1?"":"disabled"}>›</button>
+      <button class="ib" data-h="${h(()=>{if(state.dayI<D.days.length-1)setState({dayI:state.dayI+1,pickDay:undefined});})}" title="다음 날짜" data-fk="day:next" ${state.dayI<D.days.length-1?"":"disabled"}>›</button>
       <button class="btn" data-h="${h(()=>setState({dayI:D.days.length-1,pickDay:undefined}))}">최신</button>
       <button class="btn" data-h="${h(saveHtml)}" title="지금 데이터를 담은 HTML 사본을 내려받습니다">사본 저장</button></div>`:""}
-    <span class="stamp ${fixed?"":"unfixed"}" title="${fixed?"집계 기준시각 = 수집 시각(며칠 뒤 열어도 같은 숫자)":"수집 시각 정보가 없어 열람 시각을 기준으로 집계합니다"}">${esc(stampTxt)}</span></header>`;
+    <span class="stamp ${fixed?"":"unfixed"}" title="${fixed?"집계 기준시각 = 수집 시각(며칠 뒤 열어도 같은 숫자)":"수집 시각 정보가 없어 모든 날의 분모를 24시간으로 둡니다(열람 시각은 쓰지 않습니다)"}">${esc(stampTxt)}</span></header>`;
 }
 function footHtml(){
   const sc=meta.scope||{};const outs=(D&&D.scope||[]).filter(s=>s.out).map(s=>s.n);
   const dev=D?D.devices.length:0;
   return `<div class="foot">${sc.restricted?`<b>수집 범위</b> ${esc((sc.devices||[]).join(", "))}<br>`:""}${outs.length?`<b>수집 안 함</b> ${esc(outs.join(", "))}<br>`:""}
     장비 ${dev}대 · ${D?D.days.length:0}일 · 정확 경로만 확인 · 재귀 검색 없음 · 원본 Report / INI 수정 없음${meta.version?` · v${esc(meta.version)}`:""}
-    <br>가동률 = (Scan + Rescan) ÷ 24시간. 수집한 날만 00:00 ~ 그날 마지막 기록까지. Test 는 분모에만. INI 가 없는 Lot 은 Report 의 배치 시작~종료로 추정(팝업에 표시). PASS 없이 중단만 남은 Report 는 Error.</div>`;
+    <br>가동률 = (Scan + Rescan) ÷ 24시간. 수집한 날만 00:00 ~ 모든 장비의 마지막 기록까지. 한 장비의 1분은 한 번만 센다(Error › Scan › Rescan › Test). INI 가 없는 행은 그 Report 배치 창의 빈 시간을 나눠 가진다(팝업에 표시). Test 는 분모에만. Rescan 은 앞선 시도가 PASS 일 때만. PASS 없이 중단만 남은 Report 는 Error.${D&&D.badRows?`<br><b style="color:#B4402F">읽지 못한 행 ${D.badRows}개</b> — 시각 형식이 맞지 않아 집계에서 뺐습니다(수집 로그 참조).`:""}</div>`;
 }
+
+/* Lot 선택 키 — 같은 Job·Lot 이 하루에 Report 두 장이면 Report 번호(L[8])로 갈린다(D16). 장비 팝업과 Error 팝업이 같이 쓴다. */
+const lotKey=L=>L[0]+"|"+L[1]+"|"+L[2]+"|"+(L[11]||0)+"|"+(L[8]||0);
 
 /* ---------- 가동률 ---------- */
 function homeHtml(){
@@ -691,19 +718,19 @@ function homeHtml(){
   const sorted=[...items];
   if(state.sort==="low")sorted.sort((a,b)=>{const x=S.util(a.t),y=S.util(b.t);return (x===null?-1:x)-(y===null?-1:y);});
   else sorted.sort((a,b)=>cmpDev(a.n,b.n));
-  const estN=items.filter(x=>S.isEst(x.t)||S.hasEst(x.t)).length;
+  const q=items.reduce((a,x)=>{if(x.t){a.w+=x.t.w||0;a.ne+=x.t.ne||0;if(S.noRec(x.t))a.no++;}else a.no++;return a;},{w:0,ne:0,no:0});
   const isToday=D.today&&day===D.today;
-  const rowsH=sorted.map(x=>{const u=S.util(x.t),al=S.alert(x.t),es=S.isEst(x.t)||S.hasEst(x.t);
-    return `<button class="rowbtn" data-h="${h(S.open(x.n))}" title="${esc(x.n)} 하루 상세 팝업 열기${es?" · INI 가 없는 Lot 은 Report 의 배치 시각으로 추정했습니다":""}" style="grid-template-columns:96px 58px 1fr 76px 30px;gap:13px;padding:9px 18px;min-height:44px">
+  const rowsH=sorted.map(x=>{const u=S.util(x.t),al=S.alert(x.t),es=S.hasEst(x.t);
+    return `<button class="rowbtn" data-h="${h(S.open(x.n))}" data-fk="dev:${esc(x.n)}" title="${esc(x.n)} 하루 상세 팝업 열기${es?" · INI 가 없는 "+x.t.ne+"장은 Report 배치 창의 빈 시간으로 추정했습니다":""}" style="grid-template-columns:96px 58px 1fr 76px 30px;gap:13px;padding:9px 18px;min-height:44px">
       <span style="display:flex;align-items:center;gap:6px;font-weight:600;font-size:13.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis"><span style="width:5px;height:5px;border-radius:50%;flex:none;background:${u===null?"#C9D1DA":(al?ERR:(u>=70?RUN:"#C9D1DA"))}"></span><span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis">${esc(x.n)}${collectChip(x.n)}</span></span>
       <span class="num" style="text-align:right;font-size:14.5px;font-weight:600;color:${u===null?"#5A6673":(u<S.thU()?"#B4402F":"#0F151C")}">${u===null?"—":u.toFixed(0)+"%"}</span>
       <span style="display:block;height:20px;border-radius:10px;background:#E9EDF2;overflow:hidden;background-image:${S.bar(x.t)}"></span>
       <span class="num" style="text-align:right;font-size:13px;color:${x.t&&x.t.e>=S.thE()?"#B4402F":"#4B5866"}">${x.t&&x.t.e?x.t.e+"건":"—"}</span>
       <span style="text-align:right;color:#5A6673;font-size:15px">›</span></button>`;}).join("");
   return `<section class="cards">
-      <div><p class="k">평균 가동률</p><p class="v num">${S.fleetUtil(day,devs).toFixed(1)}<small>%</small></p>${isToday?`<p class="s">오늘 · 마지막 기록까지 기준</p>`:""}${estN?`<p class="s">배치 시각 추정 포함 ${estN}대</p>`:""}</div>
-      <div><p class="k">살펴볼 장비</p><p class="v num" style="color:#B4402F">${items.filter(x=>S.alert(x.t)).length}<small>대</small></p><p class="s">가동률 ${S.thU()}% 미만 또는 Error ${S.thE()}건 이상</p></div>
-      <div><p class="k" title="같은 Lot 에서 같은 유형이 여러 번 나도 1건으로 셉니다">Error</p><p class="v num">${items.reduce((a,b)=>a+(b.t?b.t.e:0),0)}<small>건</small></p><p class="s">대기 시간 ${hm(items.reduce((a,b)=>a+(b.t?(b.t.x+b.t.s):0),0))}</p></div>
+      <div><p class="k">평균 가동률</p><p class="v num">${S.fleetUtil(day,devs).toFixed(1)}<small>%</small></p>${isToday?`<p class="s">수집한 날 · 00:00 ~ 모든 장비의 마지막 기록</p>`:""}<p class="s">기록 있는 ${items.length-q.no}대 평균${q.no?` · 기록 없음 ${q.no}대 제외`:""}</p>${q.ne?`<p class="s" title="INI(시각 기록)가 없어 Report 배치 창의 빈 시간을 나눠 가진 Wafer">배치 창으로 추정 ${q.ne}장 / ${q.w}장</p>`:""}</div>
+      <div><p class="k">살펴볼 장비</p><p class="v num" style="color:#B4402F">${items.filter(x=>S.alert(x.t)).length}<small>대</small></p><p class="s">가동률 ${S.thU()}% 미만 또는 Error ${S.thE()}건 이상${q.no?` · 기록 없음 ${q.no}대는 따로`:""}</p></div>
+      <div><p class="k" title="같은 Lot 에서 같은 유형이 여러 번 나도 1건으로 셉니다">Error</p><p class="v num">${items.reduce((a,b)=>a+(b.t?b.t.e:0),0)}<small>건</small></p><p class="s">Error ${hm(items.reduce((a,b)=>a+(b.t?b.t.x:0),0))} · 에러 후 대기 ${hm(items.reduce((a,b)=>a+(b.t?b.t.s:0),0))}</p></div>
     </section>
     <div class="bar-h"><h2>${isToday?"오늘의 가동률":dayName(day)+" 가동률"}</h2><div class="spacer"></div>${segHtml(floors)}${segHtml(sorts)}</div>
     <div class="panel">
@@ -756,7 +783,7 @@ function errorsHtml(){
   errCtx={spanDays,useDays,pickDay,eDayI,lotRows,jobRows,pkDay,pkDev,jobAgg,byType,MET};
   const spans=[{k:-1,label:"일자별"},{k:7,label:"최근 7일"},{k:21,label:"최근 21일"},{k:0,label:"전체 "+D.days.length+"일"}]
     .map(it=>({label:it.label,on:it.k===-1?!!pickDay:(!pickDay&&state.span===it.k),pick:it.k===-1?(()=>setState({pickDay:undefined})):(()=>setState({span:it.k,pickDay:null}))}));
-  const metrics=S.segGroup([{k:"n",label:"건수"},{k:"min",label:"대기 시간"}],state.metric,k=>setState({metric:k}));
+  const metrics=S.segGroup([{k:"n",label:"건수"},{k:"min",label:"Error 대기"}],state.metric,k=>setState({metric:k}));
   const nW=MET?"400":"700",nInk=MET?"#5A6673":"#0F151C",mW=MET?"700":"400",mInk=MET?"#0F151C":"#5A6673";
   const bars=spanDays.map((d,i)=>({label:(i%Math.ceil(spanDays.length/11)===0||i===spanDays.length-1)?md(d):"",
     vTxt:(spanDays.length<=22&&dayV(d))?fmtV(dayV(d)):(dayV(d)===maxDay?fmtV(dayV(d)):""),h:(dayV(d)/maxDay*100).toFixed(1),
@@ -806,12 +833,12 @@ function typePopupHtml(){
   const close=()=>setState({modalType:null,modalJob:null});
   const dayBars=spanDays.map((d,i)=>({label:(i%Math.ceil(spanDays.length/11)===0||i===spanDays.length-1)?md(d):"",h:((pkDay[d]||[0,0])[1]/dmx*100).toFixed(1),
     vTxt:(pkDay[d]&&pkDay[d][1]>=dmx*0.75)?((pkDay[d][1]/60).toFixed(0)+"h"):"",color:(pkDay[d]&&pkDay[d][1])?ERR:"#EDF1F5",title:md(d)+" · "+((pkDay[d]||[0,0])[0])+"건 · "+hm((pkDay[d]||[0,0])[1]),maxW:96}));
-  return `<div class="ov z55"><button class="scrim" data-h="${h(close)}" aria-label="닫기"></button><div class="dlg w960" role="dialog" aria-modal="true">
-    <div class="dh"><h2 class="mid" style="word-break:break-all;${mono?"font-family:"+MONO:""}">${esc(label)}</h2><span class="sub">${sumN}건 · 대기 시간 ${hm(sumM)} · ${(pickDay?md(pickDay)+" 하루":("최근 "+useDays.length+"일"))+(hit.length>cap?" · 상위 "+cap+"개만 표시":"")}</span>
+  return `<div class="ov z55"><button class="scrim" data-h="${h(close)}" aria-label="닫기"></button><div class="dlg w960" role="dialog" aria-modal="true" aria-labelledby="dlg-type-title" data-dlg="type">
+    <div class="dh"><h2 id="dlg-type-title" tabindex="-1" class="mid" style="word-break:break-all;${mono?"font-family:"+MONO:""}">${esc(label)}</h2><span class="sub">${sumN}건 · Error 대기 ${hm(sumM)} · ${(pickDay?md(pickDay)+" 하루":("최근 "+useDays.length+"일"))+(hit.length>cap?" · 상위 "+cap+"개만 표시":"")}</span>
       ${G&&JOB_ALIAS[jraw]?`<span class="mono" style="flex-basis:100%;font-size:12px;color:#5A6673;word-break:break-all">${esc(jraw)}</span>`:""}
-      <div class="spacer"></div><button class="x" data-h="${h(close)}" title="닫기 (Esc)">✕</button></div>
+      <div class="spacer"></div><button class="x" data-h="${h(close)}" data-fk="x:type" title="닫기 (Esc)">✕</button></div>
     <div style="padding:16px 22px 0">
-      <section class="cards xs" style="margin-bottom:16px">${[{k:"Error",v:sumN+"건"},{k:"대기 시간",v:hm(sumM)},{k:"장비",v:Object.keys(pkDev).length+"대"},{k:mt?"Lot 기록":"Lot",v:mt?(hit.length+"건"):(JA.eLots+" / "+JA.lots+"개")}].map(s=>`<div><p class="k">${s.k}</p><p class="v num">${esc(s.v)}</p></div>`).join("")}</section>
+      <section class="cards xs" style="margin-bottom:16px">${[{k:"Error",v:sumN+"건"},{k:"Error 대기",v:hm(sumM)},{k:"장비",v:Object.keys(pkDev).length+"대"},{k:mt?"Lot 기록":"Lot",v:mt?(hit.length+"건"):(JA.eLots+" / "+JA.lots+"개")}].map(s=>`<div><p class="k">${s.k}</p><p class="v num">${esc(s.v)}</p></div>`).join("")}</section>
       ${G&&G.m.length>1?`<div style="margin-bottom:14px"><button class="link" style="color:#5A6673;font-size:11.5px" data-h="${h(()=>setState({showMembers:!state.showMembers}))}">이름 ${G.m.length}개를 묶었습니다 — 보기</button>
         ${state.showMembers?`<div class="members">${G.m.map(([i,c])=>`<p style="display:flex;gap:10px;align-items:baseline;font-size:12.5px"><span class="mono" style="flex:1;min-width:0;word-break:break-all">${esc(P.job[i]||"(Job 없음)")}</span><span class="num" style="color:#5A6673;white-space:nowrap">${c}회</span></p>`).join("")}</div>`:""}</div>`:""}
       ${!pickDay?`<div style="animation:slideIn .22s var(--ease)"><h3 class="s" style="margin-bottom:9px">날짜별 대기 시간 <span style="font-weight:400;color:#5A6673;font-size:12px">${spanDays.length===D.days.length?("전체 "+D.days.length+"일"):("최근 "+spanDays.length+"일")}</span></h3>${barsHtml(dayBars,112,false)}<div style="height:12px"></div></div>`:""}
@@ -838,27 +865,26 @@ function devPopupHtml(){
   if(D.devices[i+1])sib.push({label:D.devices[i+1]+" ›",title:D.devices[i+1]+" 로 바꾸기",go:S.open(D.devices[i+1],state.modalDayI)});
   const den=S.den(t),u=S.util(t),idle=t?Math.max(0,den-t.r-t.d-t.x-t.t-t.s):den;
   const onlyErr=state.lotFilter==="err";const all=t?t.lots:[];const shown=(onlyErr?all.filter(L=>L[5]>0):all);
-  const mEst=S.isEst(t);
-  const key=L=>L[0]+"|"+L[1]+"|"+L[2]+"|"+(L[11]||0);
-  const LA=L=>{const hasW=L[3]>L[2];if(mEst&&L[12]>L[11])return L[11];return hasW?L[2]:(L[11]||0);};
-  const LB=L=>{const hasW=L[3]>L[2];if(mEst&&L[12]>L[11])return L[12];return hasW?L[3]:Math.max((L[12]||0),(L[11]||0)+1);};
+  const key=lotKey;
+  const LA=L=>L[3]>L[2]?L[2]:(L[11]||0);
+  const LB=L=>L[3]>L[2]?L[3]:Math.max((L[12]||0),(L[11]||0)+1);
   const sel=shown.find(L=>key(L)===state.selLot)||null;
-  const W=880,ROW=26,levels=[];
+  const W=880,ROW=26,levels=[],MAXL=16;
   const textW=s=>{let w=0;for(const ch of s)w+=(ch.charCodeAt(0)>0x2000?11.6:6.4);return w;};
-  const callouts=shown.map(L=>{const lot=P.lot[L[1]]||"(Lot 확인 불가)";const label=cut(lot,15)+" · "+L[4]+"장";const wPct=(textW(label)+36)/W*100;
+  /* D10: Lot 이 많으면(40개 초과) 이름표는 Error·Test·선택 Lot 만 — 막대의 클릭 영역(hits)은 전부 남는다 */
+  const fold=shown.length>40;const labeled=fold?shown.filter(L=>L[5]||L[7]||key(L)===state.selLot):shown;
+  const callouts=labeled.map(L=>{const lot=P.lot[L[1]]||"(Lot 확인 불가)";const label=cut(lot,15)+" · "+L[4]+"장";const wPct=(textW(label)+36)/W*100;
     const la=LA(L),lb=Math.max(LB(L),LA(L)+1);let anchor=(la+lb)/2;
     if(L[5]){const eg=S.segsOf(t).find(g=>g.k===1&&g.b>la&&g.a<lb);if(eg)anchor=(Math.max(eg.a,la)+Math.min(eg.b,lb))/2;}
     const x=anchor/1440*100;let l=x-wPct/2;if(l<0)l=0;if(l+wPct>100)l=Math.max(0,100-wPct);const r=l+wPct;
-    let lv=0;while(lv<16&&levels[lv]!==undefined&&l<levels[lv]+1.2)lv++;if(lv>=16)lv=15;levels[lv]=r;
+    let lv=0;while(lv<MAXL&&levels[lv]!==undefined&&l<levels[lv]+1.2)lv++;if(lv>=MAXL)lv=MAXL-1;levels[lv]=r;
     const on=sel&&key(sel)===key(L);const y=lv*ROW+10;
-    return{x:x.toFixed(2),lx:l.toFixed(2),h:y,ty:y,on,dot:L[5]?ERR:(L[7]?TEST:(L[6]>L[4]/2?DUP:RUN)),label,title:lot+" · "+clock(la)+"–"+clock(lb)+" · 누르면 아래에 원문·Report 표시",pick:()=>setState({selLot:on?null:key(L)})};});
+    return{k:key(L),x:x.toFixed(2),lx:l.toFixed(2),h:y,ty:y,on,dot:L[5]?ERR:(L[7]?TEST:(L[6]>L[4]/2?DUP:RUN)),label,title:lot+" · "+clock(la)+"–"+clock(lb)+" · 누르면 아래에 원문·Report 표시",pick:()=>setState({selLot:on?null:key(L)})};});
   const hits=shown.map(L=>{const on=sel&&key(sel)===key(L);const la=LA(L),lb=Math.max(LB(L),la+1);
     return{l:(la/1440*100).toFixed(2),w:Math.max(0.2,(lb-la)/1440*100).toFixed(2),on,title:(P.lot[L[1]]||"Lot")+" · "+clock(la)+"–"+clock(lb),pick:()=>setState({selLot:on?null:key(L)})};});
   const calloutH=Math.max(30,(levels.length||1)*ROW+14);
   const close=()=>setState({modalDev:null,selLot:null});
-  const stats=mEst
-    ?[{k:"가동률 (추정)",v:u===null?"기록 없음":u.toFixed(1)+"%",ink:u!==null&&u<S.thU()?"#B4402F":"#0F151C"},{k:"돌아간 시간 (추정)",v:hm(t.be),ink:"#0F151C"},{k:"대기 (추정)",v:hm(Math.max(0,den-t.be)),ink:"#4B5866"},{k:"배치",v:(t.bseg?t.bseg.length:0)+"개",ink:"#0F151C"},{k:"Error",v:t.e+"건",ink:t.e>=S.thE()?"#B4402F":"#0F151C"},{k:"시각 확인",v:t.cv+"%",ink:"#B4402F"}]
-    :[{k:"가동률",v:u===null?"기록 없음":u.toFixed(1)+"%",ink:u!==null&&u<S.thU()?"#B4402F":"#0F151C"},{k:"Scan",v:t?hm(t.r):"—",ink:"#0F151C"},{k:"Rescan",v:t?hm(t.d):"—",ink:"#0F151C"},{k:"Test",v:t?hm(t.t):"—",ink:t&&t.t?"#7A5BA8":"#4B5866"},{k:"Error",v:t?(t.e+"건"+((t.x+t.s)?" · "+hm(t.x+t.s):"")):"—",ink:t&&t.e>=S.thE()?"#B4402F":"#0F151C"},{k:"대기",v:hm(idle),ink:"#4B5866"}].concat(S.hasEst(t)?[{k:"시각 확인",v:t.cv+"%",ink:"#B4402F"}]:[]);
+  const stats=[{k:"가동률",v:u===null?"기록 없음":u.toFixed(1)+"%",ink:u!==null&&u<S.thU()?"#B4402F":"#0F151C"},{k:"Scan",v:t?hm(t.r):"—",ink:"#0F151C"},{k:"Rescan",v:t?hm(t.d):"—",ink:"#0F151C"},{k:"Test",v:t?hm(t.t):"—",ink:t&&t.t?"#7A5BA8":"#4B5866"},{k:"Error",v:t?(t.e+"건"+(t.x?" · "+hm(t.x):"")):"—",ink:t&&t.e>=S.thE()?"#B4402F":"#0F151C"},{k:"에러 후 대기",v:t?hm(t.s):"—",ink:t&&t.s?"#B4402F":"#4B5866"},{k:"대기",v:hm(idle),ink:"#4B5866"}].concat(S.hasEst(t)?[{k:"시각 확인",v:t.cv+"%",ink:"#B4402F"}]:[]);
   const lotFilters=S.segGroup([{k:"all",label:"전체"},{k:"err",label:"Error 있는 Lot"}],state.lotFilter,k=>setState({lotFilter:k,selLot:null}));
   const selH=sel?(()=>{const a=LA(sel),b=Math.max(LB(sel),a+1);const types=Object.entries(sel[9]).sort((x,y)=>y[1][1]-x[1][1]);const rep=P.rep[sel[8]]||"";
     return `<div class="sel"><div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:10px"><b style="font-size:14.5px">${esc(P.lot[sel[1]]||"(Lot 확인 불가)")}</b>
@@ -866,21 +892,20 @@ function devPopupHtml(){
       <div class="kv"><span class="k">시간</span><span class="num">${clock(a)} – ${clock(b)} (${hm(b-a)})</span><span class="k">Wafer</span><span>${sel[4]?sel[4]+"장":"전날 시작한 배치(장수는 전날에)"}${sel[6]?" · Rescan "+sel[6]+"장":""}${sel[7]?" · Test "+sel[7]+"장":""}</span>
       <span class="k">Job</span><span class="mono" style="word-break:break-all">${esc(P.job[sel[0]]||"(Job 없음)")}</span>${sel[10]>=0?`<span class="k">원문</span><span class="mono" style="color:#4B5866;word-break:break-all">${esc(P.st[sel[10]])}</span>`:""}
       <span class="k">Report</span><span class="mono" style="color:#4B5866;word-break:break-all">${esc(rep||"—")}${rep&&reportUrl({device:mDev,report:rep})?` <button class="link" data-h="${h(()=>openReport({device:mDev,report:rep}))}" title="이 BatchReport 를 새 탭으로 엽니다(NAS 경로)">Report 열기</button>`:""}</span></div></div>`;})():"";
-  return `<div class="ov z50"><button class="scrim" data-h="${h(close)}" aria-label="닫기"></button><div class="dlg w1120" role="dialog" aria-modal="true">
-    <div class="dh"><h2>${esc(mDev)}</h2><span class="sub num">${dayName(mDay)}</span><span class="note">${esc(sc.note||"")}</span><div class="spacer"></div>
-      ${sib.map(s=>`<button class="btn" data-h="${h(s.go)}" title="${esc(s.title)}">${esc(s.label)}</button>`).join("")}<button class="x" data-h="${h(close)}" title="닫기 (Esc)">✕</button></div>
+  return `<div class="ov z50"><button class="scrim" data-h="${h(close)}" aria-label="닫기"></button><div class="dlg w1120" role="dialog" aria-modal="true" aria-labelledby="dlg-dev-title" data-dlg="dev">
+    <div class="dh"><h2 id="dlg-dev-title" tabindex="-1">${esc(mDev)}</h2><span class="sub num">${dayName(mDay)}</span><span class="note">${esc(sc.note||"")}</span><div class="spacer"></div>
+      ${sib.map(s=>`<button class="btn" data-h="${h(s.go)}" title="${esc(s.title)}">${esc(s.label)}</button>`).join("")}<button class="x" data-h="${h(close)}" data-fk="x:dev" title="닫기 (Esc)">✕</button></div>
     <div class="db">
       <section class="cards xs" style="margin-bottom:18px">${stats.map(s=>`<div><p class="k">${s.k}</p><p class="v num" style="color:${s.ink}">${esc(s.v)}</p></div>`).join("")}</section>
-      ${mEst?`<p style="margin:0 0 12px;font-size:11.5px;color:#5A6673;word-break:keep-all">이 날은 시각이 확인된 기록이 ${t?t.cv:0}% 뿐이라, Report 의 배치 시작·종료 시각으로 추정했습니다. Scan·Rescan·Test 구분은 할 수 없습니다.</p>`:""}
-      ${!mEst&&S.hasEst(t)?`<p style="margin:0 0 12px;font-size:11.5px;color:#5A6673;word-break:keep-all">Wafer ${t.w}장 중 ${t.ne}장은 INI(시각 기록)가 없어 Report 의 배치 시작·종료 시각으로 추정했습니다(시각 확인 ${t.cv}%).</p>`:""}
-      ${den<1440?`<p style="margin:0 0 12px;font-size:11.5px;color:#5A6673">수집한 날이라 00:00 ~ ${clock(den)}(마지막 기록)까지를 분모로 씁니다.</p>`:""}
-      <div class="bar-h" style="margin-bottom:10px"><h3 style="margin:0">Lot ${all.length}개</h3><span style="font-size:12.5px;color:#5A6673">${shown.length?"막대나 이름표를 누르면 그 Lot 을 봅니다":""}</span><div class="spacer"></div>${segHtml(lotFilters)}</div>
+      ${S.hasEst(t)?`<p style="margin:0 0 12px;font-size:11.5px;color:#5A6673;word-break:keep-all">Wafer ${t.w}장 중 ${t.ne}장은 INI(시각 기록)가 없어 그 Report 배치 창의 빈 시간을 나눠 가졌습니다(시각 확인 ${t.cv}%).</p>`:""}
+      ${den<1440?`<p style="margin:0 0 12px;font-size:11.5px;color:#5A6673">수집한 날이라 00:00 ~ ${clock(den)}(모든 장비의 마지막 기록)까지를 분모로 씁니다.</p>`:""}
+      <div class="bar-h" style="margin-bottom:10px"><h3 style="margin:0">Lot ${all.length}개</h3><span style="font-size:12.5px;color:#5A6673">${shown.length?(fold?"Lot 이 많아 이름표는 Error·Test·선택 Lot 만 — 막대를 누르면 어느 Lot 이든 봅니다":"막대나 이름표를 누르면 그 Lot 을 봅니다"):""}</span><div class="spacer"></div>${segHtml(lotFilters)}</div>
       <div style="position:relative;height:16px;margin-bottom:4px">${ticksHtml()}</div>
       <div style="position:relative;height:36px;border-radius:18px;background:#E9EDF2;overflow:hidden;background-image:${S.bar(t)}">
         ${hits.map(Hh=>`<button class="hit" data-h="${h(Hh.pick)}" title="${esc(Hh.title)}" style="left:${Hh.l}%;width:${Hh.w}%;background:${Hh.on?"rgba(46,107,168,.22)":"transparent"};box-shadow:${Hh.on?"inset 0 0 0 2px #1D4E82":"none"}"></button>`).join("")}</div>
       <div style="position:relative;margin-top:0;height:${calloutH}px">
         ${callouts.map(c=>`<span style="position:absolute;left:${c.x}%;top:-18px;width:1px;height:18px;background:${c.on?"#0F151C":"rgba(255,255,255,.85)"};z-index:2"></span><span style="position:absolute;left:${c.x}%;top:-20px;width:6px;height:6px;margin-left:-3px;border-radius:50%;background:${c.dot};box-shadow:0 0 0 1.5px #fff;z-index:3"></span><span style="position:absolute;left:${c.x}%;top:0;width:1px;height:${c.h}px;background:${c.on?"#2E6BA8":"#D5DDE5"}"></span>
-          <button class="callout ${c.on?"on":""}" data-h="${h(c.pick)}" title="${esc(c.title)}" style="left:${c.lx}%;top:${c.ty}px"><span style="width:6px;height:6px;border-radius:50%;background:${c.dot};flex:none"></span>${esc(c.label)}</button>`).join("")}</div>
+          <button class="callout ${c.on?"on":""}" data-h="${h(c.pick)}" data-fk="lot:${esc(c.k)}" title="${esc(c.title)}" style="left:${c.lx}%;top:${c.ty}px"><span style="width:6px;height:6px;border-radius:50%;background:${c.dot};flex:none"></span>${esc(c.label)}</button>`).join("")}</div>
       ${selH}
       ${shown.length===0?`<p style="margin:14px 0 0;font-size:13px;color:#5A6673">이 날 이 장비의 기록이 없습니다.</p>`:""}
     </div></div></div>`;
@@ -906,36 +931,36 @@ function errPopupHtml(){
     else marks.push({l:(g.a/14.4).toFixed(2),w:Math.max(0.25,(g.b-g.a)/14.4).toFixed(2),c:STOP,title:clock(g.a)+"–"+clock(g.b)+" Error 후 대기 "+hm(g.b-g.a)});}
   const untimed=eLots.filter(L=>!(L[3]>L[2])).length;
   const evts=[];
-  for(const L of eLots)for(const [c,v] of Object.entries(L[9])){if(ft&&c!==ft)continue;const key=L[0]+"|"+L[1]+"|"+L[2]+"|"+(L[11]||0),a=la(L);
+  for(const L of eLots)for(const [c,v] of Object.entries(L[9])){if(ft&&c!==ft)continue;const key=lotKey(L),a=la(L);
     evts.push({at:a,time:clock(a),lot:P.lot[L[1]]||"(Lot 확인 불가)",type:c,status:causeText(eDev,P.rep[L[8]]||"",c)||(L[10]>=0?P.st[L[10]]:"(원문 없음)"),min:hm(v[1]),m:v[1],rep:P.rep[L[8]]||"",
       go:()=>setState({errDev:null,modalDev:eDev,modalDayI:eI,selLot:key,lotFilter:"all"})});}
   evts.sort((a,b)=>b.m-a.m||a.at-b.at);
-  const end=Math.min(D.days.length,Math.max(eI+1,21)),start=Math.max(0,end-21),win=D.days.slice(start,end);
+  const end=Math.min(D.days.length,Math.max(eI+1,21)),start=Math.max(0,end-21),win=D.days.slice(start,end);   /* 선택한 날로 끝나는 21일(앞쪽이 모자라면 처음 21일) */
   const cnt=dy=>{const x=S.at(dy,eDev);if(!x)return 0;if(!filtered)return x.e||0;return (x.lots||[]).filter(L=>L[5]&&(fj==null||D.jobG[L[0]]===fj)&&(!ft||L[9][ft])).reduce((a,L)=>a+(ft?L[9][ft][0]:L[5]),0);};
   const tr=win.map(cnt),tmax=Math.max(1,...tr);
   const G=fj!=null?D.jobGroups[fj]:null,jraw=G?(P.job[G.l]||"(Job 없음)"):"";
   const filterTxt=ft?("유형 "+ft):("Job "+(JOB_ALIAS[jraw]||jraw)),filterMono=(ft||(G&&!JOB_ALIAS[jraw]));
   const close=()=>setState({errDev:null,errJob:null,errType:null});
-  const stats=[{k:"Error",v:totN+"건",ink:totN?"#B4402F":"#0F151C"},{k:"대기 시간",v:hm(totM),ink:totM?"#B4402F":"#0F151C"},{k:"유형",v:ct.length+"가지",ink:"#0F151C"},{k:"Error 난 Lot",v:eLots.length+" / "+lots.length+"개",ink:"#0F151C"},{k:"가장 많은 유형",v:ct.length?ct[0][0].replace("_ERROR",""):"—",ink:"#0F151C"}];
+  const stats=[{k:"Error",v:totN+"건",ink:totN?"#B4402F":"#0F151C"},{k:"Error 대기",v:hm(totM),ink:totM?"#B4402F":"#0F151C"},{k:"유형",v:ct.length+"가지",ink:"#0F151C"},{k:"Error 난 Lot",v:eLots.length+" / "+lots.length+"개",ink:"#0F151C"},{k:"가장 많은 유형",v:ct.length?ct[0][0].replace("_ERROR",""):"—",ink:"#0F151C"}];
   const trend=win.map((dy,i)=>({label:(i%4===0||i===win.length-1)?md(dy):"",vTxt:tr[i]||"",h:(tr[i]/tmax*100).toFixed(1),color:dy===eDay?ERR:"#E0A9A2",title:md(dy)+" · Error "+tr[i]+"건 · 누르면 이 날로",pick:()=>setState({errDayI:D.days.indexOf(dy)}),maxW:9999}));
-  return `<div class="ov z60"><button class="scrim" data-h="${h(close)}" aria-label="닫기"></button><div class="dlg w1000" role="dialog" aria-modal="true">
-    <div class="dh" style="gap:10px"><h2 style="font-size:20px">${esc(eDev)}</h2>
+  return `<div class="ov z60"><button class="scrim" data-h="${h(close)}" aria-label="닫기"></button><div class="dlg w1000" role="dialog" aria-modal="true" aria-labelledby="dlg-err-title" data-dlg="err">
+    <div class="dh" style="gap:10px"><h2 id="dlg-err-title" tabindex="-1" style="font-size:20px">${esc(eDev)}</h2>
       <span style="display:inline-flex;align-items:center;gap:4px"><button class="ib" style="width:26px;height:26px;font-size:14px" data-h="${h(()=>{if(eI>0)setState({errDayI:eI-1});})}" ${eI>0?"":"disabled"} title="이전 날짜">‹</button><span class="num" style="font-size:13px;color:#5A6673;min-width:100px;text-align:center">${dayName(eDay)}</span><button class="ib" style="width:26px;height:26px;font-size:14px" data-h="${h(()=>{if(eI<D.days.length-1)setState({errDayI:eI+1});})}" ${eI<D.days.length-1?"":"disabled"} title="다음 날짜">›</button></span>
-      <span class="pill err">Error ${totN}건 · 대기 ${hm(totM)}</span>
+      <span class="pill err">Error ${totN}건 · Error 대기 ${hm(totM)}</span>
       ${filtered?`<button class="btn" data-h="${h(()=>setState({errJob:null,errType:null}))}" title="필터 해제 — 이 장비의 모든 Error 보기" style="display:inline-flex;align-items:center;gap:6px;max-width:320px;border-radius:999px;background:#F7F9FB;font-size:12px;color:#3D4854;${filterMono?"font-family:"+MONO:""}"><span style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(filterTxt)}</span><span style="color:#5A6673">✕</span></button>`:""}
-      <div class="spacer"></div><button class="btn" data-h="${h(()=>setState({errDev:null,modalDev:eDev,modalDayI:eI,selLot:null}))}" title="같은 날 이 장비의 가동률 팝업으로">가동률 보기</button><button class="x" data-h="${h(close)}" title="닫기 (Esc)">✕</button></div>
+      <div class="spacer"></div><button class="btn" data-h="${h(()=>setState({errDev:null,modalDev:eDev,modalDayI:eI,selLot:null}))}" title="같은 날 이 장비의 가동률 팝업으로">가동률 보기</button><button class="x" data-h="${h(close)}" data-fk="x:err" title="닫기 (Esc)">✕</button></div>
     <div class="db">
       <section class="cards xs" style="margin-bottom:18px">${stats.map(s=>`<div><p class="k">${s.k}</p><p class="v num" style="font-size:19px;color:${s.ink}">${esc(s.v)}</p></div>`).join("")}</section>
       <h3 class="s">언제 났나</h3>
       <div style="position:relative;height:15px;margin-bottom:3px">${ticksHtml()}</div>
       <div class="tline">${marks.map(k=>`<i title="${esc(k.title)}" style="left:${k.l}%;width:${k.w}%;background:${k.c}"></i>`).join("")}</div>
-      <p style="margin:0 0 18px;font-size:11.5px;color:#5A6673">${marks.length?("진한 빨강이 Error, 연한 빨강이 그 뒤 대기입니다."+(untimed?" 시각 미기록 Error "+untimed+"건은 막대에 없습니다.":"")):(totN?"시각이 기록된 Error 가 없어 막대를 그리지 않았습니다.":"Error 없음")}</p>
+      <p style="margin:0 0 18px;font-size:11.5px;color:#5A6673">${marks.length?("진한 빨강이 Error, 연한 빨강이 그 뒤 대기입니다. Error 대기 = Error 시간 + Report 가 끝난 뒤 다음 활동까지."+(untimed?" 시간을 받지 못한 Error "+untimed+"건(배치 창에 빈 시간이 없음)은 막대에 없습니다.":"")):(totN?"시간을 받은 Error 가 없어 막대를 그리지 않았습니다(배치 창에 빈 시간이 없음).":"Error 없음")}</p>
       <h3 class="s">유형별</h3>
       ${ct.map(([c,v])=>`<div style="display:grid;grid-template-columns:190px 1fr 46px 72px;gap:10px;align-items:center;padding:4px 0"><span class="mono" title="${esc(c)}" style="font-size:12.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(c)}</span><span class="hbar" style="height:8px"><i style="width:${Math.round(v[1]/cmax*100)}%;transform-origin:left;animation:growX .35s var(--ease)"></i></span><span class="num" style="text-align:right;font-size:12.5px">${v[0]}건</span><span class="num" style="text-align:right;font-size:12.5px;font-weight:600;white-space:nowrap">${hm(v[1])}</span></div>`).join("")||`<p style="margin:0;font-size:12.5px;color:#5A6673">이 날 이 장비의 Error 가 없습니다.</p>`}
-      <h3 class="s" style="margin-top:18px">최근 21일 이 장비의 Error <span style="font-weight:400;color:#5A6673;font-size:12px">막대를 누르면 그 날로</span></h3>
+      <h3 class="s" style="margin-top:18px">${md(win[0])} ~ ${md(win[win.length-1])} 이 장비의 Error <span style="font-weight:400;color:#5A6673;font-size:12px">선택한 날까지 ${win.length}일 · 막대를 누르면 그 날로</span></h3>
       ${barsHtml(trend,74,true)}
       <h3 class="s" style="margin-top:18px">Lot 별 Error${evts.length?" · "+evts.length+"건":""}</h3>
-      <div class="box"><div class="tbl-h" style="grid-template-columns:58px 150px 1fr 60px"><span>시각</span><span>Lot</span><span>유형 · 원문</span><span style="text-align:right">대기</span></div>
+      <div class="box"><div class="tbl-h" style="grid-template-columns:58px 150px 1fr 60px"><span>시각</span><span>Lot</span><span>유형 · 원문</span><span style="text-align:right">Error 대기</span></div>
         ${evts.map(e=>`<button class="rowbtn" data-h="${h(e.go)}" title="가동률 팝업에서 이 Lot 보기" style="grid-template-columns:58px 150px 1fr 60px;gap:10px;align-items:start;padding:9px 14px"><span class="num" style="font-size:12.5px;color:#4B5866">${e.time}</span><span class="mono" title="${esc(e.lot)}" style="font-size:12.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(e.lot)}</span><span style="display:block;min-width:0"><span class="pill err mono">${esc(e.type)}</span><span class="mono" style="display:block;margin-top:3px;font-size:11.5px;color:#4B5866;word-break:break-all">${esc(e.status)}</span></span><span class="num" style="text-align:right;font-size:12.5px;font-weight:600;white-space:nowrap">${e.min}</span></button>`).join("")||`<p class="empty">기록 없음</p>`}
       </div></div></div></div>`;
 }
@@ -971,30 +996,31 @@ function trendHtml(){
 /* ---------- 리포트 (TB500 · Kendall, D49) ---------- */
 function reportHtml(){
   const P=D.pool,span=state.rptSpan,days=span?D.days.slice(-span):D.days;
-  const ABORT=/abort|cancel/i,aliasCache={};
+  const aliasCache={};
   const aliasOf=gi=>{if(aliasCache[gi]!==undefined)return aliasCache[gi];const G=D.jobGroups[gi];let al=JOB_ALIAS[P.job[G.l]]||null;if(!al)for(const [i] of G.m){if(JOB_ALIAS[P.job[i]]){al=JOB_ALIAS[P.job[i]];break;}}return aliasCache[gi]=al;};
-  const blank=()=>({n:0,err:0,errMin:0,ex:{err:0,abort:0,small:0,noTime:0},pts:[]});
-  const byAlias={};
+  const blank=()=>({n:0,err:0,errMin:0,fS:0,fN:0,ex:{err:0,small:0,noTime:0},pts:[]});
+  const byAlias={};let lotAll=0,lotIn=0;
   for(const dy of days)for(const n of D.devices){const t=S.at(dy,n);if(!t)continue;
-    for(const L of t.lots){const gi=D.jobG[L[0]],al=aliasOf(gi);if(!al)continue;
+    for(const L of t.lots){const gi=D.jobG[L[0]],al=aliasOf(gi);lotAll++;if(!al)continue;lotIn++;
       const A=byAlias[al]||(byAlias[al]={name:al,raw:{},all:blank(),devs:{}});const rawName=P.job[L[0]];A.raw[rawName]=(A.raw[rawName]||0)+1;
       const dv=A.devs[n]||(A.devs[n]=blank());let em=0;for(const v of Object.values(L[9]))em+=v[1];
-      for(const Sx of [A.all,dv]){Sx.n++;Sx.err+=L[5];Sx.errMin+=em;}
-      const st=L[10]>=0?P.st[L[10]]:"";
-      const ex=L[5]?"err":(ABORT.test(st)?"abort":(L[4]<5?"small":((L[12]>L[11])?null:"noTime")));
+      for(const Sx of [A.all,dv]){Sx.n++;Sx.err+=L[5];Sx.errMin+=em;Sx.fS+=L[13]||0;Sx.fN+=L[14]||0;}
+      /* 제외: 원인 Error 가 있는 Report(L[10]>=0 — 시작일이 아니어도) · 5장 미만 · 배치 시각 없음. 중단은 D52 로 Error 이거나 정상 종료라 따로 없다. */
+      const ex=L[10]>=0?"err":(L[4]<5?"small":((L[12]>L[11])?null:"noTime"));
       if(ex){A.all.ex[ex]++;dv.ex[ex]++;continue;}
       A.all.pts.push([L[4],L[12]-L[11]]);dv.pts.push([L[4],L[12]-L[11]]);}}
   const MIN_N=5;
   const fit=Sx=>{const r=Sx.pts.length>=MIN_N?S.ols(Sx.pts):null,mode=S.modeOf(Sx.pts.map(p=>p[0])),bad=r&&r.b<=0;
     return{prep:r&&!bad?r.a.toFixed(1)+" ± "+r.seA.toFixed(1)+"분":"—",per:r&&!bad?r.b.toFixed(2)+" ± "+r.seB.toFixed(2)+"분":"—",conv:r&&!bad&&mode?hm(Math.max(0,r.a+r.b*mode)):"—",
       convSub:r&&!bad&&mode?(mode+"장 기준"):(bad?"기울기 음수 · 신뢰 불가":(Sx.pts.length<MIN_N?"표본 "+Sx.pts.length+"개 (5개 미만)":"장수가 모두 같음")),
-      n:Sx.pts.length+" / "+Sx.n,err:Sx.err?Sx.err+"건":"—",eInk:Sx.err?"#B4402F":"#5A6673",wait:Sx.errMin?hm(Sx.errMin):"—"};};
-  const exTxt=Sx=>"제외 — Error "+Sx.ex.err+" · 중단 "+Sx.ex.abort+" · 5장 미만 "+Sx.ex.small+(Sx.ex.noTime?" · 배치 시각 없음 "+Sx.ex.noTime:"");
+      n:Sx.pts.length+" / "+Sx.n,err:Sx.err?Sx.err+"건":"—",eInk:Sx.err?"#B4402F":"#5A6673",wait:Sx.errMin?hm(Sx.errMin):"—",
+      fault:Sx.fN?(Sx.fS/Sx.fN).toFixed(1):"—",faultSub:Sx.fN?(Sx.fN+"장"):"faults 열 없음"};};
+  const exTxt=Sx=>"제외 — Error "+Sx.ex.err+" · 5장 미만 "+Sx.ex.small+(Sx.ex.noTime?" · 배치 시각 없음 "+Sx.ex.noTime:"");
   const names=Object.keys(byAlias).sort((a,b)=>a<b?-1:a>b?1:0);
   const cols="minmax(210px,1.3fr) 66px 122px 122px 132px 56px 92px 84px";
   const cell=(f,small)=>`<span class="num" style="text-align:right;font-size:${small?12.5:13}px;color:#4B5866;white-space:nowrap">${f.n}</span><span class="num" style="text-align:right;font-size:${small?12.5:13}px;${small?"":"font-weight:600;"}white-space:nowrap">${f.prep}</span><span class="num" style="text-align:right;font-size:${small?12.5:13}px;${small?"":"font-weight:600;"}white-space:nowrap">${f.per}</span>
     <span style="text-align:right;min-width:0"><span class="num" style="display:block;font-size:${small?12.5:13}px;${small?"":"font-weight:600;"}white-space:nowrap">${f.conv}</span><span style="display:block;font-size:11px;color:#5A6673;white-space:nowrap">${esc(f.convSub)}</span></span>
-    <span class="num" style="text-align:right;font-size:${small?12.5:13}px;white-space:nowrap;color:${f.eInk}">${f.err}</span><span class="num" style="text-align:right;font-size:${small?12.5:13}px;white-space:nowrap;color:${f.eInk}">${f.wait}</span><span style="text-align:right;font-size:12px;color:#8A96A3;white-space:nowrap">수집 예정</span>`;
+    <span class="num" style="text-align:right;font-size:${small?12.5:13}px;white-space:nowrap;color:${f.eInk}">${f.err}</span><span class="num" style="text-align:right;font-size:${small?12.5:13}px;white-space:nowrap;color:${f.eInk}">${f.wait}</span><span style="text-align:right;min-width:0"><span class="num" style="display:block;font-size:${small?12.5:13}px;white-space:nowrap">${f.fault}</span><span style="display:block;font-size:11px;color:#5A6673;white-space:nowrap">${esc(f.faultSub)}</span></span>`;
   const rowsH=names.map(al=>{const A=byAlias[al],f=fit(A.all),open=state.rptOpen===al,raws=Object.entries(A.raw).sort((a,b)=>b[1]-a[1]);
     const devs=Object.keys(A.devs).sort(cmpDev).map(n=>({name:n,title:n+" · "+exTxt(A.devs[n]),...fit(A.devs[n])}));
     return `<div><button class="rowbtn" data-h="${h(()=>setState({rptOpen:open?null:al}))}" title="${esc(raws.map(([k,c])=>k+" ("+c+")").join("\n")+"\n"+exTxt(A.all))}" style="grid-template-columns:${cols};gap:10px;padding:10px 18px;border-bottom:0;border-top:1px solid #F1F4F7;min-height:48px;background:${open?"#F7F9FB":"transparent"}">
@@ -1002,11 +1028,13 @@ function reportHtml(){
       ${open?`<div style="animation:slideIn .2s var(--ease);background:#FBFCFD">${devs.map(d=>`<div title="${esc(d.title)}" style="display:grid;grid-template-columns:${cols};gap:10px;align-items:center;padding:7px 18px;border-top:1px solid #F1F4F7;font-size:12.5px"><span style="padding-left:17px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(d.name)}</span>${cell(d,true)}</div>`).join("")}</div>`:""}</div>`;}).join("");
   const tot=names.reduce((a,al)=>{const Sx=byAlias[al].all;a.n+=Sx.n;a.s+=Sx.pts.length;a.e+=Sx.err;a.m+=Sx.errMin;return a;},{n:0,s:0,e:0,m:0});
   const spans=S.segGroup([{k:7,label:"최근 7일"},{k:21,label:"최근 21일"},{k:0,label:"전체 "+D.days.length+"일"}],span,k=>setState({rptSpan:k}));
-  return `<div class="bar-h"><h1>리포트</h1><span style="font-size:12.5px;color:#5A6673">TB500 · Kendall 표기명 Job ${names.length}개 · 이름순</span><div class="spacer"></div>${segHtml(spans)}</div>
-    <section class="cards sm" style="margin-bottom:16px">${[{k:"Job",v:names.length+"개",s:"표기명이 있는 것만"},{k:"표본 배치",v:tot.s+"개",s:"배치 "+tot.n+"개 중 (Error·중단·5장 미만 제외)"},{k:"Error",v:tot.e+"건",s:"Lot 단위"},{k:"Error 대기",v:hm(tot.m),s:"Error 구간 + 그 뒤 공백"}].map(s=>`<div><p class="k">${s.k}</p><p class="v num">${esc(s.v)}</p><p class="s">${esc(s.s)}</p></div>`).join("")}</section>
-    <div class="panel"><div class="thead" style="grid-template-columns:${cols};gap:10px;align-items:end"><span>Job</span><span style="text-align:right" title="표본 / 전체 배치">배치</span><span style="text-align:right" title="회귀 절편 ± 표준오차">준비</span><span style="text-align:right" title="회귀 기울기 ± 표준오차">장당</span><span style="text-align:right" title="준비 + 장당 × 최빈 장수">환산</span><span style="text-align:right">Error</span><span style="text-align:right">Error 대기</span><span style="text-align:right">평균 fault</span></div>
+  const pct=lotAll?Math.round(lotIn/lotAll*100):0;
+  return `<div class="bar-h"><h1>TB500 · Kendall</h1><span style="font-size:12.5px;color:#5A6673">표기명 Job ${names.length}개 · 이름순</span><div class="spacer"></div>${segHtml(spans)}</div>
+    <p style="margin:-6px 0 14px;font-size:12.5px;color:#5A6673;word-break:keep-all">이 탭은 TB500 · Kendall 을 위한 것입니다 — 표기명 ${Object.keys(JOB_ALIAS).length}개 Job 만 봅니다(이 기간 Lot ${lotAll}개 중 ${lotIn}개, ${pct}%). 나머지 Job 은 가동률·Error 탭에 있습니다.</p>
+    <section class="cards sm" style="margin-bottom:16px">${[{k:"Job",v:names.length+"개",s:"표기명이 있는 것만"},{k:"표본 배치",v:tot.s+"개",s:"배치 "+tot.n+"개 중 (Error·5장 미만 제외)"},{k:"Error",v:tot.e+"건",s:"Lot 단위"},{k:"Error 대기",v:hm(tot.m),s:"Error 구간 + 그 뒤 공백"}].map(s=>`<div><p class="k">${s.k}</p><p class="v num">${esc(s.v)}</p><p class="s">${esc(s.s)}</p></div>`).join("")}</section>
+    <div class="panel" style="overflow-x:auto"><div style="min-width:980px"><div class="thead" style="grid-template-columns:${cols};gap:10px;align-items:end"><span>Job</span><span style="text-align:right" title="표본 / 전체 배치">배치</span><span style="text-align:right" title="회귀 절편 ± 표준오차">준비</span><span style="text-align:right" title="회귀 기울기 ± 표준오차">장당</span><span style="text-align:right" title="준비 + 장당 × 최빈 장수">환산</span><span style="text-align:right">Error</span><span style="text-align:right">Error 대기</span><span style="text-align:right" title="Report 표 Faults 의 장당 평균 — 값이 있는 행만">평균 fault</span></div>
       ${rowsH||`<p class="empty">표기명이 있는 Job 의 기록이 없습니다.</p>`}
-      <p style="margin:0;padding:11px 18px;background:#FBFCFD;font-size:12px;color:#5A6673;border-top:1px solid #EDF1F5">배치시간 = 준비 + 장당 × 장수 로 1차 회귀 — 절편이 준비, 기울기가 장당, ± 는 회귀 표준오차. 환산은 최빈 장수 기준. 표본 5개 미만이면 내지 않음. 배치시간은 Report 의 배치 시작~종료. 평균 fault 는 수집 예정(faults 열 재수집 후).</p></div>`;
+      <p style="margin:0;padding:11px 18px;background:#FBFCFD;font-size:12px;color:#5A6673;border-top:1px solid #EDF1F5">배치시간 = 준비 + 장당 × 장수 로 1차 회귀 — 절편이 준비, 기울기가 장당, ± 는 회귀 표준오차. 환산은 최빈 장수 기준. 표본 5개 미만이면 내지 않음. 배치시간은 Report 의 배치 시작~종료. 평균 fault 는 Report 표 Faults 가 있는 행만(옛 캐시 행은 다시 읽어야 채워짐).</p></div></div>`;
 }
 
 /* ---------- boot ---------- */

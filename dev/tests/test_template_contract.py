@@ -92,7 +92,7 @@ def test_screen_terms_are_the_design_terms_and_old_ones_are_gone():
 
 
 def test_four_tabs_and_the_three_popups():
-    for frag in ('["home","가동률"],["errors","Error"],["trend","추이"],["report","리포트"]',
+    for frag in ('["home","가동률"],["errors","Error"],["trend","추이"],["report","TB500 · Kendall"]',   # D59: 리포트 → TB500 · Kendall
                  "function homeHtml(", "function errorsHtml(", "function trendHtml(", "function reportHtml(",
                  "function typePopupHtml(", "function devPopupHtml(", "function errPopupHtml("):
         assert frag in HTML, frag
@@ -103,6 +103,20 @@ def test_report_tab_follows_d49():
     body = HTML[HTML.index("function reportHtml("):HTML.index("/* ---------- boot")]
     assert "const MIN_N=5;" in body and "L[12]-L[11]" in body          # 표본 5개 미만 제외 · 배치 시작~종료
     assert len(re.findall(r'^\s*"[^"]+":"[^"]+"(?:,|\};)$', HTML[HTML.index("const JOB_ALIAS={"):HTML.index("const PROPS=")], re.M)) == 21
+
+
+def test_p4_screen_items_are_present():
+    """개선 계획 P4(9/20): D59 탭 이름·안내, D06 기록 없음 분리, D16 선택 키에 Report, D15 옛 추정 코드 제거, D05 접근성, D10 표 가로 스크롤, D14 설정 덮어쓰기, D08 평균 fault."""
+    assert "<h1>TB500 · Kendall</h1>" in HTML and "개 Job 만 봅니다" in HTML                    # D59
+    assert "noRec(t){return S.util(t)===null;}" in HTML and "기록 없음 ${q.no}대" in HTML       # D06·D57
+    assert 'const lotKey=L=>L[0]+"|"+L[1]+"|"+L[2]+"|"+(L[11]||0)+"|"+(L[8]||0);' in HTML      # D16
+    for gone in ("isEst(", "estBar(", "showRepeat", "mEst", "ABORT.test("):                     # D15·D08
+        assert gone not in HTML, gone
+    assert HTML.count('aria-labelledby="dlg-') == 3 and "function trapTab(e)" in HTML and ".inert=" in HTML   # D05
+    assert 'class="panel" style="overflow-x:auto"' in HTML                                     # D10
+    assert "function applySettings(m)" in HTML and "dashboard_settings" in HTML                 # D14
+    assert "faults" in HTML and "평균 fault" in HTML and "수집 예정" not in HTML                 # D08
+    assert "열람 시각 기준" not in HTML                                                          # D11: 열람 시계는 어디에도 없다
 
 
 def test_error_popup_shows_the_text_of_each_type_not_the_lot_representative():
@@ -151,7 +165,7 @@ def test_no_period_over_period_comparison_anywhere():
 def test_today_basis_wording_is_last_record_not_now():
     for bad in ("현재까지", "00:00 ~ 현재"):
         assert bad not in HTML, bad
-    assert "마지막 기록" in HTML and "수집 기준" in HTML and "열람 시각 기준(비고정)" in HTML
+    assert "마지막 기록" in HTML and "수집 기준" in HTML and "수집 시각 정보 없음" in HTML   # D11: 수집 시각이 없으면 24시간 분모, 열람 시계는 쓰지 않는다
 
 
 def test_no_stale_update_base_constant():
