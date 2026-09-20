@@ -1,21 +1,39 @@
-"""결과 HTML(template.html) 계약 — 자바스크립트를 실행하지 않고 문자열로만 검사한다(실행 검사는 test_dashboard_js.py).
+"""결과 HTML(template.html) 의 **제품 제약** — 자바스크립트를 실행하지 않고 글자로만 보는 것은 여기까지다(S05, 9/20).
 
-이 파일 한 장은 사용자가 **더블클릭해서 여는 화면**이다. 그래서
-- 데이터는 `__DATA__` 자리에 박혀 들어가고,
-- 바깥으로 나가는 요청(폰트·스크립트·fetch)이 한 건도 없어야 하며,
-- 브라우저가 NAS 를 직접 읽는 경로(폴더 API)는 없어야 한다(수집은 Python 수집기만 한다).
-D47·D48(9/20) 로 화면은 재설계 구조(가동률 · Error · 추이 · 리포트 + 팝업, 라이트 단일)다.
+이 파일 한 장은 사용자가 **더블클릭해서 여는 화면**이다. 글자 검사로 지키는 것은 다음뿐이다:
+- 데이터는 `__DATA__` 자리 하나에 박힌다 · 바깥으로 나가는 요청(폰트·스크립트·fetch)이 한 건도 없다 · 브라우저가 NAS 를 읽는 경로가 없다
+- 라이트 단일 테마 · 화면 용어(Scan · Rescan · Test · Error · 에러 후 대기 · 대기)와 금지 용어·금지 기능(옛 추정 코드 · 전 기간 대비 · 열람 시계 · 옛 상수)
+- 분류 정규식이 파이썬·디자인 스크립트와 글자까지 같다(D43) · 모델 구간에 열람 시계(`Date.now`/`new Date`)가 없다(D40)
+- 팝업 셋에 접근 가능한 이름이 있다(D05) · 새 탭으로 여는 링크는 `noopener`
+
+**동작**은 글자가 아니라 실행으로 본다 — 예전에 여기 있던 JS 원문 일치 검사와 그 의도를 이어받은 테스트:
+
+| 없앤 글자 검사(옛 이름) | 의도 | 지금 그 의도를 보는 테스트 |
+|---|---|---|
+| `test_entry_points_the_app_and_user_need` (`function loadDemo(` 등 8개 이름) | 로더·모델·저장·Report 열기 진입점이 있다 | `test_dashboard_js.py` 하네스가 `unfold`·`buildModel` 을 실제로 부른다 · `::test_report_url_…` · `::test_home_…collect_chips…` · `test_dashboard_browser.py::test_home_rows_follow_device_order_and_save_copy_refolds…`(사본 저장 내려받기) |
+| `test_model_has_a_product_profile_and_a_legacy_profile…` (`const RULES={…}` 원문 · 함수 조각 8개 · `MODEL_VERSION=3`) | 기본 프로필은 product 이고 네 스위치가 켜져 있다, legacy 는 디자인 스크립트와 같다 | `test_dashboard_js.py::test_default_profile_is_product_with_the_four_rules_on_and_constants_match` · `::test_legacy_profile_equals_the_design_script_on_the_30_day_sample`(slow) · D40 은 이 파일 `test_no_view_clock_in_the_model_section` |
+| `test_four_tabs_and_the_three_popups` (nav 배열 원문 · 함수 이름 7개) | 4탭 · 3팝업이 열린다 | `test_dashboard_js.py::test_header_has_four_tabs_and_each_popup_renders_an_accessible_dialog` · `test_dashboard_browser.py::test_error_popup_type_popup_trend_and_report_tab` |
+| `test_report_tab_follows_d49` (`const MIN_N=5;` · `L[12]-L[11]` · JOB_ALIAS 줄 수) | 표본 5개 미만은 회귀를 내지 않고 Error 배치는 제외, 표기명 21개 | `test_dashboard_js.py::test_report_tab_regresses_only_with_five_or_more_clean_batches_and_lists_exclusions` · `::test_default_profile_…constants_match`(JOB_ALIAS 21개 = 디자인 `job_alias.js`) |
+| `test_p4_screen_items_are_present` (D59 h1 · `noRec(t){…}` · `lotKey` 원문 · D14 `applySettings` · D08 · D05 `.inert=`) | 기록 없음 분리 · Lot 선택 키에 Report · 설정 덮어쓰기 · 접근성 | `test_dashboard_js.py::test_home_…no_record_count` · `::test_lot_key_separates_two_reports…` · `::test_dashboard_settings_override_the_attention_thresholds` · `test_dashboard_browser.py::test_device_popup_focus_inert_tab_trap_and_escape_return` · 금지 식별자는 이 파일 `test_removed_features_stay_removed` |
+| `test_error_popup_shows_the_text_of_each_type…` (`causeText(…)` 호출 원문) | 한 Lot 에 유형이 둘이면 줄마다 그 유형의 원문 | `test_dashboard_js.py::test_error_popup_shows_each_types_own_phrase_when_one_lot_has_two_types` |
+| `test_home_cards_sort_with_cmp_dev_not_alphabetically` (`sorted.sort((a,b)=>cmpDev(…))`) | 홈 목록은 AOI-1…25 뒤에 4F(사전순 아님) | `test_dashboard_js.py::test_home_…` (AOI-2 → AOI-10 → 4F) · `test_dashboard_browser.py::test_home_rows_follow_device_order…` |
+| `test_report_opens_only_through_a_file_url_built_from_meta` (`devPath(r.device)` · `file:///` · `encodeURIComponent`) | Report 경로는 meta.devices[].note + report_dir + report 로만, 드라이브·UNC | `test_dashboard_js.py::test_report_url_is_built_only_from_meta_for_drive_and_unc_paths`; `noopener` 는 이 파일 `test_links_to_new_tabs_have_no_opener` |
+| `test_scope_notice_and_collect_status_are_rendered_from_meta` (`devStatus[d.name]=` 등) | 수집 범위 · 수집 안 함 · 수집 실패 · 일부 누락 칩 | `test_dashboard_js.py::test_home_…collect_chips…` · `::test_foot_shows_scope_and_out_of_scope_devices_from_meta` |
+| `test_embedded_string_pool_is_unfolded_on_load_and_refolded_on_save` (로더·`saveHtml` 원문) | 풀 번호 범위 밖·열 중복은 예외, 사본은 같은 열·풀 구조 | `test_dashboard_js.py::test_unfold_rejects_out_of_range_pool_index_and_duplicate_columns` · `test_dashboard_browser.py::…save_copy_refolds_the_same_columns` |
+| `test_light_only_theme_but_qt_tokens_stay` 의 토큰 색 정규식 | 수집 창이 읽는 `:root` 토큰 두 블록 | `test_theme.py`(theme.py 가 실제로 파싱) |
 """
 from __future__ import annotations
 
 import re
 from pathlib import Path
 
+import template_facts
 from aoi_capacity.utils import paths
 
 HTML = paths.template_path().read_text(encoding="utf-8")
 ROOT = Path(__file__).resolve().parents[2]
 DESIGN = ROOT / "docs" / "design" / "dashboard-redesign"
+MODEL_START, SCREEN_START = "/* ---------- ③ 모델", "/* ---------- ④ 화면"
 
 
 def test_data_placeholder_present_once():
@@ -35,52 +53,29 @@ def test_browser_never_reads_the_nas_itself():
         assert bad not in HTML, bad
 
 
-def test_no_pyqt_gui_mode_left():
-    for bad in ('data-gui', 'Q.get("gui")', "btnRunTop"):
-        assert bad not in HTML, bad
-
-
-def test_entry_points_the_app_and_user_need():
-    for fn in ("function loadDemo(", "function buildModel(", "function cmpDev(", "function saveHtml(",
-               "function reportUrl(", "function openReport(", "function collectChip(", "function unfold("):
-        assert fn in HTML, fn
-
-
-def test_light_only_theme_but_qt_tokens_stay():
-    """D48-⑥ 라이트 단일. 다만 수집 창(ui/theme.py)이 읽는 `:root{}`(dark) 와 `:root[data-theme="light"]{}` 토큰 블록은 남는다."""
+def test_light_only_theme():
+    """D48-⑥ 라이트 단일. 수집 창이 읽는 `:root` 토큰 블록의 값은 test_theme.py 가 실제로 파싱해서 본다."""
     assert '<html lang="ko" data-theme="light">' in HTML
-    assert re.search(r":root\{[^}]*--accent:#4A9EE8", HTML) and re.search(r':root\[data-theme="light"\]\{[^}]*--accent:#2E6BA8', HTML)
     assert "setTheme(" not in HTML and "prefers-color-scheme: dark" not in HTML
 
 
-def _js_rules(text, name):
-    body = text[text.index(f"const {name}="):]
-    body = body[:body.index("];") + 1]
-    return re.findall(r'\["([A-Z_]+)",/(.*?)/i\]', body)
-
-
 def test_status_classification_matches_the_python_side_and_the_design_script():
-    """★ 같은 Report 를 파이썬·브라우저·디자인 스크립트가 다르게 읽으면 안 된다 — 정규식 문자열과 순서가 글자까지 같다(D43)."""
+    """★ 같은 Report 를 파이썬·브라우저·디자인 스크립트가 다르게 읽으면 안 된다 — 정규식 문자열과 순서가 글자까지 같다(D43).
+    문구별 분류 결과가 같은지는 test_status_mapping.py 가 213문구로 실행해 본다."""
     from aoi_capacity import collect
 
-    assert _js_rules(HTML, "CAUSE_RULES") == [(c, p) for c, p in collect._CAUSE_RULES]
-    assert _js_rules(HTML, "OUTCOME_RULES") == [(c, p) for c, p in collect._OUTCOME_RULES]
+    assert template_facts.rules("CAUSE_RULES", HTML) == [(c, p) for c, p in collect._CAUSE_RULES]
+    assert template_facts.rules("OUTCOME_RULES", HTML) == [(c, p) for c, p in collect._OUTCOME_RULES]
     design = (DESIGN / "scripts" / "make_aoi_data.js").read_text(encoding="utf-8")
-    assert _js_rules(design, "CR") == [(c, p) for c, p in collect._CAUSE_RULES]
-    assert "const causeOf=t=>{const x=String(t||\"\").trim();for(const[c,rx]of CAUSE_RULES)if(rx.test(x))return c;return null;};" in HTML
+    assert template_facts.rules("CR", design) == [(c, p) for c, p in collect._CAUSE_RULES]
 
 
-def test_model_has_a_product_profile_and_a_legacy_profile_equal_to_the_design_script():
-    """D47·D56: 제품 프로필(buildModelV3)이 기본이고, legacy 프로필은 make_aoi_data.js 이식 그대로(디자인 동일성 가드 전용)."""
-    assert 'const RULES={profile:"product",waitToObsEnd:true,denomToday:true,abortIsError:true,estimateFromBatch:true};' in HTML
-    assert 'return rules.profile==="legacy"?buildModelLegacy(rowsIn,metaIn,rules):buildModelV3(rowsIn,metaIn,rules);' in HTML
-    body = HTML[HTML.index("const MON="):HTML.index("/* ---------- ④ 화면")]
-    for frag in ("function lotName(rep,fb,tableFirst)", "function jobKey(s)", "const JM={\"RKENDALLPI4DG\":\"RKENDALLA0PI4\"};",
-                 "function buildModelV3(", "function buildModelLegacy(", "function dayStats(list,ds)", "if(gap>240)gap=240;",
-                 "const RT=new Set(['RE','RESCAN','REWORK','SRD','R']);", "const K_NONE=0,K_ERR=1,K_SCAN=2,K_RESCAN=3,K_TEST=4,K_WAIT=5;"):
-        assert frag in body, frag
-    assert "Date.now()" not in body and "new Date()" not in body          # D40: 집계에 열람 시계 없음
-    assert "generated_iso" in body and "MODEL_VERSION=3" in HTML
+def test_no_view_clock_in_the_model_section():
+    """D40: 집계는 수집 시각(meta.generated_iso)만 본다 — 모델 구간에 열람 시계가 없다. 값이 맞는지는 test_dashboard_js 의 D57 테스트."""
+    body = template_facts.section(HTML, MODEL_START, SCREEN_START)
+    assert "Date.now()" not in body and "new Date()" not in body
+    assert "generated_iso" in body
+    assert isinstance(template_facts.model_version(HTML), int)
 
 
 def test_screen_terms_are_the_design_terms_and_old_ones_are_gone():
@@ -91,70 +86,12 @@ def test_screen_terms_are_the_design_terms_and_old_ones_are_gone():
         assert gone not in HTML, gone
 
 
-def test_four_tabs_and_the_three_popups():
-    for frag in ('["home","가동률"],["errors","Error"],["trend","추이"],["report","TB500 · Kendall"]',   # D59: 리포트 → TB500 · Kendall
-                 "function homeHtml(", "function errorsHtml(", "function trendHtml(", "function reportHtml(",
-                 "function typePopupHtml(", "function devPopupHtml(", "function errPopupHtml("):
-        assert frag in HTML, frag
-    assert HTML.count('role="dialog"') == 3
-
-
-def test_report_tab_follows_d49():
-    body = HTML[HTML.index("function reportHtml("):HTML.index("/* ---------- boot")]
-    assert "const MIN_N=5;" in body and "L[12]-L[11]" in body          # 표본 5개 미만 제외 · 배치 시작~종료
-    assert len(re.findall(r'^\s*"[^"]+":"[^"]+"(?:,|\};)$', HTML[HTML.index("const JOB_ALIAS={"):HTML.index("const PROPS=")], re.M)) == 21
-
-
-def test_p4_screen_items_are_present():
-    """개선 계획 P4(9/20): D59 탭 이름·안내, D06 기록 없음 분리, D16 선택 키에 Report, D15 옛 추정 코드 제거, D05 접근성, D10 표 가로 스크롤, D14 설정 덮어쓰기, D08 평균 fault."""
-    assert "<h1>TB500 · Kendall</h1>" in HTML and "개 Job 만 봅니다" in HTML                    # D59
-    assert "noRec(t){return S.util(t)===null;}" in HTML and "기록 없음 ${q.no}대" in HTML       # D06·D57
-    assert 'const lotKey=L=>L[0]+"|"+L[1]+"|"+L[2]+"|"+(L[11]||0)+"|"+(L[8]||0);' in HTML      # D16
-    for gone in ("isEst(", "estBar(", "showRepeat", "mEst", "ABORT.test("):                     # D15·D08
+def test_removed_features_stay_removed():
+    """옛 장비-일 추정(D15) · PyQt GUI 모드 · 옛 업데이트 상수 · '수집 예정' 자리표시(D08) · 열람 시각 문구(D11)는 돌아오지 않는다."""
+    for gone in ("isEst(", "estBar(", "showRepeat", "mEst", "ABORT.test(",
+                 "data-gui", 'Q.get("gui")', "btnRunTop", "UPDATE_BASE=",
+                 "수집 예정", "열람 시각 기준", "현재까지", "00:00 ~ 현재"):
         assert gone not in HTML, gone
-    assert HTML.count('aria-labelledby="dlg-') == 3 and "function trapTab(e)" in HTML and ".inert=" in HTML   # D05
-    assert 'class="panel" style="overflow-x:auto"' in HTML                                     # D10
-    assert "function applySettings(m)" in HTML and "dashboard_settings" in HTML                 # D14
-    assert "faults" in HTML and "평균 fault" in HTML and "수집 예정" not in HTML                 # D08
-    assert "열람 시각 기준" not in HTML                                                          # D11: 열람 시계는 어디에도 없다
-
-
-def test_error_popup_shows_the_text_of_each_type_not_the_lot_representative():
-    """같은 Lot 에 유형이 둘이면(30일치 175 Lot) 줄마다 그 유형의 원문 — 모델의 `st` 는 Lot 당 하나라 화면이 로드한 행에서 유형별로 찾는다."""
-    assert "function causeText(dev,rep,c)" in HTML
-    assert 'status:causeText(eDev,P.rep[L[8]]||"",c)||(L[10]>=0?P.st[L[10]]:"(원문 없음)")' in HTML
-
-
-def test_home_cards_sort_with_cmp_dev_not_alphabetically():
-    assert "localeCompare" not in HTML
-    assert "sorted.sort((a,b)=>cmpDev(a.n,b.n))" in HTML
-
-
-def test_report_opens_only_through_a_file_url_built_from_meta():
-    body = HTML[HTML.index("function reportUrl("):HTML.index("function openReport(")]
-    assert "devPath(r.device)" in body and 'file:///' in body and "encodeURIComponent" in body
-    assert 'data-h="${h(()=>openReport({device:mDev,report:rep}))}"' in HTML          # 장비 팝업의 Report 줄
-    assert "a.target=\"_blank\";a.rel=\"noopener\"" in HTML
-
-
-def test_scope_notice_and_collect_status_are_rendered_from_meta():
-    assert "meta.scope" in HTML and "수집 범위" in HTML and "수집 안 함" in HTML
-    assert 'if(d.status)devStatus[d.name]=' in HTML
-    assert 'status==="unreachable"' in HTML and "수집 실패" in HTML
-    assert 'status==="partial"' in HTML and "일부 누락" in HTML
-    assert ".st.warn{" in HTML
-
-
-def test_embedded_string_pool_is_unfolded_on_load_and_refolded_on_save():
-    from aoi_capacity import collect
-
-    assert "const P=emb.pool||null,F=new Set(emb.pooled||[]);" in HTML
-    assert "if(P&&F.has(c)){const v=P[a[i]];if(v===undefined)throw" in HTML          # D09: 풀 번호 범위 밖은 빈 문자열로 숨기지 않는다
-    assert set(collect.POOLED_COLS) < set(collect.OUT_COLS)
-    body = HTML[HTML.index("function saveHtml("):HTML.index("/* ── 렌더 ── */")]
-    assert '"device","lot","wafer_id"' not in body          # 열을 손으로 고르지 않는다
-    assert "embCols" in body and "embPooled" in body and "pooled,pool,rows" in body
-    assert "embCols=emb.cols.slice()" in HTML
 
 
 def test_no_period_over_period_comparison_anywhere():
@@ -163,21 +100,30 @@ def test_no_period_over_period_comparison_anywhere():
 
 
 def test_today_basis_wording_is_last_record_not_now():
-    for bad in ("현재까지", "00:00 ~ 현재"):
-        assert bad not in HTML, bad
-    assert "마지막 기록" in HTML and "수집 기준" in HTML and "수집 시각 정보 없음" in HTML   # D11: 수집 시각이 없으면 24시간 분모, 열람 시계는 쓰지 않는다
+    assert "마지막 기록" in HTML and "수집 기준" in HTML and "수집 시각 정보 없음" in HTML   # D11: 수집 시각이 없으면 24시간 분모
 
 
-def test_no_stale_update_base_constant():
-    assert "UPDATE_BASE=" not in HTML
+def test_the_three_dialogs_have_accessible_names():
+    """D05: 팝업은 role=dialog · aria-modal · 제목 id(aria-labelledby) 를 갖는다. 포커스가 실제로 그리 가는지는 browser 테스트."""
+    assert HTML.count('role="dialog"') == 3
+    assert HTML.count('aria-modal="true"') == 3
+    assert sorted(re.findall(r'aria-labelledby="(dlg-[a-z]+-title)"', HTML)) == ["dlg-dev-title", "dlg-err-title", "dlg-type-title"]
+    for t in ("dlg-dev-title", "dlg-err-title", "dlg-type-title"):
+        assert f'id="{t}"' in HTML, t
+
+
+def test_links_to_new_tabs_have_no_opener():
+    """Report 는 사람이 연 그 탭이 연다 — 새 탭에 이 화면의 opener 를 주지 않는다."""
+    n = HTML.count('target="_blank"') + HTML.count('a.target="_blank"')
+    assert n >= 1 and n == HTML.count('rel="noopener"') + HTML.count('a.rel="noopener"')
 
 
 def test_readme_and_settings_help_follow_the_confirmed_rules():
     from aoi_capacity.i18n import ko
 
     readme = ROOT.joinpath("README.md").read_text(encoding="utf-8")
-    for bad in ("이전 기간 비교", "현재 시각까지"):
+    for bad in ("이전 기간 비교", "현재 시각까지", "통째로 건너뜁니다", "50% 미만이면"):
         assert bad not in readme, bad
-        assert bad not in ko.SET_UTIL_DEFINITION, bad
+        assert bad not in ko.SET_UTIL_DEFINITION and bad not in ko.DEV_PAGE_HELP, bad
     assert "Rescan" in ko.SET_UTIL_DEFINITION and "마지막 기록" in ko.SET_UTIL_DEFINITION
-    assert "리포트" in readme and "Rescan" in readme
+    assert "TB500 · Kendall" in readme and "Rescan" in readme and "not slow" in readme

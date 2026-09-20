@@ -153,8 +153,8 @@ main{max-width:1420px;margin:0 auto;padding:22px 24px 90px}
    AOI 가동 현황 — 수집기가 만든 정적 HTML 한 장. 바깥으로 요청을 한 건도 보내지 않는다.
    ① 로더: `#embedded` JSON(collect._embed_rows — cols/pooled/pool/rows/meta)을 열 이름으로 편다.
    ② 분류 규칙: collect._CAUSE_RULES / _OUTCOME_RULES 와 정규식 글자까지 같다(가드 test_template_contract).
-   ③ 모델 buildModel(): 디자인 세션의 make_aoi_data.js [원본] 을 그대로 옮겼다(docs/design/dashboard-redesign/scripts/).
-      D48 에서 제품 규칙을 유지하기로 한 두 곳(RULES)만 다르다 — 둘 다 끄면 그 스크립트와 같은 출력이 나온다(가드 test_dashboard_js).
+   ③ 모델 buildModel(): 프로필이 둘이다(RULES.profile). product(기본, buildModelV3 — D56~D58·D63·D64·D04·D09)가 제품 규칙이고,
+      legacy(buildModelLegacy)는 디자인 세션의 make_aoi_data.js [원본] 이식이라 네 스위치를 끄면 그 스크립트와 같은 출력이 나온다(가드 test_dashboard_js).
    ④ 화면: 가동률 · Error · 추이 · 리포트 + 장비/Error/유형·Job 팝업 (docs/design/dashboard-redesign/app/AOI-Dashboard.dc.html 의 로직).
    ============================================================================ */
 const MODEL_VERSION=3;

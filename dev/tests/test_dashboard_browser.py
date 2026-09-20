@@ -2,7 +2,8 @@
 
 문자열 검사(`test_template_contract.py`)와 Node 하네스(`test_dashboard_js.py`)는 화면이 **그려지는지**를 보지 못한다.
 여기서는 작은 fixture 행을 template 에 박아 파일로 열고(바깥 요청 0건 — file:// 만), 실제로 눌러 본다:
-가동률 → 장비 팝업(포커스 · inert · Tab 트랩 · ESC 복귀, D05) → Error 보기 → 유형 팝업 → 추이 → TB500 · Kendall(D59).
+가동률(장비 순서) → 장비 팝업(포커스 · inert · Tab 트랩 · ESC 복귀, D05) → Error 보기 → 유형 팝업 → 추이 → TB500 · Kendall(D59) → 사본 저장(내려받은 파일의 열·풀 구조).
+데이터는 수집기의 `collect._embed_rows` 로 접어 넣는다 — 제품이 만드는 HTML 과 같은 계약이다.
 콘솔 오류·페이지 오류가 하나라도 있으면 실패.
 
 마커 `browser` — CI 의 browser 잡이 `-m browser` 로 따로 돈다. Playwright(파이썬 패키지)나 Chromium 이 없으면 skip.
@@ -14,9 +15,13 @@ from __future__ import annotations
 import glob
 import json
 import os
+import re
 from pathlib import Path
 
 import pytest
+
+import sample_rows
+from aoi_capacity import collect
 
 pytestmark = pytest.mark.browser
 
@@ -56,19 +61,26 @@ def _fixture_rows():
         rows.append(_row("AOI-2", f"T{i}", f"07:{i*10:02d}", f"07:{i*10+8:02d}", lot="TEST-LOT"))
     for i in range(3):
         rows.append(_row("AOI-2", f"S{i}", f"12:{i*10:02d}", f"12:{i*10+9:02d}", lot="LOT-E"))
+    # AOI-10: 홈 목록이 번호순(AOI-2 뒤)인지 보기 위한 한 Lot — 사전순이면 AOI-1 다음에 온다
+    for i in range(2):
+        rows.append(_row("AOI-10", f"K{i}", f"09:{i*10:02d}", f"09:{i*10+8:02d}", lot="LOT-K"))
     return rows
 
 
 def _meta():
     return {"generated": f"{DAY} 13:00", "generated_iso": f"{DAY}T13:00:00", "mode": "auto",
-            "scope": {"restricted": True, "devices": ["AOI-1", "AOI-2", "AOI-3"]},
-            "devices": [{"name": d, "note": f"X:\\{d}", "report_dir": "Report", "status": "ok"} for d in ("AOI-1", "AOI-2", "AOI-3")]}
+            "scope": {"restricted": True, "devices": ["AOI-1", "AOI-2", "AOI-3", "AOI-10"]},
+            "devices": [{"name": d, "note": f"X:\\{d}", "report_dir": "Report", "status": "ok"} for d in ("AOI-1", "AOI-2", "AOI-3", "AOI-10")]}
+
+
+def _embedded() -> dict:
+    emb = collect._embed_rows(_fixture_rows())          # 제품과 같은 접기(24열 · 문자열 풀)
+    emb["meta"] = _meta()
+    return emb
 
 
 def _build_html(tmp_path: Path) -> Path:
-    rows = _fixture_rows()
-    cols = list(rows[0].keys())
-    emb = {"cols": cols, "pooled": [], "pool": None, "rows": [[r[c] for c in cols] for r in rows], "meta": _meta()}
+    emb = _embedded()
     tpl = TEMPLATE.read_text(encoding="utf-8")
     assert "__DATA__" in tpl
     out = tmp_path / "AOI_capacity.html"
@@ -164,7 +176,7 @@ def test_error_popup_type_popup_trend_and_report_tab(page):
     assert "ALIGN_ERROR" in pg.locator('.dlg[data-dlg="type"] h2').inner_text()
     pg.keyboard.press("Escape")
     pg.wait_for_selector('.dlg[data-dlg="type"]', state="detached")
-    pg.locator("button.rowbtn").filter(has_text="AOI-1").first.click()              # 장비별 → Error 상세 팝업
+    pg.locator("button.rowbtn").filter(has_text=re.compile(r"AOI-1(?!\d)")).first.click()   # 장비별 → Error 상세 팝업(AOI-10 이 아니라)
     pg.wait_for_selector('.dlg[data-dlg="err"]')
     err = pg.locator('.dlg[data-dlg="err"]').inner_text()
     assert "Error 대기" in err and "ALIGN_ERROR" in err and "Alignment Error." in err
@@ -186,3 +198,22 @@ def test_narrow_viewport_has_no_horizontal_page_scroll(page):
     pg.locator('button[data-fk="nav:report"]').click()
     assert pg.evaluate("document.documentElement.scrollWidth") <= 390
     assert errors == []
+
+
+def test_home_rows_follow_device_order_and_save_copy_refolds_the_same_columns(page, tmp_path):
+    """홈 목록은 devices.sort_key 순(AOI-1 · AOI-2 · AOI-3 · AOI-10 — 사전순이면 AOI-10 이 AOI-2 앞), '사본 저장' 이 내려준 HTML 은
+    수집기가 준 열·풀 구조 그대로이고 펼치면 같은 행이다(saveHtml, D16 이전부터의 계약)."""
+    pg, errors, requests = page
+    order = pg.evaluate("[...document.querySelectorAll('main button.rowbtn[data-fk^=\"dev:\"]')].map(b => b.dataset.fk)")
+    assert order == ["dev:AOI-1", "dev:AOI-2", "dev:AOI-3", "dev:AOI-10"]   # 번호순 — 사전순이면 AOI-10 이 AOI-2 앞에 온다
+    with pg.expect_download() as dl:
+        pg.get_by_role("button", name="사본 저장").click()
+    saved = Path(dl.value.path()).read_text(encoding="utf-8")
+    emb0 = _embedded()
+    emb1 = sample_rows.embedded(saved)
+    assert emb1["cols"] == emb0["cols"] and set(emb1["pooled"]) == set(emb0["pooled"])
+    rows0, _ = sample_rows.unfold(emb0)
+    rows1, meta1 = sample_rows.unfold(emb1)
+    assert rows1 == rows0
+    assert meta1["mode"] == "saved" and meta1.get("saved_iso") and meta1["generated_iso"] == emb0["meta"]["generated_iso"]
+    assert "__DATA__" not in saved and requests == [] and errors == []
