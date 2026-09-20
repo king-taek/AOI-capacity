@@ -102,10 +102,14 @@ DEV_OK, DEV_NO_DATA, DEV_PARTIAL, DEV_UNREACHABLE = "ok", "no_data", "partial", 
 #: `slots`(D38) — kind="slot" 합성 행의 영향 Slot 수(서로 다른 LoadPort/Slot 조합). 다른 행은 빈 값.
 #: `faults` · `scanned_dice` · `yield`(ROW_SCHEMA_VERSION 5) — Report 표의 Faults · Scanned Dice · Yield 원문 그대로(`100%` 포함). 리포트 화면의 평균 fault 근거.
 #: 캐시에 든 옛 행에는 이 세 열이 없다(빈 값으로 나간다) — 채우려면 `--full` 재수집(Report 를 다시 읽어야 한다).
-ROW_SCHEMA_VERSION = 5
+#: `issue_codes`(ROW_SCHEMA_VERSION 6, C12) — `data_issue` 의 구조화 표현: `CODE` 또는 `CODE=인자,인자` 를 세미콜론으로 이은 목록(`ISSUE_*`).
+#: 새 행은 캐시에 **코드만** 남기고(`data_issue` 는 빈 값), 사람 문장은 출력 때(`collect()` 의 끝 `render_issue_rows`) ko.py 에서 만든다 —
+#: 문구를 바꿔도 NAS 재수집이 필요 없다. 옛 캐시 행은 `data_issue` 원문 그대로 두고 손실 파싱하지 않는다(옛·새 행이 섞여도 된다).
+ROW_SCHEMA_VERSION = 6
 OUT_COLS = ["device", "kind", "job", "setup", "lot", "wafer_id", "status", "norm_status", "cause", "outcome", "scan_type", "recipe",
             "faults", "scanned_dice", "yield",
-            "wafer_start_time", "wafer_end_time", "batch_start", "batch_end", "report", "ini_match", "time_basis", "slots", "data_issue"]
+            "wafer_start_time", "wafer_end_time", "batch_start", "batch_end", "report", "ini_match", "time_basis", "slots", "data_issue",
+            "issue_codes"]
 QUALITY_COLS = ("faults", "scanned_dice", "yield")
 #: 합성 행의 종류 — "batch"(통째로 실패한 시도, D06) · "slot"(일부 성공한 배치의 자리표시 행 Error, Report 당 1건, D38)
 SYNTHETIC_KINDS = ("batch", "slot")
@@ -120,6 +124,93 @@ DT_FORMATS = ["%d-%b-%y %I:%M:%S %p", "%m/%d/%Y %I:%M:%S %p", "%m/%d/%Y %H:%M:%S
 CLOCK_SKEW_SEC = 60
 #: INI 시각이 그 Report 의 Batch 구간에서 이만큼 벗어나면 "다른 시도의 INI" 로 본다(시계 오차 여유).
 BATCH_WINDOW_MARGIN_SEC = 600
+
+# ── data_issue 의 구조화 코드(C12) ─────────────────────────────────────────────────────────
+#: 코드는 안정된 식별자다 — 바꾸면 옛 캐시의 코드를 못 읽는다. 문장은 `i18n/ko.py` 의 `ISSUE_TEXTS[코드]`(위치 인자 {0},{1}).
+ISSUE_NO_WAFER_ID_ROW = "NO_WAFER_ID_ROW"                 # LoadPort/Slot 자리표시 행 — INI 경로 없음
+ISSUE_JOB_UNKNOWN = "JOB_UNKNOWN"                         # Job 을 몰라 INI 경로를 만들지 않음
+ISSUE_MOVED_ONLY = "MOVED_ONLY"                           # Wafer 폴더에 MoveResultFlag 만 있음
+ISSUE_INI_NOT_FOUND = "INI_NOT_FOUND"                     # 예상 경로에 없음(백업 없음)
+ISSUE_INI_NOT_FOUND_BACKUPS = "INI_NOT_FOUND_BACKUPS"     # {0}=백업 폴더 수 — 어디에도 없음
+ISSUE_INI_READ_ERROR = "INI_READ_ERROR"                   # {0}=예외 문자열
+ISSUE_TIME_MISSING_OR_REVERSED = "TIME_MISSING_OR_REVERSED"
+ISSUE_INI_STALE = "INI_STALE"                             # 배치 시각 밖의 INI(덮어써짐) — 시간 미사용
+ISSUE_LOT_MISMATCH = "LOT_MISMATCH"
+ISSUE_WAFER_ID_MISMATCH = "WAFER_ID_MISMATCH"
+ISSUE_FOUND_IN_BACKUP = "FOUND_IN_BACKUP"                 # {0}=백업 폴더 이름
+ISSUE_JOB_FOLDER_DIFFERS = "JOB_FOLDER_DIFFERS"           # {0}=실제 Job 폴더 이름
+ISSUE_BATCH_NO_WAFER = "BATCH_NO_WAFER"                   # {0}=행 수, {1}=오류 행 수 (kind=batch)
+ISSUE_SLOT_ERROR = "SLOT_ERROR"                           # {0}=영향 Slot 수 (kind=slot)
+ISSUE_MULTI_LOT = "MULTI_LOT"                             # {0}=Lot 수
+ISSUE_MULTI_JOB = "MULTI_JOB"                             # {0}=Job 수
+ISSUE_CODES = (ISSUE_NO_WAFER_ID_ROW, ISSUE_JOB_UNKNOWN, ISSUE_MOVED_ONLY, ISSUE_INI_NOT_FOUND, ISSUE_INI_NOT_FOUND_BACKUPS,
+               ISSUE_INI_READ_ERROR, ISSUE_TIME_MISSING_OR_REVERSED, ISSUE_INI_STALE, ISSUE_LOT_MISMATCH, ISSUE_WAFER_ID_MISMATCH,
+               ISSUE_FOUND_IN_BACKUP, ISSUE_JOB_FOLDER_DIFFERS, ISSUE_BATCH_NO_WAFER, ISSUE_SLOT_ERROR, ISSUE_MULTI_LOT, ISSUE_MULTI_JOB)
+_ISSUE_ESC = (("%", "%25"), (";", "%3B"), ("=", "%3D"), (",", "%2C"))
+
+
+def _issue_enc(v) -> str:
+    """인자 안의 구분 문자만 이스케이프한다(경로·한글은 그대로 읽히게) — 되돌리기는 `_issue_dec`."""
+    out = str(v)
+    for ch, rep in _ISSUE_ESC:
+        out = out.replace(ch, rep)
+    return out
+
+
+def _issue_dec(v: str) -> str:
+    out = str(v)
+    for ch, rep in reversed(_ISSUE_ESC):
+        out = out.replace(rep, ch)
+    return out
+
+
+def issue_field(items) -> str:
+    """[(코드, *인자)] → `issue_codes` 열 값. 예: `INI_NOT_FOUND_BACKUPS=2;FOUND_IN_BACKUP=Scanresult_Back up_260918`."""
+    parts = []
+    for it in items:
+        code, *params = (it,) if isinstance(it, str) else tuple(it)
+        parts.append(str(code) + ("=" + ",".join(_issue_enc(x) for x in params) if params else ""))
+    return ";".join(parts)
+
+
+def parse_issue_codes(field) -> List[Tuple[str, List[str]]]:
+    """`issue_codes` 열 값 → [(코드, [인자…])]. 빈 값이면 []. 모르는 코드도 그대로 돌려준다(버리지 않는다)."""
+    out: List[Tuple[str, List[str]]] = []
+    for part in str(field or "").split(";"):
+        if not part.strip():
+            continue
+        code, _, raw = part.partition("=")
+        out.append((code.strip(), [_issue_dec(x) for x in raw.split(",")] if _ else []))
+    return out
+
+
+def issue_text(field) -> str:
+    """코드 목록 → 사람이 읽는 문장(ko.py). 아는 코드만 문장으로, 모르는 코드는 원문 항목 그대로."""
+    texts = i18n.KO.ISSUE_TEXTS
+    out = []
+    for code, params in parse_issue_codes(field):
+        fmt = texts.get(code)
+        if fmt is None:
+            out.append(code + ("=" + ",".join(params) if params else ""))
+            continue
+        try:
+            out.append(fmt.format(*params))
+        except (IndexError, KeyError):
+            out.append(fmt.replace("{0}", "?").replace("{1}", "?"))
+    return i18n.KO.ISSUE_JOIN.join(out)
+
+
+def render_issue_rows(rows: List[dict]) -> List[dict]:
+    """출력 직전: `issue_codes` 가 있고 `data_issue` 가 빈 행만 문장을 채운 **사본**으로 바꾼다(캐시 행은 건드리지 않는다).
+    옛 행(`data_issue` 원문만 있음)과 새 행(코드만 있음)이 섞여 있어도 각자 그대로다."""
+    out = []
+    for r in rows:
+        codes = r.get("issue_codes") or ""
+        if codes and not r.get("data_issue"):
+            out.append({**r, "data_issue": issue_text(codes)})
+        else:
+            out.append(r)
+    return out
 
 ProgressFn = Callable[[int, int, str], None]
 LogFn = Callable[[str], None]
@@ -582,12 +673,13 @@ def rows_for_report(dev_name: str, rep: dict, scan_root: str, memo: Optional[_In
              "recipe": w["recipe"] or s.get("Recipe", ""),
              "faults": w.get("faults", ""), "scanned_dice": w.get("scanned_dice", ""), "yield": w.get("yield", ""),
              "wafer_start_time": "", "wafer_end_time": "", "batch_start": s.get("Batch Start", ""),
-             "batch_end": s.get("Batch End", ""), "ini_match": "", "time_basis": "MISSING", "slots": "", "data_issue": ""}
+             "batch_end": s.get("Batch End", ""), "ini_match": "", "time_basis": "MISSING", "slots": "", "data_issue": "",
+             "issue_codes": ""}
         if _is_placeholder(w):
-            r["ini_match"], r["data_issue"] = "NO_WAFER_ID", "LoadPort/Slot 행이라 INI 경로를 만들 수 없음"
+            r["ini_match"], r["issue_codes"] = "NO_WAFER_ID", issue_field([ISSUE_NO_WAFER_ID_ROW])
         elif not job_folder_variants(rep["equipment"]):
             # Job 을 끝내 못 읽은 옛 형식 — 빈 칸은 경로에서 사라져 남의 INI 를 가리키므로 경로를 만들지 않는다(규칙 4). 행은 남긴다.
-            r["ini_match"], r["data_issue"] = "NOT_FOUND", "Job 을 알 수 없어 INI 경로를 만들지 않음"
+            r["ini_match"], r["issue_codes"] = "NOT_FOUND", issue_field([ISSUE_JOB_UNKNOWN])
         else:
             jobs_try = job_folder_variants(rep["equipment"])
             rels = [os.path.join(j, rep["process_code"], w["lot"], w["wafer_id"]) for j in jobs_try]
@@ -605,37 +697,37 @@ def rows_for_report(dev_name: str, rep: dict, scan_root: str, memo: Optional[_In
                     break
             if kind == "missing":
                 if any(memo.exists(os.path.join(roots[0], rel, "MoveResultFlag")) for rel in rels):
-                    r["ini_match"], r["data_issue"] = "MOVED_ONLY", "Wafer 폴더에 MoveResultFlag 만 있고 WaferInfo.ini 없음 — 이동만 되고 스캔 안 함"
+                    r["ini_match"], r["issue_codes"] = "MOVED_ONLY", issue_field([ISSUE_MOVED_ONLY])
                 else:
-                    r["ini_match"], r["data_issue"] = "NOT_FOUND", ("예상 경로에 WaferInfo.ini 없음" if len(roots) == 1
-                                                                  else f"예상 경로와 백업 폴더 {len(roots) - 1}개 어디에도 WaferInfo.ini 없음")
+                    r["ini_match"], r["issue_codes"] = "NOT_FOUND", issue_field([ISSUE_INI_NOT_FOUND] if len(roots) == 1
+                                                                                else [(ISSUE_INI_NOT_FOUND_BACKUPS, len(roots) - 1)])
             elif kind == "error":
-                r["ini_match"], r["data_issue"] = "READ_ERROR", f"{type(got).__name__}: {got}"
+                r["ini_match"], r["issue_codes"] = "READ_ERROR", issue_field([(ISSUE_INI_READ_ERROR, f"{type(got).__name__}: {got}")])
             else:
                 try:
                     a = got.get("AutoCycleInfo", {})
                     r["ini_match"] = "EXACT"
                     r["wafer_start_time"], r["wafer_end_time"] = a.get("WaferStartTime", ""), a.get("WaferEndTime", "")
-                    iss = []
+                    iss: list = []
                     st, en = parse_dt(r["wafer_start_time"]), parse_dt(r["wafer_end_time"])
                     r["time_basis"] = time_basis(st, en, b_start, b_end)
                     if not (st and en and en >= st):
-                        iss.append("Wafer 시작/종료 시각 누락 또는 역전")
+                        iss.append(ISSUE_TIME_MISSING_OR_REVERSED)
                     elif r["time_basis"] == "OUTSIDE_BATCH":
                         r["ini_match"] = "STALE"       # 덮어써진 INI — 이 시도가 아니라 다른 시도의 시각
                         r["wafer_start_time"] = r["wafer_end_time"] = ""
-                        iss.append("이 배치 시각 밖의 INI(다시 검사하며 덮어써짐) — 시간 미사용")
+                        iss.append(ISSUE_INI_STALE)
                     if a.get("UseLot") and a["UseLot"] != w["lot"]:
-                        iss.append("Lot 불일치")
+                        iss.append(ISSUE_LOT_MISMATCH)
                     if a.get("UseWaferID") and a["UseWaferID"] != w["wafer_id"]:
-                        iss.append("Wafer ID 불일치")
+                        iss.append(ISSUE_WAFER_ID_MISMATCH)
                     if found_in != scan_root:
-                        iss.append(f"백업 폴더에서 찾음: {os.path.basename(found_in.rstrip(chr(92) + '/'))}")
+                        iss.append((ISSUE_FOUND_IN_BACKUP, os.path.basename(found_in.rstrip(chr(92) + '/'))))
                     if found_job != rep["equipment"]:
-                        iss.append(f"Job 폴더 이름이 Report 와 다름: {found_job}")
-                    r["data_issue"] = "; ".join(iss)
+                        iss.append((ISSUE_JOB_FOLDER_DIFFERS, found_job))
+                    r["issue_codes"] = issue_field(iss)
                 except Exception as e:  # noqa: BLE001
-                    r["ini_match"], r["data_issue"] = "READ_ERROR", f"{type(e).__name__}: {e}"
+                    r["ini_match"], r["issue_codes"] = "READ_ERROR", issue_field([(ISSUE_INI_READ_ERROR, f"{type(e).__name__}: {e}")])
         rows.append(r)
     return synthesize_rows(rows)
 
@@ -737,7 +829,7 @@ def _batch_from_rows(rows: List[dict]) -> Optional[dict]:
             "recipe": lead.get("recipe", ""), "faults": "", "scanned_dice": "", "yield": "", "wafer_start_time": b_start,
             "wafer_end_time": b_end, "batch_start": b_start,
             "batch_end": b_end, "ini_match": "BATCH", "time_basis": "BATCH_ONLY", "slots": "",
-            "data_issue": f"검사된 Wafer 없음 — 배치 시각으로만 표시 (행 {len(rows)}개 중 오류 {len(errs)}개)"}
+            "data_issue": "", "issue_codes": issue_field([(ISSUE_BATCH_NO_WAFER, len(rows), len(errs))])}
 
 
 def slot_error_row(rows: List[dict]) -> Optional[dict]:
@@ -758,9 +850,11 @@ def slot_error_row(rows: List[dict]) -> Optional[dict]:
     lots = {str(r.get("lot") or "") for r in src if r.get("ini_match") != "NO_WAFER_ID" and r.get("lot") and not _is_placeholder(r)}
     jobs = {str(r.get("job") or "") for r in src}
     lot = next(iter(lots)) if len(lots) == 1 else ""
-    note = [] if len(lots) <= 1 else [f"Lot 여러 개({len(lots)})"]
+    codes: list = [(ISSUE_SLOT_ERROR, len(slots))]
+    if len(lots) > 1:
+        codes.append((ISSUE_MULTI_LOT, len(lots)))
     if len(jobs) > 1:
-        note.append(f"Job 여러 개({len(jobs)})")
+        codes.append((ISSUE_MULTI_JOB, len(jobs)))
     b_start, b_end = _first(src, "batch_start"), _first(src, "batch_end")
     return {"device": _first(src, "device"), "kind": "slot", "job": _first(src, "job") if len(jobs) == 1 else "", "setup": _first(src, "setup"),
             "report": _first(src, "report"), "lot": lot, "wafer_id": "",
@@ -769,7 +863,7 @@ def slot_error_row(rows: List[dict]) -> Optional[dict]:
             "faults": "", "scanned_dice": "", "yield": "",
             "wafer_start_time": "", "wafer_end_time": "", "batch_start": b_start, "batch_end": b_end,
             "ini_match": "BATCH_SLOT", "time_basis": "MISSING", "slots": str(len(slots)),
-            "data_issue": f"자리표시 행 Error — Report 당 1건 · 영향 Slot {len(slots)}개 · 시간 미확인(Batch 범위 추정)" + (" · " + " · ".join(note) if note else "")}
+            "data_issue": "", "issue_codes": issue_field(codes)}
 
 
 def synthesize_rows(rows: List[dict]) -> List[dict]:
@@ -1391,7 +1485,7 @@ def collect(cfg: dict, full: bool = False, backfill: bool = False, *, recover: b
               " · 동시 {read_workers}개".format(**stats))
     if hidden:
         _say(log, f"수집 범위({scope.describe(cfg)}) 밖 장비의 캐시 {hidden}행은 화면에서 제외했습니다(캐시는 그대로 둡니다)")
-    return rows, dev_meta, errors
+    return render_issue_rows(rows), dev_meta, errors     # 출력용 행 — issue_codes 의 사람 문장은 여기서(캐시에는 코드만, C12)
 
 
 def _carry_over(old: dict, cand: dict, devs: List[dict], plan, cutoff: dt.datetime) -> Dict[str, int]:

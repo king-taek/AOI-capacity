@@ -175,6 +175,57 @@ SET_UTIL_DEFINITION = ("가동률 = (Scan + Rescan 시간) ÷ 24시간. 수집�
                        "한 장비의 1분은 한 번만 셉니다 — INI 로 확실한 구간을 먼저 놓고, 배치 시작~종료의 남은 빈 시간을 INI 가 없는 Wafer 들이 나눠 갖습니다(팝업에 '배치 시각으로 추정' 표). "
                        "Error 는 Lot 단위로 세고, Error 를 담은 배치가 끝난 뒤 다음 기록까지의 공백을 '에러 후 대기' 로 봅니다.")
 
+# ── 행 비고(data_issue) — 캐시의 `issue_codes` 를 출력 때 문장으로(C12 · collect.issue_text). 위치 인자 {0},{1} ──────────
+ISSUE_JOIN = "; "
+ISSUE_TEXTS = {
+    "NO_WAFER_ID_ROW": "LoadPort/Slot 행이라 INI 경로를 만들 수 없음",
+    "JOB_UNKNOWN": "Job 을 알 수 없어 INI 경로를 만들지 않음",
+    "MOVED_ONLY": "Wafer 폴더에 MoveResultFlag 만 있고 WaferInfo.ini 없음 — 이동만 되고 스캔 안 함",
+    "INI_NOT_FOUND": "예상 경로에 WaferInfo.ini 없음",
+    "INI_NOT_FOUND_BACKUPS": "예상 경로와 백업 폴더 {0}개 어디에도 WaferInfo.ini 없음",
+    "INI_READ_ERROR": "{0}",
+    "TIME_MISSING_OR_REVERSED": "Wafer 시작/종료 시각 누락 또는 역전",
+    "INI_STALE": "이 배치 시각 밖의 INI(다시 검사하며 덮어써짐) — 시간 미사용",
+    "LOT_MISMATCH": "Lot 불일치",
+    "WAFER_ID_MISMATCH": "Wafer ID 불일치",
+    "FOUND_IN_BACKUP": "백업 폴더에서 찾음: {0}",
+    "JOB_FOLDER_DIFFERS": "Job 폴더 이름이 Report 와 다름: {0}",
+    "BATCH_NO_WAFER": "검사된 Wafer 없음 — 배치 시각으로만 표시 (행 {0}개 중 오류 {1}개)",
+    "SLOT_ERROR": "자리표시 행 Error — Report 당 1건 · 영향 Slot {0}개 · 시간 미확인(Batch 범위 추정)",
+    "MULTI_LOT": "Lot 여러 개({0})",
+    "MULTI_JOB": "Job 여러 개({0})",
+}
+
+# ── 헤드리스 CLI(aoi_capacity/cli.py) 출력 문구 ──────────────────────────────────────────
+CLI_DESC = "AOI Capacity 수집기(헤드리스)"
+CLI_HELP_REFRESH_WINDOW = ("최근 N일 안의 Report 는 캐시에 있어도(수정시각이 같아도) 다시 읽음. 창 밖 이력은 그대로 두고, "
+                           "다시 읽다 실패한 Report 는 이전 행을 유지한 채 다음에 재시도")
+CLI_HELP_REBUILD_ALL = ("보관 기간(retention_days) 전부를 새 후보 캐시에 모아 검증을 통과할 때만 기존 캐시와 바꿈. "
+                        "실패하면 기존 캐시를 그대로 둠(이력 삭제 없음)")
+CLI_HELP_FULL = "--rebuild-all 의 옛 별칭(같은 동작)"
+CLI_HELP_BACKFILL = ("검색 창을 최근 backfill_days 로 넓힘. 이미 캐시된 Report(수정시각 같음)는 건너뜀 — "
+                     "다시 읽으려면 --refresh-window")
+CLI_HELP_RECOVER = "INI 를 못 찾았던 Report 만 다시 읽음(누락 복구)"
+CLI_HELP_UPDATE = "시작 전에 GitHub 최신 커밋으로 자기 갱신(선택). 갱신되면 같은 인자(--update 제외)로 수집을 한 번 다시 실행하고 그 종료 코드를 돌려줌"
+CLI_UPDATE_GIT_SKIP = "git 작업 폴더 — 자동 업데이트 생략(git pull 사용)"
+CLI_UPDATE_DOWNLOADING_FMT = "새 버전 {sha} 다운로드"
+CLI_UPDATE_DONE_RERUN = "갱신 완료 — 새 코드로 수집을 다시 실행합니다(끝날 때까지 기다립니다)"
+CLI_UPDATE_RERUN_DONE_FMT = "다시 실행 종료 코드 {code}"
+CLI_UPDATE_LATEST = "최신 버전입니다"
+CLI_UPDATE_HELD_FMT = "업데이트 보류({sha}): {reason}"
+CLI_UPDATE_CHECK_FAILED_FMT = "업데이트 확인 실패: {error}"
+CLI_UPDATE_STEP_ERROR_FMT = "업데이트 단계 오류(무시): {error}"
+CLI_PLAN_FMT = ("모드 {mode} · 캐시 Report {total}개(다시 읽기 {reread} · 그대로 {keep} · 누락 복구 {recover})"
+                " · 새 Report 는 NAS 를 본 뒤 셈")
+CLI_REBUILD_REJECTED_FMT = "전체 재구축 거부 — 기존 캐시·HTML 은 그대로입니다: {error}"
+CLI_CACHE_CORRUPT_FMT = "캐시 파일이 손상되어 처음부터 다시 수집했습니다. 손상 원본 보존: {path}"
+CLI_UNREACHABLE_FMT = "접근 실패 장비: {items}"
+CLI_UNREACHABLE_ITEM_FMT = "{name} ({error})"
+CLI_PARTIAL_FMT = "일부 Report 를 읽지 못한 장비: {items}"
+CLI_PARTIAL_ITEM_FMT = "{name} ({n}개)"
+CLI_WARNING_FMT = "경고({kind}): {path} — {error}"
+CLI_DONE_FMT = "완료 · {sec:.1f}초 · 종료 코드 {code}"
+
 # ── 설정 값 검사(C13 · utils/config.py) — 성능·기간 값은 경고 + 고침, 범위·경로 값은 실행 차단 ────────────
 CFG_TRUE = "켬"
 CFG_FALSE = "끔"
