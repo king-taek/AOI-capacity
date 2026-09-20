@@ -70,15 +70,17 @@ def test_status_classification_matches_the_python_side_and_the_design_script():
     assert "const causeOf=t=>{const x=String(t||\"\").trim();for(const[c,rx]of CAUSE_RULES)if(rx.test(x))return c;return null;};" in HTML
 
 
-def test_model_is_the_design_script_with_two_product_switches():
-    """D47: 모델은 make_aoi_data.js 를 옮긴 것. D48 제품 유지 2 + D52(중단) + D54(행 단위 추정) 네 항목만 RULES 로 다르다."""
-    assert "const RULES={waitToObsEnd:true,denomToday:true,abortIsError:true,estimateFromBatch:true};" in HTML
-    body = HTML[HTML.index("function buildModel("):HTML.index("/* ---------- ④ 화면")]
-    for frag in ("function lotName(rep,fb)", "function jobKey(s)", "const JM={\"RKENDALLPI4DG\":\"RKENDALLA0PI4\"};",
-                 "function dayStats(list,ds)", "g.a-L.b<=3", "if(gap>240)gap=240;", "const RT=new Set(['RE','RESCAN','REWORK','SRD','R']);"):
+def test_model_has_a_product_profile_and_a_legacy_profile_equal_to_the_design_script():
+    """D47·D56: 제품 프로필(buildModelV3)이 기본이고, legacy 프로필은 make_aoi_data.js 이식 그대로(디자인 동일성 가드 전용)."""
+    assert 'const RULES={profile:"product",waitToObsEnd:true,denomToday:true,abortIsError:true,estimateFromBatch:true};' in HTML
+    assert 'return rules.profile==="legacy"?buildModelLegacy(rowsIn,metaIn,rules):buildModelV3(rowsIn,metaIn,rules);' in HTML
+    body = HTML[HTML.index("const MON="):HTML.index("/* ---------- ④ 화면")]
+    for frag in ("function lotName(rep,fb,tableFirst)", "function jobKey(s)", "const JM={\"RKENDALLPI4DG\":\"RKENDALLA0PI4\"};",
+                 "function buildModelV3(", "function buildModelLegacy(", "function dayStats(list,ds)", "if(gap>240)gap=240;",
+                 "const RT=new Set(['RE','RESCAN','REWORK','SRD','R']);", "const K_NONE=0,K_ERR=1,K_SCAN=2,K_RESCAN=3,K_TEST=4,K_WAIT=5;"):
         assert frag in body, frag
     assert "Date.now()" not in body and "new Date()" not in body          # D40: 집계에 열람 시계 없음
-    assert "generated_iso" in body and "t.den=" in body
+    assert "generated_iso" in body and "MODEL_VERSION=3" in HTML
 
 
 def test_screen_terms_are_the_design_terms_and_old_ones_are_gone():
@@ -133,7 +135,7 @@ def test_embedded_string_pool_is_unfolded_on_load_and_refolded_on_save():
     from aoi_capacity import collect
 
     assert "const P=emb.pool||null,F=new Set(emb.pooled||[]);" in HTML
-    assert "P&&F.has(c)?(P[a[i]]??\"\"):a[i]" in HTML
+    assert "if(P&&F.has(c)){const v=P[a[i]];if(v===undefined)throw" in HTML          # D09: 풀 번호 범위 밖은 빈 문자열로 숨기지 않는다
     assert set(collect.POOLED_COLS) < set(collect.OUT_COLS)
     body = HTML[HTML.index("function saveHtml("):HTML.index("/* ── 렌더 ── */")]
     assert '"device","lot","wafer_id"' not in body          # 열을 손으로 고르지 않는다

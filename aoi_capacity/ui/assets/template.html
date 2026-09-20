@@ -157,7 +157,7 @@ main{max-width:1420px;margin:0 auto;padding:22px 24px 90px}
       D48 에서 제품 규칙을 유지하기로 한 두 곳(RULES)만 다르다 — 둘 다 끄면 그 스크립트와 같은 출력이 나온다(가드 test_dashboard_js).
    ④ 화면: 가동률 · Error · 추이 · 리포트 + 장비/Error/유형·Job 팝업 (docs/design/dashboard-redesign/app/AOI-Dashboard.dc.html 의 로직).
    ============================================================================ */
-const MODEL_VERSION=2;
+const MODEL_VERSION=3;
 const $=s=>document.querySelector(s);
 const esc=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const p2=n=>String(n).padStart(2,"0");
@@ -208,36 +208,48 @@ const causeOf=t=>{const x=String(t||"").trim();for(const[c,rx]of CAUSE_RULES)if(
 
 /* ---------- ① 로더 ---------- */
 let rows=[],meta={},embCols=[],embPooled=[],embRowCount=0;
-function unfold(emb){const P=emb.pool||null,F=new Set(emb.pooled||[]);embCols=emb.cols.slice();embPooled=[...F];
-  const out=emb.rows.map(a=>{const o={};emb.cols.forEach((c,i)=>o[c]=P&&F.has(c)?(P[a[i]]??""):a[i]);return o;});embRowCount=out.length;return out;}
+function unfold(emb){
+  if(!emb||!Array.isArray(emb.cols)||!Array.isArray(emb.rows))throw new Error("embedded 데이터 형식이 다릅니다(cols/rows 없음)");
+  if(new Set(emb.cols).size!==emb.cols.length)throw new Error("embedded 열 이름이 중복됩니다");
+  const P=emb.pool||null,F=new Set(emb.pooled||[]);embCols=emb.cols.slice();embPooled=[...F];
+  const out=emb.rows.map((a,ri)=>{if(!Array.isArray(a)||a.length!==emb.cols.length)throw new Error("행 "+ri+" 의 열 수가 다릅니다");
+    const o={};emb.cols.forEach((c,i)=>{if(P&&F.has(c)){const v=P[a[i]];if(v===undefined)throw new Error("행 "+ri+" 열 "+c+" 의 풀 번호가 범위 밖입니다");o[c]=v;}else o[c]=a[i];});return o;});
+  embRowCount=out.length;return out;}
+function errorPanel(msg){const app=$("#app");if(app)app.innerHTML=`<main><div class="panel" style="padding:28px 24px"><h2>결과 파일을 읽지 못했습니다</h2><p class="muted" style="margin-top:6px">${esc(msg)}</p><p class="muted" style="margin-top:6px">수집 프로그램에서 '수집' 을 다시 실행해 파일을 새로 만드세요. 이 파일의 데이터는 바뀌지 않았습니다.</p></div></main>`;}
 function loadDemo(){
-  let emb;try{emb=JSON.parse($("#embedded").textContent);}catch(e){emb={cols:[],pooled:[],pool:[],rows:[],meta:{}};}
-  rows=emb.cols?unfold(emb):(emb.rows||[]);meta=emb.meta||{generated:"",mode:"saved"};
-  init();}
+  let emb;try{emb=JSON.parse($("#embedded").textContent);}catch(e){errorPanel("embedded JSON 을 해석할 수 없습니다: "+(e&&e.message||e));return;}
+  try{rows=emb.cols?unfold(emb):(emb.rows||[]);meta=emb.meta||{generated:"",mode:"saved"};init();}
+  catch(e){log("로더 오류: "+(e&&e.message||e));errorPanel(String(e&&e.message||e));}}
 
-/* ---------- ③ 모델 — make_aoi_data.js [원본] 이식 ----------
-   원본과 다른 곳은 `D48`·`D52`·`D54` 표시 네 군데뿐: (a) Error 후 대기 = 다음 기록까지(cap 없음), 그날 마지막 Error 는 관측 종료·자정 중 이른 것까지(D44)
-   (b) 분모 = 수집한 날(오늘)만 00:00~그날 마지막 기록까지(D17) (c) PASS 도 원인 Error 도 없는 Report 의 중단(Aborted)은 Error(D52)
-   (d) INI 가 없는 Pass 행은 Report 의 배치 시작~종료로 추정(D54 — 장비-일 50% 문턱 대신 행마다). RULES 네 개를 끄면 원본 스크립트와 같은 출력(가드). */
-const RULES={waitToObsEnd:true,denomToday:true,abortIsError:true,estimateFromBatch:true};
-function buildModel(rowsIn,metaIn,rules){
-rules=rules||RULES;
-const val=(r,c)=>r[c];
+/* ---------- ③ 모델 ----------
+   공통 도우미(P · lotName · jobKey · matKey)는 두 프로필이 같이 쓴다.
+   · legacy 프로필 = make_aoi_data.js [원본] 이식(buildModelLegacy) — 디자인 스크립트 동일성 가드 전용(rules.profile==="legacy", 네 스위치 전부 끔).
+   · product 프로필 = buildModelV3 — D56~D58·D63·D64·D04·D09(9/20 개선 계획). 기본값.
+   D09: 날짜는 숫자 범위와 역변환을 검사해 Invalid Date·자동 보정(2월 30일 등)을 막고 null 로 돌려준다. */
 const MON={jan:0,feb:1,mar:2,apr:3,may:4,jun:5,jul:6,aug:7,sep:8,oct:9,nov:10,dec:11};
+function _mkDate(y,mo,d,h,mi,se,ap){
+  if(mo==null||mo<0||mo>11||d<1||d>31||mi>59||se>59)return null;
+  if(ap){if(h<1||h>12)return null;const pm=ap.toUpperCase()==='PM';if(pm&&h<12)h+=12;if(!pm&&h===12)h=0;}else if(h>23)return null;
+  const x=new Date(y,mo,d,h,mi,se);
+  if(isNaN(x.getTime())||x.getFullYear()!==y||x.getMonth()!==mo||x.getDate()!==d)return null;   /* 역변환 검사 — 2월 30일은 null */
+  return x;}
 function P(s){ if(!s) return null; let t=String(s).trim();
   let m=t.match(/^(\d{1,2})-([A-Za-z]{3})-(\d{2})\s+(\d{1,2}):(\d{2}):(\d{2})\s*(AM|PM)?$/i);
-  if(m){let h=+m[4];if(m[7]){const pm=m[7].toUpperCase()==='PM';if(pm&&h<12)h+=12;if(!pm&&h===12)h=0;}return new Date(2000+ +m[3],MON[m[2].toLowerCase()],+m[1],h,+m[5],+m[6]);}
+  if(m) return _mkDate(2000+ +m[3],MON[m[2].toLowerCase()],+m[1],+m[4],+m[5],+m[6],m[7]);
   m=t.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})\s+(\d{1,2}):(\d{2}):(\d{2})\s*(AM|PM)?$/i);
-  if(m){let h=+m[4];if(m[7]){const pm=m[7].toUpperCase()==='PM';if(pm&&h<12)h+=12;if(!pm&&h===12)h=0;}return new Date(+m[3],+m[1]-1,+m[2],h,+m[5],+m[6]);}
+  if(m) return _mkDate(+m[3],+m[1]-1,+m[2],+m[4],+m[5],+m[6],m[7]);
   return null;}
 const R1=/^(.+?)_(\d{4})_(.+)_(\d{1,2}-[A-Za-z]{3}-\d{2})_\((\d{2}\.\d{2}\.\d{2})\)_BatchReport\.html?$/i;
 const R2=/^(.+)_(\d{1,2}-[A-Za-z]{3}-\d{2})_\((\d{2}\.\d{2}\.\d{2})\)_BatchReport\.html?$/i;
 const KEEP=new Set(['DIA','2D','3D','EDGE','CENTER','RE','SRD','RESCAN','PCM','DUMMY','SPT']);
 const DROPW=new Set(['PIDV','WBG','FS','BUMP','TOP','BUMPTOP','STRIP','REWORK','RW','PR','UBM','CUP']);
 const kn=t=>{const u=t.toUpperCase();return KEEP.has(u)||DROPW.has(u)||/^PIDS\d*$/.test(u)||/^RDL\d*$/.test(u)||/^TPDV\d*$/.test(u);};
-function lotName(rep,fb){ if(!rep) return fb||'';
+/* D12(product): Setup 이 4자리가 아닌 옛 파일명(R2)에서 표의 Lot 이 파일명 줄기의 끝과 같으면 표의 Lot 을 그대로 쓴다(밑줄 Lot 이 마지막 조각만 남던 문제). */
+function lotName(rep,fb,tableFirst){ if(!rep) return fb||'';
   let fl=null; const m=rep.match(R1);
-  if(m) fl=m[3]; else { const m2=rep.match(R2); if(m2){const p=m2[1].split('_');fl=p[p.length-1];} }
+  if(m) fl=m[3]; else { const m2=rep.match(R2); if(m2){const stem=m2[1];
+      if(tableFirst&&fb&&stem.length>fb.length&&stem.slice(-fb.length).toLowerCase()===String(fb).toLowerCase()&&/[_\-\s]/.test(stem[stem.length-fb.length-1])) fl=String(fb);
+      else {const p=stem.split('_');fl=p[p.length-1];}} }
   if(!fl) return fb||''; fl=fl.trim();
   let pt=fl.split('_'); while(pt.length>1&&/^(setup\d*|\d{4})$/i.test(pt[0])) pt.shift();
   fl=pt.join('_');
@@ -261,6 +273,160 @@ function jobKey(s){ const tk=String(s||'').toUpperCase().split(/[\s_\-]+/).filte
 const RT=new Set(['RE','RESCAN','REWORK','SRD','R']);
 const matKey=(j,l,w)=>jobKey(j)+'|'+String(l||'').toUpperCase().split(/[-_ #+,'%.~]+/).filter(x=>x&&!RT.has(x)).join('')+'|'+String(w||'').toUpperCase().replace(/[^A-Z0-9]/g,'');
 const dk=x=>`${x.getFullYear()}-${String(x.getMonth()+1).padStart(2,'0')}-${String(x.getDate()).padStart(2,'0')}`;
+const isPass=s=>/^pass$/i.test(String(s||'').trim());
+
+const RULES={profile:"product",waitToObsEnd:true,denomToday:true,abortIsError:true,estimateFromBatch:true};
+function buildModel(rowsIn,metaIn,rules){
+  rules=rules||RULES;
+  return rules.profile==="legacy"?buildModelLegacy(rowsIn,metaIn,rules):buildModelV3(rowsIn,metaIn,rules);
+}
+
+/* ===== product 프로필 (MODEL_VERSION 3) =====
+   한 장비의 1분은 한 번만 센다(D56). 장비마다 분 단위 시간축(로드 첫날 00:00 기준)에
+   ① 측정(INI) 구간을 Error > Scan > Rescan > Test 순으로 칠하고(같은 Report 같은 종류의 3분 이하 틈은 이어 칠함),
+   ② Report 의 배치 창에서 아직 빈 분을 그 Report 의 INI 없는 행(Pass → 이력대로 Scan/Rescan, Error → Error, D58)들이 똑같이 나눠 갖고(D56-②),
+   ③ Error 를 담은 Report 가 끝난 뒤 다음 활동까지(관측 종료·그날 자정 중 이른 것까지, D44)를 '에러 후 대기' 로 칠한다(D56-③).
+   그 다음 날짜 경계로 잘라(D04) 장비-일 값을 만든다. 시각이 여러 날에 걸치면 시간만 나뉘고 건수·Wafer 수는 시작일에 한 번.
+   Rescan = 같은 자재의 앞선 시도가 PASS 였을 때만(D63). Test Lot 의 행은 전부 Test(D64). 수집일 분모 = 모든 장비의 마지막 기록(D57). */
+const K_NONE=0,K_ERR=1,K_SCAN=2,K_RESCAN=3,K_TEST=4,K_WAIT=5;
+const K_PRI={[K_ERR]:0,[K_SCAN]:1,[K_RESCAN]:2,[K_TEST]:3};
+const K_SEG={[K_SCAN]:0,[K_ERR]:1,[K_TEST]:2,[K_WAIT]:3,[K_RESCAN]:4};        /* 화면 seg 번호(0 Scan · 1 Error · 2 Test · 3 대기 · 4 Rescan) */
+function buildModelV3(rowsIn,metaIn,rules){
+const val=(r,c)=>r[c];
+const all=[]; let bad=0;
+for(let i=0;i<rowsIn.length;i++){const r=rowsIn[i];
+  const ws=P(val(r,'wafer_start_time')), we=P(val(r,'wafer_end_time')), bs=P(val(r,'batch_start')), be=P(val(r,'batch_end'));
+  const an=ws||bs; if(!an){bad++;continue;}
+  const st=String(val(r,'status')||'').trim(), rl=String(val(r,'lot')||''), wid=String(val(r,'wafer_id')||''), rp=String(val(r,'report')||'');
+  const job=String(val(r,'job')||''), lot=lotName(rp,rl,true), test=/TEST/i.test(rl);
+  all.push({idx:i,dev:val(r,'device'),t:an.getTime(),s:ws?ws.getTime():null,e:(ws&&we&&we.getTime()>ws.getTime())?we.getTime():null,timed:!!ws,
+    bs:bs?bs.getTime():null, bend:be?be.getTime():(bs?bs.getTime():null),
+    c:test?null:causeOf(st),status:st,report:rp,job,lot,test,key:matKey(job,lot,wid),day:dk(an),pass:isPass(st)});
+}
+/* D52: PASS 도 원인 Error 도 없는 Report 의 중단은 그 Report 의 Error(ABORTED). Test Lot 은 제외(D64). */
+{const rg=new Map();
+  for(const w of all){const k=w.dev+'\u0001'+(w.report||w.job+'\u0001'+w.lot);const g=rg.get(k)||{pass:false,cause:false};if(w.pass)g.pass=true;if(w.c)g.cause=true;rg.set(k,g);}
+  for(const w of all){if(w.c||w.test||!/abort/i.test(w.status))continue;const g=rg.get(w.dev+'\u0001'+(w.report||w.job+'\u0001'+w.lot));if(!g.pass&&!g.cause)w.c='ABORTED';}}
+all.sort((a,b)=>a.t-b.t||a.idx-b.idx);
+/* D63: 앞선 시도의 결과가 PASS 일 때만 Rescan */
+{const seen=new Map(); for(const w of all){const p=seen.get(w.key); w.rel=(p&&p.pass)?1:0; seen.set(w.key,w);}}
+let obsEnd=0; for(const w of all){ obsEnd=Math.max(obsEnd,w.e||w.t,w.bend||0); }
+const genIso=metaIn&&metaIn.generated_iso?String(metaIn.generated_iso):"";
+const today=/^\d{4}-\d{2}-\d{2}/.test(genIso)?genIso.slice(0,10):null;
+const SP={job:[],lot:[],rep:[],st:[]},SM={job:new Map(),lot:new Map(),rep:new Map(),st:new Map()};
+const put=(k,v)=>{v=v||'';const m=SM[k];if(m.has(v))return m.get(v);const i=SP[k].length;SP[k].push(v);m.set(v,i);return i;};
+const devMeta=(metaIn&&metaIn.devices)||[];
+const dev=devMeta.filter(x=>x.scope!=="out").map(x=>x.name).sort(cmpDev);
+const detail={}; const daySet=new Set();
+if(all.length){
+  const day0=all.reduce((m,w)=>w.day<m?w.day:m,all[0].day);
+  const base0=new Date(day0+'T00:00:00').getTime();
+  let lastMs=obsEnd; for(const w of all){const v=Math.max(w.e||0,w.bend||0,w.t);if(v>lastMs)lastMs=v;}
+  const nDays=Math.max(1,Math.ceil((lastMs-base0)/86400000)+1);
+  const N=nDays*1440;
+  const M=ms=>Math.max(0,Math.min(N,Math.round((ms-base0)/60000)));
+  const dayOf=i=>{const d=new Date(base0+Math.floor(i/1440)*86400000);return dk(d);};
+  const obsIdx=M(obsEnd);
+  const byDev={}; for(const w of all)(byDev[w.dev]||(byDev[w.dev]=[])).push(w);
+  for(const dv of Object.keys(byDev)){
+    const ws=byDev[dv];
+    const kind=new Int8Array(N), owner=new Int32Array(N).fill(-1);
+    /* Report 묶음 */
+    const reps=[]; const ri=new Map();
+    for(const w of ws){const rk=w.report||(w.job+'\u0001'+w.lot);let R=ri.get(rk);
+      if(!R){R={i:reps.length,key:rk,rows:[],job:w.job,lot:w.lot,rep:w.report,ws:null,we:null,hasErr:false,causes:new Set()};ri.set(rk,R);reps.push(R);}
+      R.rows.push(w); w.R=R;
+      if(w.bs!=null){const a=M(w.bs),b=M(w.bend||w.bs);R.ws=R.ws==null?a:Math.min(R.ws,a);R.we=R.we==null?b:Math.max(R.we,b);}
+      if(w.c){R.hasErr=true;R.causes.add(w.c);}}
+    const kindOf=w=>w.c?K_ERR:(w.test?K_TEST:(w.rel?K_RESCAN:K_SCAN));
+    const paint=(a,b,k,o)=>{for(let i=a;i<b;i++){const cur=kind[i];if(cur===K_NONE||(cur!==K_WAIT&&K_PRI[k]<K_PRI[cur])){kind[i]=k;owner[i]=o;}}};
+    /* ① 측정 구간 */
+    for(const w of ws){if(!w.timed||w.e==null)continue;w.a=M(w.s);w.b=M(w.e);if(w.b>w.a)paint(w.a,w.b,kindOf(w),w.R.i);}
+    /* 같은 Report 같은 종류의 3분 이하 틈 잇기(빈 분만) */
+    for(const R of reps){const iv=R.rows.filter(w=>w.timed&&w.e!=null&&w.b>w.a).sort((x,y)=>x.a-y.a);
+      for(let j=1;j<iv.length;j++){const p=iv[j-1],q=iv[j];if(kindOf(p)===kindOf(q)&&q.a>p.b&&q.a-p.b<=3){for(let i=p.b;i<q.a;i++)if(kind[i]===K_NONE){kind[i]=kindOf(p);owner[i]=R.i;}}}}
+    /* ② 배치 창 나눠 갖기(D56-② · D58): INI 없는 Pass·Error 행이 창의 빈 분을 똑같이 */
+    for(const R of reps.slice().sort((x,y)=>(x.ws??1e12)-(y.ws??1e12)||x.i-y.i)){
+      if(R.ws==null||R.we==null||R.we<=R.ws)continue;
+      const need=R.rows.filter(w=>!(w.timed&&w.e!=null)&&(w.pass||w.c)).sort((x,y)=>x.idx-y.idx);
+      if(!need.length)continue;
+      const free=[];for(let i=R.ws;i<R.we;i++)if(kind[i]===K_NONE)free.push(i);
+      if(!free.length)continue;
+      const n=need.length;let from=0;
+      need.forEach((w,j)=>{const to=Math.round(free.length*(j+1)/n);const k=kindOf(w);let got=0;
+        for(let q=from;q<to;q++){kind[free[q]]=k;owner[free[q]]=R.i;got++;}
+        w.alloc=got; if(got&&!w.c)R.ne=(R.ne||0)+1; from=to;});
+    }
+    /* ③ Error 를 담은 Report 가 끝난 뒤 다음 활동까지 대기(D56-③ · D44) */
+    const repEnd=new Int32Array(reps.length).fill(-1);
+    for(let i=0;i<N;i++){const o=owner[i];if(o>=0&&kind[i]!==K_WAIT)repEnd[o]=i+1;}
+    for(const R of reps){if(!R.hasErr)continue;
+      let e=repEnd[R.i];if(e<0)e=(R.we!=null?R.we:(R.ws!=null?R.ws:Math.round((R.rows[0].t-base0)/60000)));
+      const dayEndIdx=(Math.floor(Math.max(0,e-1)/1440)+1)*1440;
+      const cap=Math.min(dayEndIdx,obsIdx,N);
+      for(let i=e;i<cap&&kind[i]===K_NONE;i++){kind[i]=K_WAIT;owner[i]=R.i;}}
+    /* Report 별 분 합계(Error·대기) — 유형별 분배와 Lot 표시용 */
+    const rMin=reps.map(()=>({err:0,wait:0,first:-1,last:-1}));
+    for(let i=0;i<N;i++){const o=owner[i];if(o<0)continue;const m=rMin[o];if(m.first<0)m.first=i;m.last=i;if(kind[i]===K_ERR)m.err++;else if(kind[i]===K_WAIT)m.wait++;}
+    /* 날짜별로 자르기(D04) */
+    const rowsByDay={}; for(const w of ws)(rowsByDay[w.day]||(rowsByDay[w.day]=[])).push(w);
+    const touched=new Set(Object.keys(rowsByDay));
+    for(let i=0;i<N;i++)if(kind[i]!==K_NONE){touched.add(dayOf(i));i=(Math.floor(i/1440)+1)*1440-1;}
+    for(const dy of touched){
+      const ds=M(new Date(dy+'T00:00:00').getTime()),de=Math.min(N,ds+1440);
+      if(ds>=N)continue;
+      let r=0,d=0,t=0,x=0,s=0;const seg=[];let cur=-1,ca=0;
+      for(let i=ds;i<=de;i++){const k=i<de?kind[i]:-2;
+        if(k!==cur){if(cur>K_NONE)seg.push([ca-ds,i-ds,K_SEG[cur]]);cur=k;ca=i;}
+        if(i<de){if(k===K_SCAN)r++;else if(k===K_RESCAN)d++;else if(k===K_TEST)t++;else if(k===K_ERR)x++;else if(k===K_WAIT)s++;}}
+      const list=rowsByDay[dy]||[];
+      const ct={}; const lots=[]; let dayE=0,ne=0;
+      /* 이 날에 닿는 Report: 이 날 행이 있거나 이 날에 칠해진 분이 있는 것 */
+      const rset=new Set(list.map(w=>w.R.i)); for(let i=ds;i<de;i++)if(owner[i]>=0)rset.add(owner[i]);
+      for(const idx of rset){const R=reps[idx];const m=rMin[idx];
+        let a=1441,b=0,em=0,wm=0; for(let i=ds;i<de;i++){if(owner[i]!==idx)continue;const rel=i-ds;if(rel<a)a=rel;if(rel+1>b)b=rel+1;if(kind[i]===K_ERR)em++;else if(kind[i]===K_WAIT)wm++;}
+        const rowsHere=R.rows.filter(w=>w.day===dy);
+        const countDay=R.rows.length?R.rows.reduce((m0,w)=>w.day<m0?w.day:m0,R.rows[0].day):dy;   /* 건수는 시작일에 한 번 */
+        const causes=[...R.causes]; const cs={};
+        if(causes.length){const share=(em+wm)/causes.length;
+          for(const c of causes){cs[c]=[countDay===dy?1:0,Math.round(share)];const g=ct[c]||(ct[c]=[0,0]);if(countDay===dy)g[0]++;g[1]+=share;}}
+        const n=countDay===dy?causes.length:0; dayE+=n;
+        const ba=R.ws!=null?Math.max(0,Math.min(1440,R.ws-ds)):0, bb=R.we!=null?Math.max(0,Math.min(1440,R.we-ds)):0;
+        if(!(b>a)&&!n&&!(bb>ba)&&!rowsHere.length)continue;
+        ne+=rowsHere.filter(w=>w.alloc&&!w.c).length;
+        const st=(R.rows.find(w=>w.c)||{}).status||'';
+        lots.push({a:b>a?a:1441,b:b>a?b:0,ba,bb,arr:[put('job',R.job),put('lot',R.lot),b>a?a:1441,b>a?b:0,rowsHere.length,n,rowsHere.filter(w=>w.rel).length,rowsHere.filter(w=>w.test).length,put('rep',R.rep),cs,causes.length?put('st',st):-1,ba,bb>ba?bb:ba]});
+      }
+      lots.sort((p,q)=>(p.a<1441?p.a:p.ba)-(q.a<1441?q.a:q.ba));
+      const rct={};for(const[k,v]of Object.entries(ct))rct[k]=[v[0],Math.round(v[1])];
+      let we=0;for(const g of seg)if(g[2]===3)we=Math.max(we,g[1]);
+      const timedRows=list.filter(w=>w.timed).length;
+      const bsegs=[];for(const idx of rset){const R=reps[idx];if(R.ws==null)continue;const a=Math.max(0,Math.min(1440,R.ws-ds)),b=Math.max(a,Math.min(1440,(R.we??R.ws)-ds));if(b>a)bsegs.push([a,b]);}
+      bsegs.sort((p,q)=>p[0]-q[0]);const mgd=[];for(const g of bsegs){const L=mgd[mgd.length-1];if(L&&g[0]-L[1]<=3)L[1]=Math.max(L[1],g[1]);else mgd.push([g[0],g[1]]);}
+      const T={r,d,t,x,s,w:list.length,e:dayE,we,ne,seg,ct:rct,lots:lots.map(L=>L.arr),
+        cv:list.length?Math.round(timedRows/list.length*100):(seg.length?100:0),bseg:mgd,be:mgd.reduce((q,g)=>q+(g[1]-g[0]),0),
+        den:(today&&dy===today)?Math.max(0,Math.min(1440,obsIdx-ds)):1440};
+      if(!dev.includes(dv))continue;
+      (detail[dy]||(detail[dy]={}))[dv]=T; daySet.add(dy);
+    }
+  }
+}
+const days=[...daySet].sort(); for(const dy of days)if(!detail[dy])detail[dy]={};
+const uj={}; for(const dy of days) for(const dv of dev){const t=(detail[dy]||{})[dv]; if(!t)continue; for(const L of t.lots) uj[L[0]]=(uj[L[0]]||0)+1;}
+const gm={}; SP.job.forEach((n,i)=>{(gm[jobKey(n)]||=[]).push(i);});
+const jobGroups=[]; const jobG=new Array(SP.job.length).fill(0);
+for(const ids of Object.values(gm)){const mem=ids.map(i=>[i,uj[i]||0]).sort((a,b)=>b[1]-a[1]);
+  const gi=jobGroups.length; jobGroups.push({l:mem[0][0],m:mem}); for(const i of ids) jobG[i]=gi;}
+const day=(today&&days.includes(today))?today:(days[days.length-1]||null);
+return {day,today,generated:(metaIn&&metaIn.generated)||"",generated_iso:genIso,devices:dev,days,pool:SP,detail,jobG,jobGroups,
+  scope:devMeta.map(x=>({n:x.name,note:x.note,reports:x.reports,status:x.status||"",readErrors:x.read_errors||0,error:x.error||"",dir:x.report_dir||"Report",out:x.scope==="out"})),
+  obsEnd,rules:{...rules},badRows:bad,modelVersion:MODEL_VERSION};
+}
+
+/* ===== legacy 프로필 — make_aoi_data.js [원본] 이식(디자인 동일성 가드 전용) =====
+   원본과 다른 곳은 `D48`·`D52`·`D54` 표시 네 군데뿐이고 네 스위치를 끄면 원본 스크립트와 같은 출력이다. 제품 화면은 이 프로필을 쓰지 않는다. */
+function buildModelLegacy(rowsIn,metaIn,rules){
+const val=(r,c)=>r[c];
 const all=[];
 for(const r of rowsIn){
   const ws=P(val(r,'wafer_start_time')), we=P(val(r,'wafer_end_time')), bs=P(val(r,'batch_start')), be=P(val(r,'batch_end'));
@@ -365,7 +531,7 @@ return {day,today,generated:(metaIn&&metaIn.generated)||"",generated_iso:genIso,
 
 /* ---------- ④ 화면 ---------- */
 const RUN="#2E6BA8", DUP="#8FB8DE", TEST="#B49BD6", ERR="#C5453C", STOP="#F1D3CE", IDLE="#E9EDF2", FUTURE="#F7F9FB";
-const SEGC={0:RUN,1:ERR,2:TEST,3:ERR,4:DUP};
+const SEGC={0:RUN,1:ERR,2:TEST,3:STOP,4:DUP};
 const HEAT=["#DCE8F4","#B4CDE6","#7FAAD5","#4E86BE","#1F5187"];
 const MONO="Consolas,'Cascadia Mono',ui-monospace,monospace";
 const JOB_ALIAS={
@@ -414,12 +580,8 @@ const S={
   dayStr(){return D.days[state.dayI];},
   at(day,dev){const X=D.detail[day];return (X&&X[dev])||null;},
   segsOf(t){const s=(t.seg||[]).map(x=>({a:x[0],b:x[1],k:x[2]})),j=[];
-    for(const g of s){const L=j[j.length-1];if(L&&L.k===g.k&&g.a-L.b<=8)L.b=Math.max(L.b,g.b);else j.push({...g});}
-    const out=[];
-    for(let i=0;i<j.length;i++){out.push(j[i]);
-      if(j[i].k===1&&j[i+1]){const g=j[i+1].a-j[i].b;if(g>0)out.push({a:j[i].b,b:j[i+1].a,k:3});}   /* D48(a): 화면도 cap 없이 이어 그린다 */
-      else if(j[i].k===1&&(t.we||0)>j[i].b)out.push({a:j[i].b,b:t.we,k:3});}                        /* 그날 마지막 Error 뒤 대기(관측 종료까지) */
-    return out;},
+    for(const g of s){const L=j[j.length-1];if(L&&L.k===g.k&&g.k!==3&&g.a-L.b<=8&&!s.some(o=>o!==g&&o.a>=L.b&&o.b<=g.a&&o.k!==g.k))L.b=Math.max(L.b,g.b);else j.push({...g});}
+    return j;},   /* 모델이 1분 단위로 배타 배정한 seg(0 Scan · 1 Error · 2 Test · 3 대기 · 4 Rescan)를 그대로 — 같은 종류의 8분 이하 틈만 시각적으로 잇는다(수치 불변) */
   den(t){return t&&t.den!=null?t.den:1440;},
   bar(t){if(!t)return"none";if(S.isEst(t))return S.estBar(t);
     let st=[],pos=0;const split=PROPS.showRepeat!==false;
@@ -701,7 +863,7 @@ function devPopupHtml(){
   const selH=sel?(()=>{const a=LA(sel),b=Math.max(LB(sel),a+1);const types=Object.entries(sel[9]).sort((x,y)=>y[1][1]-x[1][1]);const rep=P.rep[sel[8]]||"";
     return `<div class="sel"><div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:10px"><b style="font-size:14.5px">${esc(P.lot[sel[1]]||"(Lot 확인 불가)")}</b>
       ${types.map(([k,v])=>`<span class="pill err mono">${esc(k)} ${hm(v[1])}</span>`).join("")}${types.length?"":`<span class="pill ok">Error 없음</span>`}<div class="spacer"></div><button class="link" style="color:#5A6673;text-decoration:none" data-h="${h(()=>setState({selLot:null}))}">선택 해제</button></div>
-      <div class="kv"><span class="k">시간</span><span class="num">${clock(a)} – ${clock(b)} (${hm(b-a)})</span><span class="k">Wafer</span><span>${sel[4]}장${sel[6]?" · Rescan "+sel[6]+"장":""}${sel[7]?" · Test "+sel[7]+"장":""}</span>
+      <div class="kv"><span class="k">시간</span><span class="num">${clock(a)} – ${clock(b)} (${hm(b-a)})</span><span class="k">Wafer</span><span>${sel[4]?sel[4]+"장":"전날 시작한 배치(장수는 전날에)"}${sel[6]?" · Rescan "+sel[6]+"장":""}${sel[7]?" · Test "+sel[7]+"장":""}</span>
       <span class="k">Job</span><span class="mono" style="word-break:break-all">${esc(P.job[sel[0]]||"(Job 없음)")}</span>${sel[10]>=0?`<span class="k">원문</span><span class="mono" style="color:#4B5866;word-break:break-all">${esc(P.st[sel[10]])}</span>`:""}
       <span class="k">Report</span><span class="mono" style="color:#4B5866;word-break:break-all">${esc(rep||"—")}${rep&&reportUrl({device:mDev,report:rep})?` <button class="link" data-h="${h(()=>openReport({device:mDev,report:rep}))}" title="이 BatchReport 를 새 탭으로 엽니다(NAS 경로)">Report 열기</button>`:""}</span></div></div>`;})():"";
   return `<div class="ov z50"><button class="scrim" data-h="${h(close)}" aria-label="닫기"></button><div class="dlg w1120" role="dialog" aria-modal="true">
@@ -738,11 +900,10 @@ function errPopupHtml(){
   const totN=ct.reduce((a,b)=>a+b[1][0],0),totM=ct.reduce((a,b)=>a+b[1][1],0),cmax=Math.max(1,...ct.map(c=>c[1][1]));
   const segs=(t.seg||[]).map(x=>({a:x[0],b:x[1],k:x[2]})),marks=[];
   const dayEndMin=Math.max(0,...segs.map(g=>g.b));
-  for(let i=0;i<segs.length;i++){const g=segs[i];if(g.k!==1)continue;
-    if(filtered&&!eLots.some(L=>g.b>la(L)&&g.a<lb(L)))continue;
-    marks.push({l:(g.a/14.4).toFixed(2),w:Math.max(0.25,(g.b-g.a)/14.4).toFixed(2),c:ERR,title:clock(g.a)+"–"+clock(g.b)+" Error"});
-    const nx=segs[i+1];const gap=nx?Math.max(0,nx.a-g.b):Math.max(0,(t.we||0)-g.b);
-    if(gap>0)marks.push({l:(g.b/14.4).toFixed(2),w:(gap/14.4).toFixed(2),c:STOP,title:clock(g.b)+"–"+clock(g.b+gap)+" 대기 "+hm(gap)});}
+  for(const g of segs){if(g.k!==1&&g.k!==3)continue;
+    if(filtered&&g.k===1&&!eLots.some(L=>g.b>la(L)&&g.a<lb(L)))continue;
+    if(g.k===1)marks.push({l:(g.a/14.4).toFixed(2),w:Math.max(0.25,(g.b-g.a)/14.4).toFixed(2),c:ERR,title:clock(g.a)+"–"+clock(g.b)+" Error "+hm(g.b-g.a)});
+    else marks.push({l:(g.a/14.4).toFixed(2),w:Math.max(0.25,(g.b-g.a)/14.4).toFixed(2),c:STOP,title:clock(g.a)+"–"+clock(g.b)+" Error 후 대기 "+hm(g.b-g.a)});}
   const untimed=eLots.filter(L=>!(L[3]>L[2])).length;
   const evts=[];
   for(const L of eLots)for(const [c,v] of Object.entries(L[9])){if(ft&&c!==ft)continue;const key=L[0]+"|"+L[1]+"|"+L[2]+"|"+(L[11]||0),a=la(L);
