@@ -297,3 +297,27 @@ def test_report_tab_groups_and_sorts_by_column(page):
     pg.wait_for_selector('.thead button.th[aria-sort="ascending"]')
     assert "오름차순" in pg.inner_text("main")
     assert errors == []
+
+
+def test_motion_hooks_lottie_countup_sweep_and_recede(page):
+    """세 라이브러리의 자리: 브랜드의 Lottie 표식 · 'Error 없음' 의 Lottie 체크 · GSAP 카운트업(끝 값이 정확) · 막대 sweep(끝나면 clip-path 남지 않음) · 팝업 뒤 무대 물러남."""
+    pg, errors, _ = page
+    assert pg.locator('.brand .lt svg').count() == 1                                     # lottie 가 브랜드 표식을 그렸다
+    pg.locator('button[data-fk="day:prev"]').click()                                     # 날짜를 바꾸면 카드 숫자가 이전 값에서 새 값으로
+    pg.wait_for_selector('.daylab:has-text("9월 17일")')
+    pg.wait_for_timeout(900)
+    v = pg.locator('main .cards [data-count]').first
+    assert v.inner_text() == f"{float(v.get_attribute('data-count')):.1f}"              # 카운트업이 끝나면 정확히 새 값
+    assert pg.evaluate("[...document.querySelectorAll('[data-bar]')].every(e => !e.style.clipPath)")   # sweep 뒤 clip-path 정리
+    pg.locator('button[data-fk="day:next"]').click()
+    pg.wait_for_selector('.daylab:has-text("9월 18일")')
+    pg.locator('button.rowbtn[data-fk="dev:AOI-2"]').click()                              # AOI-2 는 Error 가 없다
+    pg.wait_for_selector('.dlg[data-dlg="dev"]')
+    assert pg.evaluate("document.querySelector('#app>.stage').classList.contains('behind')")   # 팝업이 열리면 무대가 물러난다
+    pg.locator('.dlg[data-dlg="dev"] button', has_text="Error 보기").click()
+    pg.wait_for_selector('.dlg[data-dlg="err"] .lt-empty .lt svg')                       # Lottie 체크
+    pg.keyboard.press("Escape")
+    pg.keyboard.press("Escape")
+    pg.wait_for_selector('.dlg[data-dlg="dev"]', state="detached")
+    assert pg.evaluate("!document.querySelector('#app>.stage').classList.contains('behind')")
+    assert errors == []

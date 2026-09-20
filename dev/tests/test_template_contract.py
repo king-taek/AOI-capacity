@@ -41,7 +41,7 @@ def test_data_placeholder_present_once():
 
 
 _VENDOR = re.compile(r'<script id="vendor">.*?</script>', re.S)
-_ALLOWED_VENDOR_URL = re.compile(r"https?://(?:gsap\.com|www\.w3\.org/(?:2000/svg|1999/xhtml|1999/xlink))(?:[/\w.-]*)")
+_ALLOWED_VENDOR_URL = re.compile(r"https?://(?:gsap\.com|github\.com/airbnb/lottie-web|www\.w3\.org/(?:2000/svg|1999/xhtml|1999/xlink|XML/1998/namespace))(?:[/\w.-]*)")
 
 
 def _without_vendor(html: str) -> str:
@@ -64,10 +64,15 @@ def test_vendor_block_makes_no_requests_either():
     m = _VENDOR.search(HTML)
     assert m, "vendor 블록이 없다"
     v = m.group(0)
-    for bad in ("fetch(", "XMLHttpRequest", "navigator.sendBeacon", "new WebSocket", "import(", "<script src=", "document.write("):
+    for bad in ("fetch(", "navigator.sendBeacon", "new WebSocket", "import(", "<script src=", "document.write("):
         assert bad not in v, bad
     urls = re.findall(r"https?://[^\s\"')]+", v)
     assert urls and all(_ALLOWED_VENDOR_URL.fullmatch(u.rstrip(".")) for u in urls), sorted(set(urls))
+    # lottie 는 path 로 파일을 읽는 코드(XMLHttpRequest)를 품고 있다 — 화면은 animationData(인라인 JSON)만 넘긴다
+    app = _VENDOR.sub("", HTML)
+    assert "XMLHttpRequest" not in app
+    calls = re.findall(r"lottie\.loadAnimation\(\{[^}]*\}", app)
+    assert calls and all("animationData:" in c and "path:" not in c for c in calls), calls
 
 
 def test_vendored_libraries_are_inline_with_their_notices():
