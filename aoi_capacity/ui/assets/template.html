@@ -1059,7 +1059,7 @@ function errorsHtml(){
   const nW=MET?"400":"700",nInk=MET?"#5A6673":"#0F151C",mW=MET?"700":"400",mInk=MET?"#0F151C":"#5A6673";
   const bars=spanDays.map((d,i)=>({label:(i%Math.ceil(spanDays.length/11)===0||i===spanDays.length-1)?md(d):"",
     vTxt:(spanDays.length<=22&&dayV(d))?fmtV(dayV(d)):(dayV(d)===maxDay?fmtV(dayV(d)):""),h:(dayV(d)/maxDay*100).toFixed(1),
-    color:pickDay===d?"#8C2A1F":(d===day?ERR:"#E0A9A2"),title:md(d)+" · Error "+(byDay[d]||[0,0])[0]+"건 · 대기 시간 "+hm((byDay[d]||[0,0])[1]),
+    color:pickDay?(pickDay===d?"#8C2A1F":"#E0A9A2"):ERR,   /* 기간 모드는 모두 같은 색(사용자 확정 9/20) — 일자별 모드만 고른 날 진하게·나머지 연하게 */title:md(d)+" · Error "+(byDay[d]||[0,0])[0]+"건 · 대기 시간 "+hm((byDay[d]||[0,0])[1]),
     pick:()=>setState({pickDay:pickDay===d?null:d})}));
   const fjName=FJ!=null?(()=>{const G=D.jobGroups[FJ],raw=P.job[G.l]||"(Job 없음)";return JOB_ALIAS[raw]||raw;})():"";
   const chips=(FT?`<button class="fchip animate__animated animate__fadeInDown" data-h="${h(()=>setState({errFType:null}))}" title="유형 필터 해제"><span class="mono">${esc(FT)}</span><span aria-hidden="true">✕</span></button>`:"")
