@@ -46,9 +46,53 @@ def test_zip_basename_and_should_include():
     assert mrz.zip_basename({"sha": "abcdef0123"}, "20260913") == "AOI_Capacity_20260913_abcdef0.zip"
     assert mrz.zip_basename({}, "20260913") == "AOI_Capacity_20260913.zip"
     assert mrz.should_include(PurePosixPath("app/main.py"))
+    assert mrz.should_include(PurePosixPath("python/python.exe")) and mrz.should_include(PurePosixPath("python/Lib/site.py"))
+    assert mrz.should_include(PurePosixPath("app/aoi_capacity/ui/assets/template.html"))
     assert not mrz.should_include(PurePosixPath("app/__pycache__/x.pyc"))
     assert not mrz.should_include(PurePosixPath("app.new/main.py"))
     assert not mrz.should_include(PurePosixPath("python.tar.gz"))
+    # S17: 낱개 pyc · pytest 캐시 · 로그 · 백업 · 스테이징/옛 폴더 · 제자리 백업도 뺀다
+    assert not mrz.should_include(PurePosixPath("app/aoi_capacity/loose.pyc"))
+    assert not mrz.should_include(PurePosixPath("app/.pytest_cache/v/cache/nodeids"))
+    assert not mrz.should_include(PurePosixPath("app/app.log")) and not mrz.should_include(PurePosixPath("build.log"))
+    assert not mrz.should_include(PurePosixPath("app/main.py.bak"))
+    assert not mrz.should_include(PurePosixPath("app.old/main.py")) and not mrz.should_include(PurePosixPath("app.new.part/x"))
+    assert not mrz.should_include(PurePosixPath("app/.update.part/main.py"))
+    assert not mrz.should_include(PurePosixPath("app/main.py.old-update"))
+    assert not mrz.should_include(PurePosixPath("app/.git/HEAD"))
+
+
+def _polluted(out: Path) -> None:
+    """빌드 PC 잔재: 낱개 pyc · pytest 캐시 · 로그 · 백업 · 옛 폴더 · 제자리 스테이징 — 그리고 지켜야 할 런타임 파일."""
+    for rel in ("app/aoi_capacity/loose.pyc", "app/.pytest_cache/v/cache/nodeids", "app/app.log", "build.log",
+                "app/main.py.bak", "app.old/main.py", "app/main.py.old-update", "app/.update.part/main.py",
+                "python/Lib/site-packages/pkg/__pycache__/m.cpython-311.pyc", "python/pip.log"):
+        p = out / rel
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_text("junk", encoding="utf-8")
+    for rel in ("python/python.exe", "python/Lib/site-packages/pkg/__init__.py", "app/aoi_capacity/__init__.py",
+                "app/aoi_capacity/ui/assets/template.html", "app/aoi_capacity/assets/devices.default.csv", "run_aoi.bat"):
+        p = out / rel
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_text("keep", encoding="utf-8")
+
+
+def test_polluted_dist_ships_no_cache_log_or_backup_but_keeps_runtime(tmp_path):
+    out = _out(tmp_path)
+    _polluted(out)
+    assert mrz.make_zip(tmp_path, log=lambda m: None, today="20260913", lite=True, build_mod=_FakeBuild(True)) == 0
+    names = set(zipfile.ZipFile(out.parent / "AOI_Capacity_20260913_abcdef0.zip").namelist())
+    rel = {n.split("/", 1)[1] for n in names}
+    for gone in ("app/aoi_capacity/loose.pyc", "app/.pytest_cache/v/cache/nodeids", "app/app.log", "build.log",
+                 "app/main.py.bak", "app.old/main.py", "app/main.py.old-update", "app/.update.part/main.py",
+                 "python/Lib/site-packages/pkg/__pycache__/m.cpython-311.pyc", "python/pip.log", "app/__pycache__/m.pyc",
+                 "app.new.part/junk"):
+        assert gone not in rel, gone
+    assert not any(n.endswith((".pyc", ".log", ".bak")) or "__pycache__" in n or ".pytest_cache" in n for n in names)
+    for kept in ("AOI_Capacity.exe", "run_aoi.bat", "app/main.py", "app/VERSION", "python/python.exe",
+                 "python/Lib/site-packages/pkg/__init__.py", "app/aoi_capacity/__init__.py",
+                 "app/aoi_capacity/ui/assets/template.html", "app/aoi_capacity/assets/devices.default.csv", mrz.INSTRUCTIONS_NAME):
+        assert kept in rel, kept
 
 
 def test_no_zip_when_verification_fails(tmp_path):
