@@ -302,9 +302,10 @@ def test_same_ini_is_opened_once_per_run_and_no_stat_before_open(tmp_path, fake_
     stats = {}
     rows, dev_meta, errors, _ = _run(cfg, stats=stats)
     assert not errors and len(rows) == 12
-    # 장비 3대 × (01B0 있음 + 99Z9 없음) = 고유 경로 6개. 9호기 두 번째 Report 의 2건은 기억한 결과를 다시 쓴다.
-    assert seen["ini"] == 6 and seen["htm"] == 4
-    assert stats["ini_asked"] == 8 and stats["ini_unique"] == 6 and stats["ini_missing"] == 3
+    # 장비 3대 × (01B0 있음 1경로 + 99Z9 없음 2경로) = 고유 경로 9개 — 없는 Wafer 는 Job 폴더 이름 후보(원문 · `-0A` 뗀 것)를 다 본다.
+    # 9호기 두 번째 Report 의 3건은 기억한 결과를 다시 쓴다(열기 0).
+    assert seen["ini"] == 9 and seen["htm"] == 4
+    assert stats["ini_asked"] == 12 and stats["ini_unique"] == 9 and stats["ini_missing"] == 6
     nine = [r for r in rows if r["device"] == "9호기" and r["wafer_id"] == "K625407-01B0"]
     assert len(nine) == 2 and {r["ini_match"] for r in nine} == {"EXACT"}       # 두 Report 모두 같은 시각을 받았다
     assert {r["ini_match"] for r in rows if r["wafer_id"] == "K625407-99Z9"} == {"NOT_FOUND"}

@@ -382,6 +382,25 @@ def _job_setup_by_table_lot(name: str, wafers: List[dict]) -> Tuple[str, str]:
     return (job.strip(), setup.strip()) if job and setup else ("", "")
 
 
+#: 4층 장비의 Job 폴더 이름은 Report 의 Job 값과 다르다(사용자가 NAS 에서 확인, 9/20): Report `2D@RE $7781539A-WUP_0858562PD_0A` ↔
+#: 폴더 `2D@RE-$7781539A-WUP_0858562PD` — `2D@XX` 뒤 공백이 하이픈이고 끝의 `_0A`/`_0B` 판 번호가 없다. 30일치 4층 NOT_FOUND 2,964행 중
+#: 2,789행이 `_0X` 로 끝나는 Job 이었다. 2층(AOI-9 등)은 `-0A` 가 폴더에도 있어 그대로 맞는다.
+_JOB_PREFIX_SPACE_RE = re.compile(r"^(2D@[A-Z0-9]+)\s+")
+_JOB_REV_SUFFIX_RE = re.compile(r"[_-]0[A-Z]$")
+
+
+def job_folder_variants(job: str) -> List[str]:
+    """Report 의 Job 값으로 만들 **정확 경로 후보** — 원문, `2D@XX ` → `2D@XX-`, 끝의 `_0A`/`-0A` 뗀 것, 둘 다. 중복 없이 순서대로.
+    재귀·나열이 아니라 후보 이름 몇 개의 존재만 확인한다(규칙 4). 원문에서 찾으면 나머지는 열지 않는다."""
+    job = str(job or "")
+    out: List[str] = []
+    for v in (job, _JOB_PREFIX_SPACE_RE.sub(r"\1-", job), _JOB_REV_SUFFIX_RE.sub("", job),
+              _JOB_REV_SUFFIX_RE.sub("", _JOB_PREFIX_SPACE_RE.sub(r"\1-", job))):
+        if v and v not in out:
+            out.append(v)
+    return out
+
+
 def split_job_setup(value: str) -> Tuple[str, str]:
     """`TB500_RDL2 - Multi/Setup1` → (`TB500_RDL2 - Multi`, `Setup1`). 마지막 `/` 로만 가른다."""
     v = str(value or "").strip()
@@ -531,17 +550,22 @@ def rows_for_report(dev_name: str, rep: dict, scan_root: str, memo: Optional[_In
         if _is_placeholder(w):
             r["ini_match"], r["data_issue"] = "NO_WAFER_ID", "LoadPort/Slot 행이라 INI 경로를 만들 수 없음"
         else:
-            rel = os.path.join(rep["equipment"], rep["process_code"], w["lot"], w["wafer_id"])
+            jobs_try = job_folder_variants(rep["equipment"])
+            rels = [os.path.join(j, rep["process_code"], w["lot"], w["wafer_id"]) for j in jobs_try]
             roots = ini_roots_for(b_start, scan_root, backups)
             # 존재 확인(stat) 없이 바로 연다 — SMB 왕복이 행마다 2번에서 1번으로 준다. 없으면 open 이 알려 준다.
-            kind, got, found_in = "missing", None, roots[0]
+            # 루트(지금 폴더 · 백업) 바깥 순서, Job 폴더 이름 후보 안쪽 순서 — 원문 이름에서 찾으면 나머지는 열지 않는다.
+            kind, got, found_in, found_job = "missing", None, roots[0], jobs_try[0]
             for root in roots:
-                kind, got = memo.get(os.path.join(root, rel, "WaferInfo.ini"))
+                for j, rel in zip(jobs_try, rels):
+                    kind, got = memo.get(os.path.join(root, rel, "WaferInfo.ini"))
+                    if kind != "missing":
+                        found_in, found_job = root, j
+                        break
                 if kind != "missing":
-                    found_in = root
                     break
             if kind == "missing":
-                if memo.exists(os.path.join(roots[0], rel, "MoveResultFlag")):
+                if any(memo.exists(os.path.join(roots[0], rel, "MoveResultFlag")) for rel in rels):
                     r["ini_match"], r["data_issue"] = "MOVED_ONLY", "Wafer 폴더에 MoveResultFlag 만 있고 WaferInfo.ini 없음 — 이동만 되고 스캔 안 함"
                 else:
                     r["ini_match"], r["data_issue"] = "NOT_FOUND", ("예상 경로에 WaferInfo.ini 없음" if len(roots) == 1
@@ -568,6 +592,8 @@ def rows_for_report(dev_name: str, rep: dict, scan_root: str, memo: Optional[_In
                         iss.append("Wafer ID 불일치")
                     if found_in != scan_root:
                         iss.append(f"백업 폴더에서 찾음: {os.path.basename(found_in.rstrip(chr(92) + '/'))}")
+                    if found_job != rep["equipment"]:
+                        iss.append(f"Job 폴더 이름이 Report 와 다름: {found_job}")
                     r["data_issue"] = "; ".join(iss)
                 except Exception as e:  # noqa: BLE001
                     r["ini_match"], r["data_issue"] = "READ_ERROR", f"{type(e).__name__}: {e}"

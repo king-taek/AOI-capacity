@@ -550,3 +550,46 @@ def test_wafer_rows_carry_faults_scanned_dice_and_yield_verbatim(tmp_path):
                                .replace("<td>0</td><td>0</td><td>0</td><td>0</td><td>0%</td>", "")
                                .replace("<td></td><td></td><td></td><td></td><td></td>", ""))
     assert all(w["faults"] == "" and w["yield"] == "" for w in old["wafers"])      # 열이 없는 옛 Report 는 빈 값
+
+
+# ── 4층 Job 폴더 이름 불일치 (사용자가 NAS 에서 확인, 9/20) ──────────────────────────
+@pytest.mark.parametrize("job,expected", [
+    ("2D@RE $7781539A-WUP_0858562PD_0A", ["2D@RE $7781539A-WUP_0858562PD_0A", "2D@RE-$7781539A-WUP_0858562PD_0A",
+                                          "2D@RE $7781539A-WUP_0858562PD", "2D@RE-$7781539A-WUP_0858562PD"]),
+    ("2D@R2-DT-GH10N-BIN1-H-U1_0858092PD_0B", ["2D@R2-DT-GH10N-BIN1-H-U1_0858092PD_0B", "2D@R2-DT-GH10N-BIN1-H-U1_0858092PD"]),
+    ("2D@R2-W97113Z6B1K16_0858956PD-0A", ["2D@R2-W97113Z6B1K16_0858956PD-0A", "2D@R2-W97113Z6B1K16_0858956PD"]),   # 2층은 원문이 먼저 맞는다
+    ("TB500_RDL2 - Multi", ["TB500_RDL2 - Multi"]),                                                                # 후보 없음 → 원문뿐
+    ("", []),
+])
+def test_job_folder_variants_are_exact_names_in_order(job, expected):
+    assert collect.job_folder_variants(job) == expected
+
+
+def test_ini_is_found_under_the_machines_own_job_folder_name(tmp_path):
+    """실물 4F-AOI-01: Report 는 `2D@RE $7781539A-WUP_0858562PD_0A`, 폴더는 `2D@RE-$7781539A-WUP_0858562PD`(공백→하이픈, `_0A` 없음)."""
+    name = "2D@RE $7781539A-WUP_0858562PD_0A_6412_XAB_26-Sep-01_(06.08.55)_BatchReport.htm"
+    html = LIVE_HTML.replace("TB500_RDL2 - Multi/Setup1", "2D@RE $7781539A-WUP_0858562PD_0A/6412").replace("FUK-RDL2", "XAB")
+    d = tmp_path / "Scanresult" / "2D@RE-$7781539A-WUP_0858562PD" / "6412" / "XAB" / "54265662EWE7"
+    d.mkdir(parents=True)
+    (d / "WaferInfo.ini").write_text(WAFER_INI.replace("UseLot=KLK-3D", "UseLot=XAB").replace("UseWaferID=K625407-01B0", "UseWaferID=54265662EWE7")
+                                     .replace("WaferStartTime=13-Sep-26 05:31:04 PM", "WaferStartTime=15-Sep-26 07:30:00 PM")
+                                     .replace("WaferEndTime=13-Sep-26 05:32:02 PM", "WaferEndTime=15-Sep-26 07:44:00 PM"), encoding="utf-8")
+    rep = collect.parse_report(name, html)
+    assert rep["job"] == "2D@RE $7781539A-WUP_0858562PD_0A"          # Report 값은 그대로 둔다(원문)
+    memo = collect._IniMemo()
+    by = {r["wafer_id"]: r for r in collect.rows_for_report("4F-AOI-01", rep, str(tmp_path / "Scanresult"), memo)}
+    r = by["54265662EWE7"]
+    assert r["ini_match"] == "EXACT" and r["wafer_start_time"] == "15-Sep-26 07:30:00 PM"
+    assert r["job"] == "2D@RE $7781539A-WUP_0858562PD_0A"            # 행의 Job 도 원문 — 폴더 이름은 비고에만
+    assert "Job 폴더 이름이 Report 와 다름: 2D@RE-$7781539A-WUP_0858562PD" in r["data_issue"]
+    # 원문 → 하이픈 → 접미 뗌 → 둘 다 순으로 4번째에 찾았다. 못 찾은 두 번째 Wafer 는 후보 4개를 다 본다
+    assert memo.asked == 4 + 4
+    assert by["54265684EWA2"]["ini_match"] == "NOT_FOUND"
+
+
+def test_two_wafers_that_never_scanned_stay_not_found_when_their_siblings_are_exact(tmp_path):
+    """실물 4F-AOI-01 UGK: 폴더가 있는 5장은 EXACT, Error/Aborted 로 스캔되지 않은 2장은 폴더가 없어 NOT_FOUND 가 맞다."""
+    _live_ini(tmp_path, "15-Sep-26 07:30:00 PM", "15-Sep-26 07:44:00 PM")
+    rep = collect.parse_report(LIVE_NAME, LIVE_HTML)
+    by = {r["wafer_id"]: r for r in collect.rows_for_report("4F-AOI-01", rep, str(tmp_path / "Scanresult"))}
+    assert by["54265662EWE7"]["ini_match"] == "EXACT" and by["54265684EWA2"]["ini_match"] == "NOT_FOUND"

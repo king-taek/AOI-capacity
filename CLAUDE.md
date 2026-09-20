@@ -38,6 +38,9 @@ Camtek AOI 장비의 BatchReport/WaferInfo.ini 를 읽어 장비별 가동률을
    폴더 이름의 날짜가 경계(그 이전 것을 담음)라 배치 시작일로 1순위 폴더를 바로 고르고(`collect.ini_roots_for`, 확인 횟수는 예전과 같은 1번),
    거기 없을 때만 나머지를 본다. 어디에도 없는데 Wafer 폴더에 `MoveResultFlag` 만 있으면 `ini_match="MOVED_ONLY"`(이동만 되고 스캔 안 함, 누락 복구 대상).
    4층 5대는 백업 폴더가 없다. 검증 도구는 조사 결과 읽을 수 있는 INI 가 24,050 → 53,069 개 — **실장비 재수집(`--full`) 전후 비교는 아직 안 했다**.
+   **4층은 Job 폴더 이름이 Report 의 Job 값과 다르다**(사용자가 NAS 에서 확인 9/20): Report `2D@RE $7781539A-WUP_0858562PD_0A` ↔ 폴더
+   `2D@RE-$7781539A-WUP_0858562PD`(`2D@XX` 뒤 공백→하이픈, 끝 `_0A`/`_0B` 없음). `collect.job_folder_variants` 가 원문 · 하이픈 · 접미 뗌 · 둘 다
+   네 후보를 **정확 경로로만** 차례로 본다(원문에서 찾으면 나머지는 열지 않는다). 행의 `job` 은 Report 원문 그대로, 찾은 폴더 이름은 `data_issue` 에만.
 5. **시각은 근거가 있을 때만 쓴다.** `WaferInfo.ini` 는 다시 검사하면 **같은 경로에 덮어써진다**(실물 확인:
    AOI-25 9/14 `00NSP049XYG7`). 그래서 옛 Report 행에도 나중 시각이 붙는다 — INI 시각이 그 Report 의
    `Batch Start~End` 밖이면 `ini_match="STALE"` 로 두고 **시간을 쓰지 않는다**(지어내지 않는다).
