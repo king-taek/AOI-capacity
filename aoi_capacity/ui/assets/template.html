@@ -74,7 +74,7 @@ button{font:inherit;color:inherit}
 .hbar i{transition:width .38s var(--ease)}
 .chart .f{transition:height .38s var(--ease),background-color .25s}
 .seg button,.nav button,.btn,.callout,.rowbtn,.link{transition:background-color .16s,color .16s,border-color .16s}
-.stage{position:relative;transform-origin:50% 0;transition:transform .42s var(--ease),filter .42s var(--ease)}
+.stage{position:relative;transform-origin:50% 0;transition:transform .42s var(--ease),filter .42s var(--ease);overflow-x:clip}   /* 탭 전환의 가로 미끄러짐이 가로 스크롤을 만들지 않게 */
 .stage.behind{transform:scale(.986);filter:brightness(.93)}
 .lt{display:block}.lt svg{display:block;width:100%;height:100%}
 .brand .lt{width:22px;height:22px;margin-right:2px}
@@ -115,6 +115,25 @@ button{font:inherit;color:inherit}
 .row2{display:grid;grid-template-columns:1fr 38px;align-items:center;border-top:1px solid #F1F4F7}
 .row2>.rowbtn{border:0}
 .partial{display:inline-block;margin-left:6px;padding:1px 7px;border-radius:999px;background:var(--warn-soft,#F6ECD6);color:var(--warn);font-size:11px;font-weight:600;vertical-align:1px}
+
+/* ── 5차(9/20 밤): 색의 깊이와 손맛. 막대는 색(background-color)은 그대로 두고 위가 밝고 아래가 살짝 어두운 한 겹(background-image)만 얹는다 —
+   dataviz 규칙대로 데이터 색은 한 자리(RUN·ERR·HEAT 램프)에서 오고, 글자는 데이터 색을 입지 않는다. 막대 끝 4px 둥글게, 히트맵은 한 색조 6단 램프(OKLCH 밝기 단조) + 2px 표면 간격. ── */
+.gloss,.chart .f,.hbar i,.tline i{background-image:linear-gradient(180deg,rgba(255,255,255,.30),rgba(255,255,255,0) 55%,rgba(15,21,28,.07))}
+.chart{gap:6px}.chart .f{border-radius:4px 4px 0 0;box-shadow:inset 0 1px 0 rgba(255,255,255,.35);transition:height .38s var(--ease),background-color .25s,filter .18s}
+.chart .v{transition:transform .18s var(--ease),color .18s}
+.chart button:hover .f{filter:brightness(1.07) saturate(1.06)}.chart button:hover .v{transform:translateY(-2px);color:var(--ink)}
+.hbar{background:var(--crit-soft)}.hbar i{transition:width .38s var(--ease),filter .18s}.rowbtn:hover .hbar i{filter:brightness(1.06)}
+.heat{display:flex;gap:3px}.heat button{flex:1;height:18px;border:0;border-radius:3px;padding:0;cursor:pointer;transition:transform .16s var(--ease),box-shadow .16s;position:relative}
+.heat button:hover{transform:scale(1.3);box-shadow:0 3px 10px rgba(15,21,28,.28),inset 0 0 0 1px rgba(255,255,255,.75);z-index:2}
+.btn,.seg button,.nav button,.ib,.x,.fbtn,.callout,.th{transition:background-color .16s,color .16s,border-color .16s,transform .1s var(--ease),box-shadow .16s}
+.btn:active,.seg button:active,.nav button:active,.ib:active,.x:active,.fbtn:active,.callout:active{transform:scale(.96)}
+.callout:hover{transform:translateY(-1px);box-shadow:0 2px 6px rgba(15,21,28,.10)}
+.chev{display:inline-block;transition:transform .18s var(--ease),color .18s}.rowbtn:hover .chev{transform:translateX(3px);color:var(--ink)}
+.dot{width:5px;height:5px;border-radius:50%;flex:none}.dot.alert{animation:pulseDot 1.4s ease-out 3}
+@keyframes pulseDot{0%{box-shadow:0 0 0 0 rgba(197,69,60,.45)}100%{box-shadow:0 0 0 7px rgba(197,69,60,0)}}
+.cards>div{transition:background-color .2s}.cards>div:hover{background:#FBFCFD}
+.dlg.pop{animation:popFront .5s var(--ease)}@keyframes popFront{0%{filter:brightness(1.10)}100%{filter:brightness(1)}}
+.legend i.gloss{background-image:linear-gradient(180deg,rgba(255,255,255,.30),rgba(255,255,255,0) 55%,rgba(15,21,28,.07))}
 
 /* ── 머리 ── */
 .hdr{position:sticky;top:0;z-index:10;display:flex;align-items:center;gap:16px;padding:0 24px;min-height:58px;background:rgba(255,255,255,.94);backdrop-filter:blur(10px);border-bottom:1px solid var(--line);flex-wrap:wrap}
@@ -641,7 +660,7 @@ return {day,today,generated:(metaIn&&metaIn.generated)||"",generated_iso:genIso,
 /* ---------- ④ 화면 ---------- */
 const RUN="#2E6BA8", DUP="#8FB8DE", TEST="#B49BD6", ERR="#C5453C", STOP="#F1D3CE", IDLE="#E9EDF2", FUTURE="#F7F9FB";
 const SEGC={0:RUN,1:ERR,2:TEST,3:STOP,4:DUP};
-const HEAT=["#DCE8F4","#B4CDE6","#7FAAD5","#4E86BE","#1F5187"];
+const HEAT=["#d5eaff","#b2ceed","#91b3d8","#7097c2","#4f7dad","#2e6398"];   /* 한 색조(RUN) 6단, OKLCH 밝기 단조 — 낮음 → 높음 */
 const MONO="Consolas,'Cascadia Mono',ui-monospace,monospace";
 const JOB_ALIAS={
   "R_TB500_LIVE_PI3":"TB500 PI3",
@@ -668,6 +687,7 @@ const JOB_ALIAS={
 const PROPS={attentionUtil:40,attentionErr:3};   /* 살펴볼 장비 문턱 — meta.dashboard_settings 의 같은 이름 숫자가 있으면 그것으로(D14) */
 function applySettings(m){const o=(m&&m.dashboard_settings)||{};for(const k of Object.keys(PROPS)){const v=Number(o[k]);if(o[k]!==undefined&&Number.isFinite(v)&&v>=0)PROPS[k]=v;}}
 let D=null;
+const VIEWS=["home","errors","trend","report"];
 const state={view:"home",dayI:null,sort:"name",floor:"all",span:21,unit:"day",metric:"min",pickDay:undefined,
   modalDev:null,modalDayI:null,modalType:null,modalJob:null,selLot:null,lotFilter:"all",showMembers:false,
   stack:[],                                  /* 열린 팝업의 순서(type · dev · err) — 마지막이 맨 위, 나머지는 뒤로 물러난다 */
@@ -697,10 +717,11 @@ const S={
   bar(t){if(!t)return"none";
     let st=[],pos=0;
     for(const s of S.segsOf(t)){const A=s.a/14.4,B=s.b/14.4;const col=SEGC[s.k];
-      if(A>pos)st.push(IDLE+" "+pos+"%",IDLE+" "+A+"%");st.push(col+" "+A+"%",col+" "+B+"%");pos=Math.max(pos,B);}
+      if(A>pos)st.push(IDLE+" "+pos+"%",IDLE+" "+A+"%");
+      if(B-A>=0.6&&s.k!==3)st.push(col+" "+A+"%",col+" calc("+B+"% - 1px)","#fff calc("+B+"% - 1px)","#fff "+B+"%");else st.push(col+" "+A+"%",col+" "+B+"%");pos=Math.max(pos,B);}
     return S.tail(st,pos,t);},
   tail(st,pos,t){const den=S.den(t);if(den<1440){const E=den/14.4;if(E>pos)st.push(IDLE+" "+pos+"%",IDLE+" "+E+"%");st.push(FUTURE+" "+Math.max(pos,E)+"%",FUTURE+" 100%");}
-    else st.push(IDLE+" "+pos+"%",IDLE+" 100%");return"linear-gradient(90deg,"+st.join(",")+")";},
+    else st.push(IDLE+" "+pos+"%",IDLE+" 100%");return"linear-gradient(180deg,rgba(255,255,255,.28),rgba(255,255,255,0) 50%,rgba(15,21,28,.05)),linear-gradient(90deg,"+st.join(",")+")";},
   measured(t){return !!t&&(t.r+t.x+t.t+t.d)>0;},
   hasEst(t){return !!t&&(t.ne||0)>0;},   /* D56②·D58: INI 없는 행이 배치 창의 빈 분을 나눠 가진 장비-일 */
   util(t){const den=S.den(t);if(!t||den<=0)return null;
@@ -712,7 +733,7 @@ const S={
   devList(){const f=state.floor;return D.devices.filter(n=>f==="all"||S.floorOf(n)===f);},
   fleetUtil(day,devs){const v=devs.map(n=>S.util(S.at(day,n))).filter(x=>x!==null);return v.length?v.reduce((a,b)=>a+b,0)/v.length:0;},
   segGroup(items,cur,on){return items.map(it=>({label:it.label,on:cur===it.k,pick:()=>on(it.k)}));},
-  go(view){return()=>{setState({view,modalType:null,modalJob:null,errDev:null,modalDev:null,selLot:null,stack:[]});window.scrollTo(0,0);};},
+  go(view){return()=>{const o=VIEWS.indexOf(state.view),n=VIEWS.indexOf(view);state.viewDir=o<0||n<0||o===n?0:(n>o?1:-1);setState({view,modalType:null,modalJob:null,errDev:null,modalDev:null,selLot:null,stack:[]});window.scrollTo(0,0);};},
   open(dev,dayI){return()=>setState({modalDev:dev,modalDayI:dayI===undefined?state.dayI:dayI,selLot:null,stack:pushTop("dev")});},
   /* days: 여러 날을 함께 보는 Error 팝업(Error 탭에서 7일·21일·전체를 고른 채로 장비를 누르면 그 기간 그대로) */
   openErr(dev,dayI,f,days){return()=>setState({errDev:dev,errDayI:dayI===undefined?state.dayI:dayI,errDays:days&&days.length>1?days.slice():null,errJob:f&&f.job!=null?f.job:null,errType:f&&f.type?f.type:null,stack:pushTop("err")});},
@@ -761,8 +782,8 @@ const SORTICON=d=>`<svg viewBox="0 0 10 10" aria-hidden="true">${d>0?`<path d="M
 /* ── 렌더 ── */
 const segHtml=(items,extra="")=>`<div class="seg" ${extra}>${items.map(it=>`<button class="${it.on?"on":""}" data-h="${h(it.pick)}" data-fk="seg:${esc(it.label)}">${esc(it.label)}</button>`).join("")}</div>`;
 const ticksHtml=()=>`<span class="ticks">${[0,6,12,18,24].map(x=>`<span style="left:${x/24*100}%;transform:${x===0?"translateX(0)":(x===24?"translateX(-100%)":"translateX(-50%)")}">${x===24?"24시":x+"시"}</span>`).join("")}</span>`;
-const barsHtml=(bars,height,btn)=>`<div class="chart" style="height:${height}px">${bars.map(b=>btn?`<button data-h="${h(b.pick)}" title="${esc(b.title)}" style="max-width:${b.maxW||104}px;cursor:${b.cur||"pointer"}"><span class="v num">${esc(b.vTxt)}</span><span class="f" style="height:${b.h}%;background:${b.color}"></span></button>`
-  :`<span class="b" title="${esc(b.title)}" style="max-width:${b.maxW||104}px"><span class="v num">${esc(b.vTxt)}</span><span class="f" style="height:${b.h}%;background:${b.color}"></span></span>`).join("")}</div>
+const barsHtml=(bars,height,btn)=>`<div class="chart" style="height:${height}px">${bars.map(b=>btn?`<button data-h="${h(b.pick)}" title="${esc(b.title)}" style="max-width:${b.maxW||104}px;cursor:${b.cur||"pointer"}"><span class="v num">${esc(b.vTxt)}</span><span class="f" style="height:${b.h}%;background-color:${b.color}"></span></button>`
+  :`<span class="b" title="${esc(b.title)}" style="max-width:${b.maxW||104}px"><span class="v num">${esc(b.vTxt)}</span><span class="f" style="height:${b.h}%;background-color:${b.color}"></span></span>`).join("")}</div>
   <div class="xl">${bars.map(b=>`<span style="max-width:${b.maxW||104}px">${esc(b.label)}</span>`).join("")}</div>`;
 
 /* ── DOM 갱신: innerHTML 통째 교체 대신 키 있는 morph — 바뀐 노드만 손댄다(9/20, 깜박임·스크롤 튐·포커스 상실의 근원 제거).
@@ -797,7 +818,7 @@ document.addEventListener("visibilitychange",()=>{for(const a of _lts)document.h
 /* 숫자 카운트업: 값이 바뀐 카드만, 이전 값에서 새 값으로(권한 없는 곳엔 안 씀 — 시각 문자열은 그대로) */
 const cnt=(v,dec=0)=>`<span data-count="${Number(v)||0}" data-dec="${dec}">${(Number(v)||0).toFixed(dec)}</span>`;
 function countUp(root){for(const el of root.querySelectorAll("[data-count]")){const v=+el.dataset.count,d=+(el.dataset.dec||0),prev=el.__cv;el.__cv=v;
-  if(prev===undefined||prev===v||!G()||reduced())continue;const o={v:prev};gsap.to(o,{v,duration:.55,ease:"power2.out",onUpdate:()=>{el.textContent=o.v.toFixed(d);},onComplete:()=>{el.textContent=v.toFixed(d);}});}}
+  if(prev===v||!G()||reduced())continue;const first=prev===undefined;const o={v:first?0:prev};gsap.to(o,{v,duration:first?.7:.55,ease:first?"power3.out":"power2.out",onUpdate:()=>{el.textContent=o.v.toFixed(d);},onComplete:()=>{el.textContent=v.toFixed(d);}});}}
 /* 24시간 막대의 sweep: 막대가 새로 그려지거나 다른 날의 것으로 바뀌면 왼쪽에서 오른쪽으로 드러난다(시간이 흐르는 방향) */
 function sweepBars(root){if(!G()||reduced()){for(const el of root.querySelectorAll("[data-bar]"))el.__bar=el.dataset.bar;return;}
   const els=[...root.querySelectorAll("[data-bar]")].filter(el=>el.__bar!==el.dataset.bar);if(!els.length)return;const each=Math.min(.02,.45/els.length);
@@ -805,8 +826,10 @@ function sweepBars(root){if(!G()||reduced()){for(const el of root.querySelectorA
 /* 무엇이든 새로 들어올 때(뷰 · 키 바뀐 차트 · 팝업): 카드는 차례로 떠오르고, 막대 그래프는 바닥에서 자라고, 히트맵 칸은 차례로 켜진다 — 한 번의 '등장', 이후 값 변화는 CSS transition */
 function enterView(root){if(!G()||reduced())return;
   const cards=root.querySelectorAll(".cards>div");if(cards.length)gsap.from(cards,{y:8,opacity:0,duration:.32,ease:"power3.out",stagger:.04,clearProps:"transform,opacity"});
-  const fills=root.querySelectorAll(".chart .f");if(fills.length){fills.forEach(f=>f.style.transition="none");gsap.from(fills,{height:0,duration:.5,ease:"power3.out",stagger:{each:Math.min(.012,.4/fills.length)},clearProps:"height",onComplete:()=>fills.forEach(f=>f.style.transition="")});}
-  const cells=root.querySelectorAll('[data-key^="heat:"] button');if(cells.length)gsap.from(cells,{opacity:0,duration:.3,ease:"power2.out",stagger:{each:Math.min(.003,.5/cells.length)}});}
+  /* 막대는 scaleY 로 자란다(높이 inline 값을 건드리면 clearProps 가 그 값까지 지운다 — 5차에서 실측) */
+  const fills=root.querySelectorAll(".chart .f");if(fills.length)gsap.from(fills,{scaleY:0,transformOrigin:"50% 100%",duration:.5,ease:"power3.out",stagger:{each:Math.min(.012,.4/fills.length)},clearProps:"transform"});
+  const cells=root.querySelectorAll('.heat button');if(cells.length){const rows=root.querySelectorAll('.heat').length,cols=Math.round(cells.length/rows)||1;
+    gsap.from(cells,{opacity:0,scale:.55,transformOrigin:"50% 50%",duration:.38,ease:"power2.out",stagger:{amount:Math.min(.8,.012*cells.length),grid:[rows,cols],from:[0,0]},clearProps:"transform,opacity"});}}
 /* 내비 표시자: 켜진 탭 아래로 미끄러진다 */
 function navInd(root){const nav=root.querySelector(".nav"),ind=nav&&nav.querySelector(".ind"),on=nav&&nav.querySelector("button.on");if(!ind||!on)return;
   const x=on.offsetLeft,w=on.offsetWidth;if(ind.__x===undefined||!G()||reduced()){ind.style.transform=`translateX(${x}px)`;ind.style.width=w+"px";}
@@ -819,7 +842,8 @@ function sigEnter(root){for(const el of root.querySelectorAll("[data-sig]")){con
   const mk=el.querySelectorAll(":scope>i");if(mk.length)gsap.from(mk,{scaleY:.15,opacity:0,transformOrigin:"50% 100%",duration:.35,ease:"power3.out",stagger:{each:Math.min(.015,.4/mk.length)},clearProps:"transform,opacity"});}}
 let _prevDayI=null;
 function slideDay(root){const el=root.querySelector(".daylab");if(!el)return;const cur=state.dayI;
-  if(_prevDayI!==null&&cur!==_prevDayI&&G()&&!reduced())gsap.fromTo(el,{x:(cur>_prevDayI?1:-1)*16,opacity:0},{x:0,opacity:1,duration:.3,ease:"power3.out",clearProps:"all"});_prevDayI=cur;}
+  if(_prevDayI!==null&&cur!==_prevDayI&&G()&&!reduced()){const dir=cur>_prevDayI?1:-1;gsap.fromTo(el,{x:dir*16,opacity:0},{x:0,opacity:1,duration:.3,ease:"power3.out",clearProps:"all"});
+    const list=root.querySelector("main .panel[data-anim]");if(list)gsap.fromTo(list,{x:dir*14,opacity:.6},{x:0,opacity:1,duration:.36,ease:"power3.out",clearProps:"transform,opacity"});}_prevDayI=cur;}
 function morphChildren(from,to){
   const anim=canAnim()&&from.hasAttribute("data-anim");
   const before=anim?flipBefore(from):null;
@@ -843,10 +867,13 @@ function flipBefore(p){gInit();const els=keyed(p);const rect=new Map();for(const
 function flipAfter(p,before){
   const rm=reduced(),els=keyed(p);
   for(const c of els)if(c.hasAttribute("data-entered"))c.removeAttribute("data-entered");
+  const moved=els.filter(c=>{const b=before.rect.get(c);if(!b||!(c.classList.contains("rowbtn")||c.classList.contains("row2")))return false;const r=c.getBoundingClientRect();return Math.abs(r.top-b.top)>2||Math.abs(r.left-b.left)>2;});
   /* 자리 이동은 Flip(앞뒤 상태 차이를 transform 으로 되감기), 새 노드는 등장 — 팝업(.ov)은 animate.css fadeIn + 대화상자가 살짝 떠오른다 */
   Flip.from(before.state,{targets:els,duration:rm?0:.32,ease:"power3.out",scale:false,nested:true,
     onEnter:els2=>{for(const c of els2){if(c.classList.contains("ov")){c.classList.add("animate__animated","animate__fadeIn");const d=c.querySelector(".dlg");if(d&&!rm)gsap.fromTo(d,{opacity:0,y:10,scale:.985},{opacity:1,y:0,scale:1,duration:.26,clearProps:"transform,opacity"});if(d)enterView(d);}
-      else{gsap.fromTo(c,rm?{opacity:0}:{opacity:0,y:8},{opacity:1,y:0,duration:rm?.12:.24,clearProps:"transform,opacity"});enterView(c);}}}});}
+      else{const dir=c.tagName==="MAIN"?(state.viewDir||0):0;gsap.fromTo(c,rm?{opacity:0}:{opacity:0,x:dir*28,y:dir?0:8},{opacity:1,x:0,y:0,duration:rm?.12:(dir?.3:.24),clearProps:"transform,opacity"});enterView(c);}}}});
+  /* 자리가 바뀐 행은 잠깐 밝게 — 정렬·필터 뒤 어느 행이 움직였는지 보인다 */
+  if(!rm&&moved.length)gsap.fromTo(moved,{backgroundColor:"rgba(46,107,168,.10)"},{backgroundColor:"rgba(46,107,168,0)",duration:.9,ease:"power2.out",delay:.25,clearProps:"backgroundColor"});}
 function flipLeave(p,o,b){
   const cs=getComputedStyle(o),rm=reduced();
   if(cs.position!=="fixed"){const pr=p.getBoundingClientRect();if(getComputedStyle(p).position==="static")p.style.position="relative";
@@ -855,7 +882,7 @@ function flipLeave(p,o,b){
   const done=()=>{if(o.parentNode)o.parentNode.removeChild(o);};
   if(o.classList.contains("ov")){o.classList.remove("animate__fadeIn");o.classList.add("animate__animated","animate__fadeOut");o.style.setProperty("--animate-duration",rm?"1ms":".15s");
     const d=o.querySelector(".dlg");if(d&&!rm)gsap.to(d,{opacity:0,y:6,scale:.985,duration:.15,ease:"power2.in"});setTimeout(done,rm?20:170);}
-  else gsap.to(o,rm?{opacity:0,duration:.1,onComplete:done}:{opacity:0,y:-4,duration:.15,ease:"power2.in",onComplete:done});
+  else{const dir=o.tagName==="MAIN"?(state.viewDir||0):0;gsap.to(o,rm?{opacity:0,duration:.1,onComplete:done}:{opacity:0,x:-dir*22,y:dir?0:-4,duration:.15,ease:"power2.in",onComplete:done});}
   setTimeout(done,500);}
 
 /* D05: 포커스(data-fk)·창/팝업 스크롤은 morph 덕에 대부분 그대로 남지만, 팝업이 열리면 제목으로 · 닫히면 열었던 버튼으로 포커스를 옮기고
@@ -872,8 +899,9 @@ const POPUP_ICON={type:`<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2 
 /* 카드 덱의 물러남 거리: 깊이마다 약 100px 씩 왼쪽으로 보이도록, 맨 위 카드와 그 카드의 폭 차이를 보정한다(폭이 다른 팝업끼리도 같은 만큼 보인다) */
 function layoutDeck(app,top){if(!top)return;const wt=top.offsetWidth||0;
   for(const ov of app.querySelectorAll(".ov.behind")){const d=+ov.style.getPropertyValue("--d")||1,dl=ov.querySelector(".dlg");if(!dl)continue;
-    const wb=(dl.offsetWidth||wt)*(1-d*.04);const shift=Math.round(100*d+Math.max(0,(wt-wb)/2)+24);ov.style.setProperty("--shift",shift+"px");}}
-function bringToFront(k){if(state.stack[state.stack.length-1]===k)return;setState({stack:pushTop(k)});}
+    const wb=(dl.offsetWidth||wt)*(1-d*.04);const shift=Math.round(130*d+Math.max(0,(wt-wb)/2)+24);ov.style.setProperty("--shift",shift+"px");}}
+function bringToFront(k){if(state.stack[state.stack.length-1]===k)return;setState({stack:pushTop(k)});
+  const d=document.querySelector(".ov:not(.behind):not([data-leaving]) .dlg");if(d&&!reduced()){d.classList.remove("pop");void d.offsetWidth;d.classList.add("pop");}}
 /* scrim 클릭: 그 자리에 뒤 카드가 있으면 그 카드를 앞으로, 없으면 맨 위를 닫는다 */
 function behindAt(x,y){/* inert·pointer-events 와 무관하게 기하로 맞춘다(transform 이 반영된 rect) — 위에 있는 카드부터 */
   const ds=[...document.querySelectorAll(".ov.behind .dlg")].filter(d=>!leaving(d.parentElement)).reverse();
@@ -962,11 +990,11 @@ function homeHtml(){
   const isToday=D.today&&day===D.today;
   const rowsH=sorted.map(x=>{const u=S.util(x.t),al=S.alert(x.t),es=S.hasEst(x.t);
     return `<button class="rowbtn" data-key="dev:${esc(x.n)}" data-h="${h(S.open(x.n))}" data-fk="dev:${esc(x.n)}" title="${esc(x.n)} 하루 상세 팝업 열기${es?" · INI 가 없는 "+x.t.ne+"장은 Report 배치 창의 빈 시간으로 추정했습니다":""}" style="grid-template-columns:96px 58px 1fr 76px 30px;gap:13px;padding:9px 18px;min-height:44px">
-      <span style="display:flex;align-items:center;gap:6px;font-weight:600;font-size:13.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis"><span style="width:5px;height:5px;border-radius:50%;flex:none;background:${u===null?"#C9D1DA":(al?ERR:(u>=70?RUN:"#C9D1DA"))}"></span><span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis">${esc(x.n)}${collectChip(x.n)}</span></span>
+      <span style="display:flex;align-items:center;gap:6px;font-weight:600;font-size:13.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis"><span class="dot${al?" alert":""}" style="background:${u===null?"#C9D1DA":(al?ERR:(u>=70?RUN:"#C9D1DA"))}"></span><span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis">${esc(x.n)}${collectChip(x.n)}</span></span>
       <span class="num" style="text-align:right;font-size:14.5px;font-weight:600;color:${u===null?"#5A6673":(u<S.thU()?"#B4402F":"#0F151C")}">${u===null?"—":cnt(u,0)+"%"}</span>
       <span data-bar="${day}|${esc(x.n)}" style="display:block;height:20px;border-radius:10px;background:#E9EDF2;overflow:hidden;background-image:${S.bar(x.t)}"></span>
       <span class="num" style="text-align:right;font-size:13px;color:${x.t&&x.t.e>=S.thE()?"#B4402F":"#4B5866"}">${x.t&&x.t.e?cnt(x.t.e)+"건":"—"}</span>
-      <span style="text-align:right;color:#5A6673;font-size:15px">›</span></button>`;}).join("");
+      <span class="chev" style="text-align:right;color:#5A6673;font-size:15px">›</span></button>`;}).join("");
   return `<section class="cards">
       <div><p class="k">평균 가동률</p><p class="v num">${cnt(S.fleetUtil(day,devs),1)}<small>%</small></p>${isToday?`<p class="s">수집한 날 · 00:00 ~ 모든 장비의 마지막 기록</p>`:""}${D.partialDays&&D.partialDays.includes(day)?`<p class="s" style="color:var(--warn)">보관 기간 첫날 — 수집 창이 도중에 시작해 하루 전체가 아닙니다</p>`:""}<p class="s">기록 있는 ${items.length-q.no}대 평균${q.no?` · 기록 없음 ${q.no}대 제외`:""}</p>${q.ne?`<p class="s" title="INI(시각 기록)가 없어 Report 배치 창의 빈 시간을 나눠 가진 Wafer">배치 창으로 추정 ${q.ne}장 / ${q.w}장</p>`:""}</div>
       <div><p class="k">살펴볼 장비</p><p class="v num" style="color:#B4402F">${cnt(items.filter(x=>S.alert(x.t)).length)}<small>대</small></p><p class="s">가동률 ${S.thU()}% 미만 또는 Error ${S.thE()}건 이상${q.no?` · 기록 없음 ${q.no}대는 따로`:""}</p></div>
@@ -974,7 +1002,7 @@ function homeHtml(){
     </section>
     <div class="bar-h"><h2>${isToday?"오늘의 가동률":dayName(day)+" 가동률"}</h2><div class="spacer"></div>${segHtml(floors)}${segHtml(sorts)}</div>
     <div class="panel" data-anim>
-      <div class="legend"><span><i style="background:${RUN}"></i>Scan</span><span><i style="background:${DUP}"></i>Rescan</span><span><i style="background:${TEST}"></i>Test</span><span><i style="background:${ERR}"></i>Error</span><span><i style="background:${STOP}"></i>에러 후 대기</span><span><i style="background:${IDLE}"></i>대기</span>${isToday?`<span><i style="background:${FUTURE};box-shadow:inset 0 0 0 1px #DCE2E9"></i>아직 오지 않은 시간</span>`:""}</div>
+      <div class="legend"><span><i class="gloss" style="background-color:${RUN}"></i>Scan</span><span><i class="gloss" style="background-color:${DUP}"></i>Rescan</span><span><i class="gloss" style="background-color:${TEST}"></i>Test</span><span><i class="gloss" style="background-color:${ERR}"></i>Error</span><span><i class="gloss" style="background-color:${STOP}"></i>에러 후 대기</span><span><i class="gloss" style="background-color:${IDLE}"></i>대기</span>${isToday?`<span><i style="background:${FUTURE};box-shadow:inset 0 0 0 1px #DCE2E9"></i>아직 오지 않은 시간</span>`:""}</div>
       <div class="thead" style="grid-template-columns:96px 58px 1fr 76px 30px;gap:13px"><span>장비</span><span style="text-align:right">가동률</span>${ticksHtml()}<span style="text-align:right">Error</span><span></span></div>
       ${rowsH||`<p class="empty">이 날 기록이 있는 장비가 없습니다.</p>`}
     </div>`;
@@ -1048,20 +1076,20 @@ function errorsHtml(){
       <section class="panel" data-anim><div style="padding:15px 20px 10px"><h2>유형별${FT?` <span style="font-weight:400;color:#5A6673;font-size:12px">이 유형만</span>`:""}</h2></div>
         ${typeArr.map(([c,v])=>`<div class="row2" data-key="type:${esc(c)}"><button class="rowbtn" data-h="${h(()=>setState({modalType:c,stack:pushTop("type")}))}" title="${esc(c)} · ${v[0]}건 · Error 대기 ${hm(v[1])} · 눌러서 자세히" style="grid-template-columns:166px 1fr 50px 72px 14px;gap:9px;padding:9px 6px 9px 20px;min-height:44px">
           <span class="mono" style="font-size:12.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(c)}</span><span class="hbar"><i style="width:${Math.round(v[mi]/cmax*100)}%"></i></span>
-          <span class="num" style="text-align:right;font-size:13px;font-weight:${nW};color:${nInk}">${v[0]}건</span><span class="num" style="text-align:right;font-size:13px;white-space:nowrap;font-weight:${mW};color:${mInk}">${hm(v[1])}</span><span style="text-align:right;color:#5A6673;font-size:13px">›</span></button>
-          <button class="fbtn ${FT===c?"on":""}" data-h="${h(()=>setState({errFType:FT===c?null:c}))}" title="${FT===c?"유형 필터 해제":"이 유형만 통계 보기"}" aria-pressed="${FT===c}">${FUNNEL}</button></div>`).join("")||`<p class="empty">기록 없음</p>`}
+          <span class="num" style="text-align:right;font-size:13px;font-weight:${nW};color:${nInk}">${v[0]}건</span><span class="num" style="text-align:right;font-size:13px;white-space:nowrap;font-weight:${mW};color:${mInk}">${hm(v[1])}</span><span class="chev" style="text-align:right;color:#5A6673;font-size:13px">›</span></button>
+          <button class="fbtn ${FT===c?"on":""}" data-h="${h(()=>setState({errFType:FT===c?null:c}))}" title="${FT===c?"유형 필터 해제":"이 유형만 통계 보기"}" aria-pressed="${FT===c}">${FUNNEL}</button></div>`).join("")||`<div class="lt-empty" style="padding:4px 20px 14px"><span class="lt" data-lottie="check" data-static aria-hidden="true"></span>이 기간에 Error 가 없습니다.</div>`}
       </section>
       <section class="panel" data-anim><div style="padding:15px 20px 10px"><h2>장비별 <span style="font-weight:400;color:#5A6673;font-size:12px">${pickDay?md(pickDay)+" 하루":"누르면 이 기간 그대로 상세"}</span></h2></div>
         ${devArr.map(([n,v])=>`<button class="rowbtn" data-key="dev:${esc(n)}" data-h="${h(S.openErr(n,eDayI,null,pickDay?null:useDays))}" title="${esc(n)} Error 상세 열기${pickDay?"":" ("+useDays.length+"일)"}" style="grid-template-columns:88px 1fr 50px 72px 14px;gap:9px;padding:9px 20px;border-bottom:0;border-top:1px solid #F1F4F7;min-height:44px">
           <span style="font-size:13px;font-weight:600">${esc(n)}</span><span class="hbar"><i style="width:${Math.round(v[mi]/dmax*100)}%"></i></span>
-          <span class="num" style="text-align:right;font-size:13px;font-weight:${nW};color:${nInk}">${v[0]}건</span><span class="num" style="text-align:right;font-size:13px;white-space:nowrap;font-weight:${mW};color:${mInk}">${hm(v[1])}</span><span style="text-align:right;color:#5A6673;font-size:13px">›</span></button>`).join("")||`<p class="empty">기록 없음</p>`}
+          <span class="num" style="text-align:right;font-size:13px;font-weight:${nW};color:${nInk}">${v[0]}건</span><span class="num" style="text-align:right;font-size:13px;white-space:nowrap;font-weight:${mW};color:${mInk}">${hm(v[1])}</span><span class="chev" style="text-align:right;color:#5A6673;font-size:13px">›</span></button>`).join("")||`<p class="empty">기록 없음</p>`}
       </section>
       <section class="panel" data-anim><div style="padding:15px 20px 10px"><h2>Job별${FJ!=null?` <span style="font-weight:400;color:#5A6673;font-size:12px">이 Job 만</span>`:""}</h2></div>
         ${jobArr.map(([gk,A])=>{const gi=+gk,G=D.jobGroups[gi],raw=P.job[G.l]||"(Job 없음)";const nm=JOB_ALIAS[raw]||raw,al=!!JOB_ALIAS[raw];
           return `<div class="row2" data-key="job:${gi}"><button class="rowbtn" data-h="${h(()=>setState({modalJob:gi,showMembers:false,stack:pushTop("type")}))}" title="${esc(raw)}${G.m.length>1?" (이름 "+G.m.length+"개 묶음)":""} · Lot ${A.lots}개 중 ${A.eLots}개 Error · 점유 ${hm(A.occ)} · Error 대기 ${hm(A.eM)} · 눌러서 자세히" style="grid-template-columns:1fr 50px 72px 14px;gap:9px;padding:9px 6px 9px 20px;border-bottom:0;min-height:44px">
             <span style="display:block;min-width:0"><span style="display:block;font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;${al?"":"font-family:"+MONO}">${esc(cut(nm,34))}</span><span style="display:block;font-size:11.5px;color:#5A6673;margin-top:2px">Lot ${A.lots}개 중 ${A.eLots}개 Error</span>
               <span style="display:flex;height:8px;margin-top:4px;border-radius:4px;background:#F0F3F7;overflow:hidden"><i style="height:100%;background:${RUN};width:${MET?0:Math.round(A.eN/jmax*100)}%"></i><i style="height:100%;background:${ERR};width:${MET?Math.round(A.eM/jmax*100):0}%"></i></span></span>
-            <span class="num" style="text-align:right;font-size:13px;font-weight:${nW};color:${A.eN?(MET?"#5A6673":"#0F151C"):"#5A6673"}">${A.eN}건</span><span class="num" style="text-align:right;font-size:13px;white-space:nowrap;font-weight:${mW};color:${mInk}">${A.eN?hm(A.eM):"—"}</span><span style="text-align:right;color:#5A6673;font-size:13px">›</span></button>
+            <span class="num" style="text-align:right;font-size:13px;font-weight:${nW};color:${A.eN?(MET?"#5A6673":"#0F151C"):"#5A6673"}">${A.eN}건</span><span class="num" style="text-align:right;font-size:13px;white-space:nowrap;font-weight:${mW};color:${mInk}">${A.eN?hm(A.eM):"—"}</span><span class="chev" style="text-align:right;color:#5A6673;font-size:13px">›</span></button>
             <button class="fbtn ${FJ===gi?"on":""}" data-h="${h(()=>setState({errFJob:FJ===gi?null:gi}))}" title="${FJ===gi?"Job 필터 해제":"이 Job 만 통계 보기"}" aria-pressed="${FJ===gi}">${FUNNEL}</button></div>`;}).join("")||`<p class="empty">기록 없음</p>`}
       </section></div>`;
 }
@@ -1219,7 +1247,7 @@ function errPopupHtml(){
       ${multi?`<h3 class="s">날짜별 <span style="font-weight:400;color:#5A6673;font-size:12px">막대를 누르면 그 하루의 타임라인으로</span></h3>${barsHtml(dayBars,84,true)}<div style="height:14px"></div>`
       :`<h3 class="s">언제 났나</h3>
       <div style="position:relative;height:15px;margin-bottom:3px">${ticksHtml()}</div>
-      <div class="tline" data-sig="${esc(eDev)}|${eDay}|${ft||""}|${fj==null?"":fj}">${marks.map(k=>`<i title="${esc(k.title)}" style="left:${k.l}%;width:${k.w}%;background:${k.c}"></i>`).join("")}</div>
+      <div class="tline" data-sig="${esc(eDev)}|${eDay}|${ft||""}|${fj==null?"":fj}">${marks.map(k=>`<i title="${esc(k.title)}" style="left:${k.l}%;width:${k.w}%;background-color:${k.c}"></i>`).join("")}</div>
       <p style="margin:0 0 18px;font-size:11.5px;color:#5A6673">${marks.length?("진한 빨강이 Error, 연한 빨강이 그 뒤 대기입니다. Error 대기 = Error 시간 + Report 가 끝난 뒤 다음 활동까지."+(untimed?" 시간을 받지 못한 Error "+untimed+"건(배치 창에 빈 시간이 없음)은 막대에 없습니다.":"")):(totN?"시간을 받은 Error 가 없어 막대를 그리지 않았습니다(배치 창에 빈 시간이 없음).":"Error 없음")}</p>`}
       <h3 class="s">유형별</h3>
       <div data-anim>${ct.map(([c,v])=>`<div data-key="ct:${esc(c)}" style="display:grid;grid-template-columns:190px 1fr 46px 72px;gap:10px;align-items:center;padding:4px 0"><span class="mono" title="${esc(c)}" style="font-size:12.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(c)}</span><span class="hbar" style="height:8px"><i style="width:${Math.round(v[1]/cmax*100)}%"></i></span><span class="num" style="text-align:right;font-size:12.5px">${v[0]}건</span><span class="num" style="text-align:right;font-size:12.5px;font-weight:600;white-space:nowrap">${hm(v[1])}</span></div>`).join("")||`<div class="lt-empty"><span class="lt" data-lottie="check" data-static aria-hidden="true"></span><p>${multi?"이 기간":"이 날"} 이 장비의 Error 가 없습니다.</p></div>`}</div>
@@ -1246,18 +1274,18 @@ function trendHtml(){
   const mx=Math.max(...buckets.map(b=>b.v),1)*1.12,avg=avgB.reduce((a,b)=>a+b.v,0)/avgB.length;
   const best=[...buckets].sort((a,b)=>b.v-a.v)[0],low=[...buckets].sort((a,b)=>a.v-b.v)[0];
   const bars=buckets.map((b,i)=>({label:(i%Math.ceil(buckets.length/11)===0||i===buckets.length-1)?b.label:"",vTxt:(buckets.length<=16||b===best||b===low||i===buckets.length-1)?b.v.toFixed(0):"",h:(b.v/mx*100).toFixed(1),cur:b.day?"pointer":"default",
-    title:b.day?(md(b.day)+" · 평균 "+b.v.toFixed(1)+"%"+(b.partial?" · 보관 기간 첫날(부분) — 평균에서 제외":"")+" · 누르면 그 날 목록으로"):(b.label+" · 평균 "+b.v.toFixed(1)+"%"),pick:b.day?(()=>{setState({view:"home",dayI:D.days.indexOf(b.day)});window.scrollTo(0,0);}):()=>{},color:b.partial?"#DCE2E9":(b.v<S.thU()?ERR:(b.v<55?DUP:RUN)),maxW:108}));
+    title:b.day?(md(b.day)+" · 평균 "+b.v.toFixed(1)+"%"+(b.partial?" · 보관 기간 첫날(부분) — 평균에서 제외":"")+" · 누르면 그 날 목록으로"):(b.label+" · 평균 "+b.v.toFixed(1)+"%"),pick:b.day?(()=>{setState({view:"home",dayI:D.days.indexOf(b.day)});window.scrollTo(0,0);}):()=>{},color:b.partial?"#DCE2E9":(b.v<S.thU()?ERR:RUN),maxW:72}));
   const heat=devs.map(n=>{const vals=D.days.map(d=>S.util(S.at(d,n)));const ok=vals.filter(v=>v!==null),a=ok.length?ok.reduce((x,y)=>x+y,0)/ok.length:null;
-    return{n,avgTxt:a===null?"—":a.toFixed(0)+"%",avgInk:a!==null&&a<S.thU()?"#B4402F":"#0F151C",cells:vals.map((v,i)=>({bg:v===null?"transparent":HEAT[Math.min(4,Math.floor(Math.min(99.9,v)/20))],ring:v===null?"inset 0 0 0 1px #DCE2E9":"none",title:md(D.days[i])+" · "+n+" · "+(v===null?"시간 기록 없음":v.toFixed(0)+"%")+" · 누르면 팝업",go:S.open(n,i)}))};});
+    return{n,avgTxt:a===null?"—":a.toFixed(0)+"%",avgInk:a!==null&&a<S.thU()?"#B4402F":"#0F151C",cells:vals.map((v,i)=>({bg:v===null?"transparent":HEAT[Math.min(HEAT.length-1,Math.floor(Math.min(99.9,v)/(100/HEAT.length)))],ring:v===null?"inset 0 0 0 1px #DCE2E9":"none",title:md(D.days[i])+" · "+n+" · "+(v===null?"시간 기록 없음":v.toFixed(0)+"%")+" · 누르면 팝업",go:S.open(n,i)}))};});
   return `<div class="bar-h"><h1>추이</h1><div class="spacer"></div>${segHtml(floors)}${segHtml(units)}</div>
     <section class="panel pad"><div style="display:flex;align-items:baseline;gap:10px;margin-bottom:12px"><h2>${U==="day"?"날짜별 평균 가동률":(U==="week"?"주별 평균 가동률":"월별 평균 가동률")}</h2><span style="font-size:12.5px;color:#5A6673;white-space:nowrap">평균 ${avg.toFixed(1)}%${PD.size?" · 첫날(부분) 제외":""}</span></div>
       <div data-anim><div data-key="chart:${U}:${state.floor}" style="position:relative"><span style="position:absolute;left:0;right:0;bottom:${(avg/mx*100).toFixed(1)}%;border-top:1px dashed #B0862F;z-index:1;pointer-events:none;height:0;top:auto"></span>${barsHtml(bars,180,true)}</div></div></section>
     <div class="bar-h"><h2>장비별 ${D.days.length}일</h2></div>
     <div class="panel" data-anim>
       ${heat.map(hh=>`<div data-key="heat:${esc(hh.n)}" style="display:grid;grid-template-columns:96px 1fr 54px;gap:12px;align-items:center;padding:5px 18px;border-top:1px solid #F1F4F7"><button class="link" style="text-decoration:none;font-size:13px;font-weight:600;color:#0F151C;text-align:left;padding:4px 0" data-h="${h(S.open(hh.n))}">${esc(hh.n)}</button>
-        <span style="display:flex;gap:2px">${hh.cells.map(c=>`<button data-h="${h(c.go)}" title="${esc(c.title)}" style="flex:1;height:18px;border:0;border-radius:2px;padding:0;cursor:pointer;background:${c.bg};box-shadow:${c.ring}"></button>`).join("")}</span>
+        <span class="heat">${hh.cells.map(c=>`<button data-h="${h(c.go)}" title="${esc(c.title)}" style="background-color:${c.bg};box-shadow:${c.ring}"></button>`).join("")}</span>
         <span class="num" style="text-align:right;font-size:13px;font-weight:600;color:${hh.avgInk}">${hh.avgTxt}</span></div>`).join("")}
-      <div style="display:flex;align-items:center;gap:8px;padding:11px 18px;background:#FBFCFD;font-size:12.5px;color:#4B5866;flex-wrap:wrap"><span>낮음</span><span style="display:flex;gap:2px">${HEAT.map(c=>`<i style="width:22px;height:11px;border-radius:2px;background:${c};display:block"></i>`).join("")}</span><span>높음</span><span style="display:inline-flex;align-items:center;gap:6px;margin-left:16px"><i style="width:22px;height:11px;border-radius:2px;background:transparent;box-shadow:inset 0 0 0 1px #DCE2E9;display:block"></i>시간 기록 없음</span></div>
+      <div style="display:flex;align-items:center;gap:8px;padding:11px 18px;background:#FBFCFD;font-size:12.5px;color:#4B5866;flex-wrap:wrap"><span>낮음</span><span style="display:flex;gap:3px">${HEAT.map(c=>`<i style="width:22px;height:11px;border-radius:3px;background:${c};display:block"></i>`).join("")}</span><span>높음</span><span style="display:inline-flex;align-items:center;gap:6px;margin-left:16px"><i style="width:22px;height:11px;border-radius:2px;background:transparent;box-shadow:inset 0 0 0 1px #DCE2E9;display:block"></i>시간 기록 없음</span></div>
     </div>`;
 }
 
