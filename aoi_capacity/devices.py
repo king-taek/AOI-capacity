@@ -21,6 +21,7 @@ from __future__ import annotations
 import csv
 import datetime as dt
 import logging
+import ntpath
 import os
 import re
 from typing import Callable, Dict, List, Optional
@@ -151,10 +152,26 @@ REPORT_DIR_NAMES = ("Report", "Reports")
 SCAN_DIR_NAMES = ("Scanresult", "ScanResult", "Scanresults")
 
 
+def dir_key(name) -> str:
+    """폴더 이름·경로의 **Windows 의미** 비교 키 — 대소문자 · `/`↔`\\` · 끝 구분자 차이를 지운다(C05).
+
+    NAS 는 대소문자를 구분하지 않아 `ScanResult` · `Scanresult` · `SCANRESULT` · `Scanresult\\` 는 같은 폴더다.
+    `os.path.normcase` 는 Linux 에서 아무것도 하지 않으므로 어느 OS 에서 돌든 `ntpath` 로 판정한다(테스트가 Linux 에서도 같은 결과)."""
+    n = str(name or "").strip()
+    if not n:
+        return ""
+    return ntpath.normcase(ntpath.normpath(n))
+
+
+def same_dir(a, b) -> bool:
+    """두 폴더 이름(또는 경로)이 Windows 의미로 같은 곳인가."""
+    return dir_key(a) == dir_key(b)
+
+
 def _candidates(configured: str, defaults) -> List[str]:
     out, seen = [], set()
     for n in [str(configured or "").strip(), *defaults]:
-        k = n.lower()
+        k = dir_key(n)
         if n and k not in seen:
             seen.add(k)
             out.append(n)
@@ -205,10 +222,23 @@ def scan_dirs_of(path: str, primary: str) -> List[Dict[str, str]]:
     INI 탐색을 재귀로 넓히는 게 아니라 **정확 경로를 확인할 루트를 늘리는 것**이다(CLAUDE.md 규칙 4 그대로)."""
     out = [{"name": primary, "cutoff": ""}]
     try:
-        names = sorted(e.name for e in nas_guard.scandir(path)
-                       if e.is_dir() and e.name.lower().startswith(_SCAN_PREFIX) and e.name != primary)
+        listed = sorted(e.name for e in nas_guard.scandir(path) if e.is_dir() and e.name.lower().startswith(_SCAN_PREFIX))
     except OSError:
         return out
+    # ★ C05: 비교는 Windows 의미(`dir_key`)로 — 실제 폴더가 `ScanResult` 이고 설정이 `Scanresult` 면 isdir 은 참이지만 이름이 달라
+    #   같은 폴더가 '백업' 으로 한 번 더 잡혀 없는 INI 마다 확인 횟수가 두 배가 됐다. 맨 앞에는 **실제 나열된 철자**를 쓰고,
+    #   대소문자·끝 구분자만 다른 항목은 하나로 센다.
+    pk = dir_key(primary)
+    real = next((n for n in listed if dir_key(n) == pk), None)
+    if real is not None:
+        out[0]["name"] = real
+    names, seen = [], {pk}
+    for n in listed:
+        k = dir_key(n)
+        if k in seen:
+            continue
+        seen.add(k)
+        names.append(n)
     dated, undated = [], []
     for n in names:
         year = None
@@ -235,11 +265,19 @@ def _entry(folder: str, path: str, *hints) -> Dict[str, object]:
             "aliases": [a for a in (folder, *[str(h) for h in hints if h]) if a]}
 
 
+def _dirs_of(path: str, cfg: dict) -> Dict[str, object]:
+    """장비 폴더 하나의 Report·Scanresult 폴더 이름과 백업 목록 — **읽기만** 한다(isdir 몇 번 + 나열 1번 + getmtime).
+
+    `scan_dir` 은 나열에서 찾은 **실제 철자**로 맞춘다(설정 `Scanresult` · 실제 `ScanResult` 면 `ScanResult`, C05)."""
+    report_dir = find_subdir(path, cfg.get("report_dir", ""), REPORT_DIR_NAMES) or str(cfg.get("report_dir") or "Report")
+    scan_dir = find_subdir(path, cfg.get("scan_dir", ""), SCAN_DIR_NAMES) or str(cfg.get("scan_dir") or "Scanresult")
+    scan_dirs = scan_dirs_of(path, scan_dir)                                  # 백업 폴더까지(맨 앞이 지금 폴더)
+    return {"report_dir": report_dir, "scan_dir": str(scan_dirs[0]["name"]), "scan_dirs": scan_dirs}
+
+
 def with_dirs(dev: Dict[str, object], cfg: dict) -> Dict[str, object]:
     """이 장비에서 실제로 쓰는 Report·Scanresult 폴더 이름을 붙인다(장비마다 다르다)."""
-    dev["report_dir"] = find_subdir(str(dev["path"]), cfg.get("report_dir", ""), REPORT_DIR_NAMES) or str(cfg.get("report_dir") or "Report")
-    dev["scan_dir"] = find_subdir(str(dev["path"]), cfg.get("scan_dir", ""), SCAN_DIR_NAMES) or str(cfg.get("scan_dir") or "Scanresult")
-    dev["scan_dirs"] = scan_dirs_of(str(dev["path"]), str(dev["scan_dir"]))   # 백업 폴더까지(맨 앞이 지금 폴더)
+    dev.update(_dirs_of(str(dev["path"]), cfg))
     return dev
 
 
@@ -309,7 +347,7 @@ def _attach_dirs(devs: List[Dict[str, object]], cfg: dict, log: Optional[LogFn] 
         with_dirs(d, cfg)
         if d["report_dir"] != (cfg.get("report_dir") or "Report"):
             _log(log, f"[{d['name']}] Report 폴더 이름이 '{d['report_dir']}' 입니다")
-        backups = [x for x in d.get("scan_dirs") or [] if x["name"] != d["scan_dir"]]
+        backups = [x for x in (d.get("scan_dirs") or [])[1:] if not same_dir(x["name"], d["scan_dir"])]
         if backups:
             _log(log, f"[{d['name']}] Scanresult 백업 폴더 {len(backups)}개도 조회합니다: "
                       + ", ".join(f"{b['name']}(~{b['cutoff']})" if b["cutoff"] else b["name"] for b in backups))

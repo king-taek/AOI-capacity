@@ -119,3 +119,61 @@ def test_with_dirs_attaches_backups_and_collect_uses_them(tmp_path):
     from aoi_capacity import collect
     roots = collect._backup_roots(d, str(dev / "Scanresult"))
     assert roots == [(str(dev / "Scanresult_Back up_260918"), dt.date(2026, 9, 18))]
+
+
+# ── C05: 지금 쓰는 Scanresult 폴더를 '백업' 으로 한 번 더 세지 않는다 (Windows 경로 의미로 비교) ──────────
+@pytest.mark.parametrize("a,b", [
+    ("Scanresult", "SCANRESULT"), ("Scanresult", "ScanResult"), ("Scanresult", "Scanresult\\"), ("Scanresult", "Scanresult/"),
+    ("X:\\AOI-1\\Scanresult\\", "x:/aoi-1/SCANRESULT"), ("\\\\host\\share\\AOI-1\\Scanresult", "\\\\HOST\\Share\\AOI-1\\scanresult\\"),
+])
+def test_dir_key_treats_case_and_trailing_separator_as_one(a, b):
+    """`os.path.normcase` 는 Linux 에서 아무것도 하지 않는다 — 판정은 `ntpath` 로 하므로 어느 OS 에서 돌려도 같다."""
+    assert devices.dir_key(a) == devices.dir_key(b) and devices.same_dir(a, b)
+    assert not devices.same_dir("Scanresult", "Scanresult_Backup_260918")
+    assert devices.dir_key("") == "" and not devices.same_dir("", "Scanresult")
+
+
+def _case_insensitive_isdir(monkeypatch):
+    """Windows 의 대소문자 무시 파일시스템을 Linux 에서 흉내 낸다 — 마지막 조각을 대소문자 무시로 찾는다(명시적 시뮬레이션)."""
+    real = os.path.isdir
+
+    def ci_isdir(p):
+        if real(p):
+            return True
+        parent, leaf = os.path.split(str(p).rstrip("\\/"))
+        if not leaf or not real(parent):
+            return False
+        return any(n.lower() == leaf.lower() and real(os.path.join(parent, n)) for n in os.listdir(parent))
+
+    monkeypatch.setattr(devices.os.path, "isdir", ci_isdir)
+
+
+def test_live_folder_spelled_differently_is_one_root_not_a_backup(tmp_path, monkeypatch):
+    """실제 폴더 `ScanResult` · 설정 `Scanresult`: isdir 은 참이라 예전엔 `ScanResult` 가 backups 에 한 번 더 들어가
+    없는 INI 마다 확인이 두 배였다. 이제 맨 앞은 나열된 실제 철자, 백업은 0개."""
+    dev = make_device(tmp_path / "X", "AOI-5")
+    (dev / "Scanresult").rename(dev / "ScanResult")
+    _case_insensitive_isdir(monkeypatch)
+    d = devices.with_dirs({"name": "AOI-5", "path": str(dev), "id": "x"}, _cfg())
+    assert d["scan_dir"] == "ScanResult" and d["scan_dirs"] == [{"name": "ScanResult", "cutoff": ""}]
+    from aoi_capacity import collect
+    assert collect._backup_roots(d, str(dev / "Scanresult")) == []           # 설정 철자로 만든 루트와도 같은 폴더
+    assert collect._backup_roots(d, str(dev / "ScanResult")) == []
+
+
+def test_backups_that_differ_only_by_case_or_separator_are_deduped_and_live_folder_kept_first(tmp_path):
+    dev = make_device(tmp_path / "X", "AOI-6")
+    (dev / "Scanresult_Backup_260918").mkdir()
+    (dev / "SCANRESULT_BACKUP_260918").mkdir()                              # Windows 에서는 같은 폴더(Linux 픽스처라 둘 다 만든다)
+    (dev / "Scanresult - 5.9.3").mkdir()
+    out = devices.scan_dirs_of(str(dev), "SCANRESULT")                       # 설정 철자가 달라도 맨 앞은 나열된 실제 철자
+    assert out[0] == {"name": "Scanresult", "cutoff": ""}
+    assert [x["name"] for x in out[1:]] == ["SCANRESULT_BACKUP_260918", "Scanresult - 5.9.3"]   # 사전순 첫 철자 하나만
+    assert out[1]["cutoff"] == "2026-09-18"
+    assert len({devices.dir_key(x["name"]) for x in out}) == len(out)
+    # 우선순위(정확 경로 → 경계 이른 백업 → 경계 모르는 백업)는 그대로다
+    from aoi_capacity import collect
+    d = devices.with_dirs({"name": "AOI-6", "path": str(dev), "id": "y"}, _cfg())
+    roots = collect._backup_roots(d, str(dev / "Scanresult"))
+    assert [c for _, c in roots] == [dt.date(2026, 9, 18), None]
+    assert collect.ini_roots_for(dt.datetime(2026, 9, 1), str(dev / "Scanresult"), roots)[0] == str(dev / "SCANRESULT_BACKUP_260918")

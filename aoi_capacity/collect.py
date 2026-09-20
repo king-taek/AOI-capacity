@@ -1196,7 +1196,7 @@ def _backup_roots(d: dict, scan_root: str) -> ScanRoots:
     out: ScanRoots = []
     for x in list(d.get("scan_dirs") or [])[1:]:
         path = os.path.join(str(d["path"]), str(x.get("name") or ""))
-        if not x.get("name") or path == scan_root:
+        if not x.get("name") or devices_mod.same_dir(path, scan_root):   # Windows 의미로 같은 폴더면 백업이 아니다(C05)
             continue
         try:
             cut = dt.date.fromisoformat(str(x.get("cutoff"))) if x.get("cutoff") else None
