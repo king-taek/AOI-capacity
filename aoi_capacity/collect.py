@@ -728,11 +728,6 @@ def rows_for_report(dev_name: str, rep: dict, scan_root: str, memo: Optional[_In
     return synthesize_rows(rows)
 
 
-def _in_batch_window(st, en, b_start, b_end) -> bool:
-    """INI 의 Wafer 시각이 이 Report 의 배치 구간 안인가(여유 `BATCH_WINDOW_MARGIN_SEC`)."""
-    return time_basis(st, en, b_start, b_end) in ("STRICT_IN_BATCH", "TOLERANCE_ONLY", "UNKNOWN_BATCH")
-
-
 def time_basis(st, en, b_start, b_end) -> str:
     """시간 근거(D37) — template 의 `timeBasis` 와 같은 규칙.
     STRICT_IN_BATCH(여유 없이 안) · TOLERANCE_ONLY(±여유로만) · OUTSIDE_BATCH · MISSING · INVALID(역전) · UNKNOWN_BATCH(배치 시각 없음 — 판단하지 않고 그대로 쓴다)."""
@@ -1999,7 +1994,7 @@ def write_html(cfg: dict, rows: List[dict], dev_meta: List[dict], errors: List[d
     ver = _version_info()
     now = dt.datetime.now()
     meta = {"generated": now.strftime("%Y-%m-%d %H:%M"), "generated_iso": now.isoformat(timespec="seconds"),
-            "mode": mode, "devices": dev_meta, "reportErrors": errors, "limit": "",
+            "mode": mode, "devices": dev_meta, "reportErrors": errors,
             "scope": {"restricted": not scope.unrestricted(cfg), "devices": scope.scope_list(cfg)},
             "elapsed": int((time.time() - started) * 1000), "retention_days": cfg["retention_days"],
             "timing": dict(timing) if timing else {},
