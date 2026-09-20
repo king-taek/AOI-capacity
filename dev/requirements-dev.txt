@@ -1,3 +1,7 @@
 # 개발 전용(사용자 배포본에는 들어가지 않는다). 런타임 의존성은 루트 requirements.txt.
 pytest>=8
 pytest-xdist>=3
+# 워크플로 가드(test_graphify_build.py)가 yaml 없이 조용히 skip 되지 않게 — CI 사전 점검이 import 를 확인한다.
+pyyaml>=6
+# 결과 HTML 의 클릭 경로 실측(Chromium). 브라우저 본체는 `python -m playwright install --with-deps chromium` 으로 따로 받는다.
+playwright>=1.45
