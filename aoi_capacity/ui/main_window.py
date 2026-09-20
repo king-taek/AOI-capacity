@@ -64,6 +64,8 @@ class _UpdateWorker(QThread):
                     result = updater.manual_check()
                 else:
                     info = updater.check_for_update()
+                    if not info and updater.last_error():
+                        log.info("update check held/failed: %s", updater.last_error())
                     result = ("update", info) if info else ("latest", {})
                 self.signals.checked.emit(tok, self.manual, result)
                 return
@@ -338,6 +340,11 @@ class MainWindow(QMainWindow):
                 return
             if sheets.ask(self, i18n.KO.UPDATE_AVAILABLE_TITLE, body) == SB.Yes:
                 self._apply_update(info)
+        elif status == "held":
+            log.info("update held: %s", info.get("reason", ""))
+            if manual:
+                sheets.info(self, i18n.KO.UPDATE_CHECK_TITLE,
+                            i18n.KO.UPDATE_HELD_FMT.format(sha=str(info.get("sha", ""))[:7], reason=info.get("reason", "")))
         elif manual:
             sheets.info(self, i18n.KO.UPDATE_CHECK_TITLE,
                         i18n.KO.UPDATE_LATEST if status == "latest" else i18n.KO.UPDATE_UNKNOWN)

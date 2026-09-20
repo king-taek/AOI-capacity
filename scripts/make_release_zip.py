@@ -18,7 +18,14 @@ from typing import Callable, List, Optional
 REPO_ROOT = Path(__file__).resolve().parent.parent
 INSTRUCTIONS_NAME = "설치방법.txt"
 ZIP_PREFIX = "AOI_Capacity"
-_SKIP_TOP = {"app.new", "app.old", "app.new.part", "python.tar.gz", "build"}
+# 최상위에서 통째로 빼는 것 — 스테이징·백업 폴더와 빌드 중간물.
+_SKIP_TOP = {"app.new", "app.old", "app.new.part", "app.old.part", ".update.part", "python.tar.gz", "build"}
+# 경로 어디에 있든 빼는 폴더 이름과 파일 확장자 — 빌드 PC 의 캐시·로그·백업 잔재와 스테이징(제자리 적용의 `.update.part` 는 app/ 안)이
+# 배포본에 실리지 않게.
+_SKIP_DIRS = {"__pycache__", ".pytest_cache", ".git", ".idea", ".vscode", ".claude", ".mypy_cache", ".ruff_cache",
+              "app.new", "app.old", "app.new.part", "app.old.part", ".update.part"}
+_SKIP_SUFFIXES = {".pyc", ".pyo", ".log", ".bak", ".tmp", ".part", ".orig", ".rej"}
+_SKIP_NAME_SUFFIXES = (".old-update",)
 
 
 def read_version(out: Path) -> dict:
@@ -38,7 +45,11 @@ def should_include(rel: PurePosixPath) -> bool:
     parts = rel.parts
     if not parts or parts[0] in _SKIP_TOP:
         return False
-    if "__pycache__" in parts:
+    if any(p in _SKIP_DIRS for p in parts):
+        return False
+    if rel.suffix.lower() in _SKIP_SUFFIXES:
+        return False
+    if any(p.endswith(_SKIP_NAME_SUFFIXES) for p in parts):
         return False
     return True
 
