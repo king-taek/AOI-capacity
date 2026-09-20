@@ -723,3 +723,23 @@ def test_promote_recovers_a_backup_left_by_an_earlier_failed_rollback(tmp_path, 
         updater._promote_in_place(staging, app, lambda *a: None)
     assert (app / "main.py").read_text(encoding="utf-8") == "old main"          # 되살린 원본이 롤백 뒤에도 제자리
     assert not (app / "main.py.old-update").exists()
+
+
+def test_current_version_prefers_git_head_over_a_stale_version_file(tmp_path, monkeypatch):
+    """git 작업 폴더에서는 HEAD 가 버전이다 — VERSION 파일은 옛 빌드가 남긴 값(현장 10일치 결과가 v9be6d0d 로 찍힌 원인)."""
+    root = tmp_path / "app"
+    (root / ".git" / "refs" / "heads").mkdir(parents=True)
+    (root / ".git" / "HEAD").write_text("ref: refs/heads/main\n", encoding="utf-8")
+    (root / ".git" / "refs" / "heads" / "main").write_text("a" * 40 + "\n", encoding="utf-8")
+    (root / "VERSION").write_text(json.dumps({"sha": "9be6d0dca367dc3ccc308ebe937c8f566b0c0b17", "branch": "main", "repo": "king-taek/AOI-capacity"}), encoding="utf-8")
+    monkeypatch.setattr(updater, "_app_root", lambda: root)
+    v = updater.current_version()
+    assert v["sha"] == "a" * 40 and v["branch"] == "main" and v["repo"] == "king-taek/AOI-capacity"
+    # packed-refs 만 있는 저장소도 읽는다
+    (root / ".git" / "refs" / "heads" / "main").unlink()
+    (root / ".git" / "packed-refs").write_text("# pack-refs with: peeled\n" + "b" * 40 + " refs/heads/main\n", encoding="utf-8")
+    assert updater.current_version()["sha"] == "b" * 40
+    # git 폴더가 아니면 VERSION 그대로
+    import shutil
+    shutil.rmtree(root / ".git")
+    assert updater.current_version()["sha"].startswith("9be6d0d")

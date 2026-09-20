@@ -201,16 +201,48 @@ def _version_file() -> Path:
     return _app_root() / "VERSION"
 
 
+def _git_head_ref(root: Path) -> Optional[dict]:
+    """git 작업 폴더의 HEAD 를 파일로만 읽는다(subprocess 없음) — `{"sha", "branch"}` 또는 None."""
+    try:
+        head = (Path(root) / ".git" / "HEAD").read_text(encoding="utf-8").strip()
+    except Exception:  # noqa: BLE001
+        return None
+    if head.startswith("ref: "):
+        ref = head[5:].strip()
+        branch = ref.rsplit("/", 1)[-1]
+        try:
+            sha = (Path(root) / ".git" / ref).read_text(encoding="utf-8").strip()
+        except Exception:  # noqa: BLE001
+            sha = ""
+            try:
+                for line in (Path(root) / ".git" / "packed-refs").read_text(encoding="utf-8").splitlines():
+                    parts = line.split()
+                    if len(parts) == 2 and parts[1] == ref:
+                        sha = parts[0]
+                        break
+            except Exception:  # noqa: BLE001
+                pass
+        return {"sha": sha, "branch": branch} if re.fullmatch(r"[0-9a-f]{40}", sha or "") else None
+    return {"sha": head, "branch": ""} if re.fullmatch(r"[0-9a-f]{40}", head) else None
+
+
 def current_version() -> Optional[dict]:
+    """지금 돌고 있는 코드의 버전. git 작업 폴더면 **HEAD 가 정답**이다 — `VERSION` 파일은 옛 빌드·업데이트가 남긴 값이라
+    `update_code.bat` 로 코드를 갱신한 뒤에도 그대로 남아 결과 HTML 의 버전 표기가 낡는다(현장 10일치 실물: 코드는 새것인데 v9be6d0d)."""
     f = _version_file()
+    data = None
     try:
         if f.exists():
-            data = json.loads(f.read_text(encoding="utf-8"))
-            if isinstance(data, dict):
-                return data
+            loaded = json.loads(f.read_text(encoding="utf-8"))
+            if isinstance(loaded, dict):
+                data = loaded
     except Exception:  # noqa: BLE001
         pass
-    return None
+    if is_git_checkout():
+        git = _git_head_ref(_app_root())
+        if git:
+            return {"sha": git["sha"], "branch": git["branch"] or (data or {}).get("branch", ""), "repo": (data or {}).get("repo", "")}
+    return data
 
 
 def _write_version_to(root: Path, sha: str, branch: str, repo: str) -> None:

@@ -141,7 +141,13 @@ Camtek AOI 장비의 BatchReport/WaferInfo.ini 를 읽어 장비별 가동률을
   - 화면 쪽 `S.segsOf` 는 모델의 seg 를 그대로 그리고(같은 종류 8분 이하 틈만 시각 병합, 수치 불변) 대기를 다시 계산하지 않는다. 옛 장비-일 추정(`isEst`/`estBar`)은 P4 에서 지웠다(가드 `test_removed_features_stay_removed`).
 - **화면 용어·색의 단일 출처는 template 의 상수** `RUN·DUP·TEST·ERR·STOP·IDLE·FUTURE` 와 범례(D48-⑦): Scan(진한 파랑) · Rescan(연한 파랑) · Test(보라) · Error(빨강) · 에러 후 대기(연한 빨강) · 대기(회색).
   옛 용어(가동·중복스캔·재스캔·Rework·중단·미가동·정지)를 화면 JS 에 다시 쓰지 않는다(가드 `test_screen_terms…`). 원본 상태 문구·Job·Report 파일명은 바꾸지 않는다.
-- **화면 구조**(`AOI-Dashboard.dc.html` 의 로직을 순수 JS 렌더로 — React·DC 런타임 없음, `render()` 가 `#app` 을 통째로 다시 그리고 `data-h` 핸들러 표를 위임 클릭으로 받는다):
+- **화면 구조**(`AOI-Dashboard.dc.html` 의 로직을 순수 JS 렌더로 — React·DC 런타임 없음, `render()` 는 HTML 문자열을 만들어 **키 있는 morph**(`morphChildren`, `data-key`)로 바뀐 노드만 손댄다 — innerHTML 통째 교체는 깜박임·스크롤 튐·포커스 상실의 근원이었다(현장 보고 9/20). `data-h` 핸들러 표는 위임 클릭):
+  **전환(9/20, impeccable animate 플레이북 — 상태 150~300ms · 레이아웃/오버레이 300~500ms · `cubic-bezier(.16,1,.3,1)`, 나가는 것은 들어오는 것보다 빠르게)**: 뷰가 바뀌면 옛 `<main>` 은 제자리에서 사라지고 새 것이 올라오며 나타난다,
+  `data-anim` 컨테이너의 키 있는 자식은 FLIP(앞뒤 rect 차이를 WAAPI `animate()` 로 — AutoAnimate 와 같은 기법, 라이브러리는 넣지 않았다: HTML 이 바깥 요청을 못 하고 셋업 환경도 CDN 을 막아 원문을 그대로 실을 수 없었다), 팝업은 CSS `popIn` 으로 나타나고 WAAPI 로 사라진다.
+  `prefers-reduced-motion` 이면 이동 없이 opacity 만. 막대 폭·높이는 CSS transition(`.hbar i` · `.chart .f`). **팝업 스택**(`state.stack`, `pushTop`·`CLOSE`): 팝업 위에 팝업을 열면 아래 것은 닫히지 않고 `behind` 로 물러난다(왼쪽 위로 밀리고 rotateY·축소·어둡게 — 뒤에 무엇이 열려 있는지 보인다) · 맨 위만 살아 있고(inert) ESC 는 맨 위만 닫는다.
+  Error 탭: 유형·Job 행의 깔때기 버튼(`errFType`·`errFJob`)이 그 유형/Job 만으로 카드·날짜별·유형별·장비별·Job별을 다시 집계한다(칩으로 해제, 유형/Job 팝업의 '이 유형만 통계' 도 같다) · 장비별 행은 **고른 기간 그대로** Error 상세 팝업을 연다(`errDays` — 여러 날이면 24시간 타임라인 대신 날짜별 막대 + Lot 표에 날짜 열, '하루씩 보기' 로 전환) · '전체 기간 합계로' 링크는 없다(막대를 다시 누르면 기간으로).
+  TB500 · Kendall 탭: **Kendall · TB500 두 묶음**(표기명이 Kendall 로 시작하면 Kendall) 안에서 열 머리를 눌러 정렬(`rptSort`, 기본 이름 오름차순, 같은 열 다시 누르면 반대, `aria-sort`).
+  **수집 창 시작일**(`D.partialDays` — `meta.retention_days` 로 계산, 보관 기간의 첫날은 수집 창이 도중에 시작해 하루 전체가 아니다): 헤더에 '부분' 표, 홈 카드 안내, 추이의 평균·주/월 묶음에서 제외(막대는 회색으로 남긴다).
   가동률(카드 3 · 층 필터 · 정렬 · 24시간 막대 목록) → **장비 팝업**(통계 6 · 막대 · Lot 이름표 지시선 · 선택 Lot 원문 · **Report 열기**) ↔ **Error 상세 팝업**(언제 났나 · 유형별 · 최근 21일 · Lot 별, 유형/Job 팝업에서 오면 필터 칩, D51) ·
   Error(기간 · 층 · 지표 → 날짜별 → 유형별·장비별·Job별 → 유형/Job 팝업) · 추이(일·주·월 + 히트맵, 전 기간 대비 없음) · **TB500 · Kendall**(D59, 옛 이름 '리포트' — 표기명 21개 Job 만 보는 탭이라 이름을 바꿨고
   '표기명 n개 Job 만(이 기간 Lot 의 p%)' 안내 한 줄을 둔다. D49: 배치시간 = Report 배치 시작~종료 회귀, 표본 5개 미만 생략, 제외 = 원인 Error 있는 Report · 5장 미만 · 배치 시각 없음. 평균 fault = `faults` 열이 있는 행의 장당 평균, `lots[13]`·`[14]`, D08).
