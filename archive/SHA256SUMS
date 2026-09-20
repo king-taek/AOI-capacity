@@ -1,0 +1,19 @@
+# 보관물 지문(D62). 형식은 sha256sum 과 같다 — `.gz` 로 끝나는 항목은 **압축을 푼 원본**의 sha256 이다
+# (`gunzip -c 파일 | sha256sum`). 원래 어디에 있던 파일인지는 archive/README.md 의 표에 있다.
+# 가드: dev/tests/test_archive.py 가 모든 항목을 다시 계산해 대조하고, archive/ 안의 파일이 빠짐없이 적혀 있는지 본다.
+db7482dc626d6a18735bb78bb2dade3e589711a8f40f4816a34cb02f6a970ffe  archive/screenshots/v6cmp.png
+f19402d6dff952fe0919005bff105d81032d401f3d94189dd7773813d2ef9550  archive/screenshots/v6home.png
+0e8d138bec05228d8b5eb714ef86a90238674e0ef891d31a85c3dde6fa943637  archive/screenshots/v6set.png
+aa9d52697f42dde7f81dfd42490cf1e841284f657b80e499f767cf14a4831fbe  archive/screenshots/v6trend.png
+e18c99c941bff1a176e773646c27fb5386a7ea5f77673694a8e1eea2cd799fbb  archive/screenshots/compare.png
+8b6049890edf122751db02a1a1ef12e4893cbdaaf5625b1c33c9fb98c3fd8bd6  archive/screenshots/home.png
+53755a7cd124f3f6b4d771ded30ebb75e300f91c617811ff41ccdb1a4254b25b  archive/screenshots/trend.png
+45f2d454ab86fafcf22a01b9e498e67eaf639a9b83ce41c0f1c7ae6e621dcd55  archive/docs/aoi_collector_demo.html.gz
+6a85f15c58412de9cdbe30cc76f3d52adf573fa1423ebbd878b9a6558e9931b9  archive/design/PROMPT.md
+707e760bdea148c3f745c89c9df6ff1617a60ee501ca5fff45408f141cdbd38f  archive/design/PROMPT_extract-script.md
+39409e14750917da1862a0b987b2b914860ef8e7dccc5712e610d12d5a80e54f  archive/design/patch/collector-backup-lookup.md
+d6d45e419bd411c31e9ba574ca3593de3e61469bba1741022db851eb972122af  archive/design/app/Err-Popup-A.dc.html
+efa1f2ba8b9a1c86faf4c4014502eb60e9e79f85a85600ba1e5e7491e7237499  archive/design/app/AOI-4 해결 제안.dc.html
+944982f00e9da26c7259f6953cb5e255674ac977e0f2d8611bd60e880d971b70  archive/design/app/aoi-recovery.json
+956529e4c39a2d8b5ca7dae300b2db2240862a4c0f5984cc83c0e0c6ee073f37  dev/samples/AOI_capacity_2026-09-16_3일치.html.gz
+58b705564fb2481aeffbfb147f4b010cb4b0a4377bbdf3d5d9a26f90cf861a81  dev/samples/AOI_capacity_2026-09-17_30대.html.gz

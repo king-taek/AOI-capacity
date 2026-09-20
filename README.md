@@ -193,5 +193,6 @@ python scripts\make_release_zip.py --lite
 ```
 
 폴더 구성: `main.py`(진입) · `aoi_capacity/`(`collect.py` 수집 코어, `devices.py`, `nas_guard.py`, `i18n/`, `utils/`, `workers/`, `ui/`) ·
-`scripts/`(런처·빌드) · `dev/`(테스트) · `docs/`(브라우저 데모 `aoi_collector_demo.html`, 설정 예시, 스크린샷).
+`scripts/`(런처·빌드) · `dev/`(테스트 · 샘플 · 도구) · `docs/`(설정 예시 `config.example.json`, 재설계 프로토타입 `design/`, 감사 계획 `audit/`) ·
+`archive/`(지우지 않기로 한 옛 스크린샷·옛 데모·반영된 디자인 시안 — 참조되지 않으며 배포에 들어가지 않는다, `archive/README.md`).
 작업 규칙은 `CLAUDE.md` 를 보세요.

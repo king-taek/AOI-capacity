@@ -15,6 +15,7 @@ Node 에서 돌아가도록 그 세 개만 파일 맨 위에 끼워 넣었습니
 
 **재현 확인했습니다.** 이 폴더의 `make_aoi_data.js` 본문을 그대로 돌려 나온 결과가
 지금 `app/aoi-data.json` 과 **바이트 단위로 완전히 일치**합니다(2,246,732 bytes).
+(저장소 주: 저장소에 있는 `app/aoi-data.json` 은 2,246,736 bytes 이고, 9/20 원본 입력으로 다시 돌려 그 파일과 바이트 동일함을 확인했다 — `dev/tests/test_design_extract.py`.)
 
 ## 파일 목록
 

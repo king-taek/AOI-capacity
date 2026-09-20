@@ -1,3 +1,6 @@
+> **저장소 주(2026-09-20)**: 디자인 세션이 남긴 저장소 연결 기록(9/20 01:10 동기화 시점)이다. 아래의 '50% 추정' · '대기 최대 240분' ·
+> '남은 일' 은 그때의 상태이고 지금은 전부 반영되거나 바뀌었다 — 현재 규칙은 `CLAUDE.md`, 차이 목록은 [`STATUS.md`](STATUS.md).
+
 repo: king-taek/AOI-capacity
 branch: main
 path: aoi_capacity/ui/assets
