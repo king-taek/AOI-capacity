@@ -393,3 +393,453 @@ def test_plan_run_never_rederives_rows_and_memoizes_by_file_stamp(tmp_path, monk
     _os.utime(cache_file, (2_000_000_000, 2_000_000_000))
     assert collect.plan_run(cfg).known_devices == 2 and len(calls) == 2   # 파일이 바뀌면(수집 뒤) 다시 읽는다
     assert collect.plan_run(cfg, full=True).first_run is True and len(calls) == 2
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# D60 / C02 — 다시 읽기 모드: refresh_window(이력 보존) · rebuild_all(후보 캐시 검증 뒤 교체) · full 은 rebuild 의 별칭
+# ══════════════════════════════════════════════════════════════════════════════
+def _dev_dir(nas, name):
+    return nas / "M-AOI-8" if name == "M-AOI-8" else nas / "X" / name
+
+
+def _add_report(nas, dev_name, tag, days_old, html=None):
+    """장비에 Report 하나를 더 두고 수정시각을 `days_old` 일 전으로 맞춘다."""
+    from conftest import REPORT_HTML
+    rep = _dev_dir(nas, dev_name) / "Report" / f"2D@R2-GA285AAB_0859840PD-0A_6321_KLK-3D_26-Sep-13_({tag})_BatchReport.htm"
+    rep.write_text(html or REPORT_HTML, encoding="utf-8")
+    m = time.time() - days_old * 86400
+    os.utime(rep, (m, m))
+    return rep
+
+
+def _rewrite_same_mtime(rep, html):
+    """내용만 바꾸고 수정시각은 그대로 — 'Report 는 그대로인데 파서를 고쳤다' 와 같은 상황(캐시가 mtime 만 보므로)."""
+    m = rep.stat().st_mtime
+    rep.write_text(html, encoding="utf-8")
+    os.utime(rep, (m, m))
+
+
+def _entry_fp(cache, rep):
+    return json.dumps(cache["reports"][str(rep)], sort_keys=True, ensure_ascii=False)
+
+
+def _cache_of(cfg):
+    return json.loads(open(cfg["cache_file"], encoding="utf-8").read())
+
+
+def test_refresh_window_rereads_same_mtime_reports_inside_the_window_and_keeps_the_rest(tmp_path, fake_nas, monkeypatch):
+    """★ 90일 캐시 + 30일 refresh: 창 안의 Report 는 수정시각이 같아도 다시 읽고, 창 밖 60일치 항목은 지문까지 그대로다.
+    backfill 은 여전히 캐시된 파일을 건너뛴다(검색 창만 넓힌다)."""
+    from conftest import REPORT_HTML
+
+    nas, csv_path = fake_nas
+    r10 = _add_report(nas, "AOI-10", "10.00.00", 10)
+    r45 = _add_report(nas, "AOI-9", "45.00.00", 45)
+    r80 = _add_report(nas, "AOI-9", "80.00.00", 80)
+    cfg = make_cfg(tmp_path, csv_path, backfill_days=100)
+    rows0, _, _, _ = _run(cfg)
+    assert len(rows0) == 18                                        # 6 Report × 3행
+    before = _cache_of(cfg)
+    fp45, fp80 = _entry_fp(before, r45), _entry_fp(before, r80)
+
+    changed = REPORT_HTML.replace("K625407-01B0", "K625407-01B1")   # 내용은 바뀌었는데 mtime 은 그대로
+    _rewrite_same_mtime(r10, changed)
+    _rewrite_same_mtime(r45, changed)                             # 창 밖 — 손대면 안 된다
+
+    # backfill(검색 창 넓히기)은 캐시된 파일을 다시 읽지 않는다 — 문구가 이걸 약속한다
+    seen = _count_nas_reads(monkeypatch)
+    rows_b, meta_b, _, _ = _run(cfg, backfill=True)
+    assert seen["htm"] == 0 and len(rows_b) == 18
+    assert all(d["refreshed"] == 0 for d in meta_b) and sum(d["kept"] for d in meta_b) == 6
+
+    seen = _count_nas_reads(monkeypatch)
+    rows, meta, errors, _ = _run(cfg, refresh_window_days=30)
+    assert not errors and seen["htm"] == 4                        # now×3 + r10 — r45·r80 은 열지 않는다
+    by = {d["name"]: d for d in meta}
+    assert (by["AOI-10"]["refreshed"], by["9호기"]["refreshed"], by["8호기"]["refreshed"]) == (2, 1, 1)
+    # 커서 기반 실행은 창 밖 파일을 나열조차 하지 않는다 — '그대로 두는 수' 는 캐시만 보는 계획 조회가 안다
+    assert collect.plan_run(cfg, refresh_window_days=30).keep_reports == 2 and by["9호기"]["kept"] == 0
+    after = _cache_of(cfg)
+    assert _entry_fp(after, r45) == fp45 and _entry_fp(after, r80) == fp80   # 창 밖 지문 그대로(내용을 바꿔 둔 r45 도)
+    assert {r["wafer_id"] for r in rows if r["report"] == r10.name} >= {"K625407-01B1"}
+    assert not any(r["wafer_id"] == "K625407-01B1" for r in rows if r["report"] == r45.name)
+    assert len(rows) == 18 and after["last_mtime"] == before["last_mtime"]  # 행이 겹쳐 붙지 않고 커서도 그대로
+
+
+def test_refresh_window_via_cfg_key_matches_the_argument(tmp_path, fake_nas, monkeypatch):
+    """GUI 는 prefs → cfg["refresh_window_days"] 로 켠다 — 인자와 같은 동작이어야 한다."""
+    nas, csv_path = fake_nas
+    cfg = make_cfg(tmp_path, csv_path)
+    _run(cfg)
+    seen = _count_nas_reads(monkeypatch)
+    _run(dict(cfg, refresh_window_days=30))
+    assert seen["htm"] == 3
+    seen = _count_nas_reads(monkeypatch)
+    _run(dict(cfg, refresh_window_days=0))
+    assert seen["htm"] == 0
+
+
+def test_failed_reread_keeps_previous_rows_and_is_retried_next_run(tmp_path, fake_nas, monkeypatch):
+    """★ 다시 읽다 실패한 Report 는 이전 행을 그대로 두고(사라지지 않는다) failed 에 재시도만 남긴다.
+    다음 평소 수집이 그 파일까지 훑어 다시 읽는다(커서는 뒤로 가지 않지만 나열은 그 파일까지 한다)."""
+    nas, csv_path = fake_nas
+    r10 = _add_report(nas, "AOI-10", "10.00.00", 10)
+    cfg = make_cfg(tmp_path, csv_path)
+    rows0, _, _, _ = _run(cfg)
+    fp0 = _entry_fp(_cache_of(cfg), r10)
+    orig = collect.parse_report
+
+    def broken(name, text):
+        if name == r10.name:
+            raise ValueError("깨진 Report")
+        return orig(name, text)
+
+    monkeypatch.setattr(collect, "parse_report", broken)
+    rows, meta, errors, _ = _run(cfg, refresh_window_days=30)
+    assert len(errors) == 1 and errors[0]["kept_rows"] == 3 and errors[0]["path"] == str(r10)
+    assert len(rows) == len(rows0) == 12                           # 이전 행이 그대로 나간다
+    cache = _cache_of(cfg)
+    assert _entry_fp(cache, r10) == fp0 and cache["failed"][str(r10)]["tries"] == 1
+    assert next(d for d in meta if d["name"] == "AOI-10")["status"] == collect.DEV_PARTIAL
+
+    monkeypatch.setattr(collect, "parse_report", orig)             # 고쳐졌다(또는 NAS 가 잠깐 막혔던 것)
+    seen = _count_nas_reads(monkeypatch)
+    rows, meta, errors, _ = _run(cfg)                              # 평소 증분 수집
+    assert not errors and seen["htm"] == 1                         # 재시도 대상 하나만 다시 읽었다
+    assert next(d for d in meta if d["name"] == "AOI-10")["retried"] == 1
+    assert str(r10) not in _cache_of(cfg)["failed"] and len(rows) == 12
+
+
+def test_rebuild_all_reads_the_whole_retention_range_and_full_is_its_alias(tmp_path, fake_nas, monkeypatch):
+    """★ 옛 --full 은 backfill 창(30일)만 읽고 나머지 60일 이력을 지웠다. 이제 full = rebuild_all: 보관 기간 전부를 다시 읽는다."""
+    nas, csv_path = fake_nas
+    r45 = _add_report(nas, "AOI-9", "45.00.00", 45)
+    cfg = make_cfg(tmp_path, csv_path, backfill_days=100, retention_days=3650)
+    rows0, _, _, _ = _run(cfg)
+    assert len(rows0) == 12
+    small = dict(cfg, backfill_days=3)                             # backfill 창은 3일뿐
+    for kw in ({"full": True}, {"rebuild_all": True}):
+        seen = _count_nas_reads(monkeypatch)
+        rows, meta, errors, _ = _run(small, **kw)
+        assert seen["htm"] == 4 and not errors                     # 45일 전 Report 까지 다시 읽었다(창 = 보관 기간)
+        assert len(rows) == 12 and str(r45) in _cache_of(small)["reports"]
+    assert collect.plan_run(small, full=True).mode == "rebuild"
+    assert collect.plan_run(small, rebuild_all=True).mode == "rebuild"
+    assert collect.plan_run(dict(small, rebuild_all=True)).mode == "rebuild"
+
+
+def test_rebuild_all_failure_keeps_the_old_cache_byte_for_byte(tmp_path, fake_nas, monkeypatch):
+    """★ 후보 캐시가 검증에 걸리면(Report 를 하나도 못 읽음) RebuildRejected — 원 캐시는 한 바이트도 바뀌지 않는다."""
+    nas, csv_path = fake_nas
+    cfg = make_cfg(tmp_path, csv_path)
+    _run(cfg)
+    raw = open(cfg["cache_file"], "rb").read()
+    monkeypatch.setattr(collect, "parse_report", lambda name, text: (_ for _ in ()).throw(ValueError("전부 깨짐")))
+    with pytest.raises(collect.RebuildRejected):
+        collect.collect(cfg, full=True)
+    assert open(cfg["cache_file"], "rb").read() == raw
+    assert [p.name for p in (tmp_path / "out").iterdir()] == ["aoi_cache.json"]   # 임시 파일도 남기지 않는다
+
+
+def test_rebuild_all_carries_over_history_of_unreachable_devices(tmp_path, fake_nas, monkeypatch):
+    """전체 재구축 중 접근 못 한 장비(나열 실패)의 이력은 후보 캐시로 옮겨 보존한다(지우는 재구축이 아니다)."""
+    nas, csv_path = fake_nas
+    cfg = make_cfg(tmp_path, csv_path)
+    _run(cfg)
+    before = _cache_of(cfg)
+    nine = [k for k in before["reports"] if "AOI-9" in k]
+    assert len(nine) == 1
+    real = collect.nas_guard.scandir
+
+    def flaky(path):
+        if str(path).endswith(os.path.join("AOI-9", "Report")):
+            raise OSError(53, "네트워크 경로를 찾을 수 없습니다")     # 9호기 나열 실패(SMB 끊김)
+        return real(path)
+
+    monkeypatch.setattr(collect.nas_guard, "scandir", flaky)
+    rows, meta, errors, _ = _run(cfg, rebuild_all=True)
+    by = {d["name"]: d for d in meta}
+    assert by["9호기"]["status"] == collect.DEV_UNREACHABLE
+    after = _cache_of(cfg)
+    assert after["reports"][nine[0]] == before["reports"][nine[0]]           # 이관된 항목은 그대로
+    assert {os.path.basename(k) for k in after["last_mtime"]} == {"AOI-9", "AOI-10", "M-AOI-8"}
+    assert len(rows) == 9 and sum(1 for r in rows if r["device"] == "9호기") == 3
+
+
+def test_rebuild_all_keeps_history_of_a_device_whose_report_folder_looks_empty(tmp_path, fake_nas):
+    """나열은 됐는데 파일이 하나도 안 보이는 장비(SMB 가 빈 폴더를 돌려주는 오류)는 접근 못 한 장비처럼 이력을 옮긴다 — 재구축이 이력을 지우면 안 된다."""
+    nas, csv_path = fake_nas
+    cfg = make_cfg(tmp_path, csv_path)
+    _run(cfg)
+    before = _cache_of(cfg)
+    nine = [k for k in before["reports"] if "AOI-9" in k]
+    moved = []
+    for f in (nas / "X" / "AOI-9" / "Report").glob("*.htm"):
+        f.rename(f.with_suffix(".hidden"))
+        moved.append(f)
+    try:
+        rows, meta, errors, _ = _run(cfg, rebuild_all=True)
+    finally:
+        for f in moved:
+            f.with_suffix(".hidden").rename(f)
+    after = _cache_of(cfg)
+    assert after["reports"][nine[0]] == before["reports"][nine[0]] and len(rows) == 9
+    assert next(d for d in meta if d["name"] == "9호기")["found"] == 0
+
+
+def test_plan_run_reports_reread_and_keep_counts_and_mode(tmp_path, fake_nas):
+    nas, csv_path = fake_nas
+    _add_report(nas, "AOI-9", "45.00.00", 45)
+    _add_report(nas, "AOI-9", "80.00.00", 80)
+    cfg = make_cfg(tmp_path, csv_path, backfill_days=100)
+    _run(cfg)
+    p = collect.plan_run(cfg, refresh_window_days=30)
+    assert (p.mode, p.total_reports, p.reread_reports, p.keep_reports, p.refresh_days) == ("refresh", 5, 3, 2, 30)
+    assert p.first_run is False
+    p = collect.plan_run(dict(cfg, refresh_window_days=60))
+    assert (p.mode, p.reread_reports, p.keep_reports) == ("refresh", 4, 1)
+    assert collect.plan_run(cfg).mode == "incremental" and collect.plan_run(cfg, backfill=True).mode == "backfill"
+    assert collect.plan_run(cfg, recover=True).mode == "recover"
+    p = collect.plan_run(cfg, full=True)
+    assert (p.mode, p.first_run, p.reread_reports, p.keep_reports, p.retention_days) == ("rebuild", True, 0, 0, 3650)
+    assert collect.plan_run(make_cfg(tmp_path / "fresh", csv_path)).mode == "first"
+
+
+def test_parallel_refresh_is_deterministic(tmp_path, fake_nas):
+    """refresh 도 스레드는 읽기만 한다 — 1개와 8개로 읽은 결과·커서가 같다."""
+    nas, csv_path = fake_nas
+    _add_report(nas, "AOI-10", "10.00.00", 10)
+    outs = []
+    for n in (1, 8):
+        cfg = make_cfg(tmp_path / f"w{n}", csv_path, read_workers=n)
+        collect.collect(cfg)
+        rows, _, _ = collect.collect(cfg, refresh_window_days=30)
+        outs.append((_fingerprint(rows), _cache_of(cfg)["last_mtime"]))
+    assert outs[0][0] == outs[1][0] and outs[0][1] == outs[1][1]
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# C15 — 캐시 파일: strict UTF-8 · 손상본 보존(.bad-<시각>) · 고유 임시 파일 · 실패 시 정리
+# ══════════════════════════════════════════════════════════════════════════════
+@pytest.mark.parametrize("garbage", [b'{"reports": {"\xff\xfe": {}}, "last_mtime": {}}', b'{"reports": {', b"[]"],
+                         ids=["bad-utf8", "truncated", "not-object"])
+def test_corrupt_cache_is_preserved_as_bad_file_not_overwritten_silently(tmp_path, fake_nas, garbage):
+    """★ 예전에는 errors='replace' 로 읽어 손상 바이트가 U+FFFD 로 바뀌거나, 못 읽으면 조용히 빈 캐시로 덮어썼다."""
+    nas, csv_path = fake_nas
+    cfg = make_cfg(tmp_path, csv_path)
+    out = tmp_path / "out"
+    out.mkdir()
+    (out / "aoi_cache.json").write_bytes(garbage)
+    stats, logs = {}, []
+    rows, _, _ = collect.collect(cfg, stats=stats, log=logs.append)
+    assert len(rows) == 9 and stats["cache_status"] == collect.CACHE_CORRUPT
+    bad = [p for p in out.iterdir() if p.name.startswith("aoi_cache.json.bad-")]
+    assert len(bad) == 1 and bad[0].read_bytes() == garbage                    # 원본 그대로 보존
+    assert stats["cache_preserved"] == str(bad[0])
+    fresh = json.loads((out / "aoi_cache.json").read_text(encoding="utf-8"))
+    assert len(fresh["reports"]) == 3 and "_corrupt_source" not in fresh and "_status" not in fresh
+    assert any("보존" in m for m in logs)
+    assert not [p for p in out.iterdir() if p.name.endswith(".tmp")]
+    # 다음 수집은 정상 캐시로 이어진다(보존본은 건드리지 않는다)
+    stats2 = {}
+    collect.collect(cfg, stats=stats2)
+    assert stats2["cache_status"] == collect.CACHE_OK and bad[0].read_bytes() == garbage
+
+
+def test_cache_load_is_strict_utf8_but_report_reading_stays_lenient(tmp_path):
+    cache_file = tmp_path / "c.json"
+    cache_file.write_bytes(b'{"reports": {}, "last_mtime": {}, "failed": {}, "note": "\xff"}')
+    c = collect._load_cache({"cache_file": str(cache_file)}, rederive=False)
+    assert collect.cache_status(c) == collect.CACHE_CORRUPT and c["reports"] == {}
+    assert collect.cache_status(collect._load_cache({"cache_file": str(tmp_path / "none.json")})) == collect.CACHE_MISSING
+    from aoi_capacity import nas_guard
+    assert "�" in nas_guard.read_text(cache_file)                            # Report 용 관대한 읽기는 그대로다
+
+
+def test_save_failure_leaves_no_tmp_and_keeps_the_old_cache(tmp_path, fake_nas, monkeypatch):
+    """저장이 중간에 실패하면(검증 실패·교체 실패) 자기 임시 파일만 지우고 원본은 그대로다."""
+    nas, csv_path = fake_nas
+    cfg = make_cfg(tmp_path, csv_path)
+    _run(cfg)
+    raw = open(cfg["cache_file"], "rb").read()
+    monkeypatch.setattr(collect, "_validate_cache_file", lambda tmp, cache: (_ for _ in ()).throw(ValueError("검증 실패")))
+    with pytest.raises(ValueError):
+        collect.collect(cfg, refresh_window_days=30)
+    assert open(cfg["cache_file"], "rb").read() == raw
+    assert [p.name for p in (tmp_path / "out").iterdir()] == ["aoi_cache.json"]
+    monkeypatch.undo()
+    real = os.replace
+
+    def locked(src, dst, *a, **k):
+        if str(dst).endswith("aoi_cache.json"):
+            raise PermissionError("잠김")
+        return real(src, dst, *a, **k)
+
+    monkeypatch.setattr(os, "replace", locked)
+    with pytest.raises(PermissionError):
+        collect.collect(cfg, refresh_window_days=30)
+    assert open(cfg["cache_file"], "rb").read() == raw
+    assert [p.name for p in (tmp_path / "out").iterdir()] == ["aoi_cache.json"]
+
+
+def test_save_cache_validates_what_it_wrote_and_uses_a_unique_tmp(tmp_path):
+    cfg = {"cache_file": str(tmp_path / "c" / "cache.json"), "nas_roots": [], "output_dir": str(tmp_path)}
+    cache = {"reports": {"/x/a.htm": {"rows": [], "mtime": 1}}, "last_mtime": {}, "failed": {}, "_status": "ok"}
+    out = collect._save_cache(cfg, cache)
+    assert out == {"path": cfg["cache_file"], "preserved": ""}
+    assert json.loads((tmp_path / "c" / "cache.json").read_text(encoding="utf-8"))["parser_version"] == collect.PARSER_VERSION
+    assert [p.name for p in (tmp_path / "c").iterdir()] == ["cache.json"]
+    t1, t2 = collect._unique_tmp("/a/b.json"), collect._unique_tmp("/a/b.json")
+    assert t1 != t2 and t1.startswith("/a/b.json.") and t1.endswith(".tmp")
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# C06 — HTML 이 주 산출물: CSV 잠금(Excel)은 경고, HTML 실패는 여전히 실패, 프로그래밍 오류는 삼키지 않는다
+# ══════════════════════════════════════════════════════════════════════════════
+def _lock_replace_for(monkeypatch, suffix):
+    real = os.replace
+
+    def locked(src, dst, *a, **k):
+        if str(dst).lower().endswith(suffix):
+            raise PermissionError(13, "다른 프로세스가 사용 중", str(dst))
+        return real(src, dst, *a, **k)
+
+    monkeypatch.setattr(os, "replace", locked)
+
+
+def test_csv_locked_by_excel_writes_html_and_returns_a_structured_warning(tmp_path, fake_nas, monkeypatch):
+    nas, csv_path = fake_nas
+    cfg = make_cfg(tmp_path, csv_path, write_csv=True)
+    rows, dev_meta, errors, _ = _run(cfg)
+    _lock_replace_for(monkeypatch, ".csv")
+    warnings, logs = [], []
+    target = collect.write_html(cfg, rows, dev_meta, errors, time.time(), mode="gui", warnings=warnings, log=logs.append)
+    assert os.path.isfile(target) and target.endswith("AOI_capacity.html")
+    assert len(warnings) == 1 and warnings[0]["kind"] == collect.WARN_CSV
+    assert warnings[0]["path"].endswith("AOI_capacity.csv") and "PermissionError" in warnings[0]["error"]
+    assert warnings[0]["html"] == target
+    names = sorted(p.name for p in (tmp_path / "out").iterdir())
+    assert names == ["AOI_capacity.html", "aoi_cache.json"]                    # CSV 임시 파일도 남지 않는다
+    assert any("CSV 저장 실패" in m for m in logs)
+    # warnings 를 안 줘도(옛 호출 방식) 예외 없이 HTML 을 돌려준다
+    assert collect.write_html(cfg, rows, dev_meta, errors, time.time()) == target
+
+
+def test_html_write_failure_is_still_a_failure_and_cleans_its_tmp(tmp_path, fake_nas, monkeypatch):
+    nas, csv_path = fake_nas
+    cfg = make_cfg(tmp_path, csv_path, write_csv=True)
+    rows, dev_meta, errors, _ = _run(cfg)
+    _lock_replace_for(monkeypatch, ".html")
+    with pytest.raises(PermissionError):
+        collect.write_html(cfg, rows, dev_meta, errors, time.time(), warnings=[])
+    assert sorted(p.name for p in (tmp_path / "out").iterdir()) == ["aoi_cache.json"]
+
+
+def test_csv_programming_error_is_not_swallowed(tmp_path, fake_nas, monkeypatch):
+    nas, csv_path = fake_nas
+    cfg = make_cfg(tmp_path, csv_path, write_csv=True)
+    rows, dev_meta, errors, _ = _run(cfg)
+    monkeypatch.setattr(collect.csv, "DictWriter", lambda *a, **k: (_ for _ in ()).throw(TypeError("버그")))
+    with pytest.raises(TypeError):
+        collect.write_html(cfg, rows, dev_meta, errors, time.time(), warnings=[])
+    assert (tmp_path / "out" / "AOI_capacity.html").exists()
+    assert not [p for p in (tmp_path / "out").iterdir() if p.name.endswith(".tmp")]
+
+
+def test_csv_on_nas_is_refused_not_downgraded_to_a_warning(tmp_path, fake_nas):
+    """NasWriteRefused 는 OSError 가 아니다 — CSV 경로가 NAS 아래면 write_html 의 `except OSError` 에 걸리지 않고 그대로 거부된다."""
+    from aoi_capacity import nas_guard
+    nas, csv_path = fake_nas
+    cfg = make_cfg(tmp_path, csv_path, write_csv=True)
+    assert not issubclass(nas_guard.NasWriteRefused, OSError)
+    with pytest.raises(nas_guard.NasWriteRefused):
+        collect._write_csv(cfg, str(nas / "X" / "AOI-9" / "AOI_capacity.csv"), [])
+    assert not (nas / "X" / "AOI-9" / "AOI_capacity.csv").exists()
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# CLI 계약 — 새 플래그와 종료 코드(0 성공 · 3 HTML 은 썼지만 CSV 실패 · 1 재구축 거부)
+# ══════════════════════════════════════════════════════════════════════════════
+def _cli_config(tmp_path, csv_path, **over):
+    cfg_path = tmp_path / "cli" / "config.json"
+    cfg_path.parent.mkdir(parents=True, exist_ok=True)
+    body = {"devices_csv": str(csv_path), "cache_file": str(tmp_path / "cli" / "aoi_cache.json"),
+            "output_dir": str(tmp_path / "cli" / "out"), "backfill_days": 3650, "retention_days": 3650,
+            "scope_devices": ["*"]}
+    body.update(over)
+    cfg_path.write_text(json.dumps(body, ensure_ascii=False), encoding="utf-8")
+    return cfg_path
+
+
+def _count_report_reads(monkeypatch, nas):
+    """CLI 는 write_html 이 template.html 도 읽으므로 NAS 아래의 Report(.htm) 만 센다."""
+    from aoi_capacity import nas_guard
+    seen = {"htm": 0}
+    orig = nas_guard.read_text
+
+    def spy(path, *a, **k):
+        if str(path).lower().endswith((".htm", ".html")) and nas_guard.is_under(str(path), str(nas)):
+            seen["htm"] += 1
+        return orig(path, *a, **k)
+
+    monkeypatch.setattr(collect.nas_guard, "read_text", spy)
+    return seen
+
+
+def test_cli_flags_and_exit_codes(tmp_path, fake_nas, monkeypatch, capsys):
+    from aoi_capacity import cli
+
+    nas, csv_path = fake_nas
+    cfg_path = _cli_config(tmp_path, csv_path, write_csv=True)
+    assert cli.main(["--config", str(cfg_path)]) == cli.EXIT_OK
+    assert (tmp_path / "cli" / "out" / "AOI_capacity.csv").exists()
+    seen = _count_report_reads(monkeypatch, nas)
+    assert cli.main(["--config", str(cfg_path), "--backfill"]) == cli.EXIT_OK and seen["htm"] == 0
+    seen = _count_report_reads(monkeypatch, nas)
+    assert cli.main(["--config", str(cfg_path), "--refresh-window", "30"]) == cli.EXIT_OK and seen["htm"] == 3
+    out = capsys.readouterr().out
+    assert "모드 refresh" in out and "다시 읽기 3" in out
+    seen = _count_report_reads(monkeypatch, nas)
+    assert cli.main(["--config", str(cfg_path), "--full"]) == cli.EXIT_OK and seen["htm"] == 3
+    assert "모드 rebuild" in capsys.readouterr().out
+    # config.json 의 키로도 켜진다
+    seen = _count_report_reads(monkeypatch, nas)
+    assert cli.main(["--config", str(_cli_config(tmp_path, csv_path, refresh_window_days=30))]) == cli.EXIT_OK
+    assert seen["htm"] == 3
+    # CSV 잠김 → 3, HTML 은 새로 썼다 (위 줄이 config.json 을 덮어썼으니 CSV 켠 설정으로 되돌린다)
+    cfg_path = _cli_config(tmp_path, csv_path, write_csv=True)
+    _lock_replace_for(monkeypatch, ".csv")
+    html = tmp_path / "cli" / "out" / "AOI_capacity.html"
+    os.utime(html, (1, 1))
+    assert cli.main(["--config", str(cfg_path)]) == cli.EXIT_PARTIAL
+    assert html.stat().st_mtime > 1000 and "경고(csv)" in capsys.readouterr().out
+    monkeypatch.undo()
+    # 재구축 거부 → 1, 캐시 그대로
+    raw = (tmp_path / "cli" / "aoi_cache.json").read_bytes()
+    monkeypatch.setattr(collect, "parse_report", lambda name, text: (_ for _ in ()).throw(ValueError("전부 깨짐")))
+    assert cli.main(["--config", str(cfg_path), "--rebuild-all"]) == cli.EXIT_FAILED
+    assert (tmp_path / "cli" / "aoi_cache.json").read_bytes() == raw
+    assert "전체 재구축 거부" in capsys.readouterr().out
+
+
+def test_cli_help_describes_what_backfill_really_does(monkeypatch, capsys):
+    """★ 옛 도움말·문구는 '전부 다시 읽습니다' 였지만 코드는 캐시된 파일을 건너뛰었다 — 문구가 코드와 같아야 한다."""
+    import argparse
+    from aoi_capacity import cli
+    seen = []
+    real = argparse.ArgumentParser.add_argument
+
+    def spy(self, *a, **k):
+        seen.append((a, k.get("help", "")))
+        return real(self, *a, **k)
+
+    monkeypatch.setattr(argparse.ArgumentParser, "add_argument", spy)
+    with pytest.raises(SystemExit):
+        cli.main(["--help"])
+    capsys.readouterr()
+    helps = {a[0]: h for a, h in seen if a}
+    assert "건너뜀" in helps["--backfill"] and "refresh-window" in helps["--backfill"]
+    assert "rebuild-all" in helps["--full"]
+    assert "이전 행" in helps["--refresh-window"] and "기존 캐시를 그대로" in helps["--rebuild-all"]
+    from aoi_capacity import i18n
+    assert "건너뜁니다" in i18n.KO.COLLECT_PLAN_BACKFILL_FMT and "다시 읽습니다" not in i18n.KO.COLLECT_PLAN_BACKFILL_FMT.split("건너뜁니다")[0]
