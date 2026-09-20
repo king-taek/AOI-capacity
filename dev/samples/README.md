@@ -33,6 +33,8 @@ meta = d["meta"]
 
 행을 꺼낼 때는 `dev/tests/sample_rows.py` 를 쓴다(`.gz` 도 풀어 읽고, 열은 **이름으로** 매핑하며 문자열 풀 범위를 검증한다).
 집계 수치를 재려면 `python dev/tools/measure.py <샘플>` — 열람 시계를 그 파일의 수집 시각에 고정해 언제 돌려도 같은 값이 나온다.
+캐시·HTML 쓰기의 크기와 메모리는 `python dev/tools/measure_cache.py <샘플> --out <임시 폴더>` (P3-A 전후 비교: 30일치 156,109행 →
+캐시 JSON 86.6MB, HTML 쓰기 최고점 옛 치환 방식 181MB → 순차 쓰기 107MB, 바뀐 것 없는 실행의 캐시 쓰기 0바이트).
 단계별 전후 수치는 `dev/samples/ledger_2026-09-18.md` 에 적는다.
 
 `AOI_capacity_2026-09-18_30일치.html.gz` 에 대해 알아 둘 것:
