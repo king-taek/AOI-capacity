@@ -129,6 +129,7 @@ button{font:inherit;color:inherit}
 .btn:active,.seg button:active,.nav button:active,.ib:active,.x:active,.fbtn:active,.callout:active{transform:scale(.96)}
 .callout:hover{transform:translateY(-1px);box-shadow:0 2px 6px rgba(15,21,28,.10)}
 .chev{display:inline-block;transition:transform .18s var(--ease),color .18s}.rowbtn:hover .chev{transform:translateX(3px);color:var(--ink)}
+[data-bar].swap{animation:barSwap .32s ease-out}@keyframes barSwap{from{opacity:.45}to{opacity:1}}
 .dot{width:5px;height:5px;border-radius:50%;flex:none}.dot.alert{animation:pulseDot 1.4s ease-out 3}
 @keyframes pulseDot{0%{box-shadow:0 0 0 0 rgba(197,69,60,.45)}100%{box-shadow:0 0 0 7px rgba(197,69,60,0)}}
 .cards>div{transition:background-color .2s}.cards>div:hover{background:#FBFCFD}
@@ -818,11 +819,13 @@ document.addEventListener("visibilitychange",()=>{for(const a of _lts)document.h
 /* 숫자 카운트업: 값이 바뀐 카드만, 이전 값에서 새 값으로(권한 없는 곳엔 안 씀 — 시각 문자열은 그대로) */
 const cnt=(v,dec=0)=>`<span data-count="${Number(v)||0}" data-dec="${dec}">${(Number(v)||0).toFixed(dec)}</span>`;
 function countUp(root){for(const el of root.querySelectorAll("[data-count]")){const v=+el.dataset.count,d=+(el.dataset.dec||0),prev=el.__cv;el.__cv=v;
-  if(prev===v||!G()||reduced())continue;const first=prev===undefined;const o={v:first?0:prev};gsap.to(o,{v,duration:first?.7:.55,ease:first?"power3.out":"power2.out",onUpdate:()=>{el.textContent=o.v.toFixed(d);},onComplete:()=>{el.textContent=v.toFixed(d);}});}}
+  if(prev===undefined||prev===v||!G()||reduced()||!el.closest(".cards"))continue;const o={v:prev};gsap.to(o,{v,duration:.55,ease:"power2.out",onUpdate:()=>{el.textContent=o.v.toFixed(d);},onComplete:()=>{el.textContent=v.toFixed(d);}});}}
 /* 24시간 막대의 sweep: 막대가 새로 그려지거나 다른 날의 것으로 바뀌면 왼쪽에서 오른쪽으로 드러난다(시간이 흐르는 방향) */
 function sweepBars(root){if(!G()||reduced()){for(const el of root.querySelectorAll("[data-bar]"))el.__bar=el.dataset.bar;return;}
-  const els=[...root.querySelectorAll("[data-bar]")].filter(el=>el.__bar!==el.dataset.bar);if(!els.length)return;const each=Math.min(.02,.45/els.length);
-  els.forEach((el,i)=>{el.__bar=el.dataset.bar;gsap.fromTo(el,{clipPath:"inset(0 100% 0 0 round 10px)"},{clipPath:"inset(0 0% 0 0 round 10px)",duration:.6,ease:"power2.out",delay:i*each,clearProps:"clipPath"});});}
+  const fresh=[],changed=[];for(const el of root.querySelectorAll("[data-bar]")){if(el.__bar===undefined)fresh.push(el);else if(el.__bar!==el.dataset.bar)changed.push(el);el.__bar=el.dataset.bar;}
+  const each=Math.min(.02,.45/Math.max(1,fresh.length));
+  fresh.forEach((el,i)=>gsap.fromTo(el,{clipPath:"inset(0 100% 0 0 round 10px)"},{clipPath:"inset(0 0% 0 0 round 10px)",duration:.6,ease:"power2.out",delay:i*each,clearProps:"clipPath"}));
+  for(const el of changed){el.classList.remove("swap");void el.offsetWidth;el.classList.add("swap");}}   /* CSS 로 — 같은 요소의 sweep 트윈과 겹치면 clearProps 가 건너뛰어진다(실측) */
 /* 무엇이든 새로 들어올 때(뷰 · 키 바뀐 차트 · 팝업): 카드는 차례로 떠오르고, 막대 그래프는 바닥에서 자라고, 히트맵 칸은 차례로 켜진다 — 한 번의 '등장', 이후 값 변화는 CSS transition */
 function enterView(root){if(!G()||reduced())return;
   const cards=root.querySelectorAll(".cards>div");if(cards.length)gsap.from(cards,{y:8,opacity:0,duration:.32,ease:"power3.out",stagger:.04,clearProps:"transform,opacity"});
@@ -842,8 +845,7 @@ function sigEnter(root){for(const el of root.querySelectorAll("[data-sig]")){con
   const mk=el.querySelectorAll(":scope>i");if(mk.length)gsap.from(mk,{scaleY:.15,opacity:0,transformOrigin:"50% 100%",duration:.35,ease:"power3.out",stagger:{each:Math.min(.015,.4/mk.length)},clearProps:"transform,opacity"});}}
 let _prevDayI=null;
 function slideDay(root){const el=root.querySelector(".daylab");if(!el)return;const cur=state.dayI;
-  if(_prevDayI!==null&&cur!==_prevDayI&&G()&&!reduced()){const dir=cur>_prevDayI?1:-1;gsap.fromTo(el,{x:dir*16,opacity:0},{x:0,opacity:1,duration:.3,ease:"power3.out",clearProps:"all"});
-    const list=root.querySelector("main .panel[data-anim]");if(list)gsap.fromTo(list,{x:dir*14,opacity:.6},{x:0,opacity:1,duration:.36,ease:"power3.out",clearProps:"transform,opacity"});}_prevDayI=cur;}
+  if(_prevDayI!==null&&cur!==_prevDayI&&G()&&!reduced()){const dir=cur>_prevDayI?1:-1;gsap.fromTo(el,{x:dir*16,opacity:0},{x:0,opacity:1,duration:.3,ease:"power3.out",clearProps:"all"});}_prevDayI=cur;}
 function morphChildren(from,to){
   const anim=canAnim()&&from.hasAttribute("data-anim");
   const before=anim?flipBefore(from):null;
@@ -867,13 +869,11 @@ function flipBefore(p){gInit();const els=keyed(p);const rect=new Map();for(const
 function flipAfter(p,before){
   const rm=reduced(),els=keyed(p);
   for(const c of els)if(c.hasAttribute("data-entered"))c.removeAttribute("data-entered");
-  const moved=els.filter(c=>{const b=before.rect.get(c);if(!b||!(c.classList.contains("rowbtn")||c.classList.contains("row2")))return false;const r=c.getBoundingClientRect();return Math.abs(r.top-b.top)>2||Math.abs(r.left-b.left)>2;});
   /* 자리 이동은 Flip(앞뒤 상태 차이를 transform 으로 되감기), 새 노드는 등장 — 팝업(.ov)은 animate.css fadeIn + 대화상자가 살짝 떠오른다 */
   Flip.from(before.state,{targets:els,duration:rm?0:.32,ease:"power3.out",scale:false,nested:true,
     onEnter:els2=>{for(const c of els2){if(c.classList.contains("ov")){c.classList.add("animate__animated","animate__fadeIn");const d=c.querySelector(".dlg");if(d&&!rm)gsap.fromTo(d,{opacity:0,y:10,scale:.985},{opacity:1,y:0,scale:1,duration:.26,clearProps:"transform,opacity"});if(d)enterView(d);}
       else{const dir=c.tagName==="MAIN"?(state.viewDir||0):0;gsap.fromTo(c,rm?{opacity:0}:{opacity:0,x:dir*28,y:dir?0:8},{opacity:1,x:0,y:0,duration:rm?.12:(dir?.3:.24),clearProps:"transform,opacity"});enterView(c);}}}});
-  /* 자리가 바뀐 행은 잠깐 밝게 — 정렬·필터 뒤 어느 행이 움직였는지 보인다 */
-  if(!rm&&moved.length)gsap.fromTo(moved,{backgroundColor:"rgba(46,107,168,.10)"},{backgroundColor:"rgba(46,107,168,0)",duration:.9,ease:"power2.out",delay:.25,clearProps:"backgroundColor"});}
+}
 function flipLeave(p,o,b){
   const cs=getComputedStyle(o),rm=reduced();
   if(cs.position!=="fixed"){const pr=p.getBoundingClientRect();if(getComputedStyle(p).position==="static")p.style.position="relative";
@@ -1071,7 +1071,7 @@ function errorsHtml(){
   return `<div class="bar-h"><h1>Error</h1>${chips}<div class="spacer"></div>${segHtml(floors)}${segHtml(spans)}${segHtml(metrics)}</div>
     <section class="cards sm" style="margin-bottom:16px">${stats.map(s=>`<div><p class="k">${esc(s.k)}</p><p class="v num" style="${s.mono?"font-family:"+MONO:""}">${s.h||esc(s.v)}</p><p class="s">${esc(s.s)}</p></div>`).join("")}</section>
     <section class="panel pad"><div style="display:flex;align-items:baseline;gap:10px;margin-bottom:12px"><h2>날짜별 ${MET?"대기 시간":"건수"}</h2><span style="font-size:12.5px;color:#5A6673">${pickDay?(md(pickDay)+" 하루만 보는 중 — 막대를 다시 누르면 기간으로"):(spanDays.length===D.days.length?"전체 "+spanDays.length+"일":"최근 "+spanDays.length+"일")}</span></div>
-      <div data-anim><div data-key="chart:${spanDays.length}:${pickDay||""}:${MET?"m":"n"}:${state.floor}:${FT||""}:${FJ==null?"":FJ}">${barsHtml(bars,140,true)}</div></div></section>
+      <div data-anim><div data-key="chart:errors">${barsHtml(bars,140,true)}</div></div></section>
     <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(310px,1fr));gap:16px">
       <section class="panel" data-anim><div style="padding:15px 20px 10px"><h2>유형별${FT?` <span style="font-weight:400;color:#5A6673;font-size:12px">이 유형만</span>`:""}</h2></div>
         ${typeArr.map(([c,v])=>`<div class="row2" data-key="type:${esc(c)}"><button class="rowbtn" data-h="${h(()=>setState({modalType:c,stack:pushTop("type")}))}" title="${esc(c)} · ${v[0]}건 · Error 대기 ${hm(v[1])} · 눌러서 자세히" style="grid-template-columns:166px 1fr 50px 72px 14px;gap:9px;padding:9px 6px 9px 20px;min-height:44px">
@@ -1279,7 +1279,7 @@ function trendHtml(){
     return{n,avgTxt:a===null?"—":a.toFixed(0)+"%",avgInk:a!==null&&a<S.thU()?"#B4402F":"#0F151C",cells:vals.map((v,i)=>({bg:v===null?"transparent":HEAT[Math.min(HEAT.length-1,Math.floor(Math.min(99.9,v)/(100/HEAT.length)))],ring:v===null?"inset 0 0 0 1px #DCE2E9":"none",title:md(D.days[i])+" · "+n+" · "+(v===null?"시간 기록 없음":v.toFixed(0)+"%")+" · 누르면 팝업",go:S.open(n,i)}))};});
   return `<div class="bar-h"><h1>추이</h1><div class="spacer"></div>${segHtml(floors)}${segHtml(units)}</div>
     <section class="panel pad"><div style="display:flex;align-items:baseline;gap:10px;margin-bottom:12px"><h2>${U==="day"?"날짜별 평균 가동률":(U==="week"?"주별 평균 가동률":"월별 평균 가동률")}</h2><span style="font-size:12.5px;color:#5A6673;white-space:nowrap">평균 ${avg.toFixed(1)}%${PD.size?" · 첫날(부분) 제외":""}</span></div>
-      <div data-anim><div data-key="chart:${U}:${state.floor}" style="position:relative"><span style="position:absolute;left:0;right:0;bottom:${(avg/mx*100).toFixed(1)}%;border-top:1px dashed #B0862F;z-index:1;pointer-events:none;height:0;top:auto"></span>${barsHtml(bars,180,true)}</div></div></section>
+      <div data-anim><div data-key="chart:trend" style="position:relative"><span style="position:absolute;left:0;right:0;bottom:${(avg/mx*100).toFixed(1)}%;border-top:1px dashed #B0862F;z-index:1;pointer-events:none;height:0;top:auto"></span>${barsHtml(bars,180,true)}</div></div></section>
     <div class="bar-h"><h2>장비별 ${D.days.length}일</h2></div>
     <div class="panel" data-anim>
       ${heat.map(hh=>`<div data-key="heat:${esc(hh.n)}" style="display:grid;grid-template-columns:96px 1fr 54px;gap:12px;align-items:center;padding:5px 18px;border-top:1px solid #F1F4F7"><button class="link" style="text-decoration:none;font-size:13px;font-weight:600;color:#0F151C;text-align:left;padding:4px 0" data-h="${h(S.open(hh.n))}">${esc(hh.n)}</button>
