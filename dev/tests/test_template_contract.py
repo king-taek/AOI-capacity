@@ -40,10 +40,41 @@ def test_data_placeholder_present_once():
     assert HTML.count("__DATA__") == 1
 
 
+_VENDOR = re.compile(r'<script id="vendor">.*?</script>', re.S)
+_ALLOWED_VENDOR_URL = re.compile(r"https?://(?:gsap\.com|www\.w3\.org/(?:2000/svg|1999/xhtml|1999/xlink))(?:[/\w.-]*)")
+
+
+def _without_vendor(html: str) -> str:
+    """제3자 라이브러리(GSAP+Flip · animate.css 일부)를 **인라인**으로 싣는다 — 그 라이선스 머리말의 홈페이지 주소와
+    SVG/XHTML 네임스페이스 문자열은 요청이 아니다. vendor 블록과 `/*! … */` 머리말을 걷어내고 나머지에서 네트워크 흔적을 찾는다."""
+    html = _VENDOR.sub("", html)
+    return re.sub(r"/\*!.*?\*/", "", html, flags=re.S)
+
+
 def test_no_network_use_at_all():
-    for bad in ("fetch(", "api.github.com", "fonts.googleapis.com", "XMLHttpRequest",
+    body = _without_vendor(HTML)
+    for bad in ("fetch(", "api.github.com", "fonts.googleapis.com", "XMLHttpRequest", "navigator.sendBeacon", "new WebSocket", "import(",
                 "<script src=", '<link rel="stylesheet"', "http://", "https://"):
-        assert bad not in HTML, bad
+        assert bad not in body, bad
+    assert HTML.count("<script") == 3, "embedded JSON · 인라인 라이브러리(vendor) · 화면 스크립트 — 셋뿐"
+
+
+def test_vendor_block_makes_no_requests_either():
+    """vendor 블록(GSAP·Flip)도 요청 API 를 쓰지 않고, 안에 든 주소는 라이선스·네임스페이스뿐이다."""
+    m = _VENDOR.search(HTML)
+    assert m, "vendor 블록이 없다"
+    v = m.group(0)
+    for bad in ("fetch(", "XMLHttpRequest", "navigator.sendBeacon", "new WebSocket", "import(", "<script src=", "document.write("):
+        assert bad not in v, bad
+    urls = re.findall(r"https?://[^\s\"')]+", v)
+    assert urls and all(_ALLOWED_VENDOR_URL.fullmatch(u.rstrip(".")) for u in urls), sorted(set(urls))
+
+
+def test_vendored_libraries_are_inline_with_their_notices():
+    """GSAP(+Flip) 와 animate.css 일부를 파일 안에 그대로 싣는다 — 라이선스 머리말을 지우지 않는다."""
+    assert '<script id="vendor">' in HTML
+    for notice in ("GSAP 3.", "Subject to the terms at https://gsap.com/standard-license", "Flip 3.", "animate.css", "MIT"):
+        assert notice in HTML, notice
 
 
 def test_browser_never_reads_the_nas_itself():
