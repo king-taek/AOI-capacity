@@ -46,11 +46,14 @@ def graphify_cmds(root: Path, no_viz: bool) -> list[list[str]]:
     return cmds
 
 
-def build(root: Path = ROOT, no_viz: bool = False, run=subprocess.run) -> int:
+def build(root: Path = ROOT, no_viz: bool = False, run=subprocess.run, inline_js: Path | None = None) -> int:
+    """`inline_js` 는 임시 JS 의 위치. 기본(None)은 호출 시점의 모듈 상수 INLINE_JS — 실제 실행에서는 template 옆이어야
+    graphify 가 그래프에 넣고, 테스트는 tmp 경로를 넘기거나 상수를 monkeypatch 해 패키지 폴더에 아무것도 만들지 않는다."""
     if shutil.which("graphify") is None:
         print("graphify 명령이 없습니다: pip install \"graphifyy[sql]\"", file=sys.stderr)
         return 2
-    write_inline_js()
+    tmp_js = Path(inline_js) if inline_js is not None else INLINE_JS
+    write_inline_js(dst=tmp_js)
     try:
         for cmd in graphify_cmds(root, no_viz):
             print("+", " ".join(cmd), flush=True)
@@ -58,7 +61,7 @@ def build(root: Path = ROOT, no_viz: bool = False, run=subprocess.run) -> int:
             if rc != 0:
                 return rc
     finally:
-        INLINE_JS.unlink(missing_ok=True)   # 성공·실패·예외 어느 경우에도 임시 파일은 남기지 않는다
+        tmp_js.unlink(missing_ok=True)   # 성공·실패·예외 어느 경우에도 임시 파일은 남기지 않는다
     return 0
 
 

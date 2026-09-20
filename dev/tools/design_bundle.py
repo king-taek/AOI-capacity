@@ -72,10 +72,16 @@ def _res(text: str, mime: str) -> dict:
             "data": base64.b64encode(gzip.compress(text.encode("utf-8"), mtime=0)).decode("ascii")}
 
 
-def build(out: Path = DEFAULT_OUT) -> Path:
+def build(out: Path = DEFAULT_OUT, offline_dc: Path = OFFLINE_DC) -> Path:
+    """단일 HTML 을 `out` 에, 오프라인 DC 변형을 `offline_dc` 에 쓴다.
+
+    기본값은 저장소의 추적 파일(app/AOI-Dashboard-offline.dc.html)이다 — 테스트는 반드시 tmp 경로를 넘긴다.
+    같은 내용을 다시 써도 mtime 이 바뀌어 작업 트리가 오염되기 때문이다(test_design_bundle 이 sha256·mtime 으로 지킨다).
+    """
     main = MAIN.read_text(encoding="utf-8")
     off = offline_variant(main)
-    OFFLINE_DC.write_text(off, encoding="utf-8")
+    offline_dc.parent.mkdir(parents=True, exist_ok=True)
+    offline_dc.write_text(off, encoding="utf-8")
     meta = json.loads(SHELL_META.read_text(encoding="utf-8"))
     manifest = dict(meta["shell_manifest"])
     data_js = "window.AOI_DATA=" + json.dumps(json.loads(DATA.read_text(encoding="utf-8")), ensure_ascii=False, separators=(",", ":")) + ";"
@@ -95,9 +101,10 @@ def build(out: Path = DEFAULT_OUT) -> Path:
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--out", default=str(DEFAULT_OUT))
+    ap.add_argument("--offline-dc", default=str(OFFLINE_DC), help="오프라인 DC 변형 출력 위치(기본: 저장소의 추적 파일)")
     args = ap.parse_args(argv)
-    p = build(Path(args.out))
-    print(f"오프라인 DC: {OFFLINE_DC}\n단일 HTML : {p} ({p.stat().st_size // 1024} KB)")
+    p = build(Path(args.out), Path(args.offline_dc))
+    print(f"오프라인 DC: {args.offline_dc}\n단일 HTML : {p} ({p.stat().st_size // 1024} KB)")
     return 0
 
 
