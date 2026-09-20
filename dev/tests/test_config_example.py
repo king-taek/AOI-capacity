@@ -15,7 +15,7 @@ ROOT = Path(__file__).resolve().parents[2]
 EXAMPLE = ROOT / "docs" / "config.example.json"
 #: DEFAULT_CONFIG 에는 있지만 예시에 일부러 넣지 않는 키 — 지금은 없다. 화면 문턱(attention_util·attention_err)이 설정 키로 들어오면
 #: 여기서 이름을 빼고 예시에 넣거나, 내부 키로 남길 이유를 적는다.
-NOT_IN_EXAMPLE: frozenset[str] = frozenset({"attention_util", "attention_err"})
+NOT_IN_EXAMPLE: frozenset[str] = frozenset()   # 지금은 공개 키 전부가 예시에 있다
 
 
 def _example() -> dict:

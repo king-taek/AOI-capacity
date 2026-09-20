@@ -26,7 +26,7 @@ Camtek AOI 장비의 BatchReport/WaferInfo.ini 를 읽어 장비별 가동률을
    `AOI_capacity.html` 한 장을 사용자가 더블클릭해 브라우저에서 본다. QtWebEngine·로컬 서버·localhost 를 쓰지 않는다.
    그 HTML 은 데이터·CSS·JS 를 모두 품고 **바깥으로 요청을 한 건도 보내지 않는다**(가드: `test_template_contract.py`).
    브라우저가 NAS 를 직접 읽는 경로도 두지 않는다 — 수집은 Python 만 한다. 자동 주기 수집은 없다(수동 실행만, D50).
-   화면은 **재설계 구조**(D47, 9/20): 가동률 · Error · 추이 · 리포트 4탭 + 장비/Error/유형·Job 팝업, 라이트 단일. 모델은 아래 '레이아웃' 의 화면 절.
+   화면은 **재설계 구조**(D47, 9/20): 가동률 · Error · 추이 · TB500 · Kendall(D59) 4탭 + 장비/Error/유형·Job 팝업, 라이트 단일. 모델은 아래 '레이아웃' 의 화면 절.
 4. **Scanresult 를 재귀 검색하지 않는다.** INI 경로는 `{scan}/{job}/{setup}/{lot}/{wafer}/WaferInfo.ini` 로 계산해 존재만 확인한다.
    `job`·`setup` 의 출처는 **Report 안의 `Job/Setup` 값**이다(파일명이 아니다 — 실장비 516개 중 옛 파일명 규칙에 맞는 건 6개뿐이었다).
    `Job/Setup` 이 없는 옛 형식만 파일명 규칙(`{job}_{4자리}_{lot}_…`)으로 되돌아가고, 그것도 안 맞으면
@@ -38,6 +38,8 @@ Camtek AOI 장비의 BatchReport/WaferInfo.ini 를 읽어 장비별 가동률을
    `Scanresult_Back up_260918` 같은 폴더로 옮긴다(30대 중 16대, 이름 규칙 제각각 → `Scanresult` 로 시작하는 폴더 전부, `devices.scan_dirs_of`).
    폴더 이름의 날짜가 경계(그 이전 것을 담음)라 배치 시작일로 1순위 폴더를 바로 고르고(`collect.ini_roots_for`, 확인 횟수는 예전과 같은 1번),
    거기 없을 때만 나머지를 본다. 어디에도 없는데 Wafer 폴더에 `MoveResultFlag` 만 있으면 `ini_match="MOVED_ONLY"`(이동만 되고 스캔 안 함, 누락 복구 대상).
+   Scanresult 폴더 비교는 **Windows 경로 의미**(`devices.dir_key/same_dir` = ntpath normcase+normpath)로 한다 — `ScanResult`·`Scanresult`·`SCANRESULT`·끝 구분자 차이는 한 폴더이고
+   `scan_dirs_of` 맨 앞은 나열된 실제 철자다. 지금 쓰는 폴더가 '백업' 으로 한 번 더 잡히면 없는 INI 마다 확인이 두 배가 된다(C05, 가드 `test_devices_csv.py`).
    4층 5대는 백업 폴더가 없다. 검증 도구는 조사 결과 읽을 수 있는 INI 가 24,050 → 53,069 개 — **실장비 재수집(`--rebuild-all`) 전후 비교는 아직 안 했다**.
    **4층은 Job 폴더 이름이 Report 의 Job 값과 다르다**(사용자가 NAS 에서 확인 9/20): Report `2D@RE $7781539A-WUP_0858562PD_0A` ↔ 폴더
    `2D@RE-$7781539A-WUP_0858562PD`(`2D@XX` 뒤 공백→하이픈, 끝 `_0A`/`_0B` 없음). `collect.job_folder_variants` 가 원문 · 하이픈 · 접미 뗌 · 둘 다
@@ -58,11 +60,15 @@ Camtek AOI 장비의 BatchReport/WaferInfo.ini 를 읽어 장비별 가동률을
    (PyInstaller 의 FrozenImporter 가 디스크의 새 코드를 가린다). `hiddenimports=[]`, `pathex=[]`, 앱 패키지는 `excludes`.
 7. **`app.new` 는 완성·검증된 트리만.** `app.new.part` 에 만들고 검증 후 rename 한 것이 준비 신호. VERSION 은 스테이징 트리에만 쓴다.
 8. **사용자 문구는 `aoi_capacity/i18n/ko.py` 에만.** 위젯·업데이터·워커에 한국어 리터럴을 두지 않는다(로그 메시지는 예외).
+   가드 `test_no_hardcoded_korean.py` 는 `cli.py`·`utils/config.py` 도 본다 — CLI 도움말·출력은 ko.py `CLI_*`, 설정 검사 문구는 `CFG_*`(C12·C13).
+   행 데이터의 `data_issue` 자유 문장도 새 행에는 쓰지 않는다 — 코드(`issue_codes`)만 캐시에 두고 문장은 출력 때 `ko.ISSUE_TEXTS` 로 만든다(아래 행 계약).
 9. **긴 작업은 UI 스레드 밖에서.** 코어 함수는 `progress(done, total, phase)` 콜백을 받고, 총량을 모르면 `total<=0`(busy) 로 보고한다.
    NAS 읽기는 **기다리는 시간이 대부분**이라(SMB 왕복 지연) 장비 나열도 Report 읽기도 `read_workers` 개씩
    동시에 한다(`collect._run`, 기본 8 · 1 이면 예전처럼 한 줄로). ★ 스레드는 **읽기만** 한다 —
    캐시·커서·오류 목록에 넣는 일은 전부 메인 스레드가 `plan` 순서대로 하므로 결과가 순서에 좌우되지 않는다.
    회귀 가드: `test_collect_incremental.py` 가 1·2·8·32개로 읽은 결과의 지문과 커서가 같은지 본다.
+   장비 확인(Report/Scanresult 폴더 · 백업 나열 · 연결 확인)도 `devices._pmap` 으로 `read_workers` 개씩 동시에 하되 **범위 게이트를 지난 장비만**, 결과·로그는 입력 순서,
+   취소는 새 작업 제출만 멈춘다(SMB 호출을 중간에 끊는다고 주장하지 않는다). 동시성 예산은 하나 — Report 읽기 단계 안에 풀을 겹치지 않는다(C08, 가드 `test_parallel_device_check_stays_in_scope_and_matches_serial`).
 10. `requirements.txt` 변경은 업데이트가 통째로 실패할 수 있는 지점 — 작업 요약에 반드시 표시하고 `--upgrade` 는 쓰지 않는다. 테스트는 실제 pip 을 절대 실행하지 않는다.
 
 ## 레이아웃
@@ -70,7 +76,8 @@ Camtek AOI 장비의 BatchReport/WaferInfo.ini 를 읽어 장비별 가동률을
   `ui/` — 수집 UI 만: `pages/collect_page.py`·`devices_page.py`·`settings_page.py`), `scripts/`(런처·빌드), `dev/`(테스트), `docs/`.
 - **결과 화면 재설계 프로토타입**은 `docs/design/dashboard-redesign/`(Claude Design handoff 9/19: `RULES.md`·`CHANGELOG.md`·`app/*.dc.html`·`aoi-data.json`).
   DC 런타임(`support.js`) 위에서 도는 **별도 화면**이고 제품 `template.html` 과 계산 규칙이 여러 곳에서 다르다(추정·Error 단위·재스캔 정의·Job/Lot 이름) —
-  이식은 D47·D48(진행상황) 대로 진행한다. 데이터 `aoi-data.json` 은 `scripts/make_aoi_data.js`(디자인 세션 원본 그대로, Node, 표준 라이브러리 없음 — 9/20 원본 입력으로
+  **이식은 9/20 에 끝났다**(D47~D59). 제품 규칙의 정본은 아래 모델 절이고, 원 디자인과의 차이표·살아 있는 파일 목록은 `docs/design/dashboard-redesign/STATUS.md`(S07).
+  끝난 PROMPT·patch·시안은 `archive/design/` 으로 옮겼다(D62, `archive/SHA256SUMS` · 가드 `test_archive.py`). 데이터 `aoi-data.json` 은 `scripts/make_aoi_data.js`(디자인 세션 원본 그대로, Node, 표준 라이브러리 없음 — 9/20 원본 입력으로
   바이트 동일 재현 확인)가 수집 결과 HTML 의 embedded JSON 에서 만든다. 규칙의 **원본 정의는 이 JS** 다(RULES.md 와 다른 곳은 `scripts/README.md`).
   오프라인 단일 HTML 은 `python dev/tools/design_bundle.py`(표준 라이브러리, 가드 `test_design_bundle.py`)로 만들며 생성물은 커밋하지 않는다.
   업데이트 payload 는 **허용 목록**(`updater._UPDATE_TOP_ALLOW`: `main.py` · `requirements.txt` · `aoi_capacity` · `scripts`(`_UPDATE_KEEP_ONLY` 로 다시 거름) + 생성한 `VERSION`)뿐이다 — `docs/`·`dev/`·`진행상황.md` 는 들어가지 않는다(S01, 가드 `test_update_payload.py`).
@@ -90,13 +97,16 @@ Camtek AOI 장비의 BatchReport/WaferInfo.ini 를 읽어 장비별 가동률을
   **`TEST` 는 분모(24시간)에는 들어가되 분자(실가동)에서만 뺀다**(사용자 확정 — 양산을 위해 돈 게 아니다).
   오류 건수에도 넣지 않는다. 화면에서 사라지지는 않는다: 타임라인에 분홍 점무늬 띠, 제목에 'Test n건 제외',
   Lot 목록에 '시험 · 제외' 표. 빼는 것과 없었던 것은 다르다.
-- 행 데이터 계약(`collect.OUT_COLS`, 24열 · `ROW_SCHEMA_VERSION` 5): `kind`("" = Wafer 한 장 · "batch" = 통째로 실패한 시도 · "slot" = 일부 성공한
+- 행 데이터 계약(`collect.OUT_COLS`, **25열 · `ROW_SCHEMA_VERSION` 6**): `kind`("" = Wafer 한 장 · "batch" = 통째로 실패한 시도 · "slot" = 일부 성공한
   배치의 자리표시 행 Error 를 Report 당 1건으로 합성한 사건, D38), `batch_end`,
   `job`·`setup`(Report 안의 `Job/Setup`, 없으면 파일명 규칙), `report`(BatchReport 파일 이름 — 화면에서 그 파일을 다시 여는 근거),
   `cause`(원인 코드들, 규칙 순 세미콜론) · `outcome`(종료 결과) · `norm_status`(호환: 원인이 있으면 첫 원인, 없으면 결과) — **원인과 결과는 다른 축**(D43),
   `scan_type`("" · RESCAN · REWORK · TEST — 겹치면 TEST → RESCAN → REWORK 순), `ini_match`(EXACT · NOT_FOUND · MOVED_ONLY · NO_WAFER_ID · READ_ERROR · STALE · BATCH_FAILED · BATCH · BATCH_SLOT),
   `faults` · `scanned_dice` · `yield`(Report 표의 Faults · Scanned Dice · Yield **원문 그대로**, 합성 행은 빈 값 — 옛 캐시 행에는 없어 `--rebuild-all`(또는 `--refresh-window N`) 재수집으로만 채워진다),
-  `time_basis`(STRICT_IN_BATCH · TOLERANCE_ONLY · OUTSIDE_BATCH · BATCH_ONLY · MISSING · INVALID · UNKNOWN_BATCH), `slots`(slot 행의 영향 Slot 수).
+  `time_basis`(STRICT_IN_BATCH · TOLERANCE_ONLY · OUTSIDE_BATCH · BATCH_ONLY · MISSING · INVALID · UNKNOWN_BATCH), `slots`(slot 행의 영향 Slot 수),
+  `issue_codes`(C12: `CODE` 또는 `CODE=인자,인자` 를 `;` 로 이은 목록, `collect.ISSUE_CODES` 16개 — 인자 안의 `% ; = ,` 만 퍼센트 이스케이프, 경로·한글은 그대로).
+  **캐시에는 코드만** 두고 사람 문장(`data_issue`)은 `collect()` 끝의 `render_issue_rows` 가 `ko.ISSUE_TEXTS` 로 채운 사본에만 있다(캐시 행 불변) — 문구를 고쳐도 재수집이 필요 없다.
+  옛 캐시 행의 `data_issue` 자유 문장은 파싱하지 않고 그대로 나간다(옛·새 혼재 허용, 가드 `test_issue_codes.py`). `write_html`/`_write_csv` 를 캐시 원본 행으로 직접 부르면 문장이 비어 있다.
   열은 **이름으로** 읽는다(고정 인덱스 금지) — 화면(template)은 `status` 원문에서 첫 원인(`causeOf` = 유형)만 쓰고, 합성 행(batch: 배치 시각을 Wafer 시각으로 가진 Error 1건 · slot: 시각 없는 Error)은
   다른 행과 같은 규칙으로 모델에 들어간다(디자인 데이터도 제품 HTML 에서 그대로 뽑았다). 캐시는 `PARSER_VERSION` 이 다르면 `_rederive_rows` 가 NAS 없이 재분류·재합성한다.
   옛 standalone HTML 파일 자체는 옛 JS 를 실행한다 — 최신 규칙으로 보려면 재생성(재수집 또는 `write_html`).
@@ -128,7 +138,7 @@ Camtek AOI 장비의 BatchReport/WaferInfo.ini 를 읽어 장비별 가동률을
   - **분모(D57 · D17 개정)**: 지난 날 1440분. **수집한 날(`today` = `meta.generated_iso` 날짜)은 모든 장비의 마지막 기록(관측 종료)** 까지 — 장비마다 다르지 않다. 기록이 없는 장비는 그날 항목이 없어 평균에서 빠진다(0% 로 채우지 않음).
     **가동률 = (r + d) ÷ den**. 평균은 값이 있는 장비만(`S.fleetUtil`). 화면의 '오늘' 은 열람 시계가 아니라 수집 시각이다(D40) — 집계 경로에 `Date.now()`/`new Date()` 가 없다(가드).
   - **D09 로더**: 날짜는 숫자 범위 + 역변환 검사(2월 30일·25시·월 약어 오타 → null, 그 행은 `badRows` 로 세고 버림), `unfold` 는 cols 중복·행 길이·풀 번호 범위를 검사해 예외를 던지고 `loadDemo` 가 오류 패널로 보여 준다(무한 '불러오는 중…' 없음).
-  - 화면 쪽 `S.segsOf` 는 모델의 seg 를 그대로 그리고(같은 종류 8분 이하 틈만 시각 병합, 수치 불변) 대기를 다시 계산하지 않는다. 옛 장비-일 추정(`isEst`/`estBar`)은 product 에서 도달 불가(legacy 잔재, P5 에서 정리).
+  - 화면 쪽 `S.segsOf` 는 모델의 seg 를 그대로 그리고(같은 종류 8분 이하 틈만 시각 병합, 수치 불변) 대기를 다시 계산하지 않는다. 옛 장비-일 추정(`isEst`/`estBar`)은 P4 에서 지웠다(가드 `test_removed_features_stay_removed`).
 - **화면 용어·색의 단일 출처는 template 의 상수** `RUN·DUP·TEST·ERR·STOP·IDLE·FUTURE` 와 범례(D48-⑦): Scan(진한 파랑) · Rescan(연한 파랑) · Test(보라) · Error(빨강) · 에러 후 대기(연한 빨강) · 대기(회색).
   옛 용어(가동·중복스캔·재스캔·Rework·중단·미가동·정지)를 화면 JS 에 다시 쓰지 않는다(가드 `test_screen_terms…`). 원본 상태 문구·Job·Report 파일명은 바꾸지 않는다.
 - **화면 구조**(`AOI-Dashboard.dc.html` 의 로직을 순수 JS 렌더로 — React·DC 런타임 없음, `render()` 가 `#app` 을 통째로 다시 그리고 `data-h` 핸들러 표를 위임 클릭으로 받는다):
@@ -143,8 +153,11 @@ Camtek AOI 장비의 BatchReport/WaferInfo.ini 를 읽어 장비별 가동률을
   여는 주체는 사람이 연 그 탭이지 이 화면이 아니다 — 화면은 여전히 바깥으로 요청을 한 건도 보내지 않는다. 수집 상태 칩(`collectChip`: 수집 실패 · 일부 누락)과 '수집 범위 / 수집 안 함' 은 `meta` 에서 그린다. **사본 저장**(`saveHtml`)은 수집기가 준 열·풀 구조 그대로 다시 접는다.
 - 추이 화면에 **전 기간 대비(전주·전월·전일)는 두지 않는다**(사용자 확정, 가드: `test_no_period_over_period_comparison_anywhere`). 선택한 기간의 값만 보여 준다.
 - 결과 HTML 의 위치·생성은 `utils/results.py` 한 곳에서만 묻는다(`html_path` · `ensure_html` · `last_collect_time`).
-- 장비는 `id`(정규화 경로, 캐시 커서·집계 키) · `path` · `name`(표시명 `AOI-25` · `4F-AOI-01`) · `aliases`(옛 표시명) 로 나눠 다룬다.
-  표시명을 바꿔도 이력이 갈라지지 않는다. 홈 정렬은 `devices.sort_key`(= template 의 `cmpDev`) — AOI-1…AOI-25 뒤에 4F-AOI-01….
+- 장비는 `key`(**영속 안정 키** `dev:AOI-25`, C03) · `id`(정규화 경로 — **연결용**, 안정 키를 찾는 열쇠) · `path` · `name`(표시명 `AOI-25` · `4F-AOI-01`) · `aliases`(옛 표시명) · `path_aliases` 로 나눠 다룬다.
+  안정 키는 처음 볼 때 표시명에서 한 번 만들어 캐시의 `devices` 대응표(`{key: {name, ids, aliases}}`)에 영속한다 — 표시명·드라이브 문자를 바꿔도 이력이 갈라지지 않는다.
+  **Report 캐시 키 = `dev:<장비>|<Report 폴더 아래 상대 경로>`**(절대 경로가 아니다). 같은 장비로 잇는 다른 경로 표기는 **검증·승인된 것만** — OS 가 알려 준 드라이브의 UNC 동치(`devices.UNC_RESOLVER`)와 cfg `device_path_aliases`;
+  폴더 이름·표시명이 같다는 이유로는 절대 합치지 않는다(이름 충돌은 새 키 + `identity.conflicts` 기록). Report 를 읽을 때 SHA256 을 함께 두어 같은 키의 내용 변화는 `revision`, 다른 폴더의 같은 파일명은 다른 키다.
+  옛 절대 경로 캐시는 `_migrate_identity` 가 한 번 옮긴다(멱등 · 행 삭제 0 · 중복은 `superseded_by` 로 출력에서만 제외, `cache_format` 2, 가드 `test_cache_identity.py`). 홈 정렬은 `devices.sort_key`(= template 의 `cmpDev`) — AOI-1…AOI-25 뒤에 4F-AOI-01….
 - 시각 테마의 단일 출처는 `aoi_capacity/ui/assets/template.html` 의 `:root` 토큰 두 블록(dark · light). `ui/theme.py` 는 그 값을 그대로 쓴다(가드: `test_theme.py`).
   결과 화면은 라이트 단일(D48-⑥, `<html data-theme="light">`)이고 dark 블록은 수집 창의 다크 모드 값이다. CSS 주석에 `:root{` 를 적지 않는다(파서가 첫 블록으로 오인한다 — 실측).
 - 사용자 데이터는 `%LOCALAPPDATA%\AOI_Capacity`(`utils/paths.data_root()`), 절대 `app/` 안이 아니다(업데이트가 `app/` 를 통째로 교체).
@@ -166,16 +179,28 @@ Camtek AOI 장비의 BatchReport/WaferInfo.ini 를 읽어 장비별 가동률을
 `--rebuild-all`(보관 기간 전부를 **후보 캐시**로 새로 읽고 검증 뒤 교체 — 실패하면 기존 캐시 그대로, `RebuildRejected`) · `--full` 은 `--rebuild-all` 의 별칭(**이력 삭제 없음**) · `--recover`(시간 미확인 Report 다시 읽기).
 GUI 체크 '최근 N일 다시 읽기(이력 보존)' 은 `refresh_window_days`(N 은 '처음 수집 기간' 스핀 값). 캐시 저장은 고유 tmp → fsync → strict 재읽기 검증 → `os.replace`, 손상 캐시는 덮어쓰지 않고 `aoi_cache.json.bad-<시각>` 으로 보존(C15).
 CSV 를 못 쓰는 OS 오류(Excel 잠금)는 실패가 아니라 **부분 성공**(`warnings`, CLI exit 3, 워커 `completed_with_warnings`) — HTML 이 주 산출물이다(C06). 회귀 가드: `test_collect_incremental.py` · `test_collector_worker.py`.
+캐시는 **바뀐 이유(`_Dirty`: created · corrupt · format · parser · cursor · identity · device_mapping · reports · reports_updated · failed · retention · rebuild)가 있을 때만 저장**한다 — 아무것도 안 바뀐 실행은 파일을 건드리지 않는다(mtime·바이트 동일), rows 0 이어도 커서·재시도·보관 정리는 저장(C04, `stats["cache_dirty"]`·`cache_saved`).
+`write_html` 은 `__DATA__` 가 정확히 하나임을 확인하고 앞부분·데이터·뒷부분을 같은 임시 파일에 차례로 쓴다(C07, 30일치 최고점 181 → 107MB). 크기·메모리 측정은 `python dev/tools/measure_cache.py <샘플> --out <임시>`.
+`python -m aoi_capacity.cli --update` 는 갱신되면 같은 인자(`--update` 제외)로 **자식 프로세스**를 띄워 기다리고 그 종료 코드를 돌려준다(exec 아님 — 스케줄러가 '완료' 를 잘못 보지 않게, C14).
+`scripts/run_collect.bat` 은 `PYTHONNOUSERSITE=1`, ERRORLEVEL 보존, `collect.log` 5MB 초과 시 `.1~.4` 회전. 의존성 설치 실패 안내는 `main._pause_or_notify` — stdin 없음/EOF/RuntimeError(pythonw)면 MessageBoxW(ctypes) 또는 print, PyQt6 재import 없음(C16).
+
+## 설정 검사(C13 · D14, P3 9/20)
+`utils/config.normalize_config` 하나를 prefs(GUI)·cli(config.json)가 같이 쓴다. 성능·기간 값(`read_workers` 1~32 · `backfill_days`/`retention_days` 1~3650 · `refresh_window_days` 0~3650 · `attention_util` 0~100 · `attention_err` 0~999,
+bool 은 문자열을 엄격 판정 — `bool("false")` 없음)은 **경고 + 기본값/클램프**, `scope_devices`·경로·폴더 이름(구분자·`..`·NUL)은 `ConfigError` 로 **실행 차단** — `collect.collect` 첫머리와 장비 게이트 4곳이 파일 접근 전에 부른다(fail closed).
+`retention_days` 가 `backfill_days` 보다 짧으면 backfill 값으로 늘린다. `prefs_version` 이 잘못돼도 장비 목록을 기본 30대로 되돌리지 않는다. 문구는 ko.py `CFG_*`. 가드 `test_config_normalize.py` · `test_config_example.py`(예시 공개 키 = `DEFAULT_CONFIG`).
+`meta.dashboard_settings = {attentionUtil, attentionErr}` 는 cfg `attention_util/attention_err`(prefs 필드명은 `threshold_util/threshold_err` 그대로, 설정 페이지 '주의 장비 기준' 스핀)에서 `write_html` 이 넣고 화면 `PROPS` 가 읽는다(D14).
 
 ## 테스트
 `QT_QPA_PLATFORM=offscreen python -m pytest -q` (빠른 확인: `-m "not ui and not slow"`, `slow` = 30일치 샘플 전수). PyQt6 가 없는 환경에서는 ui 테스트가 skip 된다.
-CI 는 `.github/workflows/tests.yml`(이름 `tests`, main 푸시·PR) — `core` 잡이 전체 스위트(Linux · Qt offscreen · Node 22), `browser` 잡이 `-m browser`(Playwright Chromium). 이 워크플로의 성공이 업데이터의 배포 조건(D61)이므로 이름·파일명을 바꾸면 `updater.py` 도 같이 바꾼다.
+CI 는 `.github/workflows/tests.yml`(이름 `tests`, main 푸시·PR) — `core` 잡이 전체 스위트(Linux · Qt offscreen · Node 22), `browser` 잡이 `-m browser`(Playwright Chromium), `progress-doc` 잡(PR 만)이 merge-base→HEAD 에 코드 변경이 있으면 `진행상황.md` 동반을 요구한다(`dev/tools/progress_doc_check.py`, S14).
+이 워크플로의 성공이 업데이터의 배포 조건(D61)이므로 이름·파일명을 바꾸면 `updater.py` 도 같이 바꾼다. `test_progress_doc.py` 는 CLAUDE.md 의 숫자(수집 범위 대수 · OUT_COLS 열 수 · ROW_SCHEMA_VERSION · MODEL_VERSION · 원인 규칙 수 · 표기명 수)를 코드와 대조한다(S18) — 숫자를 바꾸면 이 파일도.
+보관물은 `archive/`(D62: `git mv` + 큰 것은 gzip + `archive/SHA256SUMS`, 가드 `test_archive.py`) — 지우지 않고 옮긴다. 옛 샘플 두 장은 `dev/samples/` 에서 gzip(원본 sha 는 `test_sample_rows.py` 가 확인).
 dev 의존성은 `dev/requirements-dev.txt`(pyyaml · playwright — 런타임 `requirements.txt` 에는 넣지 않는다). 테스트는 저장소 안 파일을 다시 쓰지 않는다(S04 — `design_bundle.py`·`graphify_build.py` 는 출력 경로를 인자로 받고, 가드가 전후 지문을 비교한다).
 보관 샘플에서 행을 꺼낼 때는 `dev/tests/sample_rows.py`(이름 기반 열 복원·풀 검증), 집계 수치를 잴 때는 `python dev/tools/measure.py <샘플> [--design-rules]`(새 모델의 장비-일 합과 일별 평균 가동률),
 단계별 전후는 `dev/samples/ledger_2026-09-18.md` 에 적는다 — 예상치에 맞추어 규칙·테스트를 고치지 않는다.
 테스트는 실제 pip·네트워크를 절대 실행하지 않는다(`test_updater.py` 의 autouse 가드). 유일한 예외는 `test_dashboard_js.py` —
 `dev/tests/js_harness.js` 가 template 의 스크립트를 **로컬 Node(vm, DOM 대역)** 에서 실행해 `buildModel` 을 검사한다(네트워크·파일 쓰기 없음, Node 가 없으면 skip):
-slow 한 개가 30일치로 디자인 스크립트와의 동일성을, 나머지가 D48 규칙을 작은 fixture 로 본다. `test_status_mapping.py` 는 하네스의 classify 모드로 Python·JS 분류를 대조한다.
+slow 두 개가 30일치로 디자인 스크립트와의 동일성(legacy 프로필)과 product 불변식을, 나머지가 D48~D64 규칙을 작은 fixture 로 본다(하네스 모드: classify · rows+meta+rules · embedded · globals · screen). `test_status_mapping.py` 는 하네스의 classify 모드로 Python·JS 분류를 대조한다.
 문자열 검사(`test_template_contract.py`)만으로 화면 로직을 '완료' 라고 하지 않는다. 화면은 Chromium(Playwright)으로 클릭 경로를 실측한다 — `dev/tests/test_dashboard_browser.py`(마커 `browser`, S06: 작은 fixture 를 template 에 박아 file:// 로 열고
 가동률 → 장비 팝업(포커스·inert·Tab·ESC) → Error·유형 팝업 → 추이 → TB500 · Kendall 을 누른다, 바깥 요청 0건·콘솔 오류 0 확인; Playwright 나 Chromium 이 없으면 skip, `/opt/pw-browsers` 도 찾는다). 30일치 전수는 스크래치 스크립트로 따로 본다.
 

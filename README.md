@@ -136,7 +136,7 @@ legacy 프로필 동일성의 근거일 뿐이며, 제품과 다른 곳(장비-�
 |---|---|
 | `prefs.json` | 설정 |
 | `devices.csv` | 장비 목록 |
-| `aoi_cache.json` | 수집 캐시(장비별 마지막 수정시각 커서 포함) |
+| `aoi_cache.json` | 수집 캐시(장비별 마지막 수정시각 커서 포함). 장비는 표시명에서 만든 **안정 키**(`dev:AOI-25`)로 이어지므로 드라이브 문자를 바꾸거나(X: → UNC) 표시명을 바꿔도 이력이 갈라지지 않습니다. 바뀐 것이 없는 수집은 이 파일을 다시 쓰지 않습니다 |
 | `AOI_capacity.html` | 결과 화면 — **파일을 더블클릭하면 브라우저에서 그대로 열립니다**(Python·서버 불필요, 외부 요청 없음). 새 데이터는 수집을 다시 실행한 뒤 새로고침 |
 | `app.log`, `collect.log` | 로그 |
 
@@ -168,8 +168,9 @@ python -m aoi_capacity.cli --recover            # 시간 미확인 Report 다시
 
 종료 코드: 0 성공 · 3 부분 성공(HTML 은 새로 썼고 CSV 만 못 씀 — Excel 이 열어 둔 경우) · 1 실패.
 
-작업 스케줄러처럼 화면 없이 돌릴 때는 `scripts/run_collect.bat` (로그를 `%LOCALAPPDATA%\AOI_Capacity\collect.log` 에 남깁니다).
-`--config` 로 `docs/config.example.json` 형식의 설정 파일을 줄 수도 있습니다.
+작업 스케줄러처럼 화면 없이 돌릴 때는 `scripts/run_collect.bat` (로그를 `%LOCALAPPDATA%\AOI_Capacity\collect.log` 에 남기고 5MB 가 넘으면 `.1~.4` 로 돌립니다. 종료 코드는 그대로 전달).
+`--config` 로 `docs/config.example.json` 형식의 설정 파일을 줄 수도 있습니다. 설정값은 실행 전에 검사합니다 — 동시 읽기 수·기간·주의 기준처럼 성능에만 관계된 값이 잘못되면 경고하고 기본값이나 허용 범위로 맞추며,
+수집 범위(`scope_devices`)·경로·폴더 이름이 잘못되면 NAS 를 건드리기 전에 멈춥니다. `--update` 를 붙이면 새 버전을 먼저 받고 **자식 프로세스**로 다시 수집해 그 종료 코드를 돌려줍니다(스케줄러가 '완료' 를 잘못 보지 않게).
 
 > `scripts/collect_sample.py` 는 **조사용 샘플 도구**라 대시보드를 만들지 않습니다 — Report 몇 장과 INI 를 zip 으로 모아 줄 뿐입니다.
 > 수집은 위의 CLI 나 GUI 로 하세요.

@@ -323,7 +323,7 @@ def test_zero_new_rows_but_state_change_still_saves(tmp_path, fake_nas, monkeypa
     assert stats["cache_saved"] is False and stats["cache_dirty"] == {}
     # (3) 보관 정리 → retention(rows 0, 항목 삭제)
     stats = {}
-    collect.collect(dict(cfg, retention_days=0.0000001), stats=stats)
+    collect.collect(dict(cfg, retention_days=1, backfill_days=1), stats=stats)   # 설정 검사(C13) 안의 값 — fixture 행(9/13)은 하루 창 밖
     assert stats["cache_saved"] and "retention" in stats["cache_dirty"] and _cache_of(cfg)["reports"] == {}
 
 
