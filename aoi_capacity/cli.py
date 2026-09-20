@@ -87,6 +87,8 @@ def main(argv=None) -> int:
                                  [a for a in (argv or sys.argv[1:]) if a != "--update"])
                 elif status == "latest":
                     _print("최신 버전입니다")
+                elif status == "held":
+                    _print(f"업데이트 보류({info.get('sha', '')[:7]}): {info.get('reason', '')}")
                 else:
                     _print(f"업데이트 확인 실패: {info.get('error', '')}")
         except Exception as e:  # noqa: BLE001
