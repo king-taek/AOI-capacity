@@ -1247,7 +1247,8 @@ def collect(cfg: dict, full: bool = False, backfill: bool = False, *, recover: b
         cache = _load_cache(cfg, log=log)
     stats["cache_status"] = cache_status(cache)
     backfill = backfill or rebuild or not cache["reports"]
-    devs = devices_mod.resolve_devices(cfg, log)
+    devs = devices_mod.resolve_devices(cfg, log, should_stop=should_stop)   # 장비 확인도 read_workers 개씩(C08) — 같은 예산, 중첩 풀 없음
+    _check(should_stop)
     _migrate_cursors(old_cache if old_cache is not None else cache, devs, log)
     stats["devices_ms"] = int((clock() - t0) * 1000)
     t1 = clock()

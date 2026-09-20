@@ -201,6 +201,28 @@ def test_collect_entry_points_stay_in_scope(tmp_path, scoped_nas, tripwire, kw):
     assert not tripwire.hits, tripwire.hits
 
 
+@pytest.mark.parametrize("workers", [1, 2, 8, 32])
+def test_parallel_device_check_stays_in_scope_and_matches_serial(tmp_path, scoped_nas, tripwire, workers):
+    """C08: 장비 확인(devices_from_rows · _attach_dirs · check_rows)을 read_workers 개씩 동시에 해도 범위 밖 접근은 0 이고
+    결과·로그 순서는 한 줄로 돌린 것과 같다."""
+    nas, csv_path = scoped_nas
+    make_device(nas / "I", "4F-AOI-01")
+    tripwire.allowed.append(os.path.abspath(str(nas / "I" / "4F-AOI-01")))     # 이번 테스트에서는 허용 장비다(그 안 나열은 규칙 위반이 아니다)
+    cfg = _cfg(tmp_path, csv_path, read_workers=workers, scope_devices=[*SCOPE, "4F-AOI-01"])
+    logs = []
+    devs = devices.resolve_devices(cfg, logs.append)
+    checks = devices.check_rows(devices.read_devices_csv(csv_path), cfg)
+    assert not tripwire.hits, tripwire.hits
+    assert [d["name"] for d in devs] == ["AOI-1", "AOI-8", "AOI-9", "AOI-25", "4F-AOI-01"]
+    serial_logs = []
+    serial = devices.resolve_devices({**cfg, "read_workers": 1}, serial_logs.append)
+    assert devs == serial and logs == serial_logs
+    assert checks == devices.check_rows(devices.read_devices_csv(csv_path), {**cfg, "read_workers": 1})
+    rows, dev_meta, errors = collect.collect(cfg)
+    assert not tripwire.hits, tripwire.hits
+    assert {r["device"] for r in rows} == {"AOI-1", "AOI-8", "AOI-9", "AOI-25", "4F-AOI-01"}
+
+
 def test_cli_run_stays_in_scope(tmp_path, scoped_nas, tripwire, monkeypatch):
     nas, csv_path = scoped_nas
     from aoi_capacity import cli
