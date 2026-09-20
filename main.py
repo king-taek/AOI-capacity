@@ -59,11 +59,47 @@ def _ensure_deps_installed(logger: logging.Logger) -> bool:
 
     ok = bootstrap.ensure_deps(log=say)
     if not ok:
-        try:
-            input(i18n.KO.BOOT_PRESS_ENTER)
-        except EOFError:
-            pass
+        hint = i18n.KO.BOOT_LOG_HINT_FMT.format(path=paths.log_file())
+        say(hint)
+        how = _pause_or_notify(i18n.KO.BOOT_PRESS_ENTER, i18n.KO.BOOT_DEPS_FAILED + "\n\n" + hint)
+        logger.info("deps install failed; user notified via %s", how)
     return ok
+
+
+def _message_box(text: str, title: str) -> bool:
+    """Windows 표준 MessageBoxW(ctypes) — 표준 라이브러리만 쓴다(PyQt6 는 설치에 실패한 그 패키지라 다시 import 하지 않는다).
+    Windows 가 아니거나 호출이 안 되면 False."""
+    if os.name != "nt":
+        return False
+    try:
+        import ctypes
+
+        windll = getattr(ctypes, "windll", None)
+        if windll is None:
+            return False
+        windll.user32.MessageBoxW(None, str(text), str(title), 0x10 | 0x40000)   # MB_ICONERROR | MB_TOPMOST
+        return True
+    except Exception:  # noqa: BLE001 - 안내 경로에서 새 예외를 만들지 않는다
+        return False
+
+
+def _pause_or_notify(prompt: str, notice: str) -> str:
+    """의존성 설치 실패 안내(C16). 콘솔이 있으면 Enter 를 기다리고, stdin 이 없거나(pythonw 는 `sys.stdin is None` 이라
+    `input()` 이 EOFError 가 아니라 RuntimeError 를 낸다) 닫혔으면 Windows MessageBox, 그것도 안 되면 print.
+    돌려주는 값은 어떤 길로 안내했는지("input" · "messagebox" · "print") — 로그용."""
+    if sys.stdin is not None:
+        try:
+            input(prompt)
+            return "input"
+        except (EOFError, RuntimeError, OSError):
+            pass
+    if _message_box(notice, i18n.KO.APP_TITLE):
+        return "messagebox"
+    try:
+        print(notice, flush=True)
+    except Exception:  # noqa: BLE001
+        pass
+    return "print"
 
 
 def _apply_env(p: prefs.Prefs) -> None:

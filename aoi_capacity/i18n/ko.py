@@ -317,3 +317,4 @@ BOOT_DEPS_INSTALLING = "[AOI] 처음 실행입니다. 필요한 패키지를 설
 BOOT_DEPS_FAILED = "[AOI] 패키지 설치에 실패했습니다. 인터넷 연결 또는 회사 프록시를 확인한 뒤 다시 실행하세요."
 BOOT_DEPS_DONE = "[AOI] 설치가 끝났습니다. 프로그램을 시작합니다."
 BOOT_PRESS_ENTER = "계속하려면 Enter 를 누르세요..."
+BOOT_LOG_HINT_FMT = "[AOI] 자세한 내용은 로그 파일을 보세요: {path}"
