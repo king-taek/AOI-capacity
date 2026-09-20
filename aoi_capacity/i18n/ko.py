@@ -175,6 +175,22 @@ SET_UTIL_DEFINITION = ("가동률 = (Scan + Rescan 시간) ÷ 24시간. 수집�
                        "한 장비의 1분은 한 번만 셉니다 — INI 로 확실한 구간을 먼저 놓고, 배치 시작~종료의 남은 빈 시간을 INI 가 없는 Wafer 들이 나눠 갖습니다(팝업에 '배치 시각으로 추정' 표). "
                        "Error 는 Lot 단위로 세고, Error 를 담은 배치가 끝난 뒤 다음 기록까지의 공백을 '에러 후 대기' 로 봅니다.")
 
+# ── 설정 값 검사(C13 · utils/config.py) — 성능·기간 값은 경고 + 고침, 범위·경로 값은 실행 차단 ────────────
+CFG_TRUE = "켬"
+CFG_FALSE = "끔"
+CFG_BAD_INT_FMT = "설정 '{key}' 값 {value} 은(는) 정수가 아니라 기본값 {default} 을(를) 씁니다"
+CFG_OUT_OF_RANGE_FMT = "설정 '{key}' 값 {value} 은(는) 허용 범위({lo}~{hi}) 밖이라 {fixed} 으로 맞춥니다"
+CFG_BAD_BOOL_FMT = "설정 '{key}' 값 {value} 은(는) 참/거짓이 아니라 '{default}' 으로 둡니다"
+CFG_BAD_STR_FMT = "설정 '{key}' 값 {value} 은(는) 문자열이 아니라 기본값 '{default}' 을(를) 씁니다"
+CFG_RETENTION_LT_BACKFILL_FMT = "이력 보관 기간({retention}일)이 처음 수집 기간({backfill}일)보다 짧아 {fixed}일로 늘립니다"
+CFG_FATAL_SCOPE_FMT = "수집 범위(scope_devices) 설정이 장비 이름 목록이 아니라 수집을 시작하지 않습니다: {value}"
+CFG_FATAL_PATH_FMT = "경로 설정 '{key}' 이(가) 문자열이 아니라 수집을 시작하지 않습니다: {value}"
+CFG_FATAL_FOLDER_NAME_FMT = "폴더 이름 설정 '{key}' 에 경로 구분자나 상위 폴더 표기가 있어(다른 폴더를 가리킬 수 있음) 수집을 시작하지 않습니다: {value}"
+CFG_ERROR_TITLE = "설정 오류"
+CLI_CFG_WARNING_FMT = "설정 경고: {message}"
+CLI_CFG_FATAL_FMT = "설정 오류 — 수집을 시작하지 않습니다: {message}"
+CFG_ERROR_BODY_FMT = "설정을 고친 뒤 다시 실행하세요.\n\n{items}"
+
 # ── NAS 안전장치 ───────────────────────────────────────────────────────
 NAS_WRITE_REFUSED_FMT = "NAS 원본 폴더 안에는 파일을 쓸 수 없습니다: {path}  (NAS: {root})"
 

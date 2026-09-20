@@ -48,6 +48,7 @@ from typing import Callable, Dict, List, Optional, Tuple
 
 from . import devices as devices_mod
 from . import i18n, nas_guard, scope
+from .utils import config as config_mod
 
 _LOG = logging.getLogger("aoi.collect")
 
@@ -72,6 +73,8 @@ DEFAULT_CONFIG: Dict[str, object] = {
     "read_workers": READ_WORKERS,                 # NAS 를 동시에 몇 개씩 읽을지(1 = 한 줄로)
     "refresh_window_days": 0,                     # D60: 최근 N일 안의 Report 는 캐시에 있어도 다시 읽는다(0 = 끔). 창 밖 이력은 보존
     "rebuild_all": False,                         # D60: 보관 기간 전부를 새 후보 캐시에 모아 검증 뒤 교체(옛 --full 의 별칭)
+    "attention_util": 40,                         # D14: 살펴볼 장비 = 가동률 이 값(%) 미만 — 결과 HTML 의 meta.dashboard_settings 로 나간다
+    "attention_err": 3,                           # D14: 또는 Error 건수 이 값 이상
 }
 MAX_READ_RETRY = 3   # 읽기에 실패한 Report 를 몇 번까지 다시 시도하고 커서를 붙잡아 둘지
 INI_KEYS = {
@@ -1014,6 +1017,7 @@ def plan_run(cfg: dict, full: bool = False, backfill: bool = False, recover: boo
 
     `reread_reports`/`keep_reports` 는 캐시에 있는 Report 중 다시 읽을 것/그대로 둘 것의 수다. 새로 생긴 Report 는 NAS 를
     봐야 알 수 있으니 세지 않는다. rebuild 는 캐시 파일을 읽지 않는다(어차피 전부 다시 읽는다)."""
+    cfg, _problems = config_mod.normalize_config(cfg)   # 형·범위만 맞춘다(C13) — 안내용이라 막지는 않는다
     refresh_days, rebuild = _mode_args(cfg, full, refresh_window_days, rebuild_all)
     s = _cache_summary("" if rebuild else str(cfg.get("cache_file") or ""))
     n = s["n_reports"]
@@ -1228,6 +1232,7 @@ def collect(cfg: dict, full: bool = False, backfill: bool = False, *, recover: b
     stats = stats if stats is not None else {}
     clock = time.perf_counter
     t0 = clock()
+    cfg = config_mod.check_or_raise(cfg)   # ★ C13: 형·범위를 맞추고, 범위·경로 설정이 잘못됐으면 ConfigError — NAS 접근 0
     nas_guard.check_cfg(cfg)  # 출력·캐시가 NAS 아래면 시작조차 하지 않는다
     refresh_days, rebuild = _mode_args(cfg, full, refresh_window_days, rebuild_all)
     progress(0, 0, i18n.KO.COLLECT_PHASE_DEVICES)
@@ -1545,7 +1550,8 @@ def write_html(cfg: dict, rows: List[dict], dev_meta: List[dict], errors: List[d
             "elapsed": int((time.time() - started) * 1000), "retention_days": cfg["retention_days"],
             "timing": dict(timing) if timing else {},
             "sha": ver.get("sha", ""), "branch": ver.get("branch", ""), "repo": ver.get("repo", ""),
-            "version": (str(ver.get("sha", ""))[:7]) if ver.get("sha") else ""}
+            "version": (str(ver.get("sha", ""))[:7]) if ver.get("sha") else "",
+            "dashboard_settings": config_mod.dashboard_settings(cfg)}      # D14: 살펴볼 장비 문턱(attentionUtil · attentionErr)
     emb = _embed_rows(rows)
     if meta["timing"]:
         meta["timing"]["html_ms"] = int((time.perf_counter() - t_html) * 1000)   # 템플릿 읽기 + 접기까지(쓰기 전)

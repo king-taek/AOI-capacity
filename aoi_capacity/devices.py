@@ -27,6 +27,7 @@ import re
 from typing import Callable, Dict, List, Optional
 
 from . import nas_guard, scope
+from .utils import config as _config
 
 _LOG = logging.getLogger("aoi.devices")
 
@@ -358,7 +359,8 @@ def _attach_dirs(devs: List[Dict[str, object]], cfg: dict, log: Optional[LogFn] 
 def devices_from_rows(rows: List[Dict[str, object]], cfg: dict, log: Optional[LogFn] = None) -> List[Dict[str, object]]:
     """CSV 행을 실제 장비 폴더 목록으로 푼다. 접근할 수 없는 행은 로그에 남기고 건너뛴다.
 
-    ★ 수집 허용 범위 밖 행은 파일시스템을 건드리기 전에 걸러낸다."""
+    ★ 수집 허용 범위 밖 행은 파일시스템을 건드리기 전에 걸러낸다. 범위·폴더 이름 설정이 잘못돼 있으면(`ConfigError`) 아무것도 만지지 않는다(C13)."""
+    _config.assert_valid(cfg)
     devs: List[Dict[str, object]] = []
     for row in rows:
         if not row.get("on", True):
@@ -417,6 +419,7 @@ def discover_devices(cfg: dict, log: Optional[LogFn] = None) -> List[Dict[str, o
     """devices.csv 가 없을 때의 폴백: nas_roots 각각을 `*` 로 본다.
 
     범위 제한 중에는 `_discover_under` 가 공유를 나열하지 않고 허용 이름만 정확 경로로 확인한다."""
+    _config.assert_valid(cfg)
     devs: List[Dict[str, object]] = []
     for root in cfg.get("nas_roots") or []:
         root = _norm_root(root)
@@ -429,6 +432,7 @@ def discover_devices(cfg: dict, log: Optional[LogFn] = None) -> List[Dict[str, o
 
 def resolve_devices(cfg: dict, log: Optional[LogFn] = None) -> List[Dict[str, object]]:
     """설정에 맞는 장비 목록. devices.csv 가 있으면 그것, 없으면 nas_roots 자동 탐색."""
+    _config.assert_valid(cfg)                                   # 범위·폴더 이름 설정이 잘못됐으면 파일을 만지기 전에 막는다(C13)
     if not scope.unrestricted(cfg):
         _log(log, f"수집 범위: {scope.describe(cfg)} (다른 장비에는 접근하지 않습니다)")
     path = cfg.get("devices_csv") or ""
@@ -446,6 +450,7 @@ def check_rows(rows: List[Dict[str, object]], cfg: dict) -> List[Dict[str, objec
     """UI 의 '연결 확인': 행마다 상태 문자열 키를 돌려준다(ok / auto:<n> / no_report / unreachable / out_of_scope).
 
     ★ 범위 밖 행은 연결 확인에서도 접근하지 않는다 — 상태만 out_of_scope 로 알려 준다."""
+    _config.assert_valid(cfg)
     out = []
     for row in rows:
         sub = str(row.get("sub", "")).strip()

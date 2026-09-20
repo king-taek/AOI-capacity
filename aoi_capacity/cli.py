@@ -24,27 +24,35 @@ import json
 import os
 import sys
 import time
-from typing import Dict
+from typing import Dict, List, Optional
 
-from . import collect
+from . import collect, i18n
+from .utils import config as config_mod
 from .utils import paths, prefs
 
 EXIT_OK, EXIT_FAILED, EXIT_PARTIAL = 0, 1, 3
 
 
-def load_config(path: str) -> Dict[str, object]:
-    """config.json 을 읽어 cfg 를 만든다. 상대 경로 기본값은 config.json 이 있는 폴더 기준."""
+def load_config(path: str, problems: Optional[List[config_mod.Problem]] = None) -> Dict[str, object]:
+    """config.json 을 읽어 cfg 를 만든다. 상대 경로 기본값은 config.json 이 있는 폴더 기준.
+
+    GUI 의 prefs 와 **같은 규칙**(`utils.config.normalize_config`)으로 형·범위를 맞춘다(C13). `problems` 리스트를 주면
+    경고(고친 값)와 치명(범위·경로 — 실행을 막아야 함)을 담아 준다. 여기서는 막지 않는다 — `main` 이 문구를 찍고 종료 코드를 정한다."""
     cfg = copy.deepcopy(collect.DEFAULT_CONFIG)
     if os.path.isfile(path):
         with open(path, "r", encoding="utf-8") as f:
             user = json.load(f)
-        for k, v in user.items():
+        for k, v in (user.items() if isinstance(user, dict) else ()):
             if not k.startswith("_"):
                 cfg[k] = v
+        cfg, found = config_mod.normalize_config(cfg)
+        if problems is not None:
+            problems.extend(found)
         base = os.path.dirname(os.path.abspath(path))
-        cfg["devices_csv"] = cfg.get("devices_csv") or os.path.join(base, "devices.csv")
-        cfg["cache_file"] = cfg.get("cache_file") or os.path.join(base, "aoi_cache.json")
-        cfg["output_dir"] = cfg.get("output_dir") or base
+        if not config_mod.fatal(found):
+            cfg["devices_csv"] = cfg.get("devices_csv") or os.path.join(base, "devices.csv")
+            cfg["cache_file"] = cfg.get("cache_file") or os.path.join(base, "aoi_cache.json")
+            cfg["output_dir"] = cfg.get("output_dir") or base
         return cfg
     p = prefs.load()
     return prefs.to_collect_cfg(p)
@@ -114,7 +122,15 @@ def main(argv=None) -> int:
             _print(f"업데이트 단계 오류(무시): {e}")
 
     started = time.time()
-    cfg = load_config(args.config)
+    problems: List[config_mod.Problem] = []
+    cfg = load_config(args.config, problems)
+    for pr in problems:
+        if not pr.fatal:
+            _print(i18n.KO.CLI_CFG_WARNING_FMT.format(message=pr.message()))
+    if config_mod.fatal(problems):                        # 범위·경로 설정 오류 — NAS 를 만지기 전에 멈춘다(C13)
+        for pr in config_mod.fatal(problems):
+            _print(i18n.KO.CLI_CFG_FATAL_FMT.format(message=pr.message()))
+        return EXIT_FAILED
     paths.ensure_user_files()
     rebuild = bool(args.rebuild_all or args.full) or None            # None 이면 cfg 의 rebuild_all 을 따른다
     refresh = args.refresh_window                                      # None 이면 cfg 의 refresh_window_days 를 따른다
