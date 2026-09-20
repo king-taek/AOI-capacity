@@ -239,9 +239,10 @@ def test_html_carries_scope_and_skipped_devices(tmp_path, scoped_nas):
 
 
 def _cursor_of(cache: dict, device_folder: str):
-    """여러 장비가 범위 안이므로 커서는 장비 경로로 골라 본다."""
-    hits = [v for k, v in cache["last_mtime"].items() if k.rstrip("\\/").endswith(device_folder.lower())
-            or device_folder.lower() in k.lower()]
+    """여러 장비가 범위 안이므로 커서는 장비 경로로 골라 본다 — 커서 키는 안정 키라 `devices` 대응표의 경로 id 로 찾는다(C03)."""
+    keys = [k for k, m in cache["devices"].items()
+            if any(i.rstrip("\\/").endswith(device_folder.lower()) or device_folder.lower() in i.lower() for i in m["ids"])]
+    hits = [cache["last_mtime"][k] for k in keys if k in cache["last_mtime"]]
     return hits[0] if hits else None
 
 
@@ -256,7 +257,7 @@ def test_other_device_cache_is_kept_but_excluded_from_output(tmp_path, scoped_na
     assert {r["device"] for r in rows} == {"AOI-1", "AOI-8", "AOI-9", "AOI-25"}   # 범위 밖은 화면에서 빠진다
     cache = json.loads((tmp_path / "out" / "aoi_cache.json").read_text(encoding="utf-8"))
     for gone in ("AOI-24", "AOI-2", "AOI-10", "AOI-3"):    # ★ 다른 장비 캐시는 지우지 않는다
-        assert any(f"{gone}{os.sep}" in k for k in cache["reports"]), gone
+        assert any(f"{gone}{os.sep}" in e["path"] for e in cache["reports"].values()), gone
 
 
 def test_display_rename_keeps_one_device_and_one_cursor(tmp_path, scoped_nas):
@@ -320,7 +321,7 @@ def test_failed_report_blocks_cursor_and_is_retried(tmp_path, scoped_nas, monkey
     cur = _cursor_of(cache, "AOI-25")
     # ★ 커서가 실패 파일을 넘어가지 않았다(넘어갔다면 그 Report 는 영영 다시 읽히지 않는다)
     assert cur is None or cur < bad.stat().st_mtime
-    assert any("BROKEN" in k for k in cache["failed"])
+    assert any("BROKEN" in f["path"] for f in cache["failed"].values())   # 실패 목록도 안정 키(대소문자 접음) — 경로는 항목의 path 에
 
     boom["on"] = False                                      # 다음 수집에서 다시 읽힌다
     rows2, dev_meta2, errors2 = collect.collect(cfg)
@@ -345,7 +346,7 @@ def test_permanently_broken_report_stops_blocking_after_retries(tmp_path, scoped
         assert len(errors) == 1
     cache = json.loads((tmp_path / "out" / "aoi_cache.json").read_text(encoding="utf-8"))
     assert _cursor_of(cache, "AOI-25") >= good.stat().st_mtime            # 커서가 다시 전진한다
-    assert cache["failed"][str(bad)]["tries"] == collect.MAX_READ_RETRY    # 오류 기록은 남는다
+    assert next(f for f in cache["failed"].values() if f["path"] == str(bad))["tries"] == collect.MAX_READ_RETRY    # 오류 기록은 남는다
 
 
 # ── 6. 표시명 · 정렬 ─────────────────────────────────────────────────────

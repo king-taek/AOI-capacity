@@ -5,11 +5,13 @@ CSV 열: 장비명, NAS경로, 폴더, 사용, 메모  (영문 헤더도 인식,
 - 폴더 "*"   → NAS경로 안에서 Report 폴더가 있는 하위 폴더를 모두 자동 등록(재귀 없음, 한 단계)
 - 사용 N/0/아니오 → 건너뜀
 
-장비 하나는 네 가지를 분리해 들고 다닌다(이름을 바꿔도 이력이 갈라지지 않게):
-    id       정규화한 원본 경로 — 캐시 커서·집계의 안정 키. 절대 표시명이 아니다.
+장비 하나는 다섯 가지를 분리해 들고 다닌다(이름·드라이브 문자를 바꿔도 이력이 갈라지지 않게):
+    id       정규화한 원본 경로 — 연결용. 절대 표시명이 아니다. 드라이브 문자·UNC 표기가 바뀌면 달라진다.
+    key      영속 안정 키(`dev:AOI-25`, C03) — 캐시 커서·Report 키의 장비 부분. 수집기가 캐시의 `devices` 대응표에서
+             경로 id(와 검증된 별칭 `path_aliases`)로 찾아 붙이고, 처음 보는 장비는 표시명에서 한 번 만들어 영속화한다.
     path     실제 NAS 경로(읽기 전용, 폴더명을 바꾸지 않는다)
     name     표시명 — `AOI-25`, `4F-AOI-01` 로 정리한 이름
-    aliases  예전 표시명 후보 — 캐시 커서를 새 키로 옮길 때만 쓴다
+    aliases  예전 표시명 후보 — 옛 표시명 커서를 옮길 때만 쓴다(경로를 합치는 근거가 아니다)
 
 ★ 수집 허용 범위(`scope.py`) 는 **파일을 만지기 전에** 적용한다. 범위 밖 행은 `os.path.isdir` 조차
   부르지 않고 건너뛴다. 회귀 가드: dev/tests/test_scope_isolation.py
@@ -244,8 +246,54 @@ def with_dirs(dev: Dict[str, object], cfg: dict) -> Dict[str, object]:
 
 
 def device_id(path) -> str:
-    """캐시 커서·집계의 안정 키 — 정규화한 경로. 표시명을 바꿔도 변하지 않는다."""
+    """연결용 경로 id — 정규화한 경로. 표시명을 바꿔도 변하지 않지만 **드라이브 문자·UNC 표기가 바뀌면 달라진다**.
+    캐시 커서·Report 키는 이것이 아니라 영속 안정 키(`key`, C03)를 쓴다 — 경로 id 는 안정 키를 찾는 열쇠다."""
     return nas_guard.normalize(path)
+
+
+# ----------------------------------------------------------------------------- 안정 키(C03)
+#: 안정 키의 접두 — 표시명(`AOI-25`)·경로 id(`x:\aoi-25`)와 한눈에 구분되게 `dev:AOI-25` 꼴이다.
+#: 캐시의 `devices` 대응표(`{key: {name, ids, aliases}}`)가 경로 id ↔ 안정 키를 영속화하므로 표시명·드라이브 문자를
+#: 바꿔도 이력이 갈라지지 않는다. 키는 처음 볼 때 표시명에서 한 번 만들고 그 뒤로는 **바꾸지 않는다**(표시명이 바뀌어도).
+KEY_PREFIX = "dev:"
+#: 드라이브 문자 → UNC 동치를 OS 에 묻는 함수(Windows 의 WNetGetConnection). 검증된 별칭만 같은 장비로 잇는다 —
+#: 폴더 이름·표시명이 같다는 이유로는 합치지 않는다(C03). 테스트가 표로 바꿔 끼운다.
+UNC_RESOLVER: Callable[[str], Optional[str]] = nas_guard._unc_for_drive
+#: cfg 키 — 사용자가 **명시적으로 승인한** 같은 장비의 다른 경로 표기 묶음. `{경로: [다른 표기, …]}` 또는 `[[표기, 표기, …], …]`.
+PATH_ALIASES_CFG = "device_path_aliases"
+
+
+def derive_key(name: str, fallback: str = "") -> str:
+    """표시명에서 안정 키를 만든다(처음 한 번). 공백은 하나로, 키 구분자 `|` 는 `_` 로. 이름이 없으면 폴더 이름."""
+    base = re.sub(r"\s+", " ", str(name or "").strip()) or re.sub(r"\s+", " ", str(fallback or "").strip())
+    return KEY_PREFIX + (base.replace("|", "_") or "device")
+
+
+def path_aliases(path: str, cfg: Optional[dict] = None) -> List[str]:
+    """이 경로와 같은 곳을 가리킨다고 **검증·승인된** 다른 표기들의 경로 id(자기 자신 제외).
+
+    출처는 둘뿐이다 — OS 가 알려 준 드라이브의 UNC 동치(`UNC_RESOLVER`)와 cfg 의 `device_path_aliases` 묶음.
+    파일시스템은 보지 않고 공유를 나열하지도 않는다."""
+    me = device_id(path)
+    out: List[str] = []
+    try:
+        unc = UNC_RESOLVER(str(path))
+    except Exception:  # noqa: BLE001 - 조회 실패는 별칭이 없는 것과 같다
+        unc = None
+    if unc:
+        out.append(device_id(unc))
+    raw = (cfg or {}).get(PATH_ALIASES_CFG) or {}
+    groups = [[k, *(v if isinstance(v, (list, tuple)) else [v])] for k, v in raw.items()] if isinstance(raw, dict) else list(raw)
+    for g in groups:
+        ids = [device_id(x) for x in (g if isinstance(g, (list, tuple)) else [g]) if str(x or "").strip()]
+        if me in ids:
+            out.extend(ids)
+    seen, uniq = {me}, []
+    for i in out:
+        if i not in seen:
+            seen.add(i)
+            uniq.append(i)
+    return uniq
 
 
 def _discover_under(root: str, cfg: dict, log: Optional[LogFn] = None, hint: str = "") -> List[Dict[str, object]]:

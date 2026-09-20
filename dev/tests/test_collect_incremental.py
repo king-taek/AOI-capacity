@@ -26,9 +26,13 @@ def test_first_run_reads_everything_and_second_run_reads_nothing(tmp_path, fake_
     assert len(rows) == 9 and not errors
     assert prog[-1][0] == prog[-1][1] > 0                 # 마지막 보고는 (total, total)
     cache = json.loads((tmp_path / "out" / "aoi_cache.json").read_text(encoding="utf-8"))
-    # 커서 키는 표시명이 아니라 정규화한 장비 경로다(이름을 바꿔도 이력이 갈라지지 않게)
+    # 커서 키는 표시명도 경로도 아닌 영속 안정 키다(C03) — 이름·드라이브 문자를 바꿔도 이력이 갈라지지 않게.
+    # 키는 처음 본 표시명에서 만들고 캐시의 `devices` 대응표가 경로 id 로 잇는다.
     assert len(cache["last_mtime"]) == 3
-    assert {os.path.basename(k) for k in cache["last_mtime"]} == {"AOI-9", "AOI-10", "M-AOI-8"}
+    assert set(cache["last_mtime"]) == {"dev:9호기", "dev:AOI-10", "dev:8호기"} == set(cache["devices"])
+    assert {os.path.basename(m["ids"][0]) for m in cache["devices"].values()} == {"AOI-9", "AOI-10", "M-AOI-8"}
+    assert all(k.startswith(e["device_key"] + "|") and e["rel"] == os.path.basename(e["path"]).casefold() and len(e["sha256"]) == 64
+               for k, e in cache["reports"].items())
 
     rows2, dev_meta2, _, prog2 = _run(cfg)
     assert len(rows2) == 9
@@ -173,17 +177,25 @@ def _count_nas_reads(monkeypatch):
     """가짜 NAS 에서 실제로 연 파일 수 — Report(.htm) 와 INI 를 따로 센다."""
     from aoi_capacity import nas_guard
     seen = {"htm": 0, "ini": 0}
-    orig = nas_guard.read_text
+    orig_text, orig_bytes = nas_guard.read_text, nas_guard.read_bytes
 
-    def spy(path, *a, **k):
+    def count(path):
         low = str(path).lower()
         if low.endswith((".htm", ".html")):
             seen["htm"] += 1
         elif low.endswith(".ini"):
             seen["ini"] += 1
-        return orig(path, *a, **k)
+
+    def spy(path, *a, **k):
+        count(path)
+        return orig_text(path, *a, **k)
+
+    def spy_bytes(path, *a, **k):                   # Report 는 지문(SHA256)까지 내려고 바이트로 한 번 읽는다(C03)
+        count(path)
+        return orig_bytes(path, *a, **k)
 
     monkeypatch.setattr(collect.nas_guard, "read_text", spy)
+    monkeypatch.setattr(collect.nas_guard, "read_bytes", spy_bytes)
     return seen
 
 
@@ -419,8 +431,15 @@ def _rewrite_same_mtime(rep, html):
     os.utime(rep, (m, m))
 
 
+def _entry_of(cache, rep, section="reports"):
+    """캐시 키는 절대 경로가 아니라 `(안정 키|상대 경로)` 다(C03) — 항목의 `path` 로 찾는다."""
+    hits = [e for e in cache[section].values() if e.get("path") == str(rep) and not e.get("superseded_by")]
+    assert len(hits) <= 1, hits
+    return hits[0] if hits else None
+
+
 def _entry_fp(cache, rep):
-    return json.dumps(cache["reports"][str(rep)], sort_keys=True, ensure_ascii=False)
+    return json.dumps(_entry_of(cache, rep), sort_keys=True, ensure_ascii=False)
 
 
 def _cache_of(cfg):
@@ -499,7 +518,7 @@ def test_failed_reread_keeps_previous_rows_and_is_retried_next_run(tmp_path, fak
     assert len(errors) == 1 and errors[0]["kept_rows"] == 3 and errors[0]["path"] == str(r10)
     assert len(rows) == len(rows0) == 12                           # 이전 행이 그대로 나간다
     cache = _cache_of(cfg)
-    assert _entry_fp(cache, r10) == fp0 and cache["failed"][str(r10)]["tries"] == 1
+    assert _entry_fp(cache, r10) == fp0 and _entry_of(cache, r10, "failed")["tries"] == 1
     assert next(d for d in meta if d["name"] == "AOI-10")["status"] == collect.DEV_PARTIAL
 
     monkeypatch.setattr(collect, "parse_report", orig)             # 고쳐졌다(또는 NAS 가 잠깐 막혔던 것)
@@ -507,7 +526,7 @@ def test_failed_reread_keeps_previous_rows_and_is_retried_next_run(tmp_path, fak
     rows, meta, errors, _ = _run(cfg)                              # 평소 증분 수집
     assert not errors and seen["htm"] == 1                         # 재시도 대상 하나만 다시 읽었다
     assert next(d for d in meta if d["name"] == "AOI-10")["retried"] == 1
-    assert str(r10) not in _cache_of(cfg)["failed"] and len(rows) == 12
+    assert _entry_of(_cache_of(cfg), r10, "failed") is None and len(rows) == 12
 
 
 def test_rebuild_all_reads_the_whole_retention_range_and_full_is_its_alias(tmp_path, fake_nas, monkeypatch):
@@ -522,7 +541,7 @@ def test_rebuild_all_reads_the_whole_retention_range_and_full_is_its_alias(tmp_p
         seen = _count_nas_reads(monkeypatch)
         rows, meta, errors, _ = _run(small, **kw)
         assert seen["htm"] == 4 and not errors                     # 45일 전 Report 까지 다시 읽었다(창 = 보관 기간)
-        assert len(rows) == 12 and str(r45) in _cache_of(small)["reports"]
+        assert len(rows) == 12 and _entry_of(_cache_of(small), r45) is not None
     assert collect.plan_run(small, full=True).mode == "rebuild"
     assert collect.plan_run(small, rebuild_all=True).mode == "rebuild"
     assert collect.plan_run(dict(small, rebuild_all=True)).mode == "rebuild"
@@ -547,7 +566,7 @@ def test_rebuild_all_carries_over_history_of_unreachable_devices(tmp_path, fake_
     cfg = make_cfg(tmp_path, csv_path)
     _run(cfg)
     before = _cache_of(cfg)
-    nine = [k for k in before["reports"] if "AOI-9" in k]
+    nine = [k for k, e in before["reports"].items() if "AOI-9" in e["path"]]
     assert len(nine) == 1
     real = collect.nas_guard.scandir
 
@@ -562,7 +581,7 @@ def test_rebuild_all_carries_over_history_of_unreachable_devices(tmp_path, fake_
     assert by["9호기"]["status"] == collect.DEV_UNREACHABLE
     after = _cache_of(cfg)
     assert after["reports"][nine[0]] == before["reports"][nine[0]]           # 이관된 항목은 그대로
-    assert {os.path.basename(k) for k in after["last_mtime"]} == {"AOI-9", "AOI-10", "M-AOI-8"}
+    assert set(after["last_mtime"]) == {"dev:9호기", "dev:AOI-10", "dev:8호기"}
     assert len(rows) == 9 and sum(1 for r in rows if r["device"] == "9호기") == 3
 
 
@@ -572,7 +591,7 @@ def test_rebuild_all_keeps_history_of_a_device_whose_report_folder_looks_empty(t
     cfg = make_cfg(tmp_path, csv_path)
     _run(cfg)
     before = _cache_of(cfg)
-    nine = [k for k in before["reports"] if "AOI-9" in k]
+    nine = [k for k, e in before["reports"].items() if "AOI-9" in e["path"]]
     moved = []
     for f in (nas / "X" / "AOI-9" / "Report").glob("*.htm"):
         f.rename(f.with_suffix(".hidden"))
@@ -775,14 +794,14 @@ def _count_report_reads(monkeypatch, nas):
     """CLI 는 write_html 이 template.html 도 읽으므로 NAS 아래의 Report(.htm) 만 센다."""
     from aoi_capacity import nas_guard
     seen = {"htm": 0}
-    orig = nas_guard.read_text
+    orig = nas_guard.read_bytes
 
     def spy(path, *a, **k):
         if str(path).lower().endswith((".htm", ".html")) and nas_guard.is_under(str(path), str(nas)):
             seen["htm"] += 1
         return orig(path, *a, **k)
 
-    monkeypatch.setattr(collect.nas_guard, "read_text", spy)
+    monkeypatch.setattr(collect.nas_guard, "read_bytes", spy)
     return seen
 
 

@@ -23,7 +23,12 @@
     Report 의 이전 이력은 후보로 옮겨 보존한다. 검증 실패면 `RebuildRejected` — 원 캐시는 그대로다(이력 삭제 없음).
   * 캐시는 `retention_days` 동안 보관.
 
-캐시 파일(C15)
+캐시 파일(C15 · C03 · C04)
+  * Report 키는 `(장비 안정 키, Report 폴더 아래 상대 경로)` = `dev:AOI-25|<파일명>` 이다(C03) — 절대 경로(드라이브 문자)가 아니라서
+    X: → UNC → M: 로 표기가 바뀌어도 같은 Report 는 한 항목이다. 장비 안정 키는 캐시의 `devices` 대응표가 경로 id 로 영속화한다.
+    검증·승인된 경로 별칭(`devices.path_aliases`)만 같은 장비로 잇고, 폴더 이름·표시명이 같다는 이유로는 합치지 않는다.
+    옛 절대 경로 키는 `_migrate_identity` 가 한 번 옮기고 대응표·충돌 목록을 `identity` 에 남긴다(두 번 돌려도 같다, rows 삭제 0).
+  * 저장은 바뀐 이유가 하나라도 있을 때만 한다(C04, `_Dirty`) — 아무것도 안 바뀐 실행은 캐시 파일을 건드리지 않는다(mtime·바이트 그대로).
   * 읽기는 **strict UTF-8** 이다 — 손상되면 조용히 빈 캐시로 덮어쓰지 않는다. 빈 캐시로 시작하되 `_save_cache` 가
     원본을 `<캐시>.bad-<시각>` 으로 옮겨 보존하고, `stats["cache_status"]="corrupt"` 로 알린다.
   * 쓰기는 실행별 고유 임시 파일 → flush+fsync → 다시 읽어 JSON 검증 → `os.replace`. 실패하면 자기 임시 파일만 지우고 원본은 그대로다.
@@ -35,6 +40,7 @@ from __future__ import annotations
 
 import csv
 import datetime as dt
+import hashlib
 import json
 import logging
 import os
@@ -72,6 +78,9 @@ DEFAULT_CONFIG: Dict[str, object] = {
     "read_workers": READ_WORKERS,                 # NAS 를 동시에 몇 개씩 읽을지(1 = 한 줄로)
     "refresh_window_days": 0,                     # D60: 최근 N일 안의 Report 는 캐시에 있어도 다시 읽는다(0 = 끔). 창 밖 이력은 보존
     "rebuild_all": False,                         # D60: 보관 기간 전부를 새 후보 캐시에 모아 검증 뒤 교체(옛 --full 의 별칭)
+    # C03: 사용자가 **명시적으로 승인한** 같은 장비의 다른 경로 표기 묶음 — `{경로: [다른 표기, …]}` 또는 `[[표기, 표기, …], …]`.
+    # 드라이브 문자의 UNC 동치는 OS 가 알려 주므로(devices.UNC_RESOLVER) 보통 비워 둔다. 폴더 이름·표시명만으로는 절대 합치지 않는다.
+    devices_mod.PATH_ALIASES_CFG: {},
 }
 MAX_READ_RETRY = 3   # 읽기에 실패한 Report 를 몇 번까지 다시 시도하고 커서를 붙잡아 둘지
 INI_KEYS = {
@@ -791,8 +800,37 @@ def synthesize_rows(rows: List[dict]) -> List[dict]:
 
 
 # ----------------------------------------------------------------------------- cache
+#: 캐시 파일 형식 번호 — 2 = Report 키가 `(안정 키|상대 경로)` 이고 `devices` 대응표가 있다(C03). 1(번호 없음) = 절대 경로 키.
+CACHE_FORMAT = 2
+#: 저장 이유(C04). `_Dirty` 에 쌓이고 `stats["cache_dirty"]` 로 나간다 — 비어 있으면 `_save_cache` 를 부르지 않는다.
+DIRTY_CREATED, DIRTY_CORRUPT, DIRTY_FORMAT, DIRTY_PARSER = "created", "corrupt", "format", "parser"
+DIRTY_CURSOR, DIRTY_IDENTITY, DIRTY_MAPPING = "cursor", "identity", "device_mapping"
+DIRTY_REPORTS, DIRTY_UPDATED, DIRTY_FAILED, DIRTY_RETENTION, DIRTY_REBUILD = "reports", "reports_updated", "failed", "retention", "rebuild"
+#: identity 기록의 충돌 목록 상한 — 요약이지 원장(ledger)이 아니다. 건수는 `n_conflicts` 에 전부 남는다.
+_MAX_CONFLICTS = 200
+
+
+class _Dirty:
+    """캐시를 저장해야 하는 이유들(C04). 아무 이유도 없으면 순수 no-op — 저장을 생략해 파일의 mtime·바이트가 그대로다.
+
+    rows 가 0건 늘어도 커서·재시도 상태·보관 정리·규칙/형식 이관·장비 대응표가 바뀌면 이유가 남아 저장한다."""
+
+    def __init__(self) -> None:
+        self.reasons: Dict[str, int] = {}
+
+    def add(self, reason: str, n: int = 1) -> None:
+        if n:
+            self.reasons[reason] = self.reasons.get(reason, 0) + int(n)
+
+    def __bool__(self) -> bool:
+        return bool(self.reasons)
+
+    def summary(self) -> str:
+        return " · ".join(f"{k} {v}" for k, v in sorted(self.reasons.items())) or "없음"
+
+
 def _empty_cache() -> dict:
-    return {"reports": {}, "last_mtime": {}, "failed": {}}
+    return {"reports": {}, "last_mtime": {}, "failed": {}, "devices": {}}
 
 
 def cache_status(cache: dict) -> str:
@@ -800,37 +838,44 @@ def cache_status(cache: dict) -> str:
     return str(cache.get("_status") or CACHE_OK)
 
 
-def _load_cache(cfg: dict, full: bool = False, log: Optional[LogFn] = None, rederive: bool = True) -> dict:
+def _load_cache(cfg: dict, full: bool = False, log: Optional[LogFn] = None, rederive: bool = True,
+                dirty: Optional[_Dirty] = None) -> dict:
     """캐시 JSON 을 읽는다. `rederive=True`(수집 경로)면 규칙 번호가 다를 때 행을 지금 규칙으로 다시 계산한다 —
     15만 행이면 몇 초가 걸리므로 **UI 스레드에서 부르는 계획 조회(`plan_run`)는 이것을 끄고** 수집 워커에서만 켠다.
 
     ★ C15: **strict UTF-8** 로 읽는다(NAS Report 용 관대한 디코딩과 다르다 — 손상 바이트가 U+FFFD 로 바뀌어 Lot·Job 문자열이
     조용히 오염되면 안 된다). 디코딩·JSON 이 깨졌으면 빈 캐시로 시작하되 `_status="corrupt"` 와 원본 경로를 남긴다 —
     `_save_cache` 가 그 원본을 `.bad-<시각>` 으로 옮겨 **보존한 뒤** 새 파일을 쓴다(조용한 덮어쓰기 없음).
-    `full=True` 는 파일을 아예 읽지 않는다(전체 재구축은 `collect` 가 원 캐시를 따로 읽는다)."""
+    `full=True` 는 파일을 아예 읽지 않는다(전체 재구축은 `collect` 가 원 캐시를 따로 읽는다).
+    `dirty` 를 주면 저장이 필요한 이유(없던 파일 · 손상 · 형식 보정 · 규칙 재계산)를 적는다(C04)."""
+    dirty = dirty if dirty is not None else _Dirty()
     cache = _empty_cache()
     path = cfg.get("cache_file") or ""
     if full or not path or not os.path.isfile(path):
         cache["_status"] = CACHE_MISSING
+        dirty.add(DIRTY_CREATED)
         return cache
     try:
         loaded = json.loads(nas_guard.read_text(path, errors="strict"))
         if not isinstance(loaded, dict) or not isinstance(loaded.get("reports", {}), dict):
             raise ValueError("캐시 JSON 의 최상위가 객체가 아닙니다")
         cache.update(loaded)
-        for k in ("reports", "last_mtime", "failed"):
+        for k in ("reports", "last_mtime", "failed", "devices"):
             if not isinstance(cache.get(k), dict):
                 cache[k] = {}
+                dirty.add(DIRTY_FORMAT)
         cache.pop(_CORRUPT_KEY, None)
         cache["_status"] = CACHE_OK
     except (UnicodeDecodeError, ValueError, OSError) as e:      # json.JSONDecodeError 는 ValueError
         cache = _empty_cache()
         cache["_status"] = CACHE_CORRUPT
         cache[_CORRUPT_KEY] = {"path": path, "error": f"{type(e).__name__}: {e}"}
+        dirty.add(DIRTY_CORRUPT)
         _say(log, f"★ 캐시 파일을 읽을 수 없습니다({type(e).__name__}: {e}) — 빈 캐시로 시작하되 "
                   f"원본은 '{os.path.basename(path)}.bad-<시각>' 으로 보존합니다(덮어쓰지 않음)")
     if rederive and cache.get("parser_version") != PARSER_VERSION:
         n = _rederive_rows(cache)
+        dirty.add(DIRTY_PARSER)                                  # 번호만 달라도 저장한다 — 다음 실행이 또 재계산하지 않게
         if n:
             _say(log, f"분류 규칙이 바뀌어 캐시 행 {n}개의 상태·검사 종류를 다시 계산했습니다(NAS 는 읽지 않음)")
     return cache
@@ -868,54 +913,331 @@ def _rederive_rows(cache: dict) -> int:
 
 
 def _needs_recovery(entry: dict) -> bool:
-    """누락 복구 대상인가 — INI 를 못 찾았거나 읽다 실패한 행이 하나라도 있는 Report."""
+    """누락 복구 대상인가 — INI 를 못 찾았거나 읽다 실패한 행이 하나라도 있는 Report. 밀려난 옛 판(superseded)은 대상이 아니다."""
+    if entry.get("superseded_by"):
+        return False
     return any(r.get("ini_match") in RECOVERABLE_INI for r in entry.get("rows") or ())
 
 
-def _migrate_cursors(cache: dict, devs: List[dict], log: Optional[LogFn] = None) -> None:
-    """옛 캐시의 '표시명' 커서를 '경로' 커서로 옮긴다(표시명이 바뀌어도 이력이 갈라지지 않게).
+def _migrate_cursors(cache: dict, devs: List[dict], log: Optional[LogFn] = None, dirty: Optional[_Dirty] = None) -> None:
+    """옛 캐시의 '표시명' 커서를 '경로' 커서로 옮긴다(표시명이 바뀌어도 이력이 갈라지지 않게). 안정 키로는 `_assign_device_keys` 가 옮긴다.
 
     옮길 짝을 못 찾은 키는 건드리지 않는다 — 사용자 데이터는 지우지 않는다."""
     last = cache["last_mtime"]
     for d in devs:
         did = str(d["id"])
-        if did in last:
+        if did in last or (d.get("key") and d["key"] in last):
             continue
         for alias in [d.get("name"), *(d.get("aliases") or [])]:
             key = str(alias or "")
-            if key and key in last:
+            if key and key in last and not key.startswith(devices_mod.KEY_PREFIX):
                 last[did] = last.pop(key)
+                if dirty is not None:
+                    dirty.add(DIRTY_CURSOR)
                 _say(log, f"캐시 커서 이관: '{key}' → {d.get('name')} (경로 키)")
                 break
 
 
-def _cache_device(path: str, entry: dict, devs: List[dict]) -> Optional[dict]:
-    """캐시에 있는 Report 하나가 지금 수집 대상 장비 중 어디에 속하는지. 파일시스템을 보지 않는다."""
-    did = entry.get("device_id")
+# ── 안정 키 · Report 키(C03) ──────────────────────────────────────────────────
+def _rel_key(rel: str) -> str:
+    """Report 키의 상대 경로 부분 — 구분자는 `/`, 대소문자는 접는다(SMB 는 대소문자를 구분하지 않는다). 원문 경로는 항목의 `path` 에 남는다."""
+    return str(rel or "").replace("\\", "/").strip("/").casefold()
+
+
+def report_key(dev_key: str, rel: str) -> str:
+    """Report 캐시 키 = `<장비 안정 키>|<Report 폴더 아래 상대 경로>`. 드라이브 문자·UNC·Report 폴더 이름(`Report`/`Reports`)과 무관하다."""
+    return f"{dev_key}|{_rel_key(rel)}"
+
+
+def _strip_long_prefix(p: str) -> str:
+    if p.startswith("\\\\?\\"):
+        p = p[4:]
+        if p.upper().startswith("UNC\\"):
+            p = "\\\\" + p[4:]
+    return p
+
+
+def _rel_under_device(path: str, dev_root: str) -> str:
+    """옛 절대 경로 키를 상대 경로로 — 장비 경로 아래면 첫 조각(Report 폴더)을 뗀 나머지, 아니면 파일 이름만.
+    문자열로만 판정한다(OS 무관 — Windows 에서 만든 캐시를 어디서 읽어도 같은 답)."""
+    p = _strip_long_prefix(str(path or "")).replace("\\", "/")
+    r = _strip_long_prefix(str(dev_root or "")).replace("\\", "/").rstrip("/")
+    if r and p.casefold().startswith(r.casefold() + "/"):
+        parts = [x for x in p[len(r) + 1:].split("/") if x]
+        return _rel_key("/".join(parts[1:] if len(parts) > 1 else parts))
+    return _rel_key(p.rsplit("/", 1)[-1])
+
+
+def _is_stable_key(k: str) -> bool:
+    return str(k).startswith(devices_mod.KEY_PREFIX)
+
+
+def _fresh_key(name: str, fallback: str, taken) -> str:
+    """표시명에서 만든 키가 이미 다른 장비의 것이면 `~2`, `~3` … 을 붙인다 — 이름이 같다고 합치지 않는다(C03)."""
+    base = devices_mod.derive_key(name, fallback)
+    key, n = base, 1
+    while key in taken:
+        n += 1
+        key = f"{base}~{n}"
+    return key
+
+
+def _note_conflict(cache: dict, item: dict) -> None:
+    """identity 기록에 충돌 한 건을 남긴다(같은 내용이 이미 있으면 그대로 — 두 번 돌려도 같다)."""
+    rec = cache.setdefault("identity", {"format": CACHE_FORMAT, "migrated": {}, "conflicts": [], "n_conflicts": 0})
+    rec.setdefault("conflicts", [])
+    if item in rec["conflicts"]:
+        return
+    if len(rec["conflicts"]) < _MAX_CONFLICTS:
+        rec["conflicts"].append(item)
+    rec["n_conflicts"] = int(rec.get("n_conflicts") or 0) + 1
+
+
+def _assign_device_keys(cache: dict, devs: List[dict], cfg: dict, dirty: _Dirty, log: Optional[LogFn] = None) -> None:
+    """이번 실행의 장비마다 안정 키(`d["key"]`)를 붙인다 — 캐시의 `devices` 대응표 `{key: {name, ids, aliases}}` 를 경로 id 로 찾는다.
+
+    찾는 열쇠는 경로 id 와 **검증·승인된** 경로 별칭(`devices.path_aliases`: OS 가 알려 준 UNC 동치 · cfg 의 승인 묶음)뿐이다.
+    없으면 표시명에서 새 키를 만들어 대응표에 넣는다(같은 이름의 키가 이미 다른 경로의 것이면 `~2` — 이름만으로 합치지 않고 충돌로 기록).
+    옛 형식 커서(경로 id 키)는 여기서 안정 키로 옮긴다. 대응표는 순수 데이터라 파일시스템을 보지 않는다."""
+    devmap = cache.get("devices")
+    if not isinstance(devmap, dict):
+        devmap = cache["devices"] = {}
+        dirty.add(DIRTY_FORMAT)
+    by_id: Dict[str, str] = {}
+    for k, m in devmap.items():
+        for i in m.get("ids") or ():
+            by_id.setdefault(str(i), k)
+    last = cache["last_mtime"]
     for d in devs:
-        if did and str(d["id"]) == str(did):
-            return d
-        if nas_guard.is_under(path, str(d["path"])):
-            return d
-    return None
+        did = str(d["id"])
+        aliases = [a for a in devices_mod.path_aliases(str(d["path"]), cfg) if a != did]
+        d["path_aliases"] = aliases
+        ids = [did, *aliases]
+        hits: List[str] = []
+        for i in ids:
+            k = by_id.get(i)
+            if k and k not in hits:
+                hits.append(k)
+        if hits:
+            key = hits[0]
+            if len(hits) > 1:                       # 승인된 별칭이 서로 다른 키에 걸려 있다 — 합치지 않고 첫 키를 쓰며 기록만 남긴다
+                _note_conflict(cache, {"kind": "alias_spans_keys", "name": str(d["name"]), "keys": hits})
+                _say(log, f"[{d['name']}] 경로 별칭이 서로 다른 안정 키 {hits} 에 걸려 있어 '{key}' 를 씁니다(합치지 않음)")
+        else:
+            base = devices_mod.derive_key(str(d["name"]), scope.path_tail(d["path"]))
+            key = _fresh_key(str(d["name"]), scope.path_tail(d["path"]), devmap)
+            if key != base:
+                _note_conflict(cache, {"kind": "name_clash", "name": str(d["name"]), "key": key, "existing": base,
+                                       "existing_ids": list(devmap.get(base, {}).get("ids") or [])})
+                _say(log, f"[{d['name']}] 같은 이름의 안정 키 '{base}' 가 다른 경로의 것이라 '{key}' 를 새로 만듭니다(이름만으로 합치지 않음)")
+            devmap[key] = {"name": str(d["name"]), "ids": [], "aliases": []}
+            dirty.add(DIRTY_IDENTITY)
+        m = devmap[key]
+        m.setdefault("ids", [])
+        m.setdefault("aliases", [])
+        for i in ids:
+            if i not in m["ids"]:
+                m["ids"].append(i)
+                by_id.setdefault(i, key)
+                dirty.add(DIRTY_MAPPING)
+        if m.get("name") != str(d["name"]):
+            if m.get("name") and m["name"] not in m["aliases"]:
+                m["aliases"].append(m["name"])
+            m["name"] = str(d["name"])
+            dirty.add(DIRTY_MAPPING)
+        d["key"] = key
+        for i in ids:                               # 옛 커서(경로 id) → 안정 키
+            if i in last:
+                cur = float(last.pop(i))
+                last[key] = max(cur, float(last.get(key, 0)))
+                dirty.add(DIRTY_CURSOR)
 
 
-def _rows_from_cache(cache: dict, devs: List[dict], cfg: dict) -> Tuple[List[dict], int]:
-    """출력용 행 — 범위 밖 장비의 캐시는 **지우지 않고 빼기만** 한다.
+class _DeviceIndex:
+    """이번 실행의 장비 목록을 한 번만 색인한다(C09) — 캐시 항목마다 장비 목록을 선형으로 돌며 경로를 정규화하지 않는다.
+
+    찾는 순서: 안정 키 정확 일치 → 경로 id 정확 일치 → (둘 다 없는 옛 항목만) 경로 포함 폴백."""
+
+    def __init__(self, devs: List[dict]) -> None:
+        self.devs = list(devs)
+        self.by_key: Dict[str, dict] = {str(d["key"]): d for d in devs if d.get("key")}
+        self.by_id: Dict[str, dict] = {str(d["id"]): d for d in devs}
+
+    def find(self, entry: dict, path: str = "") -> Optional[dict]:
+        k = entry.get("device_key")
+        if k and str(k) in self.by_key:
+            return self.by_key[str(k)]
+        did = entry.get("device_id")
+        if did and str(did) in self.by_id:
+            return self.by_id[str(did)]
+        if k or did:
+            return None                             # 정확한 id 가 있는데 지금 목록에 없다 — 범위 밖·이름이 바뀐 장비
+        p = path or str(entry.get("path") or "")
+        if not p:
+            return None
+        for d in self.devs:                         # 옛 항목(id 없음)만 여기 온다
+            if nas_guard.is_under(p, str(d["path"])):
+                return d
+        return None
+
+
+def _cache_device(entry: dict, index: _DeviceIndex, path: str = "") -> Optional[dict]:
+    """캐시에 있는 Report 하나가 지금 수집 대상 장비 중 어디에 속하는지. 파일시스템을 보지 않는다."""
+    return index.find(entry, path)
+
+
+def _entry_sort_stamp(entry: dict) -> tuple:
+    """같은 키로 모인 옛 항목 중 '현재 판' 을 고르는 결정적 기준 — 수정시각이 늦은 것, 같으면 행 JSON 이 큰 것."""
+    return (float(entry.get("mtime") or 0), json.dumps(entry.get("rows") or [], sort_keys=True, ensure_ascii=False))
+
+
+def _migrate_identity(cache: dict, index: _DeviceIndex, dirty: _Dirty, log: Optional[LogFn] = None) -> Dict[str, int]:
+    """옛 절대 경로 키(`X:\\AOI-1\\Report\\a.htm`)를 새 키(`dev:AOI-1|a.htm`)로 옮긴다(C03). 두 번 돌려도 같다(옮길 것이 없으면 아무것도 안 한다).
+
+    * 장비는 `_DeviceIndex` 로 찾고(정확 id → 옛 항목은 경로 포함), 지금 목록에 없는 장비는 항목의 `device_id`·`device` 로 대응표에 새 키를 만든다.
+    * 같은 새 키에 옛 항목이 둘 이상 모이면(X: 와 UNC 로 같은 파일이 두 번 들어간 C03 의 증상) **지우지 않는다** — 수정시각이 늦은 것을 현재 판으로 두고
+      나머지는 `<키>#<n>` 에 `superseded_by` 를 붙여 보존한다(출력에서만 빠진다). 내용까지 같으면 `identical`, 다르면 `revision` 으로 기록.
+    * 커서·실패 목록도 같은 규칙으로 옮기고, 짝을 못 찾은 커서는 그대로 둔다(`cursors_unmapped`).
+    결과는 `cache["identity"]` 에 남고 돌려주는 값은 건수 요약."""
+    reports, failed, last, devmap = cache["reports"], cache["failed"], cache["last_mtime"], cache["devices"]
+    legacy = [k for k, e in reports.items() if not e.get("device_key")]
+    legacy_failed = [k for k, f in failed.items() if not f.get("device_key")]
+    legacy_cursors = [k for k in last if not _is_stable_key(k)]
+    by_id: Dict[str, str] = {}
+    for k, m in devmap.items():
+        for i in m.get("ids") or ():
+            by_id.setdefault(str(i), k)
+    # 옮길 수 있는 것이 하나도 없으면 손대지 않는다 — 짝 없는 옛 커서만 남은 캐시는 몇 번을 돌려도 그대로다(멱등)
+    if not legacy and not legacy_failed and not any(by_id.get(str(k)) for k in legacy_cursors):
+        return {}
+    counts = {"reports": 0, "failed": 0, "cursors": 0, "cursors_unmapped": 0, "no_id": 0, "superseded": 0}
+
+    def key_for(entry: dict, old_path: str) -> Tuple[str, str]:
+        dev = index.find(entry, old_path)
+        if dev is not None:
+            return str(dev["key"]), _rel_under_device(old_path, str(dev["path"]))
+        did, name = str(entry.get("device_id") or ""), str(entry.get("device") or "")
+        if did:
+            dk = by_id.get(did)
+            if not dk:
+                dk = _fresh_key(name, scope.path_tail(did), devmap)
+                devmap[dk] = {"name": name, "ids": [did], "aliases": []}
+                by_id[did] = dk
+                dirty.add(DIRTY_IDENTITY)
+            return dk, _rel_under_device(old_path, did)
+        counts["no_id"] += 1                        # 아주 옛 항목(장비 id 없음) — 이름으로 새 키(이름만으로 남과 합치지 않는다)
+        dk = by_id.get(f"name:{name}")
+        if not dk:
+            dk = _fresh_key(name, "", devmap)
+            devmap[dk] = {"name": name, "ids": [], "aliases": []}
+            by_id[f"name:{name}"] = dk
+            dirty.add(DIRTY_IDENTITY)
+        return dk, _rel_under_device(old_path, "")
+
+    if legacy:
+        rebuilt: Dict[str, dict] = {}
+        groups: Dict[str, List[Tuple[str, dict]]] = {}
+        for k, e in reports.items():
+            if e.get("device_key"):
+                rebuilt[k] = e
+                continue
+            dk, rel = key_for(e, k)
+            e = dict(e)
+            e.update({"device_key": dk, "rel": rel, "path": k})
+            groups.setdefault(report_key(dk, rel), []).append((k, e))
+            counts["reports"] += 1
+        for nk, items in groups.items():
+            items.sort(key=lambda kv: _entry_sort_stamp(kv[1]), reverse=True)
+            if nk in rebuilt:                       # 새 형식 항목이 이미 있다 — 그것이 현재 판
+                losers, cur = items, rebuilt[nk]
+            else:
+                rebuilt[nk] = items[0][1]
+                losers, cur = items[1:], items[0][1]
+            n = 0
+            for lp, le in losers:
+                n += 1
+                sk = f"{nk}#{n}"
+                while sk in rebuilt:
+                    n += 1
+                    sk = f"{nk}#{n}"
+                identical = le.get("mtime") == cur.get("mtime") and le.get("rows") == cur.get("rows")
+                le["superseded_by"] = nk
+                rebuilt[sk] = le
+                counts["superseded"] += 1
+                _note_conflict(cache, {"kind": "identical" if identical else "revision", "key": nk,
+                                       "kept": str(cur.get("path") or ""), "superseded": lp})
+        cache["reports"] = rebuilt
+        dirty.add(DIRTY_IDENTITY, len(legacy))
+    if legacy_failed:
+        new_failed: Dict[str, dict] = {}
+        for k, f in failed.items():
+            if f.get("device_key"):
+                new_failed[k] = f
+                continue
+            dk, rel = key_for(f, k)
+            f = dict(f)
+            f.update({"device_key": dk, "path": k})
+            nk = report_key(dk, rel)
+            if nk in new_failed:
+                _note_conflict(cache, {"kind": "failed_duplicate", "key": nk, "kept": str(new_failed[nk].get("path") or ""), "dropped_state": k})
+                if int(f.get("tries", 0)) > int(new_failed[nk].get("tries", 0)):
+                    new_failed[nk] = f
+                continue
+            new_failed[nk] = f
+            counts["failed"] += 1
+        cache["failed"] = new_failed
+        dirty.add(DIRTY_FAILED, len(legacy_failed))
+    for k in legacy_cursors:
+        dk = by_id.get(str(k))
+        if not dk:
+            counts["cursors_unmapped"] += 1        # 짝을 못 찾은 커서는 그대로 둔다 — 그 장비가 돌아오면 `_assign_device_keys` 가 옮긴다
+            continue
+        cur = float(last.pop(k))
+        last[dk] = max(cur, float(last.get(dk, 0)))
+        counts["cursors"] += 1
+        dirty.add(DIRTY_CURSOR)
+    rec = cache.setdefault("identity", {"format": CACHE_FORMAT, "migrated": {}, "conflicts": [], "n_conflicts": 0})
+    rec["format"] = CACHE_FORMAT
+    mig = rec.setdefault("migrated", {})
+    for k, v in counts.items():
+        if k == "cursors_unmapped":
+            if v:
+                mig[k] = v                          # 상태 수(지금 남아 있는 것) — 더하지 않는다
+            else:
+                mig.pop(k, None)
+        elif v:
+            mig[k] = int(mig.get(k) or 0) + v      # 사건 수 — 이관이 또 일어나면(옛 캐시 복원) 더한다
+    _say(log, f"캐시 키 이관: Report {counts['reports']}개 · 실패 목록 {counts['failed']}개 · 커서 {counts['cursors']}개"
+              + (f" · 밀려난 옛 판 {counts['superseded']}개(보존)" if counts["superseded"] else "")
+              + (f" · 짝 없는 커서 {counts['cursors_unmapped']}개(그대로 둠)" if counts["cursors_unmapped"] else ""))
+    return counts
+
+
+def _rows_from_cache(cache: dict, index: _DeviceIndex, cfg: dict, stats: Optional[dict] = None) -> Tuple[List[dict], int]:
+    """출력용 행 — 범위 밖 장비의 캐시는 **지우지 않고 빼기만** 한다. 밀려난 옛 판(`superseded_by`)도 출력에서만 뺀다.
 
     표시명이 바뀐 장비의 옛 행은 현재 표시명으로 바꿔 내보낸다(같은 장비가 둘로 갈라지지 않게)."""
-    rows, hidden = [], 0
+    rows, hidden, superseded = [], 0, 0
     unrestricted = scope.unrestricted(cfg)
-    for path, entry in cache["reports"].items():
-        dev = _cache_device(path, entry, devs)
+    devmap = cache.get("devices") or {}
+    for key, entry in cache["reports"].items():
+        if entry.get("superseded_by"):
+            superseded += len(entry.get("rows") or ())
+            continue
+        path = str(entry.get("path") or (key if not _is_stable_key(key) else ""))
+        dev = index.find(entry, path)
+        mapped = devmap.get(str(entry.get("device_key") or ""), {}) if dev is None else {}
         if dev is None and not unrestricted:
-            name = str(entry.get("device") or "")
-            if not scope.is_allowed(cfg, name, scope.path_tail(os.path.dirname(os.path.dirname(path)))):
+            name = str(mapped.get("name") or entry.get("device") or "")
+            folder = scope.path_tail(entry.get("device_id") or os.path.dirname(os.path.dirname(path)))
+            if not scope.is_allowed(cfg, name, folder):
                 hidden += len(entry.get("rows") or ())
                 continue
-        name = str(dev["name"]) if dev else str(entry.get("device") or "")
+        name = str(dev["name"]) if dev else str(mapped.get("name") or entry.get("device") or "")
         for r in entry.get("rows") or ():
             rows.append({**r, "device": name} if name and r.get("device") != name else r)
+    if stats is not None:
+        stats["cache_superseded_rows"] = superseded
     return rows, hidden
 
 
@@ -929,7 +1251,7 @@ def _validate_cache_file(tmp: str, cache: dict) -> None:
     check = json.loads(nas_guard.read_text(tmp, errors="strict"))
     if not isinstance(check, dict):
         raise ValueError("캐시 JSON 최상위가 객체가 아닙니다")
-    for k in ("reports", "last_mtime", "failed"):
+    for k in ("reports", "last_mtime", "failed", "devices"):
         if not isinstance(check.get(k), dict):
             raise ValueError(f"캐시 JSON 에 '{k}' 객체가 없습니다")
     if check.get("parser_version") != PARSER_VERSION:
@@ -948,6 +1270,8 @@ def _save_cache(cfg: dict, cache: dict) -> dict:
     path = str(cfg["cache_file"])
     os.makedirs(os.path.dirname(os.path.abspath(path)), exist_ok=True)
     cache["parser_version"] = PARSER_VERSION
+    cache["cache_format"] = CACHE_FORMAT
+    cache.setdefault("devices", {})
     corrupt = cache.pop(_CORRUPT_KEY, None)
     cache.pop("_status", None)
     tmp = _unique_tmp(path)
@@ -1090,16 +1414,17 @@ def _list_new_reports(devs, cache, cfg, backfill, log, progress, on_device, shou
     # (커서는 뒤로 가지 않는다. 나열만 조금 더 하고, 고르는 건 위의 규칙대로라 다른 파일은 그대로 known 이다.)
     pending_since: Dict[str, float] = {}
     for f in failed.values():
-        if f.get("device_id") and int(f.get("tries", 0)) < MAX_READ_RETRY:
-            did_f, m_f = str(f["device_id"]), float(f.get("mtime") or 0)
-            pending_since[did_f] = min(pending_since.get(did_f, m_f), m_f)
+        dk_f = str(f.get("device_key") or f.get("device_id") or "")
+        if dk_f and int(f.get("tries", 0)) < MAX_READ_RETRY:
+            m_f = float(f.get("mtime") or 0)
+            pending_since[dk_f] = min(pending_since.get(dk_f, m_f), m_f)
     done = _Counter()
 
     def one(d):
         _check(should_stop)
         on_device(d["name"], "listing", "")
-        did = str(d["id"])
-        dm = {"name": d["name"], "id": did, "note": d["path"], "reports": 0, "found": 0, "error": "",
+        dk = str(d["key"])                         # ★ 커서·Report 키는 안정 키(C03) — 경로 id 가 아니다
+        dm = {"name": d["name"], "id": str(d["id"]), "key": dk, "note": d["path"], "reports": 0, "found": 0, "error": "",
               "report_dir": str(d.get("report_dir") or cfg["report_dir"]), "recovered": 0, "read_errors": 0,
               "refreshed": 0, "retried": 0, "kept": 0}
         rep_dir = os.path.join(d["path"], str(d.get("report_dir") or cfg["report_dir"]))
@@ -1107,33 +1432,34 @@ def _list_new_reports(devs, cache, cfg, backfill, log, progress, on_device, shou
             files = [e for e in nas_guard.scandir(rep_dir) if e.is_file() and e.name.lower().endswith((".htm", ".html"))]
             files.sort(key=lambda e: e.stat().st_mtime, reverse=True)
             # 누락 복구는 커서와 무관하게 backfill 창 전체를 다시 훑되, 다시 읽는 건 복구 대상뿐이다(아래)
-            since = backfill_since if (backfill or recover or did not in last) else float(last[did]) - CLOCK_SKEW_SEC
+            since = backfill_since if (backfill or recover or dk not in last) else float(last[dk]) - CLOCK_SKEW_SEC
             if refresh_since is not None:
                 since = min(since, refresh_since)          # refresh 창은 커서보다 앞서도 훑는다
-            if did in pending_since:
-                since = min(since, pending_since[did] - 1)  # 재시도할 Report 까지는 훑는다
+            if dk in pending_since:
+                since = min(since, pending_since[dk] - 1)  # 재시도할 Report 까지는 훑는다
             pick, known = [], []
             for e in files:
                 m = e.stat().st_mtime
                 if m < since:
                     continue
-                cached = reports.get(e.path)
-                if cached and abs(float(cached.get("mtime", 0)) - m) < 1 and _is_same_device(cached, e.path, d):
-                    pending = failed.get(e.path) or {}
+                key = report_key(dk, e.name)               # Report 폴더 바로 아래 파일이라 상대 경로 = 파일 이름
+                cached = reports.get(key)
+                if cached and abs(float(cached.get("mtime", 0)) - m) < 1:
+                    pending = failed.get(key) or {}
                     if refresh_since is not None and m >= refresh_since:
                         dm["refreshed"] += 1
-                        pick.append(e)
+                        pick.append((e, key))
                     elif recover and _needs_recovery(cached):
                         dm["recovered"] += 1
-                        pick.append(e)
+                        pick.append((e, key))
                     elif pending and int(pending.get("tries", 0)) < MAX_READ_RETRY:
                         dm["retried"] += 1                 # 지난번 다시 읽다 실패 — 이전 행은 그대로, 이번에 재시도
-                        pick.append(e)
+                        pick.append((e, key))
                     else:
                         known.append(m)
                         dm["kept"] += 1
                 else:
-                    pick.append(e)
+                    pick.append((e, key))
             dm["found"], dm["reports"] = len(files), len(pick)
             out = (d, dm, pick, known)
         except OSError as ex:
@@ -1170,25 +1496,26 @@ class _Counter:
             return self._n
 
 
-def _is_same_device(cached: dict, path: str, dev: dict) -> bool:
-    cid = cached.get("device_id")
-    if cid:
-        return str(cid) == str(dev["id"])
-    return cached.get("device") == dev["name"] or nas_guard.is_under(path, str(dev["path"]))
+def _decode_report(raw: bytes) -> str:
+    """Report 본문 — NAS 용 관대한 디코딩(손상 바이트는 U+FFFD)과 텍스트 모드와 같은 줄바꿈 정규화. 지문(SHA256)은 원본 바이트로 낸다."""
+    return raw.decode("utf-8", errors="replace").replace("\r\n", "\n").replace("\r", "\n")
 
 
-def _advance_cursor(last: dict, did: str, ok_mtimes, blocked_mtimes) -> None:
-    """커서는 **성공적으로 캐시에 들어간 파일까지만** 전진한다.
+def _advance_cursor(last: dict, did: str, ok_mtimes, blocked_mtimes) -> bool:
+    """커서는 **성공적으로 캐시에 들어간 파일까지만** 전진한다. 값이 실제로 바뀌었을 때만 True(저장 이유, C04).
 
     읽기에 실패해 아직 재시도가 남은 파일이 있으면 그 파일보다 앞에서 멈춘다 →
     다음 증분 수집에서 그 Report 를 다시 만난다(영구 누락 방지)."""
     cur = float(last.get(did, 0))
     limit = min(blocked_mtimes) if blocked_mtimes else None
     usable = [m for m in ok_mtimes if limit is None or m < limit]
-    if usable:
-        last[did] = max(cur, max(usable))
-    elif cur:
-        last[did] = cur
+    new = max(cur, max(usable)) if usable else cur
+    if did in last and float(last[did]) == new:
+        return False
+    if new or did in last:
+        last[did] = new
+        return True
+    return False
 
 
 def _backup_roots(d: dict, scan_root: str) -> ScanRoots:
@@ -1232,18 +1559,28 @@ def collect(cfg: dict, full: bool = False, backfill: bool = False, *, recover: b
     refresh_days, rebuild = _mode_args(cfg, full, refresh_window_days, rebuild_all)
     progress(0, 0, i18n.KO.COLLECT_PHASE_DEVICES)
     old_cache: Optional[dict] = None
+    dirty = _Dirty()                                          # C04: 저장 이유 — 비어 있으면 캐시 파일을 건드리지 않는다
     if rebuild:
-        old_cache = _load_cache(cfg, log=log)                 # 원 캐시는 검증 뒤 교체할 때까지 그대로 둔다
+        old_cache = _load_cache(cfg, log=log, dirty=dirty)   # 원 캐시는 검증 뒤 교체할 때까지 그대로 둔다
         cache = _empty_cache()
         cache["_status"] = old_cache.get("_status")
         if old_cache.get(_CORRUPT_KEY):
             cache[_CORRUPT_KEY] = old_cache[_CORRUPT_KEY]      # 손상 원본 보존은 _save_cache 가 한다
+        dirty.add(DIRTY_REBUILD)
     else:
-        cache = _load_cache(cfg, log=log)
+        cache = _load_cache(cfg, log=log, dirty=dirty)
     stats["cache_status"] = cache_status(cache)
     backfill = backfill or rebuild or not cache["reports"]
     devs = devices_mod.resolve_devices(cfg, log)
-    _migrate_cursors(old_cache if old_cache is not None else cache, devs, log)
+    base = old_cache if old_cache is not None else cache
+    _migrate_cursors(base, devs, log, dirty)
+    _assign_device_keys(base, devs, cfg, dirty, log)          # C03: 장비마다 안정 키(d["key"]) — 캐시 대응표로 영속
+    index = _DeviceIndex(devs)                                # C09: 실행 단위로 한 번만 색인
+    _migrate_identity(base, index, dirty, log)                # 옛 절대 경로 키 → (안정 키|상대 경로), 한 번만
+    if old_cache is not None:
+        cache["devices"] = json.loads(json.dumps(old_cache.get("devices") or {}))
+        if old_cache.get("identity"):
+            cache["identity"] = json.loads(json.dumps(old_cache["identity"]))
     stats["devices_ms"] = int((clock() - t0) * 1000)
     t1 = clock()
     window_days = float(cfg["retention_days"]) if rebuild else None
@@ -1275,60 +1612,76 @@ def collect(cfg: dict, full: bool = False, backfill: bool = False, *, recover: b
     for d, dm, pick, _known in plan:
         if dm["error"] or not pick:
             continue
-        left[str(d["id"])] = len(pick)
+        left[str(d["key"])] = len(pick)
         on_device(d["name"], "parsing", "")
         scan_root = os.path.join(d["path"], str(d.get("scan_dir") or cfg["scan_dir"]))
         backups = _backup_roots(d, scan_root)
-        jobs.extend((d, dm, e, scan_root, backups) for e in pick)
+        jobs.extend((d, dm, e, key, scan_root, backups) for e, key in pick)
 
     def read_one(job):
-        d, _dm, e, scan_root, backups = job
+        d, _dm, e, _key, scan_root, backups = job
         _check(should_stop)
         t_job = clock()
         mtime = e.stat().st_mtime
+        sha = ""
         try:
-            rep = parse_report(e.name, nas_guard.read_text(e.path))
-            out = (job, mtime, rows_for_report(d["name"], rep, scan_root, memo, backups), None, clock() - t_job)
+            raw = nas_guard.read_bytes(e.path)                 # 한 번 읽은 바이트로 지문(SHA256)까지 — 중복 판정용 추가 읽기는 없다(C03)
+            sha = hashlib.sha256(raw).hexdigest()
+            rep = parse_report(e.name, _decode_report(raw))
+            del raw
+            out = (job, mtime, rows_for_report(d["name"], rep, scan_root, memo, backups), None, clock() - t_job, sha)
         except CollectCancelled:
             raise
         except Exception as ex:  # noqa: BLE001
-            out = (job, mtime, None, f"{type(ex).__name__}: {ex}", clock() - t_job)
+            out = (job, mtime, None, f"{type(ex).__name__}: {ex}", clock() - t_job, sha)
         progress(done.bump(), total, i18n.KO.COLLECT_PHASE_PARSE_FMT.format(device=d["name"], name=e.name))
         with left_lock:                       # 여러 스레드가 같이 줄이므로 잠그고 센다
-            n = left.get(str(d["id"]))
-            n = left[str(d["id"])] = (n - 1) if n is not None else None
+            dk = str(d["key"])
+            n = left.get(dk)
+            n = left[dk] = (n - 1) if n is not None else None
             if out[3] is not None:
-                bad_in[str(d["id"])] = bad_in.get(str(d["id"]), 0) + 1
-            failed_any = bad_in.get(str(d["id"]), 0) > 0
+                bad_in[dk] = bad_in.get(dk, 0) + 1
+            failed_any = bad_in.get(dk, 0) > 0
         if n == 0:                            # 이 장비 몫을 다 읽었다 — 실패가 섞였으면 초록이 아니라 '일부 실패'
             on_device(d["name"], "partial" if failed_any else "done", "")
         return out
 
-    by_dev: Dict[str, dict] = {str(d["id"]): {"ok": list(known), "blocked": []}
+    by_dev: Dict[str, dict] = {str(d["key"]): {"ok": list(known), "blocked": []}
                                for d, dm, _pick, known in plan if not dm["error"]}
-    for (d, _dm, e, _scan, _bk), mtime, rows_of, err, sec in _run(cfg, jobs, read_one, should_stop):
-        did = str(d["id"])
+    for (d, _dm, e, key, _scan, _bk), mtime, rows_of, err, sec, sha in _run(cfg, jobs, read_one, should_stop):
+        dk, did = str(d["key"]), str(d["id"])
         _dm["read_sum_ms"] = _dm.get("read_sum_ms", 0) + int(sec * 1000)   # 병렬로 겹치는 시간의 **합**(경과시간 아님)
         if err is None:
-            reports[e.path] = {"mtime": mtime, "device": d["name"], "device_id": did,
-                               "rows": rows_of, "seen": time.time(), "parser_version": PARSER_VERSION}
-            failed.pop(e.path, None)
-            by_dev[did]["ok"].append(mtime)
+            prev = reports.get(key)
+            revision = 1
+            if prev is not None:                                     # 같은 키를 다시 읽었다 — 내용이 달라졌으면 수정본(revision), 같으면 그대로 1
+                same = (prev.get("sha256") == sha) if prev.get("sha256") else abs(float(prev.get("mtime") or 0) - mtime) < 1
+                revision = int(prev.get("revision") or 1) + (0 if same else 1)
+                dirty.add(DIRTY_UPDATED)
+            else:
+                dirty.add(DIRTY_REPORTS)
+            reports[key] = {"mtime": mtime, "device": d["name"], "device_id": did, "device_key": dk,
+                            "rel": _rel_key(e.name), "path": e.path, "sha256": sha, "revision": revision,
+                            "rows": rows_of, "seen": time.time(), "parser_version": PARSER_VERSION}
+            if failed.pop(key, None) is not None:
+                dirty.add(DIRTY_FAILED)
+            by_dev[dk]["ok"].append(mtime)
             n_new += 1
             continue
-        tries = int(failed.get(e.path, {}).get("tries", 0)) + 1
-        prev = reports.get(e.path)                                   # 다시 읽기(refresh·recover·재시도)였다면 이전 행이 있다
-        if prev is None and old_cache is not None and e.path in old_cache["reports"]:
-            prev = reports[e.path] = old_cache["reports"][e.path]    # rebuild: 실패한 Report 는 이전 이력을 후보로 옮긴다
-        failed[e.path] = {"mtime": mtime, "tries": tries, "device_id": did, "error": err,
-                          "kept_rows": len(prev.get("rows") or ()) if prev else 0}
+        tries = int(failed.get(key, {}).get("tries", 0)) + 1
+        prev = reports.get(key)                                      # 다시 읽기(refresh·recover·재시도)였다면 이전 행이 있다
+        if prev is None and old_cache is not None and key in old_cache["reports"]:
+            prev = reports[key] = old_cache["reports"][key]          # rebuild: 실패한 Report 는 이전 이력을 후보로 옮긴다
+        failed[key] = {"mtime": mtime, "tries": tries, "device_id": did, "device_key": dk, "path": e.path, "error": err,
+                       "kept_rows": len(prev.get("rows") or ()) if prev else 0}
+        dirty.add(DIRTY_FAILED)
         errors.append({"device": d["name"], "path": e.path, "tries": tries, "error": err,
-                       "kept_rows": failed[e.path]["kept_rows"]})
+                       "kept_rows": failed[key]["kept_rows"]})
         _dm["read_errors"] += 1
         if prev is not None:
-            _say(log, f"[{d['name']}] {e.name}: 다시 읽기 실패 — 이전 행 {failed[e.path]['kept_rows']}개를 그대로 두고 다음에 재시도합니다")
+            _say(log, f"[{d['name']}] {e.name}: 다시 읽기 실패 — 이전 행 {failed[key]['kept_rows']}개를 그대로 두고 다음에 재시도합니다")
         # 재시도가 남아 있으면 커서를 이 파일 앞에서 멈춰 다음 수집에 다시 읽는다
-        by_dev[did]["blocked" if tries < MAX_READ_RETRY else "ok"].append(mtime)
+        by_dev[dk]["blocked" if tries < MAX_READ_RETRY else "ok"].append(mtime)
         if tries >= MAX_READ_RETRY:
             _say(log, f"[{d['name']}] {e.name}: {tries}번 실패해 더는 붙잡지 않습니다(오류 목록에는 남습니다)")
     for d, dm, _pick, _known in plan:
@@ -1336,8 +1689,9 @@ def collect(cfg: dict, full: bool = False, backfill: bool = False, *, recover: b
             dev_meta.append(dm)
             continue
         # 커서는 이 장비의 파싱이 끝난 뒤에만 전진 — 중간에 취소되면 다음에 같은 파일을 다시 본다
-        cur = by_dev[str(d["id"])]
-        _advance_cursor(last, str(d["id"]), cur["ok"], cur["blocked"])
+        cur = by_dev[str(d["key"])]
+        if _advance_cursor(last, str(d["key"]), cur["ok"], cur["blocked"]):
+            dirty.add(DIRTY_CURSOR)
         on_device(d["name"], "partial" if dm["read_errors"] else "done", "")
         dev_meta.append(dm)
     _check(should_stop)
@@ -1354,20 +1708,28 @@ def collect(cfg: dict, full: bool = False, backfill: bool = False, *, recover: b
 
     for k in [k for k, v in reports.items() if newest_of(v) < cutoff]:
         del reports[k]
+        dirty.add(DIRTY_RETENTION)
     for k in [k for k, v in failed.items() if dt.datetime.fromtimestamp(float(v.get("mtime", 0))) < cutoff]:
         del failed[k]
+        dirty.add(DIRTY_RETENTION)
     if old_cache is not None:
-        carried = _carry_over(old_cache, cache, devs, plan, cutoff)
+        carried = _carry_over(old_cache, cache, index, plan, cutoff)
         reasons = _validate_rebuild(old_cache, cache, plan, n_new)
         if reasons:
             raise RebuildRejected("전체 재구축 후보를 버리고 기존 캐시를 그대로 둡니다 — " + " / ".join(reasons))
         _say(log, f"전체 재구축: 새로 읽은 Report {n_new}개 · 이전 이력 이관 {carried['reports']}개"
                   f"(미접근 장비 {carried['unreachable']}대 · 목록 밖 {carried['foreign']}개) · 읽기 실패 {len(errors)}건(이전 행 유지)")
-    saved = _save_cache(cfg, cache)
-    if saved.get("preserved"):
-        stats["cache_preserved"] = saved["preserved"]
-        _say(log, f"★ 손상된 캐시 원본을 보존했습니다: {saved['preserved']}")
-    rows, hidden = _rows_from_cache(cache, devs, cfg)
+    stats["cache_dirty"] = dict(sorted(dirty.reasons.items()))
+    if dirty:
+        saved = _save_cache(cfg, cache)
+        stats["cache_saved"] = True
+        if saved.get("preserved"):
+            stats["cache_preserved"] = saved["preserved"]
+            _say(log, f"★ 손상된 캐시 원본을 보존했습니다: {saved['preserved']}")
+    else:
+        stats["cache_saved"] = False                            # C04: 순수 no-op — 파일의 mtime·바이트를 그대로 둔다
+        _say(log, "캐시에 바뀐 것이 없어 저장을 생략합니다")
+    rows, hidden = _rows_from_cache(cache, index, cfg, stats)
     _mark_device_status(dev_meta, rows)
     dev_meta.extend(_out_of_scope_meta(cfg, devs))
     stats["cache_ms"] = int((clock() - t3) * 1000)
@@ -1379,7 +1741,8 @@ def collect(cfg: dict, full: bool = False, backfill: bool = False, *, recover: b
                   "mode": "rebuild" if rebuild else "refresh" if refresh_days > 0 else "recover" if recover
                           else "backfill" if backfill else "incremental",
                   "read_workers": _workers(cfg, max(1, len(jobs))), "total_ms": int((clock() - t0) * 1000)})
-    _say(log, f"새로 읽은 Report {n_new}개 · 캐시 Report {len(reports)}개 · Wafer 행 {len(rows)} · 오류 {len(errors)}건")
+    _say(log, f"새로 읽은 Report {n_new}개 · 캐시 Report {len(reports)}개 · Wafer 행 {len(rows)} · 오류 {len(errors)}건"
+              f" · 캐시 저장 {'함(' + dirty.summary() + ')' if stats['cache_saved'] else '생략'}")
     _say(log, "단계별 경과: 장비 확인 {devices_ms}ms · 목록 {list_ms}ms · 읽기 {read_ms}ms"
               "(Report {reports_read}개 · INI 요청 {ini_asked}건 → 실제 {ini_unique}건, 없음 {ini_missing}) · 캐시 {cache_ms}ms"
               " · 동시 {read_workers}개".format(**stats))
@@ -1388,7 +1751,7 @@ def collect(cfg: dict, full: bool = False, backfill: bool = False, *, recover: b
     return rows, dev_meta, errors
 
 
-def _carry_over(old: dict, cand: dict, devs: List[dict], plan, cutoff: dt.datetime) -> Dict[str, int]:
+def _carry_over(old: dict, cand: dict, index: _DeviceIndex, plan, cutoff: dt.datetime) -> Dict[str, int]:
     """전체 재구축(rebuild): 이번에 **보지 못한** 이력을 원 캐시에서 후보 캐시로 옮긴다 — 지우는 재구축이 아니다.
 
     옮기는 것: (1) 나열에 실패한(접근 못 한) 장비와 **파일이 하나도 안 보인 장비**(빈 폴더로 보이는 SMB 오류를 정상과 구분할 수 없다)의
@@ -1396,29 +1759,29 @@ def _carry_over(old: dict, cand: dict, devs: List[dict], plan, cutoff: dt.dateti
     옮기지 않는 것: 나열에 성공해 파일이 보인 장비의 항목 — NAS 에 지금 있는 파일은 이미 새로 읽었고(실패분은 읽기 루프가 옮겼다),
     NAS 에서 사라진 파일의 이력은 후보에 넣지 않는다(재구축은 '지금 NAS 에 있는 것' 을 기준으로 다시 세우는 길이다.
     이력을 남기며 다시 읽으려면 `refresh_window_days` 를 쓴다). 보관 기간 밖 항목은 어차피 지운다."""
-    listed_ok = {str(d["id"]) for d, dm, _p, _k in plan if not dm["error"] and dm.get("found")}
-    unreachable = {str(d["id"]) for d, dm, _p, _k in plan if dm["error"] or not dm.get("found")}
+    listed_ok = {str(d["key"]) for d, dm, _p, _k in plan if not dm["error"] and dm.get("found")}
+    unreachable = {str(d["key"]) for d, dm, _p, _k in plan if dm["error"] or not dm.get("found")}
     out = {"reports": 0, "unreachable": 0, "foreign": 0}
-    for path, entry in old["reports"].items():
-        if path in cand["reports"]:
+    for key, entry in old["reports"].items():
+        if key in cand["reports"]:
             continue
-        dev = _cache_device(path, entry, devs)
-        did = str(dev["id"]) if dev else None
-        if did in listed_ok:
+        dev = _cache_device(entry, index, str(entry.get("path") or ""))
+        dk = str(dev["key"]) if dev else str(entry.get("device_key") or "")
+        if dk in listed_ok:
             continue
         if entry.get("rows") and _entry_newest(entry) < cutoff:
             continue
-        cand["reports"][path] = entry
+        cand["reports"][key] = entry
         out["reports"] += 1
-        out["unreachable" if did in unreachable else "foreign"] += 1
-    out["unreachable"] = len({str(entry.get("device_id")) for path, entry in cand["reports"].items()
-                              if str(entry.get("device_id")) in unreachable})
-    for did, cur in old["last_mtime"].items():
-        if str(did) not in listed_ok and str(did) not in cand["last_mtime"]:
-            cand["last_mtime"][str(did)] = cur
-    for path, f in (old.get("failed") or {}).items():
-        if path not in cand["failed"] and str(f.get("device_id")) not in listed_ok:
-            cand["failed"][path] = f
+        out["unreachable" if dk in unreachable else "foreign"] += 1
+    out["unreachable"] = len({str(entry.get("device_key")) for entry in cand["reports"].values()
+                              if str(entry.get("device_key")) in unreachable})
+    for dk, cur in old["last_mtime"].items():
+        if str(dk) not in listed_ok and str(dk) not in cand["last_mtime"]:
+            cand["last_mtime"][str(dk)] = cur
+    for key, f in (old.get("failed") or {}).items():
+        if key not in cand["failed"] and str(f.get("device_key") or f.get("device_id")) not in listed_ok:
+            cand["failed"][key] = f
     return out
 
 
@@ -1440,13 +1803,16 @@ def _validate_rebuild(old: dict, cand: dict, plan, n_new: int) -> List[str]:
         reasons.append("장비를 하나도 나열하지 못했습니다")
     if found and not n_new:
         reasons.append(f"Report {found}개를 찾았지만 하나도 읽지 못했습니다")
-    old_ids = {str(e.get("device_id")) for e in old["reports"].values() if e.get("device_id")}
-    new_ids = {str(e.get("device_id")) for e in cand["reports"].values() if e.get("device_id")}
+    def dev_of(e):
+        return str(e.get("device_key") or e.get("device_id") or "")
+
+    old_ids = {dev_of(e) for e in old["reports"].values() if dev_of(e)}
+    new_ids = {dev_of(e) for e in cand["reports"].values() if dev_of(e)}
     lost = sorted(old_ids - new_ids)
     if lost:
-        names = {str(d["id"]): str(d["name"]) for d in listed_ok}
+        names = {str(d["key"]): str(d["name"]) for d in listed_ok}
         # 나열에 성공했고 파일이 하나도 없던 장비(NAS 에서 정리됨)는 소실이 아니라 현실이다 — 찾은 파일이 있는데 항목이 없는 경우만 거부
-        found_by = {str(d["id"]): len(pick) for d, _dm, pick, _k in plan}
+        found_by = {str(d["key"]): len(pick) for d, _dm, pick, _k in plan}
         lost = [i for i in lost if found_by.get(i, 0)]
         if lost:
             reasons.append("이력이 통째로 사라진 장비: " + ", ".join(names.get(i, i) for i in lost))
@@ -1537,6 +1903,11 @@ def write_html(cfg: dict, rows: List[dict], dev_meta: List[dict], errors: List[d
 
     t_html = time.perf_counter()
     tpl = nas_guard.read_text(paths.template_path())
+    if tpl.count("__DATA__") != 1:                 # C07: 자리는 정확히 한 곳 — 치환한 큰 사본을 만들지 않고 앞·데이터·뒤를 차례로 쓴다
+        raise RuntimeError(f"template.html 에 __DATA__ 자리가 {tpl.count('__DATA__')}곳입니다(정확히 1곳이어야 합니다)")
+    cut = tpl.index("__DATA__")
+    prefix, suffix = tpl[:cut], tpl[cut + len("__DATA__"):]
+    del tpl
     ver = _version_info()
     now = dt.datetime.now()
     meta = {"generated": now.strftime("%Y-%m-%d %H:%M"), "generated_iso": now.isoformat(timespec="seconds"),
@@ -1550,18 +1921,21 @@ def write_html(cfg: dict, rows: List[dict], dev_meta: List[dict], errors: List[d
     if meta["timing"]:
         meta["timing"]["html_ms"] = int((time.perf_counter() - t_html) * 1000)   # 템플릿 읽기 + 접기까지(쓰기 전)
     emb["meta"] = meta
+    # `</` → `<\/` 는 JSON 으로는 같은 문자열이면서 HTML 파서가 `</script>` 로 읽지 못하게 한다. U+2028·한글은 JSON 그대로(스크립트가 아니라 데이터 블록).
     data = json.dumps(emb, ensure_ascii=False, separators=(",", ":")).replace("</", "<\\/")
-    if "__DATA__" not in tpl:
-        raise RuntimeError("template.html 에 __DATA__ 자리가 없습니다")
-    out = tpl.replace("__DATA__", data, 1)
+    del emb                                        # 접힌 dict 는 문자열이 됐다 — 큰 참조를 놓는다(C07)
     os.makedirs(cfg["output_dir"], exist_ok=True)
     target = os.path.join(cfg["output_dir"], cfg["output_name"])
     tmp = _unique_tmp(target)
+    size = len(prefix) + len(data) + len(suffix)
     try:
-        with open(tmp, "w", encoding="utf-8") as f:
-            f.write(out)
+        with open(tmp, "w", encoding="utf-8", errors="strict") as f:
+            f.write(prefix)
+            f.write(data)
+            f.write(suffix)
             f.flush()
             os.fsync(f.fileno())
+        del data
         os.replace(tmp, target)
     finally:
         if os.path.isfile(tmp):                     # 자기가 만든 임시 파일만 지운다(원본에는 손대지 않는다)
@@ -1569,7 +1943,7 @@ def write_html(cfg: dict, rows: List[dict], dev_meta: List[dict], errors: List[d
                 os.remove(tmp)
             except OSError:
                 pass
-    _say(log, f"HTML 저장: {target} ({len(out) // 1024} KB)")
+    _say(log, f"HTML 저장: {target} ({size // 1024} KB)")
     if cfg.get("write_csv"):
         csv_path = os.path.splitext(target)[0] + ".csv"
         try:
