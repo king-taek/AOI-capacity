@@ -36,13 +36,14 @@ FALLBACK: Dict[str, Dict[str, str]] = {
         "good": "#3DCC8E", "good_soft": "#0F2E24", "warn": "#E0A82E", "warn_soft": "#332608",
         "crit": "#E85A5A", "crit_ink": "#F08080", "crit_soft": "#3A1818",
     },
+    # 9/20 D48-⑥: 결과 화면이 라이트 단일이 되면서 라이트 팔레트는 재설계 화면의 값으로 맞췄다(수집 창 라이트 모드도 같은 색).
     "light": {
-        "bg": "#f2f5f9", "surface": "#ffffff", "surface_2": "#f7f9fc", "raise_": "#e9eef5",
-        "ink": "#0f1720", "ink_2": "#4b5865", "ink_3": "#5E6A77", "line": "#dde3ea", "line_2": "#c6d0dc",
-        "accent": "#2A6AAA", "accent_2": "#4A9EE8", "accent_ink": "#ffffff", "accent_soft": "#e1eefb",
-        "run": "#2A6AAA", "err": "#d64545", "off": "#d3dbe5", "nodata": "#eef2f7", "prev": "#b9c4d2",
-        "good": "#1f9e6a", "good_soft": "#dff4ea", "warn": "#d99a12", "warn_soft": "#fff1cf",
-        "crit": "#d64545", "crit_soft": "#fbe3e3", "crit_ink": "#a02525",
+        "bg": "#F4F6F8", "surface": "#FFFFFF", "surface_2": "#F7F9FB", "raise_": "#EAF0F7",
+        "ink": "#0F151C", "ink_2": "#4B5866", "ink_3": "#5A6673", "line": "#E1E6EC", "line_2": "#DCE2E9",
+        "accent": "#2E6BA8", "accent_2": "#8FB8DE", "accent_ink": "#FFFFFF", "accent_soft": "#EAF0F7",
+        "run": "#2E6BA8", "err": "#C5453C", "off": "#E9EDF2", "nodata": "#F0F3F7", "prev": "#C9D1DA",
+        "good": "#276B48", "good_soft": "#E7F0EA", "warn": "#B0862F", "warn_soft": "#FBEFD6",
+        "crit": "#C5453C", "crit_soft": "#FAE7E4", "crit_ink": "#9C3527",
     },
 }
 # HTML 에는 없는, Qt 전용 보조 토큰

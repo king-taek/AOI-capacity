@@ -41,7 +41,7 @@ def test_inline_scripts_take_every_script_body_in_order():
 def test_real_template_yields_the_dashboard_functions():
     mod = _load()
     js = mod.inline_scripts(mod.TEMPLATE.read_text(encoding="utf-8"))
-    for fn in ("function build(", "function metricState(", "materialKey", "occurrenceIndex"):
+    for fn in ("function buildModel(", "function dayStats(", "jobKey", "lotName", "function homeHtml("):
         assert fn in js
 
 
