@@ -42,7 +42,7 @@ def measure(path: Path, design_rules: bool = False) -> dict:
         raise SystemExit("node 가 필요합니다")
     html = sample_rows.read_bytes(path).decode("utf-8")
     emb = sample_rows.embedded(html)
-    rules = {"waitToObsEnd": False, "denomToday": False} if design_rules else None
+    rules = {"waitToObsEnd": False, "denomToday": False, "abortIsError": False, "estimateFromBatch": False} if design_rules else None
     payload = json.dumps({"embedded": emb, **({"rules": rules} if rules else {})}, ensure_ascii=False)
     out = subprocess.run([node, "--max-old-space-size=4096", str(ROOT / "dev" / "tests" / "js_harness.js")], input=payload,
                          capture_output=True, text=True, timeout=900, cwd=str(ROOT))
@@ -52,6 +52,7 @@ def measure(path: Path, design_rules: bool = False) -> dict:
     days, devs = D["days"], D["devices"]
     tot = {k: 0 for k in ("r", "x", "t", "d", "s", "e", "w")}
     est = 0
+    est_rows = est_days = 0
     per_day = {}
     for dy in days:
         us = []
@@ -63,7 +64,10 @@ def measure(path: Path, design_rules: bool = False) -> dict:
                 tot[k] += t.get(k, 0)
             den = t.get("den", 1440)
             measured = (t["r"] + t["x"] + t["t"] + t["d"]) > 0
-            is_est = (t.get("cv") is not None) and (t["cv"] < 50 or not measured) and t.get("be", 0) > 0
+            row_est = bool((D.get("rules") or {}).get("estimateFromBatch"))        # D54: 행 단위 추정이면 장비-일 추정(옛 D48-①)은 쓰지 않는다
+            is_est = (not row_est) and (t.get("cv") is not None) and (t["cv"] < 50 or not measured) and t.get("be", 0) > 0
+            if t.get("ne"):
+                est_rows += t["ne"]; est_days += 1
             if is_est:
                 est += 1
             if den > 0:
@@ -75,7 +79,7 @@ def measure(path: Path, design_rules: bool = False) -> dict:
     return {"input": path.name, "input_sha256": sample_rows.sha256(path), "input_rows": len(emb["rows"]),
             "generated_iso": (emb.get("meta") or {}).get("generated_iso", ""), "code_sha": git_sha(), "model_version": model_version(),
             "rules": D.get("rules"), "today": D.get("today"), "day": D.get("day"), "days": [days[0], days[-1], len(days)], "devices": len(devs),
-            "device_days": sum(len(v) for v in D["detail"].values()), "estimated_device_days": est,
+            "device_days": sum(len(v) for v in D["detail"].values()), "estimated_device_days": est, "batch_estimated_rows": est_rows, "device_days_with_batch_estimate": est_days,
             "totals_minutes_and_counts": tot, "fleet_util_by_day": per_day,
             "fleet_util_avg": round(sum(v["util"] for v in per_day.values() if v["util"] is not None) / max(1, len([v for v in per_day.values() if v["util"] is not None])), 2),
             "jobs": {"names": len(D["pool"]["job"]), "groups": len(D["jobGroups"])}}

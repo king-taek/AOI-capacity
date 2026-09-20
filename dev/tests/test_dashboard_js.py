@@ -23,7 +23,7 @@ NODE = shutil.which("node")
 pytestmark = pytest.mark.skipif(not NODE, reason="node 가 없는 환경")
 
 DAY = "2026-09-18"
-DESIGN_RULES = {"waitToObsEnd": False, "denomToday": False}
+DESIGN_RULES = {"waitToObsEnd": False, "denomToday": False, "abortIsError": False, "estimateFromBatch": False}
 
 
 def meta(*devs, generated_iso=f"{DAY}T12:59:17", **extra):
@@ -92,6 +92,7 @@ def test_model_equals_the_design_script_when_the_two_product_rules_are_off(tmp_p
             m = dict(mine["detail"][dy][dv])
             m.pop("den", None)                       # 제품 쪽에만 있는 분모 열
             assert m.pop("we", 0) == 0               # 마지막 Error 뒤 대기 끝 — 디자인 규칙(cap·다음 기록 없으면 0)에서는 늘 0
+            assert m.pop("ne", 0) == 0               # 배치 시각으로 추정한 행 수 — 디자인 규칙에서는 0
             if m != t:
                 bad += 1
     assert bad == 0
@@ -189,7 +190,8 @@ def test_coverage_and_batch_occupancy_are_computed_per_device_day():
             w("AOI-1", "W3", None, None, lot="LOT-B", bs="09:00", be="09:30")]
     t = at(run(rows), "AOI-1")
     assert t["cv"] == 33 and t["bseg"] == [[475, 520], [540, 570]] and t["be"] == 75
-    assert t["r"] == 10 and len(t["lots"]) == 2                     # 배치 구간만 있는 Lot 도 남는다
+    assert t["r"] == 75 and t["ne"] == 2 and len(t["lots"]) == 2   # D54: INI 없는 Pass 2장은 배치 구간(45+30)으로 추정
+    assert at(run(rows, rules=DESIGN_RULES), "AOI-1")["r"] == 10    # 디자인 규칙: 시각 있는 10분만
 
 
 # ── 7. Lot 이름은 Report 파일명에서 (D48-⑤) ───────────────────────────────────
@@ -243,3 +245,50 @@ def test_day_falls_back_to_the_last_data_day_when_the_collection_day_has_no_data
     assert D["today"] == DAY and D["day"] == "2026-09-17"
     D2 = run(rows, {**meta("AOI-1"), "generated_iso": ""})
     assert D2["today"] is None and D2["day"] == "2026-09-17"
+
+
+# ── 9. D52 원인 없는 중단 · D54 INI 없는 Pass 행의 배치 시각 추정 (9/20 사용자 답) ─────────
+def test_abort_is_the_error_only_when_its_report_has_neither_pass_nor_cause():
+    # Report 에 Aborted + Skipped 만 있음 → Error 1건(유형 ABORTED), 그 뒤 대기는 다음 기록까지
+    rows = [w("AOI-1", "W1", "08:00", "08:05", status="Aborted."), w("AOI-1", "W2", status="Skipped."), w("AOI-1", "W3", status="Skipped."),
+            w("AOI-1", "W9", "10:00", "10:10", lot="LOT-B")]
+    t = at(run(rows), "AOI-1")
+    assert t["e"] == 1 and list(t["ct"]) == ["ABORTED"] and t["x"] == 5 and t["s"] == 115 and t["r"] == 10
+    assert at(run(rows, rules=DESIGN_RULES), "AOI-1")["e"] == 0                 # 디자인 규칙: 중단은 Error 아님(Scan 5분)
+
+
+def test_abort_after_a_pass_or_after_a_cause_in_the_same_report_adds_no_error():
+    rows = [w("AOI-1", "W1", "08:00", "08:10"), w("AOI-1", "W2", "08:10", "08:12", status="Aborted.")]
+    t = at(run(rows), "AOI-1")
+    assert t["e"] == 0 and t["r"] == 12                                          # PASS 뒤 중단 → 그 내용(정상)으로 끝, 시간은 Scan
+    rows2 = [w("AOI-1", "W1", "08:00", "08:03", status="Alignment Error."), w("AOI-1", "W2", "08:03", "08:04", status="Aborted.")]
+    t2 = at(run(rows2), "AOI-1")
+    assert t2["e"] == 1 and list(t2["ct"]) == ["ALIGN_ERROR"]                   # 원인 뒤 중단 → 원인으로 끝, ABORTED 를 더 세지 않음
+
+
+def test_a_failed_batch_row_without_cause_becomes_an_error_over_its_batch_window():
+    b = w("AOI-1", "", "08:00", "08:30", status="Aborted.", bs="08:00", be="08:30"); b["kind"] = "batch"
+    t = at(run([b, w("AOI-1", "W9", "12:00", "12:10", lot="LOT-B")]), "AOI-1")
+    assert t["e"] == 1 and t["x"] == 30 and t["s"] == 210 and t["r"] == 10
+
+
+def test_pass_rows_without_ini_are_estimated_from_the_batch_window_row_by_row():
+    # INI 없는 Pass 3장(배치 07:50~09:00) + INI 있는 Pass 1장 → Scan 은 배치 구간 전체, ne=3, cv=25
+    rows = [w("AOI-1", f"W{i}", bs="07:50", be="09:00") for i in (1, 2, 3)] + [w("AOI-1", "W4", "08:00", "08:10", bs="07:50", be="09:00")]
+    t = at(run(rows), "AOI-1")
+    assert t["r"] == 70 and t["ne"] == 3 and t["cv"] == 25 and t["e"] == 0
+    d = at(run(rows, rules=DESIGN_RULES), "AOI-1")
+    assert d["r"] == 10 and d["ne"] == 0                                         # 디자인 규칙: 시각 없는 행은 0(장비-일 cv<50 → 화면이 be 로 추정)
+
+
+def test_skipped_and_aborted_rows_without_ini_are_never_estimated():
+    # 실패한 배치의 자식(Skipped·Aborted, 시각 없음)은 배치 구간을 Scan 으로 만들지 않는다
+    rows = [w("AOI-1", "W1", status="Skipped.", bs="08:00", be="09:00"), w("AOI-1", "W2", status="Aborted.", bs="08:00", be="09:00"),
+            w("AOI-1", "W3", status="-", bs="08:00", be="09:00"), w("AOI-1", "W9", "12:00", "12:10", lot="LOT-B")]
+    t = at(run(rows), "AOI-1")
+    assert t["r"] == 10 and t["ne"] == 0 and t["e"] == 1 and list(t["ct"]) == ["ABORTED"]   # PASS 없는 Report 의 중단은 Error(D52)
+
+
+def test_estimated_test_lot_rows_count_as_test_not_scan():
+    t = at(run([w("AOI-1", "W1", lot="TEST-LOT", bs="08:00", be="08:30")]), "AOI-1")
+    assert t["t"] == 30 and t["r"] == 0 and t["ne"] == 1

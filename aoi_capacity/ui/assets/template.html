@@ -157,7 +157,7 @@ main{max-width:1420px;margin:0 auto;padding:22px 24px 90px}
       D48 에서 제품 규칙을 유지하기로 한 두 곳(RULES)만 다르다 — 둘 다 끄면 그 스크립트와 같은 출력이 나온다(가드 test_dashboard_js).
    ④ 화면: 가동률 · Error · 추이 · 리포트 + 장비/Error/유형·Job 팝업 (docs/design/dashboard-redesign/app/AOI-Dashboard.dc.html 의 로직).
    ============================================================================ */
-const MODEL_VERSION=1;
+const MODEL_VERSION=2;
 const $=s=>document.querySelector(s);
 const esc=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const p2=n=>String(n).padStart(2,"0");
@@ -216,9 +216,10 @@ function loadDemo(){
   init();}
 
 /* ---------- ③ 모델 — make_aoi_data.js [원본] 이식 ----------
-   원본과 다른 곳은 `D48` 표시 두 군데뿐: (a) Error 후 대기 = 다음 기록까지(cap 없음), 그날 마지막 Error 는 관측 종료·자정 중 이른 것까지(D44)
-   (b) 분모 = 수집한 날(오늘)만 00:00~그날 마지막 기록까지(D17). RULES 두 개를 끄면 원본 스크립트와 같은 출력(가드). */
-const RULES={waitToObsEnd:true,denomToday:true};
+   원본과 다른 곳은 `D48`·`D52`·`D54` 표시 네 군데뿐: (a) Error 후 대기 = 다음 기록까지(cap 없음), 그날 마지막 Error 는 관측 종료·자정 중 이른 것까지(D44)
+   (b) 분모 = 수집한 날(오늘)만 00:00~그날 마지막 기록까지(D17) (c) PASS 도 원인 Error 도 없는 Report 의 중단(Aborted)은 Error(D52)
+   (d) INI 가 없는 Pass 행은 Report 의 배치 시작~종료로 추정(D54 — 장비-일 50% 문턱 대신 행마다). RULES 네 개를 끄면 원본 스크립트와 같은 출력(가드). */
+const RULES={waitToObsEnd:true,denomToday:true,abortIsError:true,estimateFromBatch:true};
 function buildModel(rowsIn,metaIn,rules){
 rules=rules||RULES;
 const val=(r,c)=>r[c];
@@ -270,6 +271,10 @@ for(const r of rowsIn){
     bs:bs?bs.getTime():null, bend:be?be.getTime():(bs?bs.getTime():null),
     c:causeOf(st),status:st,report:rp,job,lot,test:/TEST/i.test(rl),key:matKey(job,lot,wid),day:dk(an)});
 }
+/* D52: 같은 Report 에 PASS 도 원인 Error 도 없으면 원인 없는 중단(Aborted…)이 그 Report 의 Error 다(유형 ABORTED). 앞에 다른 내용(PASS·원인)이 있으면 그 내용으로 끝난다. */
+if(rules.abortIsError){const rg=new Map();
+  for(const w of all){const k=w.dev+'\u0001'+(w.report||w.job+'\u0001'+w.lot);const g=rg.get(k)||{pass:false,cause:false};if(/^pass$/i.test(w.status))g.pass=true;if(w.c)g.cause=true;rg.set(k,g);}
+  for(const w of all){if(w.c||!/abort/i.test(w.status))continue;const g=rg.get(w.dev+'\u0001'+(w.report||w.job+'\u0001'+w.lot));if(!g.pass&&!g.cause)w.c='ABORTED';}}
 all.sort((a,b)=>a.t-b.t);
 const seen=new Map();
 for(const w of all){const p=seen.get(w.key); w.rel=(p&&!p.c)?1:0; seen.set(w.key,w);}
@@ -282,7 +287,10 @@ const put=(k,v)=>{v=v||'';const m=SM[k];if(m.has(v))return m.get(v);const i=SP[k
 function dayStats(list,ds){
   const base=new Date(ds+'T00:00:00').getTime();
   const mm=t=>Math.max(0,Math.min(1440,Math.round((t-base)/60000)));
-  const iv=list.map(w=>{const a=mm(w.s||w.t); const b=(w.timed&&w.e&&w.e>w.s)?mm(w.e):(w.c?Math.min(1440,a+3):a);
+  let ne=0;
+  const iv=list.map(w=>{const a=mm(w.s||w.t); let b=(w.timed&&w.e&&w.e>w.s)?mm(w.e):(w.c?Math.min(1440,a+3):a);
+    /* D54: INI 가 없는 Pass 행은 그 Report 의 배치 시작~종료를 쓴다(a 는 이미 배치 시작). Skipped·중단·미확인 행은 추정하지 않는다. */
+    if(rules.estimateFromBatch&&!w.timed&&!w.c&&w.bs&&w.bend>w.bs&&/^pass$/i.test(w.status)){b=Math.max(b,mm(w.bend));ne++;}
     return {a,b,w,k:w.c?1:(w.test?2:(w.rel?4:0))};});
   iv.sort((x,y)=>x.a-y.a||x.b-y.b);
   const mg=[];
@@ -318,7 +326,7 @@ function dayStats(list,ds){
   const out=[...lots.entries()].map(([lk,L])=>{const cs=rnd(lotCt[lk]||{}); const n=Object.keys(cs).length; dayE+=n; return {L,cs,n};})
     .filter(x=>x.L.b>x.L.a||x.n||x.L.bb>x.L.ba)          /* ★ 배치 구간만 있어도 남긴다 */
     .sort((x,y)=>(x.L.a<1441?x.L.a:x.L.ba)-(y.L.a<1441?y.L.a:y.L.ba));
-  return {r:run,x:err,t:test,d:dup,s:stop,w:list.length,e:dayE,we,
+  return {r:run,x:err,t:test,d:dup,s:stop,w:list.length,e:dayE,we,ne,
     seg:mg.map(g=>[g.a,g.b,g.k]),ct:rnd(ct),
     lots:out.map(({L,cs,n})=>[put('job',L.job),put('lot',L.lot),L.a,L.b,L.w,n,L.dup,L.test,put('rep',L.rep),cs,n?put('st',L.st):-1,
       L.ba<1441?L.ba:0, L.bb>L.ba?L.bb:(L.ba<1441?L.ba:0)])};
@@ -421,7 +429,8 @@ const S={
   tail(st,pos,t){const den=S.den(t);if(den<1440){const E=den/14.4;if(E>pos)st.push(IDLE+" "+pos+"%",IDLE+" "+E+"%");st.push(FUTURE+" "+Math.max(pos,E)+"%",FUTURE+" 100%");}
     else st.push(IDLE+" "+pos+"%",IDLE+" 100%");return"linear-gradient(90deg,"+st.join(",")+")";},
   measured(t){return !!t&&(t.r+t.x+t.t+t.d)>0;},
-  isEst(t){return !!t&&(t.cv!==undefined)&&(t.cv<50||!S.measured(t))&&(t.be>0);},   /* D48-① 추정 */
+  isEst(t){return !!t&&!(D.rules&&D.rules.estimateFromBatch)&&(t.cv!==undefined)&&(t.cv<50||!S.measured(t))&&(t.be>0);},   /* 옛 D48-① 장비-일 추정 — D54 뒤에는 행 단위(ne)라 쓰지 않는다 */
+  hasEst(t){return !!t&&(t.ne||0)>0;},   /* D54: INI 없는 Pass 행을 배치 시각으로 추정한 장비-일 */
   util(t){const den=S.den(t);if(!t||den<=0)return null;if(S.isEst(t))return Math.min(100,t.be/den*100);
     return S.measured(t)?Math.min(100,(t.r+t.d)/den*100):null;},
   estBar(t){let st=[],pos=0;
@@ -508,7 +517,7 @@ function footHtml(){
   const dev=D?D.devices.length:0;
   return `<div class="foot">${sc.restricted?`<b>수집 범위</b> ${esc((sc.devices||[]).join(", "))}<br>`:""}${outs.length?`<b>수집 안 함</b> ${esc(outs.join(", "))}<br>`:""}
     장비 ${dev}대 · ${D?D.days.length:0}일 · 정확 경로만 확인 · 재귀 검색 없음 · 원본 Report / INI 수정 없음${meta.version?` · v${esc(meta.version)}`:""}
-    <br>가동률 = (Scan + Rescan) ÷ 24시간. 수집한 날만 00:00 ~ 그날 마지막 기록까지. Test 는 분모에만. 시각 확인 50% 미만인 날은 Report 배치 시각으로 추정(팝업에 표시).</div>`;
+    <br>가동률 = (Scan + Rescan) ÷ 24시간. 수집한 날만 00:00 ~ 그날 마지막 기록까지. Test 는 분모에만. INI 가 없는 Lot 은 Report 의 배치 시작~종료로 추정(팝업에 표시). PASS 없이 중단만 남은 Report 는 Error.</div>`;
 }
 
 /* ---------- 가동률 ---------- */
@@ -520,17 +529,17 @@ function homeHtml(){
   const sorted=[...items];
   if(state.sort==="low")sorted.sort((a,b)=>{const x=S.util(a.t),y=S.util(b.t);return (x===null?-1:x)-(y===null?-1:y);});
   else sorted.sort((a,b)=>cmpDev(a.n,b.n));
-  const estN=items.filter(x=>S.isEst(x.t)).length;
+  const estN=items.filter(x=>S.isEst(x.t)||S.hasEst(x.t)).length;
   const isToday=D.today&&day===D.today;
-  const rowsH=sorted.map(x=>{const u=S.util(x.t),al=S.alert(x.t),es=S.isEst(x.t);
-    return `<button class="rowbtn" data-h="${h(S.open(x.n))}" title="${esc(x.n)} 하루 상세 팝업 열기${es?" · 시각 기록이 부족해 Report 의 배치 시각으로 추정한 값입니다":""}" style="grid-template-columns:96px 58px 1fr 76px 30px;gap:13px;padding:9px 18px;min-height:44px">
+  const rowsH=sorted.map(x=>{const u=S.util(x.t),al=S.alert(x.t),es=S.isEst(x.t)||S.hasEst(x.t);
+    return `<button class="rowbtn" data-h="${h(S.open(x.n))}" title="${esc(x.n)} 하루 상세 팝업 열기${es?" · INI 가 없는 Lot 은 Report 의 배치 시각으로 추정했습니다":""}" style="grid-template-columns:96px 58px 1fr 76px 30px;gap:13px;padding:9px 18px;min-height:44px">
       <span style="display:flex;align-items:center;gap:6px;font-weight:600;font-size:13.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis"><span style="width:5px;height:5px;border-radius:50%;flex:none;background:${u===null?"#C9D1DA":(al?ERR:(u>=70?RUN:"#C9D1DA"))}"></span><span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis">${esc(x.n)}${collectChip(x.n)}</span></span>
       <span class="num" style="text-align:right;font-size:14.5px;font-weight:600;color:${u===null?"#5A6673":(u<S.thU()?"#B4402F":"#0F151C")}">${u===null?"—":u.toFixed(0)+"%"}</span>
       <span style="display:block;height:20px;border-radius:10px;background:#E9EDF2;overflow:hidden;background-image:${S.bar(x.t)}"></span>
       <span class="num" style="text-align:right;font-size:13px;color:${x.t&&x.t.e>=S.thE()?"#B4402F":"#4B5866"}">${x.t&&x.t.e?x.t.e+"건":"—"}</span>
       <span style="text-align:right;color:#5A6673;font-size:15px">›</span></button>`;}).join("");
   return `<section class="cards">
-      <div><p class="k">평균 가동률</p><p class="v num">${S.fleetUtil(day,devs).toFixed(1)}<small>%</small></p>${isToday?`<p class="s">오늘 · 마지막 기록까지 기준</p>`:""}${estN?`<p class="s">추정 ${estN}대 포함</p>`:""}</div>
+      <div><p class="k">평균 가동률</p><p class="v num">${S.fleetUtil(day,devs).toFixed(1)}<small>%</small></p>${isToday?`<p class="s">오늘 · 마지막 기록까지 기준</p>`:""}${estN?`<p class="s">배치 시각 추정 포함 ${estN}대</p>`:""}</div>
       <div><p class="k">살펴볼 장비</p><p class="v num" style="color:#B4402F">${items.filter(x=>S.alert(x.t)).length}<small>대</small></p><p class="s">가동률 ${S.thU()}% 미만 또는 Error ${S.thE()}건 이상</p></div>
       <div><p class="k" title="같은 Lot 에서 같은 유형이 여러 번 나도 1건으로 셉니다">Error</p><p class="v num">${items.reduce((a,b)=>a+(b.t?b.t.e:0),0)}<small>건</small></p><p class="s">대기 시간 ${hm(items.reduce((a,b)=>a+(b.t?(b.t.x+b.t.s):0),0))}</p></div>
     </section>
@@ -687,7 +696,7 @@ function devPopupHtml(){
   const close=()=>setState({modalDev:null,selLot:null});
   const stats=mEst
     ?[{k:"가동률 (추정)",v:u===null?"기록 없음":u.toFixed(1)+"%",ink:u!==null&&u<S.thU()?"#B4402F":"#0F151C"},{k:"돌아간 시간 (추정)",v:hm(t.be),ink:"#0F151C"},{k:"대기 (추정)",v:hm(Math.max(0,den-t.be)),ink:"#4B5866"},{k:"배치",v:(t.bseg?t.bseg.length:0)+"개",ink:"#0F151C"},{k:"Error",v:t.e+"건",ink:t.e>=S.thE()?"#B4402F":"#0F151C"},{k:"시각 확인",v:t.cv+"%",ink:"#B4402F"}]
-    :[{k:"가동률",v:u===null?"기록 없음":u.toFixed(1)+"%",ink:u!==null&&u<S.thU()?"#B4402F":"#0F151C"},{k:"Scan",v:t?hm(t.r):"—",ink:"#0F151C"},{k:"Rescan",v:t?hm(t.d):"—",ink:"#0F151C"},{k:"Test",v:t?hm(t.t):"—",ink:t&&t.t?"#7A5BA8":"#4B5866"},{k:"Error",v:t?(t.e+"건"+((t.x+t.s)?" · "+hm(t.x+t.s):"")):"—",ink:t&&t.e>=S.thE()?"#B4402F":"#0F151C"},{k:"대기",v:hm(idle),ink:"#4B5866"}];
+    :[{k:"가동률",v:u===null?"기록 없음":u.toFixed(1)+"%",ink:u!==null&&u<S.thU()?"#B4402F":"#0F151C"},{k:"Scan",v:t?hm(t.r):"—",ink:"#0F151C"},{k:"Rescan",v:t?hm(t.d):"—",ink:"#0F151C"},{k:"Test",v:t?hm(t.t):"—",ink:t&&t.t?"#7A5BA8":"#4B5866"},{k:"Error",v:t?(t.e+"건"+((t.x+t.s)?" · "+hm(t.x+t.s):"")):"—",ink:t&&t.e>=S.thE()?"#B4402F":"#0F151C"},{k:"대기",v:hm(idle),ink:"#4B5866"}].concat(S.hasEst(t)?[{k:"시각 확인",v:t.cv+"%",ink:"#B4402F"}]:[]);
   const lotFilters=S.segGroup([{k:"all",label:"전체"},{k:"err",label:"Error 있는 Lot"}],state.lotFilter,k=>setState({lotFilter:k,selLot:null}));
   const selH=sel?(()=>{const a=LA(sel),b=Math.max(LB(sel),a+1);const types=Object.entries(sel[9]).sort((x,y)=>y[1][1]-x[1][1]);const rep=P.rep[sel[8]]||"";
     return `<div class="sel"><div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:10px"><b style="font-size:14.5px">${esc(P.lot[sel[1]]||"(Lot 확인 불가)")}</b>
@@ -701,6 +710,7 @@ function devPopupHtml(){
     <div class="db">
       <section class="cards xs" style="margin-bottom:18px">${stats.map(s=>`<div><p class="k">${s.k}</p><p class="v num" style="color:${s.ink}">${esc(s.v)}</p></div>`).join("")}</section>
       ${mEst?`<p style="margin:0 0 12px;font-size:11.5px;color:#5A6673;word-break:keep-all">이 날은 시각이 확인된 기록이 ${t?t.cv:0}% 뿐이라, Report 의 배치 시작·종료 시각으로 추정했습니다. Scan·Rescan·Test 구분은 할 수 없습니다.</p>`:""}
+      ${!mEst&&S.hasEst(t)?`<p style="margin:0 0 12px;font-size:11.5px;color:#5A6673;word-break:keep-all">Wafer ${t.w}장 중 ${t.ne}장은 INI(시각 기록)가 없어 Report 의 배치 시작·종료 시각으로 추정했습니다(시각 확인 ${t.cv}%).</p>`:""}
       ${den<1440?`<p style="margin:0 0 12px;font-size:11.5px;color:#5A6673">수집한 날이라 00:00 ~ ${clock(den)}(마지막 기록)까지를 분모로 씁니다.</p>`:""}
       <div class="bar-h" style="margin-bottom:10px"><h3 style="margin:0">Lot ${all.length}개</h3><span style="font-size:12.5px;color:#5A6673">${shown.length?"막대나 이름표를 누르면 그 Lot 을 봅니다":""}</span><div class="spacer"></div>${segHtml(lotFilters)}</div>
       <div style="position:relative;height:16px;margin-bottom:4px">${ticksHtml()}</div>

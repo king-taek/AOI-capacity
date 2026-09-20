@@ -71,8 +71,8 @@ def test_status_classification_matches_the_python_side_and_the_design_script():
 
 
 def test_model_is_the_design_script_with_two_product_switches():
-    """D47: 모델은 make_aoi_data.js 를 옮긴 것. D48 제품 유지 두 항목만 RULES 로 다르다."""
-    assert "const RULES={waitToObsEnd:true,denomToday:true};" in HTML
+    """D47: 모델은 make_aoi_data.js 를 옮긴 것. D48 제품 유지 2 + D52(중단) + D54(행 단위 추정) 네 항목만 RULES 로 다르다."""
+    assert "const RULES={waitToObsEnd:true,denomToday:true,abortIsError:true,estimateFromBatch:true};" in HTML
     body = HTML[HTML.index("function buildModel("):HTML.index("/* ---------- ④ 화면")]
     for frag in ("function lotName(rep,fb)", "function jobKey(s)", "const JM={\"RKENDALLPI4DG\":\"RKENDALLA0PI4\"};",
                  "function dayStats(list,ds)", "g.a-L.b<=3", "if(gap>240)gap=240;", "const RT=new Set(['RE','RESCAN','REWORK','SRD','R']);"):

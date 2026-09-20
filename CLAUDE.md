@@ -51,9 +51,9 @@ Camtek AOI 장비의 BatchReport/WaferInfo.ini 를 읽어 장비별 가동률을
    **시간 미확인은 0초가 아니다** — 화면은 '—' 로 적고 Batch 전체 시간을 Error 시간으로 복사하지 않는다.
    검사된 Wafer 가 하나도 없고 정상 통과도 없는 시도는 `kind="batch"` 행 하나로 만들어 `Batch Start~End` 를
    오류 시간으로 쓰고, 그 배치의 나머지 행(LoadPort/Slot 자리표시 포함)은 `BATCH_FAILED` 로 묶어 따로 세지 않는다.
-   ★ D48-①(9/20): 시각 확인 비율(`cv`)이 50% 미만이거나 측정값이 0 인 장비-일은 **화면이** Report 의 배치 시작~종료(`bseg`/`be`)로 가동률을 **추정**한다
-   (template `S.isEst` — 목록은 같은 모양, 장비 팝업에 '(추정)' 과 시각 확인 비율). 이것은 표시 규칙이다 — 수집기는 여전히 시각을 지어내지 않고 행의
-   `wafer_start_time` 은 비워 둔다. 배치 시각조차 없으면(`be===0`) 추정하지 않는다('—').
+   ★ D54(9/20, D48-① 개정): **INI 가 없는 Pass 행은 행마다** 그 Report 의 배치 시작~종료를 Scan(또는 Rescan·Test) 구간으로 쓴다(template `dayStats`, `RULES.estimateFromBatch`,
+   `t.ne` = 추정한 행 수). 장비-일 50% 문턱은 없다. Skipped·중단·`-` 행과 원인 Error 행은 추정하지 않는다(Error 는 배치 시작 3분 표식 그대로).
+   이것은 화면 규칙이다 — 수집기는 여전히 시각을 지어내지 않고 행의 `wafer_start_time` 은 비워 둔다. 장비 팝업이 'n장은 INI 가 없어 배치 시각으로 추정' 과 시각 확인 비율을 적는다.
 6. **런처 exe 에는 앱 코드가 0줄이다.** `scripts/exe_launcher.py` 는 표준 라이브러리만 import 한다
    (PyInstaller 의 FrozenImporter 가 디스크의 새 코드를 가린다). `hiddenimports=[]`, `pathex=[]`, 앱 패키지는 `excludes`.
 7. **`app.new` 는 완성·검증된 트리만.** `app.new.part` 에 만들고 검증 후 rename 한 것이 준비 신호. VERSION 은 스테이징 트리에만 쓴다.
@@ -112,12 +112,13 @@ Camtek AOI 장비의 BatchReport/WaferInfo.ini 를 읽어 장비별 가동률을
   번호로 바꾼다. 30대 × 90일이면 행이 십수만 개라 접지 않으면 HTML 이 수십 MB 가 된다. template 의 로더가 편다.
   CSV 는 사람이 읽는 파일이라 접지 않는다.
 - **결과 화면 모델의 원본은 `docs/design/dashboard-redesign/scripts/make_aoi_data.js`** 다(D47·D48, 9/20). template 의 `buildModel(rows, meta, rules)` 는 그 [원본] 블록을
-  그대로 옮긴 것이고(`val(r,c)`→`r[c]` 한 줄만 다름), 제품 규칙을 유지하기로 한 두 곳만 `RULES={waitToObsEnd,denomToday}` 로 다르다 — 둘 다 끄면 스크립트와 **같은 출력**이다
-  (가드 `test_dashboard_js.py::test_model_equals_the_design_script…`, 30일치 833 장비-일 전부 동일). 규칙을 바꾸면 `MODEL_VERSION` 을 올린다. 열 때마다 원천 행에서 다시 계산한다(저장하지 않는다).
+  그대로 옮긴 것이고(`val(r,c)`→`r[c]` 한 줄만 다름), 제품 규칙 네 곳만 `RULES={waitToObsEnd,denomToday,abortIsError,estimateFromBatch}` 로 다르다 — 넷 다 끄면 스크립트와 **같은 출력**이다
+  (가드 `test_dashboard_js.py::test_model_equals_the_design_script…`, 30일치 828 장비-일 전부 동일). 규칙을 바꾸면 `MODEL_VERSION` 을 올린다(지금 2). 열 때마다 원천 행에서 다시 계산한다(저장하지 않는다).
   - 장비-일 값 `t`: `r` Scan · `d` Rescan · `t` Test · `x` Error 구간 · `s` 에러 후 대기 (전부 분) · `e` Error 건수(Lot 단위) · `w` Wafer 수 · `seg` [시작,끝,종류] (0 Scan · 1 Error · 2 Test · 4 Rescan) ·
-    `ct` {유형:[건수,대기분]} · `lots` [job,lot,a,b,w,e,dup,test,rep,causes,st,ba,bb] · `cv` 시각 확인 % · `bseg`/`be` 배치 구간·점유 · `we` 그날 마지막 Error 뒤 대기의 끝(분, 없으면 0) · `den` 분모(분).
+    `ct` {유형:[건수,대기분]} · `lots` [job,lot,a,b,w,e,dup,test,rep,causes,st,ba,bb] · `cv` 시각 확인 % · `bseg`/`be` 배치 구간·점유 · `we` 그날 마지막 Error 뒤 대기의 끝(분, 없으면 0) · `ne` 배치 시각으로 추정한 행 수(D54) · `den` 분모(분).
   - 종류: 원인 코드(`CAUSE_RULES` 첫 매치)가 있으면 Error, Lot 원문에 `TEST` 가 있으면 Test, 같은 자재의 **앞선 시도가 Pass** 였으면 Rescan(장비 무관), 아니면 Scan.
-    앞선 시도가 Error 였으면 정상 Scan 이다(D48-③). 원인 없는 중단(`Aborted.`)은 Error 가 아니다 — 시각이 있으면 Scan 시간, 없으면 0(디자인 규칙, D41 폐지).
+    앞선 시도가 Error 였으면 정상 Scan 이다(D48-③). **원인 없는 중단(`Aborted…`)은 같은 Report 에 PASS 도 원인 Error 도 없을 때만 Error(유형 `ABORTED`)** 다(D52, `RULES.abortIsError`) —
+    앞에 PASS 가 있으면 정상으로 끝난 것(시각이 있으면 Scan 시간), 앞에 원인 Error 가 있으면 그 원인으로 끝난 것(ABORTED 를 더 세지 않음). 실패 배치 행(`kind=batch`, 배치 시각 보유)도 같은 규칙.
   - 자재 키 = `jobKey(Job)|Lot 토큰(RE·RESCAN·REWORK·SRD·R 제외)|Wafer ID(영숫자)`. **Job 병합(`jobKey`)** 은 구분자·공백·대소문자 · `_Copy` · `LIVE` · 장비별 복사본 · `Test_` 접두 · 끝 4자리 날짜 · `AO`→`A0` 를 묶고
     R접두어(RE·R2·R3…)와 단계 번호(PI2/PI3, RDL1~4)는 나눈다(D48-④). 통계에서만 묶고 **표기는 원문**, 화면 표기명 21개는 `JOB_ALIAS`(화면 규칙).
   - **Lot 이름은 Report 파일명에서**(`lotName`, D48-⑤): 4자리 설비번호 다음 칸(없으면 날짜 앞 칸), `Setup1_`·`6324_` 접두 제거, 3글자 코드 뒤 꼬리표는 `KEEP`(DIA·2D·3D·EDGE·CENTER·RE·SRD·RESCAN·PCM·DUMMY·SPT)만 남김,
@@ -125,6 +126,7 @@ Camtek AOI 장비의 BatchReport/WaferInfo.ini 를 읽어 장비별 가동률을
   - **Error 는 Lot(=Report) 단위**(D48-②): 같은 Report 의 같은 유형은 1건(`give` 의 `sl`). 대기 시간 = Error 구간 + 그 뒤 다음 기록까지의 공백을 그 구간의 Error 들이 나눠 가진다(한 공백은 한 번만).
     구간 병합은 데이터 **3분**(`dayStats`), 화면 **8분**(`S.segsOf`, 수치 불변). 시각 없는 Error 는 배치 시작에 3분 표식.
   - **제품 유지 ①(D44)**: 공백에 240분 cap 을 두지 않고, 그날 마지막 Error 는 관측 종료(로드한 데이터의 마지막 시각)까지 — 뒷날 데이터가 있으면 자정까지, 다음 날로 늘리지 않는다. 그 끝이 `we` 이고 막대·팝업도 거기까지 '에러 후 대기' 를 그린다.
+  - **제품 규칙 ③(D54)**: INI 없는 Pass 행 = 배치 구간(위 절대 규칙 5). **제품 규칙 ④(D52)**: PASS·원인 없는 Report 의 중단 = Error.
   - **제품 유지 ②(D17·D46)**: 분모는 1440분. **수집한 날(`today` = `meta.generated_iso` 날짜)만** 00:00~그날 마지막 기록(Wafer·Error 구간·배치 종료·**마지막 Error 뒤 대기 끝 `we`** 중 늦은 것) = `den` — 센 대기가 분모 밖에 남지 않게(검수에서 잡은 버그). 막대의 그 뒤는 '아직 오지 않은 시간'.
     **가동률 = (r + d) ÷ den**, 추정이면 `be ÷ den`. 평균은 값이 있는 장비만(`S.fleetUtil`). 화면의 '오늘' 은 열람 시계가 아니라 수집 시각이다(D40) — 집계 경로에 `Date.now()`/`new Date()` 가 없다(가드).
   - ★ 종류가 다른 구간이 겹치면 각각 센다(우선순위 배정 없음) — 옛 U+T+E+S+R=D 항등식은 폐기. 필요하면 `MODEL_VERSION` 을 올리고 규칙을 더한다.
