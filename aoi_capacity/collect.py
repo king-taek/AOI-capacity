@@ -549,6 +549,9 @@ def rows_for_report(dev_name: str, rep: dict, scan_root: str, memo: Optional[_In
              "batch_end": s.get("Batch End", ""), "ini_match": "", "time_basis": "MISSING", "slots": "", "data_issue": ""}
         if _is_placeholder(w):
             r["ini_match"], r["data_issue"] = "NO_WAFER_ID", "LoadPort/Slot 행이라 INI 경로를 만들 수 없음"
+        elif not job_folder_variants(rep["equipment"]):
+            # Job 을 끝내 못 읽은 옛 형식 — 빈 칸은 경로에서 사라져 남의 INI 를 가리키므로 경로를 만들지 않는다(규칙 4). 행은 남긴다.
+            r["ini_match"], r["data_issue"] = "NOT_FOUND", "Job 을 알 수 없어 INI 경로를 만들지 않음"
         else:
             jobs_try = job_folder_variants(rep["equipment"])
             rels = [os.path.join(j, rep["process_code"], w["lot"], w["wafer_id"]) for j in jobs_try]

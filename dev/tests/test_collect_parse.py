@@ -593,3 +593,15 @@ def test_two_wafers_that_never_scanned_stay_not_found_when_their_siblings_are_ex
     rep = collect.parse_report(LIVE_NAME, LIVE_HTML)
     by = {r["wafer_id"]: r for r in collect.rows_for_report("4F-AOI-01", rep, str(tmp_path / "Scanresult"))}
     assert by["54265662EWE7"]["ini_match"] == "EXACT" and by["54265684EWA2"]["ini_match"] == "NOT_FOUND"
+
+
+def test_report_without_any_job_keeps_its_rows_and_builds_no_ini_path(tmp_path):
+    """Job/Setup 도 없고 파일명 규칙에도 표-Lot 규칙에도 안 맞는 Report — 예전엔 jobs_try[0] 에서 IndexError 로 Report 통째로 '읽기 실패'."""
+    from aoi_capacity import collect
+
+    rep = {"name": "WEIRD NAME_BatchReport.htm", "equipment": "", "process_code": "", "job": "", "setup": "", "report_lot": "",
+           "summary": {"Batch Start": "15-Sep-26 01:00:00 PM", "Batch End": "15-Sep-26 01:10:00 PM"},
+           "wafers": [{"lot": "LOT-A", "wafer_id": "W1", "status": "Pass", "recipe": "", "faults": "", "scanned_dice": "", "yield": ""}]}
+    rows = collect.rows_for_report("AOI-1", rep, str(tmp_path))
+    assert len(rows) == 1 and rows[0]["ini_match"] == "NOT_FOUND" and "Job" in rows[0]["data_issue"]
+    assert rows[0]["wafer_start_time"] == ""
