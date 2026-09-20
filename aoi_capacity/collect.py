@@ -12,10 +12,24 @@
     장비별 상태는 `on_device(name, state, detail)` — state ∈ {"listing","parsing","done","error","skipped"}.
   * 취소: `should_stop()` 이 True 면 `CollectCancelled`. 캐시·HTML 은 손대지 않아 이전 상태가 그대로 남는다.
 
-수집 기간
-  * 처음(캐시 없음) 또는 `backfill=True`: 수정시각이 최근 `backfill_days` 안인 Report 를 전부.
+수집 기간·모드(D60)
+  * 처음(캐시 없음) 또는 `backfill=True`: 수정시각이 최근 `backfill_days` 안인 Report 를 **찾는다** — 이미 캐시에 있고
+    수정시각이 같은 파일은 건너뛴다(검색 창만 넓히는 것이지 다시 읽는 것이 아니다).
   * 그 뒤: 장비별로 마지막으로 가져온 Report 수정시각 이후 것 전부(시계 오차 60초 여유). 처음 보는 장비는 backfill 창.
+  * `refresh_window_days=N`(cfg 또는 인자): 최근 N일 안의 Report 는 **캐시에 있어도(수정시각이 같아도) 다시 읽는다**.
+    창 밖 항목은 손대지 않고, 다시 읽다 실패한 Report 는 이전 행을 그대로 두고 `failed` 에 재시도 표시만 남긴다.
+  * `rebuild_all=True`(= `full`, 옛 `--full` 의 별칭): 보관 기간(`retention_days`) 전부를 **새 후보 캐시**에 모으고
+    검증(`_validate_rebuild`)을 통과할 때만 원 캐시를 바꾼다. 미접근 장비·지금 장비 목록에 없는 항목·다시 읽다 실패한
+    Report 의 이전 이력은 후보로 옮겨 보존한다. 검증 실패면 `RebuildRejected` — 원 캐시는 그대로다(이력 삭제 없음).
   * 캐시는 `retention_days` 동안 보관.
+
+캐시 파일(C15)
+  * 읽기는 **strict UTF-8** 이다 — 손상되면 조용히 빈 캐시로 덮어쓰지 않는다. 빈 캐시로 시작하되 `_save_cache` 가
+    원본을 `<캐시>.bad-<시각>` 으로 옮겨 보존하고, `stats["cache_status"]="corrupt"` 로 알린다.
+  * 쓰기는 실행별 고유 임시 파일 → flush+fsync → 다시 읽어 JSON 검증 → `os.replace`. 실패하면 자기 임시 파일만 지우고 원본은 그대로다.
+
+산출물(C06)
+  * HTML 이 주 산출물이다. CSV 가 잠겨 있어(Excel) 못 쓰면 수집을 실패로 만들지 않고 `warnings` 에 구조화해 돌려준다.
 """
 from __future__ import annotations
 
@@ -56,6 +70,8 @@ DEFAULT_CONFIG: Dict[str, object] = {
     "cache_file": "",
     "scope_devices": list(scope.DEFAULT_SCOPE),   # ★ 수집 허용 장비. ["*"] 면 제한 없음
     "read_workers": READ_WORKERS,                 # NAS 를 동시에 몇 개씩 읽을지(1 = 한 줄로)
+    "refresh_window_days": 0,                     # D60: 최근 N일 안의 Report 는 캐시에 있어도 다시 읽는다(0 = 끔). 창 밖 이력은 보존
+    "rebuild_all": False,                         # D60: 보관 기간 전부를 새 후보 캐시에 모아 검증 뒤 교체(옛 --full 의 별칭)
 }
 MAX_READ_RETRY = 3   # 읽기에 실패한 Report 를 몇 번까지 다시 시도하고 커서를 붙잡아 둘지
 INI_KEYS = {
@@ -111,12 +127,29 @@ class CollectCancelled(Exception):
     """사용자가 중지했다. 캐시·출력은 바뀌지 않았다."""
 
 
+class RebuildRejected(Exception):
+    """전체 재구축(`rebuild_all`)의 후보 캐시가 검증에 걸렸다. **원 캐시는 바뀌지 않았다.**"""
+
+
+#: 캐시 파일을 읽은 결과 — `stats["cache_status"]` 로 나간다. "corrupt" 면 원본을 `.bad-<시각>` 으로 보존한다(`_save_cache`).
+CACHE_OK, CACHE_MISSING, CACHE_CORRUPT = "ok", "missing", "corrupt"
+#: `_load_cache` 가 손상 사실을 `_save_cache` 로 넘기는 비공개 키 — 저장 전에 빠지므로 파일에는 남지 않는다.
+_CORRUPT_KEY = "_corrupt_source"
+
+
 @dataclass
 class RunPlan:
     first_run: bool
     known_devices: int
     backfill_days: int
     recover_reports: int = 0   # 누락 복구를 켜면 다시 읽을 Report 수(캐시만 보고 센다)
+    mode: str = "incremental"  # incremental · first · backfill · recover · refresh · rebuild
+    refresh_days: int = 0      # refresh 창(일). 0 이면 끔
+    retention_days: int = 0    # rebuild 가 읽는 범위(일)
+    total_reports: int = 0     # 캐시에 든 Report 수
+    reread_reports: int = 0    # 캐시에 있는데도 다시 읽을 Report 수(refresh 창 안 · rebuild 면 전부)
+    keep_reports: int = 0      # 손대지 않는 캐시 Report 수(refresh 창 밖)
+    # 새로 생긴 Report 수는 NAS 를 봐야 알 수 있어 여기 없다(계획 조회는 NAS 에 접근하지 않는다).
 
 
 # ----------------------------------------------------------------------------- helpers
@@ -758,22 +791,44 @@ def synthesize_rows(rows: List[dict]) -> List[dict]:
 
 
 # ----------------------------------------------------------------------------- cache
+def _empty_cache() -> dict:
+    return {"reports": {}, "last_mtime": {}, "failed": {}}
+
+
+def cache_status(cache: dict) -> str:
+    """`_load_cache` 가 돌려준 캐시가 어떤 상태였나 — ok · missing · corrupt."""
+    return str(cache.get("_status") or CACHE_OK)
+
+
 def _load_cache(cfg: dict, full: bool = False, log: Optional[LogFn] = None, rederive: bool = True) -> dict:
     """캐시 JSON 을 읽는다. `rederive=True`(수집 경로)면 규칙 번호가 다를 때 행을 지금 규칙으로 다시 계산한다 —
-    15만 행이면 몇 초가 걸리므로 **UI 스레드에서 부르는 계획 조회(`plan_run`)는 이것을 끄고** 수집 워커에서만 켠다."""
-    cache: dict = {"reports": {}, "last_mtime": {}, "failed": {}}
+    15만 행이면 몇 초가 걸리므로 **UI 스레드에서 부르는 계획 조회(`plan_run`)는 이것을 끄고** 수집 워커에서만 켠다.
+
+    ★ C15: **strict UTF-8** 로 읽는다(NAS Report 용 관대한 디코딩과 다르다 — 손상 바이트가 U+FFFD 로 바뀌어 Lot·Job 문자열이
+    조용히 오염되면 안 된다). 디코딩·JSON 이 깨졌으면 빈 캐시로 시작하되 `_status="corrupt"` 와 원본 경로를 남긴다 —
+    `_save_cache` 가 그 원본을 `.bad-<시각>` 으로 옮겨 **보존한 뒤** 새 파일을 쓴다(조용한 덮어쓰기 없음).
+    `full=True` 는 파일을 아예 읽지 않는다(전체 재구축은 `collect` 가 원 캐시를 따로 읽는다)."""
+    cache = _empty_cache()
     path = cfg.get("cache_file") or ""
     if full or not path or not os.path.isfile(path):
+        cache["_status"] = CACHE_MISSING
         return cache
     try:
-        loaded = json.loads(nas_guard.read_text(path))
-        if isinstance(loaded, dict):
-            cache.update(loaded)
-            cache.setdefault("reports", {})
-            cache.setdefault("last_mtime", {})
-            cache.setdefault("failed", {})
-    except Exception as e:  # noqa: BLE001
-        _say(log, f"캐시 읽기 실패, 새로 시작: {e}")
+        loaded = json.loads(nas_guard.read_text(path, errors="strict"))
+        if not isinstance(loaded, dict) or not isinstance(loaded.get("reports", {}), dict):
+            raise ValueError("캐시 JSON 의 최상위가 객체가 아닙니다")
+        cache.update(loaded)
+        for k in ("reports", "last_mtime", "failed"):
+            if not isinstance(cache.get(k), dict):
+                cache[k] = {}
+        cache.pop(_CORRUPT_KEY, None)
+        cache["_status"] = CACHE_OK
+    except (UnicodeDecodeError, ValueError, OSError) as e:      # json.JSONDecodeError 는 ValueError
+        cache = _empty_cache()
+        cache["_status"] = CACHE_CORRUPT
+        cache[_CORRUPT_KEY] = {"path": path, "error": f"{type(e).__name__}: {e}"}
+        _say(log, f"★ 캐시 파일을 읽을 수 없습니다({type(e).__name__}: {e}) — 빈 캐시로 시작하되 "
+                  f"원본은 '{os.path.basename(path)}.bad-<시각>' 으로 보존합니다(덮어쓰지 않음)")
     if rederive and cache.get("parser_version") != PARSER_VERSION:
         n = _rederive_rows(cache)
         if n:
@@ -864,15 +919,56 @@ def _rows_from_cache(cache: dict, devs: List[dict], cfg: dict) -> Tuple[List[dic
     return rows, hidden
 
 
-def _save_cache(cfg: dict, cache: dict) -> None:
+def _unique_tmp(path: str) -> str:
+    """실행별 고유 임시 이름 — 동시에 도는 GUI/CLI 가 서로의 임시 파일을 밟거나 지우지 않게."""
+    return f"{path}.{os.getpid()}-{threading.get_ident()}-{time.time_ns()}.tmp"
+
+
+def _validate_cache_file(tmp: str, cache: dict) -> None:
+    """방금 쓴 임시 파일을 strict 로 다시 읽어 구조가 맞는지 본다 — 반쯤 쓴 파일이 정상 캐시로 승격되지 않게."""
+    check = json.loads(nas_guard.read_text(tmp, errors="strict"))
+    if not isinstance(check, dict):
+        raise ValueError("캐시 JSON 최상위가 객체가 아닙니다")
+    for k in ("reports", "last_mtime", "failed"):
+        if not isinstance(check.get(k), dict):
+            raise ValueError(f"캐시 JSON 에 '{k}' 객체가 없습니다")
+    if check.get("parser_version") != PARSER_VERSION:
+        raise ValueError("캐시 JSON 의 parser_version 이 다릅니다")
+    if len(check["reports"]) != len(cache["reports"]):
+        raise ValueError(f"캐시 JSON 의 Report 수가 다릅니다({len(check['reports'])} ≠ {len(cache['reports'])})")
+
+
+def _save_cache(cfg: dict, cache: dict) -> dict:
+    """캐시를 **트랜잭션**으로 쓴다(C15): 고유 임시 파일 → flush+fsync → 다시 읽어 검증 → `os.replace`.
+    어느 단계가 실패해도 원본은 그대로고 자기 임시 파일만 지운다.
+
+    `_load_cache` 가 손상을 표시해 두었으면(`_CORRUPT_KEY`) 교체 **직전에** 원본을 `<캐시>.bad-<시각>` 으로 옮겨 보존한다 —
+    쓰기는 이 함수 안에서만 허용되므로 보존도 여기서 한다. 돌려주는 값: {"path", "preserved"(보존한 경로 또는 "")}."""
     nas_guard.check_cfg(cfg)  # ★ NAS 아래에는 절대 쓰지 않는다
-    path = cfg["cache_file"]
+    path = str(cfg["cache_file"])
     os.makedirs(os.path.dirname(os.path.abspath(path)), exist_ok=True)
     cache["parser_version"] = PARSER_VERSION
-    tmp = path + ".tmp"
-    with open(tmp, "w", encoding="utf-8") as f:
-        json.dump(cache, f, ensure_ascii=False)
-    os.replace(tmp, path)
+    corrupt = cache.pop(_CORRUPT_KEY, None)
+    cache.pop("_status", None)
+    tmp = _unique_tmp(path)
+    preserved = ""
+    try:
+        with open(tmp, "w", encoding="utf-8") as f:
+            json.dump(cache, f, ensure_ascii=False)
+            f.flush()
+            os.fsync(f.fileno())
+        _validate_cache_file(tmp, cache)
+        if corrupt and os.path.isfile(path):
+            preserved = f"{path}.bad-{time.strftime('%Y%m%d-%H%M%S')}-{time.time_ns() % 1000000:06d}"
+            os.replace(path, preserved)                 # 손상 원본 보존(지우지 않는다)
+        os.replace(tmp, path)
+    finally:
+        if os.path.isfile(tmp):                     # 자기가 만든 임시 파일만 지운다(원본에는 손대지 않는다)
+            try:
+                os.remove(tmp)
+            except OSError:
+                pass
+    return {"path": path, "preserved": preserved}
 
 
 #: 캐시 파일 요약의 메모 — (경로) → (mtime_ns, size, 요약). 계획 조회는 체크박스를 누를 때마다 불리는데
@@ -881,8 +977,9 @@ _PLAN_MEMO: Dict[str, tuple] = {}
 
 
 def _cache_summary(path: str) -> dict:
-    """계획 조회에 필요한 것만 — Report 수 · 장비 커서 수 · 누락 복구 대상 수. 행은 재분류하지 않는다(수집 워커가 한다)."""
-    empty = {"n_reports": 0, "known_devices": 0, "n_recover": 0}
+    """계획 조회에 필요한 것만 — Report 수 · 장비 커서 수 · 누락 복구 대상 수 · Report 수정시각 목록(refresh 창 계산용).
+    행은 재분류하지 않는다(수집 워커가 한다)."""
+    empty = {"n_reports": 0, "known_devices": 0, "n_recover": 0, "mtimes": []}
     if not path or not os.path.isfile(path):
         return empty
     try:
@@ -895,17 +992,42 @@ def _cache_summary(path: str) -> dict:
         return hit[1]
     cache = _load_cache({"cache_file": path}, rederive=False)
     summary = {"n_reports": len(cache.get("reports", {})), "known_devices": len(cache.get("last_mtime", {})),
-               "n_recover": sum(1 for e in cache.get("reports", {}).values() if _needs_recovery(e))}
+               "n_recover": sum(1 for e in cache.get("reports", {}).values() if _needs_recovery(e)),
+               "mtimes": [float(e.get("mtime") or 0) for e in cache.get("reports", {}).values()]}
     _PLAN_MEMO[path] = (key, summary)
     return summary
 
 
-def plan_run(cfg: dict, full: bool = False, backfill: bool = False, recover: bool = False) -> RunPlan:
-    """UI 안내용 — 캐시만 보고 이번 실행이 어떤 성격인지 알려준다(NAS 접근 없음). 행을 다시 계산하지 않고 결과를 메모한다."""
-    s = _cache_summary("" if full else str(cfg.get("cache_file") or ""))
-    first = full or backfill or not s["n_reports"]
+def _mode_args(cfg: dict, full: bool, refresh_window_days, rebuild_all) -> Tuple[int, bool]:
+    """인자가 None 이면 cfg 값을 쓴다. `full` 은 `rebuild_all` 의 별칭(D60). 돌려주는 값: (refresh 창 일수, rebuild 여부)."""
+    try:
+        days = int(cfg.get("refresh_window_days") or 0) if refresh_window_days is None else int(refresh_window_days)
+    except (TypeError, ValueError):
+        days = 0
+    rebuild = bool(cfg.get("rebuild_all")) if rebuild_all is None else bool(rebuild_all)
+    return max(0, days), bool(rebuild or full)
+
+
+def plan_run(cfg: dict, full: bool = False, backfill: bool = False, recover: bool = False, *,
+             refresh_window_days=None, rebuild_all=None) -> RunPlan:
+    """UI 안내용 — 캐시만 보고 이번 실행이 어떤 성격인지 알려준다(NAS 접근 없음). 행을 다시 계산하지 않고 결과를 메모한다.
+
+    `reread_reports`/`keep_reports` 는 캐시에 있는 Report 중 다시 읽을 것/그대로 둘 것의 수다. 새로 생긴 Report 는 NAS 를
+    봐야 알 수 있으니 세지 않는다. rebuild 는 캐시 파일을 읽지 않는다(어차피 전부 다시 읽는다)."""
+    refresh_days, rebuild = _mode_args(cfg, full, refresh_window_days, rebuild_all)
+    s = _cache_summary("" if rebuild else str(cfg.get("cache_file") or ""))
+    n = s["n_reports"]
+    first = rebuild or backfill or not n
+    reread = 0
+    if refresh_days > 0 and n:
+        since = time.time() - refresh_days * 86400
+        reread = sum(1 for m in s["mtimes"] if m >= since)
+    mode = ("rebuild" if rebuild else "first" if not n else "refresh" if refresh_days > 0
+            else "backfill" if backfill else "recover" if recover else "incremental")
     return RunPlan(first_run=first, known_devices=s["known_devices"], backfill_days=int(cfg["backfill_days"]),
-                   recover_reports=s["n_recover"] if recover and not full else 0)
+                   recover_reports=s["n_recover"] if recover and not rebuild else 0,
+                   mode=mode, refresh_days=refresh_days, retention_days=int(cfg.get("retention_days") or 0),
+                   total_reports=n, reread_reports=reread, keep_reports=max(0, n - reread) if not rebuild else 0)
 
 
 # ----------------------------------------------------------------------------- collect
@@ -946,15 +1068,31 @@ def _run(cfg: dict, tasks, fn, should_stop) -> list:
     return out
 
 
-def _list_new_reports(devs, cache, cfg, backfill, log, progress, on_device, should_stop, recover=False):
+def _list_new_reports(devs, cache, cfg, backfill, log, progress, on_device, should_stop, recover=False,
+                      refresh_days: int = 0, window_days=None):
     """1차 패스: 장비마다 Report 폴더를 한 번 나열(scandir+stat 만)해 읽을 파일을 고른다. NAS 읽기 전용.
 
     장비 30대를 한 줄로 나열하면 SMB 왕복 지연이 30번 더해진다 — 동시에 나열한다(`read_workers`).
 
+    고르는 규칙(캐시에 **같은 수정시각**으로 들어 있는 파일은 원래 건너뛴다 — backfill 은 검색 창만 넓힌다):
+      * `refresh_days>0`: 최근 그 일수 안의 파일은 캐시에 있어도 다시 읽는다(D60, `dm["refreshed"]`).
+      * `recover`: INI 를 못 찾았던 Report 만 다시 읽는다(`dm["recovered"]`).
+      * 지난번 다시 읽다 실패해 이전 행을 그대로 둔 Report(`failed` 에 재시도가 남은 것)는 다시 읽는다(`dm["retried"]`).
+    `window_days` 는 backfill 창 길이(기본 `backfill_days`; rebuild 는 `retention_days`).
+
     돌려주는 `known` 은 '이미 캐시에 잘 들어 있는 파일들의 수정시각' — 커서를 어디까지 밀어도 되는지
     계산할 때 쓴다(읽기에 실패한 파일을 커서가 넘어가 버리지 않게)."""
-    reports, last = cache["reports"], cache["last_mtime"]
-    backfill_since = time.time() - float(cfg["backfill_days"]) * 86400
+    reports, last, failed = cache["reports"], cache["last_mtime"], cache.get("failed") or {}
+    now = time.time()
+    backfill_since = now - float(cfg["backfill_days"] if window_days is None else window_days) * 86400
+    refresh_since = (now - float(refresh_days) * 86400) if refresh_days and refresh_days > 0 else None
+    # 다시 읽다 실패해 이전 행을 그대로 둔 Report 는 보통 커서보다 오래됐다 — 장비별로 그 파일까지는 훑어야 재시도가 실제로 일어난다.
+    # (커서는 뒤로 가지 않는다. 나열만 조금 더 하고, 고르는 건 위의 규칙대로라 다른 파일은 그대로 known 이다.)
+    pending_since: Dict[str, float] = {}
+    for f in failed.values():
+        if f.get("device_id") and int(f.get("tries", 0)) < MAX_READ_RETRY:
+            did_f, m_f = str(f["device_id"]), float(f.get("mtime") or 0)
+            pending_since[did_f] = min(pending_since.get(did_f, m_f), m_f)
     done = _Counter()
 
     def one(d):
@@ -962,13 +1100,18 @@ def _list_new_reports(devs, cache, cfg, backfill, log, progress, on_device, shou
         on_device(d["name"], "listing", "")
         did = str(d["id"])
         dm = {"name": d["name"], "id": did, "note": d["path"], "reports": 0, "found": 0, "error": "",
-              "report_dir": str(d.get("report_dir") or cfg["report_dir"]), "recovered": 0, "read_errors": 0}
+              "report_dir": str(d.get("report_dir") or cfg["report_dir"]), "recovered": 0, "read_errors": 0,
+              "refreshed": 0, "retried": 0, "kept": 0}
         rep_dir = os.path.join(d["path"], str(d.get("report_dir") or cfg["report_dir"]))
         try:
             files = [e for e in nas_guard.scandir(rep_dir) if e.is_file() and e.name.lower().endswith((".htm", ".html"))]
             files.sort(key=lambda e: e.stat().st_mtime, reverse=True)
             # 누락 복구는 커서와 무관하게 backfill 창 전체를 다시 훑되, 다시 읽는 건 복구 대상뿐이다(아래)
             since = backfill_since if (backfill or recover or did not in last) else float(last[did]) - CLOCK_SKEW_SEC
+            if refresh_since is not None:
+                since = min(since, refresh_since)          # refresh 창은 커서보다 앞서도 훑는다
+            if did in pending_since:
+                since = min(since, pending_since[did] - 1)  # 재시도할 Report 까지는 훑는다
             pick, known = [], []
             for e in files:
                 m = e.stat().st_mtime
@@ -976,11 +1119,19 @@ def _list_new_reports(devs, cache, cfg, backfill, log, progress, on_device, shou
                     continue
                 cached = reports.get(e.path)
                 if cached and abs(float(cached.get("mtime", 0)) - m) < 1 and _is_same_device(cached, e.path, d):
-                    if recover and _needs_recovery(cached):
+                    pending = failed.get(e.path) or {}
+                    if refresh_since is not None and m >= refresh_since:
+                        dm["refreshed"] += 1
+                        pick.append(e)
+                    elif recover and _needs_recovery(cached):
                         dm["recovered"] += 1
+                        pick.append(e)
+                    elif pending and int(pending.get("tries", 0)) < MAX_READ_RETRY:
+                        dm["retried"] += 1                 # 지난번 다시 읽다 실패 — 이전 행은 그대로, 이번에 재시도
                         pick.append(e)
                     else:
                         known.append(m)
+                        dm["kept"] += 1
                 else:
                     pick.append(e)
             dm["found"], dm["reports"] = len(files), len(pick)
@@ -998,8 +1149,12 @@ def _list_new_reports(devs, cache, cfg, backfill, log, progress, on_device, shou
         if dm["error"]:
             _say(log, f"[{d['name']}] {dm['error']}")
         elif pick:
-            rec = f" (누락 복구 {dm['recovered']}개 포함)" if dm.get("recovered") else ""
-            _say(log, f"[{d['name']}] Report {dm['found']}개 중 새 파일 {len(pick)}개{rec}")
+            extra = [f"다시 읽기 {dm['refreshed']}개" if dm.get("refreshed") else "",
+                     f"누락 복구 {dm['recovered']}개" if dm.get("recovered") else "",
+                     f"재시도 {dm['retried']}개" if dm.get("retried") else ""]
+            extra = [x for x in extra if x]
+            rec = f" ({' · '.join(extra)} 포함)" if extra else ""
+            _say(log, f"[{d['name']}] Report {dm['found']}개 중 읽을 파일 {len(pick)}개{rec} · 그대로 두는 캐시 {dm['kept']}개")
     return plan
 
 
@@ -1052,6 +1207,7 @@ def _backup_roots(d: dict, scan_root: str) -> ScanRoots:
 
 
 def collect(cfg: dict, full: bool = False, backfill: bool = False, *, recover: bool = False,
+            refresh_window_days=None, rebuild_all=None,
             progress: Optional[ProgressFn] = None, log: Optional[LogFn] = None,
             should_stop: Optional[Callable[[], bool]] = None,
             on_device: Optional[DeviceFn] = None, stats: Optional[dict] = None) -> Tuple[List[dict], List[dict], List[dict]]:
@@ -1059,27 +1215,49 @@ def collect(cfg: dict, full: bool = False, backfill: bool = False, *, recover: b
 
     `stats` 에 dict 를 주면 단계별 경과(ms)·읽은 수·INI 왕복 수를 채워 준다(`write_html` 이 `meta.timing` 으로 박는다).
     현장에서 "어디서 시간이 가는지" 를 재는 유일한 근거다 — 값은 결과에 영향을 주지 않는다.
+    `stats["cache_status"]`(ok · missing · corrupt) 와 `stats["cache_preserved"]`(손상 원본을 옮긴 경로) 도 여기로 나간다.
 
-    `recover` 는 INI 를 못 찾았던 Report(`RECOVERABLE_INI`)만 수정시각과 상관없이 다시 읽는다 — 파서를 고친 뒤
-    옛 캐시를 되살리는 길. 나머지 캐시 Report 는 평소처럼 건너뛴다."""
+    모드(D60 — 인자가 None 이면 cfg 의 `refresh_window_days` · `rebuild_all` 을 쓴다):
+      * `recover`: INI 를 못 찾았던 Report(`RECOVERABLE_INI`)만 수정시각과 상관없이 다시 읽는다 — 파서를 고친 뒤 옛 캐시를 되살리는 길.
+      * `refresh_window_days=N`: 최근 N일 안의 Report 는 캐시에 있어도 다시 읽는다. 창 밖 이력은 손대지 않고, 다시 읽다 실패하면
+        그 Report 의 이전 행을 그대로 두고 `failed` 에 재시도만 남긴다.
+      * `rebuild_all`(= `full`): 보관 기간 전부를 새 후보 캐시에 모아 `_validate_rebuild` 를 통과할 때만 교체한다.
+        미접근 장비·지금 목록에 없는 장비·다시 읽다 실패한 Report 의 이전 이력은 후보로 옮긴다. 실패면 `RebuildRejected`(원 캐시 그대로)."""
     progress = progress or (lambda d, t, p: None)
     on_device = on_device or (lambda n, s, d: None)
     stats = stats if stats is not None else {}
     clock = time.perf_counter
     t0 = clock()
     nas_guard.check_cfg(cfg)  # 출력·캐시가 NAS 아래면 시작조차 하지 않는다
+    refresh_days, rebuild = _mode_args(cfg, full, refresh_window_days, rebuild_all)
     progress(0, 0, i18n.KO.COLLECT_PHASE_DEVICES)
-    cache = _load_cache(cfg, full=full, log=log)
-    backfill = backfill or full or not cache["reports"]
+    old_cache: Optional[dict] = None
+    if rebuild:
+        old_cache = _load_cache(cfg, log=log)                 # 원 캐시는 검증 뒤 교체할 때까지 그대로 둔다
+        cache = _empty_cache()
+        cache["_status"] = old_cache.get("_status")
+        if old_cache.get(_CORRUPT_KEY):
+            cache[_CORRUPT_KEY] = old_cache[_CORRUPT_KEY]      # 손상 원본 보존은 _save_cache 가 한다
+    else:
+        cache = _load_cache(cfg, log=log)
+    stats["cache_status"] = cache_status(cache)
+    backfill = backfill or rebuild or not cache["reports"]
     devs = devices_mod.resolve_devices(cfg, log)
-    _migrate_cursors(cache, devs, log)
+    _migrate_cursors(old_cache if old_cache is not None else cache, devs, log)
     stats["devices_ms"] = int((clock() - t0) * 1000)
     t1 = clock()
-    if backfill:
+    window_days = float(cfg["retention_days"]) if rebuild else None
+    if rebuild:
+        _say(log, f"전체 재구축: 보관 기간 {cfg['retention_days']}일 안의 Report 를 전부 새 후보 캐시에 모읍니다"
+                  f"(검증을 통과할 때만 기존 캐시 {len(old_cache['reports'])}개 항목을 바꿉니다)")
+    elif backfill:
         _say(log, f"초기 수집: 최근 {cfg['backfill_days']}일 안의 Report 를 전부 읽습니다")
-    elif recover:
+    if refresh_days > 0 and not rebuild:
+        _say(log, f"다시 읽기: 최근 {refresh_days}일 안의 Report 는 캐시에 있어도 다시 읽습니다(창 밖 이력은 그대로)")
+    if recover and not rebuild:
         _say(log, f"누락 복구: 최근 {cfg['backfill_days']}일 안에서 INI 를 못 찾았던 Report 만 다시 읽습니다")
-    plan = _list_new_reports(devs, cache, cfg, backfill, log, progress, on_device, should_stop, recover=recover)
+    plan = _list_new_reports(devs, cache, cfg, backfill, log, progress, on_device, should_stop, recover=recover,
+                             refresh_days=0 if rebuild else refresh_days, window_days=window_days)
     stats["list_ms"] = int((clock() - t1) * 1000)
     t2 = clock()
 
@@ -1139,9 +1317,16 @@ def collect(cfg: dict, full: bool = False, backfill: bool = False, *, recover: b
             n_new += 1
             continue
         tries = int(failed.get(e.path, {}).get("tries", 0)) + 1
-        failed[e.path] = {"mtime": mtime, "tries": tries, "device_id": did, "error": err}
-        errors.append({"device": d["name"], "path": e.path, "tries": tries, "error": err})
+        prev = reports.get(e.path)                                   # 다시 읽기(refresh·recover·재시도)였다면 이전 행이 있다
+        if prev is None and old_cache is not None and e.path in old_cache["reports"]:
+            prev = reports[e.path] = old_cache["reports"][e.path]    # rebuild: 실패한 Report 는 이전 이력을 후보로 옮긴다
+        failed[e.path] = {"mtime": mtime, "tries": tries, "device_id": did, "error": err,
+                          "kept_rows": len(prev.get("rows") or ()) if prev else 0}
+        errors.append({"device": d["name"], "path": e.path, "tries": tries, "error": err,
+                       "kept_rows": failed[e.path]["kept_rows"]})
         _dm["read_errors"] += 1
+        if prev is not None:
+            _say(log, f"[{d['name']}] {e.name}: 다시 읽기 실패 — 이전 행 {failed[e.path]['kept_rows']}개를 그대로 두고 다음에 재시도합니다")
         # 재시도가 남아 있으면 커서를 이 파일 앞에서 멈춰 다음 수집에 다시 읽는다
         by_dev[did]["blocked" if tries < MAX_READ_RETRY else "ok"].append(mtime)
         if tries >= MAX_READ_RETRY:
@@ -1171,7 +1356,17 @@ def collect(cfg: dict, full: bool = False, backfill: bool = False, *, recover: b
         del reports[k]
     for k in [k for k, v in failed.items() if dt.datetime.fromtimestamp(float(v.get("mtime", 0))) < cutoff]:
         del failed[k]
-    _save_cache(cfg, cache)
+    if old_cache is not None:
+        carried = _carry_over(old_cache, cache, devs, plan, cutoff)
+        reasons = _validate_rebuild(old_cache, cache, plan, n_new)
+        if reasons:
+            raise RebuildRejected("전체 재구축 후보를 버리고 기존 캐시를 그대로 둡니다 — " + " / ".join(reasons))
+        _say(log, f"전체 재구축: 새로 읽은 Report {n_new}개 · 이전 이력 이관 {carried['reports']}개"
+                  f"(미접근 장비 {carried['unreachable']}대 · 목록 밖 {carried['foreign']}개) · 읽기 실패 {len(errors)}건(이전 행 유지)")
+    saved = _save_cache(cfg, cache)
+    if saved.get("preserved"):
+        stats["cache_preserved"] = saved["preserved"]
+        _say(log, f"★ 손상된 캐시 원본을 보존했습니다: {saved['preserved']}")
     rows, hidden = _rows_from_cache(cache, devs, cfg)
     _mark_device_status(dev_meta, rows)
     dev_meta.extend(_out_of_scope_meta(cfg, devs))
@@ -1179,6 +1374,10 @@ def collect(cfg: dict, full: bool = False, backfill: bool = False, *, recover: b
     stats.update(memo.stats())
     stats.update({"reports_found": sum(int(dm.get("found") or 0) for dm in dev_meta),
                   "reports_read": n_new, "reports_failed": len(errors), "devices": len(devs),
+                  "reports_refreshed": sum(int(dm.get("refreshed") or 0) for dm in dev_meta),
+                  "reports_kept": sum(int(dm.get("kept") or 0) for dm in dev_meta),
+                  "mode": "rebuild" if rebuild else "refresh" if refresh_days > 0 else "recover" if recover
+                          else "backfill" if backfill else "incremental",
                   "read_workers": _workers(cfg, max(1, len(jobs))), "total_ms": int((clock() - t0) * 1000)})
     _say(log, f"새로 읽은 Report {n_new}개 · 캐시 Report {len(reports)}개 · Wafer 행 {len(rows)} · 오류 {len(errors)}건")
     _say(log, "단계별 경과: 장비 확인 {devices_ms}ms · 목록 {list_ms}ms · 읽기 {read_ms}ms"
@@ -1187,6 +1386,71 @@ def collect(cfg: dict, full: bool = False, backfill: bool = False, *, recover: b
     if hidden:
         _say(log, f"수집 범위({scope.describe(cfg)}) 밖 장비의 캐시 {hidden}행은 화면에서 제외했습니다(캐시는 그대로 둡니다)")
     return rows, dev_meta, errors
+
+
+def _carry_over(old: dict, cand: dict, devs: List[dict], plan, cutoff: dt.datetime) -> Dict[str, int]:
+    """전체 재구축(rebuild): 이번에 **보지 못한** 이력을 원 캐시에서 후보 캐시로 옮긴다 — 지우는 재구축이 아니다.
+
+    옮기는 것: (1) 나열에 실패한(접근 못 한) 장비와 **파일이 하나도 안 보인 장비**(빈 폴더로 보이는 SMB 오류를 정상과 구분할 수 없다)의
+    항목·커서 전부, (2) 지금 장비 목록에 없는 장비(범위 밖·이름 바뀜)의 항목·커서.
+    옮기지 않는 것: 나열에 성공해 파일이 보인 장비의 항목 — NAS 에 지금 있는 파일은 이미 새로 읽었고(실패분은 읽기 루프가 옮겼다),
+    NAS 에서 사라진 파일의 이력은 후보에 넣지 않는다(재구축은 '지금 NAS 에 있는 것' 을 기준으로 다시 세우는 길이다.
+    이력을 남기며 다시 읽으려면 `refresh_window_days` 를 쓴다). 보관 기간 밖 항목은 어차피 지운다."""
+    listed_ok = {str(d["id"]) for d, dm, _p, _k in plan if not dm["error"] and dm.get("found")}
+    unreachable = {str(d["id"]) for d, dm, _p, _k in plan if dm["error"] or not dm.get("found")}
+    out = {"reports": 0, "unreachable": 0, "foreign": 0}
+    for path, entry in old["reports"].items():
+        if path in cand["reports"]:
+            continue
+        dev = _cache_device(path, entry, devs)
+        did = str(dev["id"]) if dev else None
+        if did in listed_ok:
+            continue
+        if entry.get("rows") and _entry_newest(entry) < cutoff:
+            continue
+        cand["reports"][path] = entry
+        out["reports"] += 1
+        out["unreachable" if did in unreachable else "foreign"] += 1
+    out["unreachable"] = len({str(entry.get("device_id")) for path, entry in cand["reports"].items()
+                              if str(entry.get("device_id")) in unreachable})
+    for did, cur in old["last_mtime"].items():
+        if str(did) not in listed_ok and str(did) not in cand["last_mtime"]:
+            cand["last_mtime"][str(did)] = cur
+    for path, f in (old.get("failed") or {}).items():
+        if path not in cand["failed"] and str(f.get("device_id")) not in listed_ok:
+            cand["failed"][path] = f
+    return out
+
+
+def _entry_newest(entry: dict) -> dt.datetime:
+    ts = [parse_dt(r.get("wafer_end_time") or r.get("batch_start")) for r in entry.get("rows") or ()]
+    ts = [t for t in ts if t]
+    return max(ts) if ts else dt.datetime.fromtimestamp(float(entry.get("seen", 0) or 0))
+
+
+def _validate_rebuild(old: dict, cand: dict, plan, n_new: int) -> List[str]:
+    """후보 캐시를 원 캐시 자리에 놓아도 되는가. 이유 목록이 비어 있으면 통과.
+
+    거부하는 경우(이력 소실을 막는 최소 조건): 장비를 하나도 나열하지 못했는데 원 캐시에는 이력이 있다 /
+    Report 를 찾았는데 하나도 읽지 못했다(NAS·파서가 통째로 깨진 상황) / 원 캐시에 있던 장비가 후보에서 통째로 사라졌다."""
+    reasons: List[str] = []
+    listed_ok = [d for d, dm, _p, _k in plan if not dm["error"]]
+    found = sum(len(pick) for _d, _dm, pick, _k in plan)
+    if old["reports"] and not listed_ok:
+        reasons.append("장비를 하나도 나열하지 못했습니다")
+    if found and not n_new:
+        reasons.append(f"Report {found}개를 찾았지만 하나도 읽지 못했습니다")
+    old_ids = {str(e.get("device_id")) for e in old["reports"].values() if e.get("device_id")}
+    new_ids = {str(e.get("device_id")) for e in cand["reports"].values() if e.get("device_id")}
+    lost = sorted(old_ids - new_ids)
+    if lost:
+        names = {str(d["id"]): str(d["name"]) for d in listed_ok}
+        # 나열에 성공했고 파일이 하나도 없던 장비(NAS 에서 정리됨)는 소실이 아니라 현실이다 — 찾은 파일이 있는데 항목이 없는 경우만 거부
+        found_by = {str(d["id"]): len(pick) for d, _dm, pick, _k in plan}
+        lost = [i for i in lost if found_by.get(i, 0)]
+        if lost:
+            reasons.append("이력이 통째로 사라진 장비: " + ", ".join(names.get(i, i) for i in lost))
+    return reasons
 
 
 def _mark_device_status(dev_meta: List[dict], rows: List[dict]) -> None:
@@ -1253,10 +1517,19 @@ def _embed_rows(rows: List[dict]) -> dict:
             "pool": pool, "rows": out}
 
 
+#: `write_html(..., warnings=[])` 에 쌓이는 부가 산출물 경고의 종류 — CSV 가 잠겨 있어(Excel) 못 쓴 경우.
+WARN_CSV = "csv"
+
+
 def write_html(cfg: dict, rows: List[dict], dev_meta: List[dict], errors: List[dict], started: float, *,
                mode: str = "auto", log: Optional[LogFn] = None, progress: Optional[ProgressFn] = None,
-               timing: Optional[dict] = None) -> str:
-    """template.html 에 데이터를 넣어 출력 폴더에 HTML 한 장을 쓴다. 임시 파일에 쓴 뒤 교체(원자적)."""
+               timing: Optional[dict] = None, warnings: Optional[List[dict]] = None) -> str:
+    """template.html 에 데이터를 넣어 출력 폴더에 HTML 한 장을 쓴다. 고유 임시 파일에 쓴 뒤 교체(원자적), 실패하면 자기 임시 파일만 지운다.
+
+    HTML 이 **주 산출물**이고 CSV 는 부가 산출물이다(C06). CSV 를 못 쓰는 OS 오류(Excel 이 열어 둔 파일에 `os.replace` →
+    PermissionError 등)는 수집을 실패로 만들지 않는다 — `warnings` 리스트를 주면 `{"kind": WARN_CSV, "path", "error", "html"}` 를
+    넣어 주고 HTML 경로를 정상 반환한다(리스트를 안 주면 로그만 남긴다). 프로그래밍 오류(OSError 가 아닌 것)는 그대로 올린다.
+    HTML 쓰기 실패는 여전히 예외다."""
     nas_guard.check_cfg(cfg)  # ★ NAS 아래에는 절대 쓰지 않는다
     if progress:
         progress(0, 0, i18n.KO.COLLECT_PHASE_WRITE)
@@ -1283,25 +1556,50 @@ def write_html(cfg: dict, rows: List[dict], dev_meta: List[dict], errors: List[d
     out = tpl.replace("__DATA__", data, 1)
     os.makedirs(cfg["output_dir"], exist_ok=True)
     target = os.path.join(cfg["output_dir"], cfg["output_name"])
-    tmp = target + ".tmp"
-    with open(tmp, "w", encoding="utf-8") as f:
-        f.write(out)
-    os.replace(tmp, target)
+    tmp = _unique_tmp(target)
+    try:
+        with open(tmp, "w", encoding="utf-8") as f:
+            f.write(out)
+            f.flush()
+            os.fsync(f.fileno())
+        os.replace(tmp, target)
+    finally:
+        if os.path.isfile(tmp):                     # 자기가 만든 임시 파일만 지운다(원본에는 손대지 않는다)
+            try:
+                os.remove(tmp)
+            except OSError:
+                pass
     _say(log, f"HTML 저장: {target} ({len(out) // 1024} KB)")
     if cfg.get("write_csv"):
-        _write_csv(cfg, os.path.splitext(target)[0] + ".csv", rows, log)
+        csv_path = os.path.splitext(target)[0] + ".csv"
+        try:
+            _write_csv(cfg, csv_path, rows, log)
+        except OSError as ex:                     # NasWriteRefused 는 RuntimeError 라 여기 걸리지 않는다(그대로 올라간다)
+            warn = {"kind": WARN_CSV, "path": csv_path, "error": f"{type(ex).__name__}: {ex}", "html": target}
+            _say(log, f"CSV 저장 실패(HTML 은 정상 저장됨): {csv_path} — {warn['error']}. "
+                      f"Excel 등에서 열려 있으면 닫고 다시 수집하세요")
+            if warnings is not None:
+                warnings.append(warn)
     if progress:
         progress(1, 1, i18n.KO.COLLECT_PHASE_DONE)
     return target
 
 
 def _write_csv(cfg: dict, path: str, rows: List[dict], log: Optional[LogFn] = None) -> None:
+    """CSV 는 사람이 읽는 부가 산출물 — 고유 임시 파일에 쓰고 교체하며, 실패하면(Excel 잠금) 자기 임시 파일만 지우고 OSError 를 올린다."""
     nas_guard.check_cfg(cfg)  # ★ NAS 아래에는 절대 쓰지 않는다
     nas_guard.assert_local(path, nas_guard.roots_for_cfg(cfg))
-    tmp = path + ".tmp"
-    with open(tmp, "w", encoding="utf-8-sig", newline="") as f:
-        w = csv.DictWriter(f, fieldnames=OUT_COLS)
-        w.writeheader()
-        w.writerows(rows)
-    os.replace(tmp, path)
+    tmp = _unique_tmp(path)
+    try:
+        with open(tmp, "w", encoding="utf-8-sig", newline="") as f:
+            w = csv.DictWriter(f, fieldnames=OUT_COLS)
+            w.writeheader()
+            w.writerows(rows)
+        os.replace(tmp, path)
+    finally:
+        if os.path.isfile(tmp):                     # 자기가 만든 임시 파일만 지운다(원본에는 손대지 않는다)
+            try:
+                os.remove(tmp)
+            except OSError:
+                pass
     _say(log, f"CSV 저장: {path}")

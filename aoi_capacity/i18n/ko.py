@@ -79,10 +79,18 @@ DEV_EMPTY_HINT = "장비가 없습니다. '행 추가' 또는 '예시 목록 불
 COLLECT_PAGE_TITLE = "수집"
 COLLECT_PLAN_FIRST_FMT = "처음 수집: 모든 장비의 최근 {days}일 Report 를 전부 읽습니다. 장비 수에 따라 몇 분 걸릴 수 있습니다."
 COLLECT_PLAN_INCR_FMT = "증분 수집: 마지막으로 가져온 이후 새로 생긴 Report 만 읽습니다 (알고 있는 장비 {n}대)."
-COLLECT_PLAN_BACKFILL_FMT = "과거 이력 다시 채우기: 최근 {days}일 Report 를 전부 다시 읽습니다."
-COLLECT_PLAN_FULL_FMT = "캐시를 버리고 최근 {days}일 Report 를 처음부터 다시 읽습니다."
-COLLECT_OPT_BACKFILL = "과거 이력 다시 채우기 (backfill)"
-COLLECT_OPT_FULL = "캐시 무시하고 전부 다시 읽기"
+# ── 수집 모드(D60): 문구는 코드가 실제로 하는 일과 같아야 한다 ────────────────────────────
+#   backfill = 검색 창만 넓힌다(캐시된 파일은 건너뛴다) · refresh = 창 안의 캐시된 Report 도 다시 읽는다(창 밖 이력 보존)
+#   full/rebuild = 보관 기간 전부를 새 후보 캐시에 모아 검증 뒤 교체(실패하면 기존 캐시 유지, 이력 삭제 없음)
+COLLECT_PLAN_BACKFILL_FMT = ("검색 창 넓히기: 최근 {days}일 안에서 아직 캐시에 없는 Report 를 찾아 읽습니다. "
+                             "이미 캐시된 Report(수정시각 같음)는 건너뜁니다 — 다시 읽으려면 '최근 N일 다시 읽기' 를 켜세요.")
+COLLECT_PLAN_FULL_FMT = ("전체 다시 만들기: 보관 기간 {days}일 안의 Report 를 전부 새 후보 캐시에 모아 검증한 뒤 바꿉니다. "
+                         "검증에 실패하면 기존 캐시를 그대로 둡니다(이력이 지워지지 않습니다).")
+COLLECT_PLAN_REFRESH_FMT = ("최근 {days}일 다시 읽기: 캐시된 Report {reread}개를 다시 읽고, 창 밖 {keep}개는 그대로 둡니다. "
+                            "새 Report 도 함께 읽습니다. 다시 읽다 실패한 Report 는 이전 결과를 유지합니다.")
+COLLECT_OPT_BACKFILL = "검색 창 넓히기 (backfill · 캐시된 파일은 건너뜀)"
+COLLECT_OPT_FULL = "전체 다시 만들기 (검증 뒤 교체 · 이력 보존)"
+COLLECT_OPT_REFRESH_FMT = "최근 {days}일 다시 읽기(이력 보존)"
 COLLECT_OPT_RECOVER = "시간 미확인 Report 다시 읽기"
 COLLECT_PLAN_RECOVER_FMT = "누락 복구: INI 를 못 찾았던 Report {n}개를 다시 읽습니다. 새 Report 도 함께 읽습니다."
 COLLECT_PLAN_RECOVER_NONE = "누락 복구: 다시 읽을 Report 가 없습니다. 새 Report 만 읽습니다."
@@ -106,6 +114,10 @@ COLLECT_DONE_WITH_ERRORS_TITLE = "수집은 끝났지만 일부 문제가 있습
 COLLECT_DONE_UNREACHABLE_FMT = "접근 못 함 {n}대: {names}"
 COLLECT_DONE_PARTIAL_FMT = "일부 Report 실패 {n}대: {names} (Report {reports}개)"
 COLLECT_DONE_SEE_LOG = "자세한 내용은 로그를 보세요."
+# ── 부분 성공(C06)·캐시 손상(C15) 안내 — 수집은 끝났고 HTML 은 정상이다 ──────────────────────
+COLLECT_DONE_CSV_FAILED_FMT = ("CSV 는 저장하지 못했습니다(HTML 결과 화면은 정상 저장됨): {path}\n{error}\n"
+                               "Excel 등에서 열려 있으면 닫고 다시 수집하세요. 이전 CSV 는 그대로 남아 있습니다.")
+COLLECT_CACHE_CORRUPT_FMT = ("캐시 파일을 읽을 수 없어 처음부터 다시 수집했습니다. 손상된 원본은 지우지 않고 보존했습니다: {path}")
 COLLECT_CANCELLED_TOAST = "수집을 중지했습니다. 이전 결과가 그대로 남아 있습니다."
 COLLECT_FAILED_TITLE = "수집 실패"
 COLLECT_FAILED_FMT = "수집 중 오류가 났습니다.\n\n{detail}"
