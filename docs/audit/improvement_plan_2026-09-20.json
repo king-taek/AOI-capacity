@@ -1,0 +1,2618 @@
+{
+  "title": "AOI Capacity — 근거를 보존하는 계산 모델·수집·배포 개선 실행 프롬프트",
+  "schema_version": "1.0",
+  "created_at": "2026-09-20",
+  "language": "ko-KR",
+  "author": {
+    "identity": "OpenAI ChatGPT/Codex AI",
+    "role": "저장소 검토 및 Claude Code용 개선안 작성",
+    "disclosure": "이 문서는 AI가 작성한 실행 제안이다. 원 감사의 측정치, 직접 재현한 결과, 설계 제안을 구분했다."
+  },
+  "verdict": "기능 추가보다 시간 중복 제거·자정 분할·재수집 이력 보존·검증된 업데이트를 먼저 고친다. 기존 51개를 모두 추적하고 직접 확인한 추가 결함 2개를 포함한다. 규칙 변경은 전후 수치와 영향 목록을 먼저 만든 뒤 적용한다.",
+  "recipient_instruction": "당신은 이 저장소를 수정하는 Claude Code다. 아래 요구를 실제 코드·검증 결과·진행상황 문서로 완성하라. 첫 응답을 계획 설명만으로 끝내지 말고 읽기·재현·안전한 수정부터 수행하라. 사용자가 확정한 의미론은 임의로 바꾸지 말고, 본 문서의 recommended_policy를 확정된 사용자 결정으로 기록하지 마라.",
+  "scope": {
+    "deliverable": "기존 제품의 단계별 개선",
+    "coverage": {
+      "original_findings": 51,
+      "additional_confirmed_findings": 2
+    },
+    "out_of_scope": [
+      "웹 서버·localhost·QtWebEngine 도입",
+      "자동 주기 수집",
+      "NAS 쓰기·허용 범위 밖 탐색",
+      "전일·전주·전월 대비 UI 재도입",
+      "이번 프롬프트만을 근거로 main push·merge·release·현장 전체 재수집·샘플 삭제 실행"
+    ],
+    "note": "현재 작성 작업은 분석과 JSON 생성까지다. 저장소 코드·설정·원격 브랜치는 변경하지 않았다."
+  },
+  "evidence_context": {
+    "repository": "https://github.com/king-taek/AOI-capacity",
+    "branch_observed": "main",
+    "head_observed": "f3a79bd13480f283282cc308ab591774e20f1bb8",
+    "audit_base_commit": "e2ab0f586755cca84058a7a76419a1b630ca9368",
+    "head_relation": "관찰한 main의 마지막 커밋은 원 감사 JSON을 추가한 커밋이며 부모가 감사 기준 커밋이다.",
+    "attachment": {
+      "name": "improvements_2026-09-20.json",
+      "sha256": "dcdf6a9474518224a7a74318a3b8dd9836817c00dc33a2a2206b8edbdcd941a1",
+      "reported_counts": {
+        "total": 51,
+        "by_severity": {
+          "high": 6,
+          "medium": 20,
+          "low": 25
+        },
+        "by_area": {
+          "D": 17,
+          "C": 16,
+          "S": 18
+        },
+        "needs_user_decision": 18
+      }
+    },
+    "examined_source_paths": [
+      ".github/workflows/graphify.yml",
+      "CLAUDE.md",
+      "aoi_capacity/cli.py",
+      "aoi_capacity/collect.py",
+      "aoi_capacity/devices.py",
+      "aoi_capacity/ui/assets/template.html",
+      "aoi_capacity/utils/prefs.py",
+      "aoi_capacity/utils/updater.py",
+      "dev/requirements-dev.txt",
+      "dev/tests/js_harness.js",
+      "dev/tests/sample_rows.py",
+      "dev/tests/test_dashboard_js.py",
+      "dev/tests/test_template_contract.py",
+      "dev/tests/test_update_payload.py",
+      "dev/tools/measure.py",
+      "pytest.ini",
+      "scripts/build.py",
+      "scripts/exe_launcher.py",
+      "scripts/make_release_zip.py",
+      "진행상황.md"
+    ],
+    "direct_execution": {
+      "runtime": "Node v24.19.0; Python 표준 라이브러리",
+      "model_method": "저장소 template.html을 저장소 js_harness.js로 실행한 합성 fixture 8개. pytest 전체 실행이 아니다.",
+      "updater_method": "현행 _promote_in_place 함수의 AST만 추출해 임시 폴더에서 shutil.move 실패를 주입했다.",
+      "results": [
+        {
+          "case": "D01_mixed_estimated_report",
+          "days": [
+            "2026-09-18"
+          ],
+          "detail": {
+            "2026-09-18": {
+              "AOI-1": {
+                "r": 70,
+                "d": 60,
+                "x": 0,
+                "s": 0,
+                "t": 0,
+                "den": 540,
+                "e": 0,
+                "ne": 2,
+                "seg": [
+                  [
+                    420,
+                    430,
+                    0
+                  ],
+                  [
+                    480,
+                    540,
+                    4
+                  ],
+                  [
+                    480,
+                    540,
+                    0
+                  ]
+                ]
+              }
+            }
+          }
+        },
+        {
+          "case": "D02_active_scan_at_error_end",
+          "days": [
+            "2026-09-18"
+          ],
+          "detail": {
+            "2026-09-18": {
+              "AOI-1": {
+                "r": 60,
+                "d": 0,
+                "x": 3,
+                "s": 237,
+                "t": 0,
+                "den": 750,
+                "e": 1,
+                "ne": 1,
+                "seg": [
+                  [
+                    480,
+                    540,
+                    0
+                  ],
+                  [
+                    510,
+                    513,
+                    1
+                  ]
+                ]
+              },
+              "AOI-2": {
+                "r": 10,
+                "d": 0,
+                "x": 0,
+                "s": 0,
+                "t": 0,
+                "den": 750,
+                "e": 0,
+                "ne": 0,
+                "seg": [
+                  [
+                    740,
+                    750,
+                    0
+                  ]
+                ]
+              }
+            }
+          }
+        },
+        {
+          "case": "D04_cross_midnight",
+          "days": [
+            "2026-09-18"
+          ],
+          "detail": {
+            "2026-09-18": {
+              "AOI-1": {
+                "r": 10,
+                "d": 0,
+                "x": 0,
+                "s": 0,
+                "t": 0,
+                "den": 1440,
+                "e": 0,
+                "ne": 0,
+                "seg": [
+                  [
+                    1430,
+                    1440,
+                    0
+                  ]
+                ]
+              }
+            }
+          }
+        },
+        {
+          "case": "D03_early_last_record",
+          "days": [
+            "2026-09-18"
+          ],
+          "detail": {
+            "2026-09-18": {
+              "AOI-1": {
+                "r": 10,
+                "d": 0,
+                "x": 0,
+                "s": 0,
+                "t": 0,
+                "den": 15,
+                "e": 0,
+                "ne": 0,
+                "seg": [
+                  [
+                    5,
+                    15,
+                    0
+                  ]
+                ]
+              }
+            }
+          }
+        },
+        {
+          "case": "N01_skipped_is_not_pass",
+          "days": [
+            "2026-09-18"
+          ],
+          "detail": {
+            "2026-09-18": {
+              "AOI-1": {
+                "r": 10,
+                "d": 10,
+                "x": 0,
+                "s": 0,
+                "t": 0,
+                "den": 540,
+                "e": 0,
+                "ne": 0,
+                "seg": [
+                  [
+                    420,
+                    430,
+                    0
+                  ],
+                  [
+                    480,
+                    490,
+                    4
+                  ]
+                ]
+              }
+            }
+          }
+        },
+        {
+          "case": "N01_simultaneous_order_a",
+          "days": [
+            "2026-09-18"
+          ],
+          "detail": {
+            "2026-09-18": {
+              "AOI-1": {
+                "r": 10,
+                "d": 10,
+                "x": 0,
+                "s": 0,
+                "t": 0,
+                "den": 540,
+                "e": 0,
+                "ne": 0,
+                "seg": [
+                  [
+                    480,
+                    490,
+                    0
+                  ],
+                  [
+                    480,
+                    490,
+                    4
+                  ]
+                ]
+              }
+            }
+          }
+        },
+        {
+          "case": "N01_simultaneous_order_b",
+          "days": [
+            "2026-09-18"
+          ],
+          "detail": {
+            "2026-09-18": {
+              "AOI-1": {
+                "r": 10,
+                "d": 10,
+                "x": 0,
+                "s": 0,
+                "t": 0,
+                "den": 540,
+                "e": 0,
+                "ne": 0,
+                "seg": [
+                  [
+                    480,
+                    490,
+                    0
+                  ],
+                  [
+                    480,
+                    490,
+                    4
+                  ]
+                ]
+              }
+            }
+          }
+        },
+        {
+          "case": "D01_same_kind_overlap_interleaved",
+          "days": [
+            "2026-09-18"
+          ],
+          "detail": {
+            "2026-09-18": {
+              "AOI-1": {
+                "r": 120,
+                "d": 0,
+                "x": 5,
+                "s": 5,
+                "t": 0,
+                "den": 560,
+                "e": 1,
+                "ne": 0,
+                "seg": [
+                  [
+                    480,
+                    540,
+                    0
+                  ],
+                  [
+                    490,
+                    495,
+                    1
+                  ],
+                  [
+                    500,
+                    560,
+                    0
+                  ]
+                ]
+              }
+            }
+          }
+        }
+      ],
+      "rollback_result": {
+        "case": "N02_promotion_rollback",
+        "main_exists_after_failure": false,
+        "old_backup_exists": true,
+        "method": "current function extracted via AST; move failure injection; temporary directories only"
+      }
+    },
+    "not_independently_verified": [
+      "30일치 gzip 실데이터 전체 재실행",
+      "Chromium 실측·키보드·hover·화면 캡처",
+      "Windows SMB·실장비·사내 인증서·exe 실제 업데이트",
+      "첨부의 218MB 메모리·7.3초 테스트 시간·483시간 겹침 집계"
+    ],
+    "numeric_evidence_rule": "원 감사 수치는 reported_evidence다. 28,997분 겹침을 실제 회복 가능한 생산 시간 또는 확정 가동률 오차로 표현하지 마라. 겹침 정의와 분모·추정 정책에 따라 영향이 달라진다.",
+    "source_links": [
+      {
+        "path": "CLAUDE.md",
+        "url": "https://github.com/king-taek/AOI-capacity/blob/f3a79bd13480f283282cc308ab591774e20f1bb8/CLAUDE.md"
+      },
+      {
+        "path": "진행상황.md",
+        "url": "https://github.com/king-taek/AOI-capacity/blob/f3a79bd13480f283282cc308ab591774e20f1bb8/진행상황.md"
+      },
+      {
+        "path": "aoi_capacity/ui/assets/template.html",
+        "url": "https://github.com/king-taek/AOI-capacity/blob/f3a79bd13480f283282cc308ab591774e20f1bb8/aoi_capacity/ui/assets/template.html"
+      },
+      {
+        "path": "aoi_capacity/collect.py",
+        "url": "https://github.com/king-taek/AOI-capacity/blob/f3a79bd13480f283282cc308ab591774e20f1bb8/aoi_capacity/collect.py"
+      },
+      {
+        "path": "aoi_capacity/utils/updater.py",
+        "url": "https://github.com/king-taek/AOI-capacity/blob/f3a79bd13480f283282cc308ab591774e20f1bb8/aoi_capacity/utils/updater.py"
+      },
+      {
+        "path": "pytest.ini",
+        "url": "https://github.com/king-taek/AOI-capacity/blob/f3a79bd13480f283282cc308ab591774e20f1bb8/pytest.ini"
+      },
+      {
+        "path": "docs/audit/improvements_2026-09-20.json",
+        "url": "https://github.com/king-taek/AOI-capacity/blob/f3a79bd13480f283282cc308ab591774e20f1bb8/docs/audit/improvements_2026-09-20.json"
+      }
+    ],
+    "confidence": {
+      "percent": 92,
+      "meaning": "검토 근거와 실행안의 타당성에 대한 정성 판단이며 성공 확률이 아니다.",
+      "limits": "대규모 실데이터·Windows·브라우저 검증 전에는 성능 개선률과 현장 결과를 보증하지 않는다."
+    }
+  },
+  "audit_corrections": [
+    {
+      "id": "AC01",
+      "related": [
+        "S11"
+      ],
+      "finding": "pytest.ini addopts는 -q뿐이므로 기본 pytest는 slow를 제외하지 않는다. CLAUDE.md도 기본 명령은 전체 실행이다. 원 감사의 기본 제외 주장은 빠른 실행 명령에 한정해야 한다.",
+      "instruction": "기본 설정을 잘못된 전제 아래 변경하지 말고 CI 필수 실행과 문서의 빠른 명령을 분리한다."
+    },
+    {
+      "id": "AC02",
+      "related": [
+        "D01"
+      ],
+      "finding": "겹침은 다른 종류뿐 아니라 같은 종류에도 발생한다. Scan 사이에 Error가 끼면 인접 항목만 합치는 구현이 같은 Scan 구간을 두 번 센다.",
+      "instruction": "종류별 union과 최종 배타적 분할을 별도 단계로 구현한다. 배치 다수결로 Scan/Rescan 시간을 확정하지 않는다."
+    },
+    {
+      "id": "AC03",
+      "related": [
+        "C03"
+      ],
+      "finding": "현행 device_id 자체가 경로 기반이다. device_id+파일명으로 바꾸기만 하면 드라이브 재매핑 문제는 남는다. 장비 표시명+파일명도 충돌할 수 있다.",
+      "instruction": "경로와 독립적인 안정 장비 키 및 검증된 경로 별칭, Report 상대경로·콘텐츠 지문으로 식별한다. 추측 병합은 금지한다."
+    },
+    {
+      "id": "AC04",
+      "related": [
+        "C01"
+      ],
+      "finding": "zip 최상위 폴더명·VERSION·같은 비검증 채널에서 받은 SHA256은 작성자 인증을 제공하지 않는다.",
+      "instruction": "검증된 TLS와 고정 커밋 URL을 기본으로 삼는다. 서명을 추가한다면 별도로 신뢰한 키로 검증하며 경고 확인만으로 비검증 코드 실행을 허용하지 않는다."
+    },
+    {
+      "id": "AC05",
+      "related": [
+        "S02"
+      ],
+      "finding": "CI 파일 추가만으로 main HEAD 자동 배포가 안전해지지 않는다. 테스트가 실행 중이거나 실패해도 업데이터는 새 SHA를 볼 수 있다.",
+      "instruction": "현재 배포 경로의 검사와 배포 승격을 연결하고 미검증 SHA 적용을 막는다. 정확한 성공 SHA 기준을 사용한다."
+    },
+    {
+      "id": "AC06",
+      "related": [
+        "D04",
+        "D17"
+      ],
+      "finding": "날짜별 행 복제만 하면 Error·Wafer·회귀 표본까지 중복된다. 동일성 테스트는 공유 버그를 검출하지 못한다.",
+      "instruction": "사건·시도·시간 조각을 분리하고 독립 기대값과 보존 법칙으로 검증한다."
+    },
+    {
+      "id": "AC07",
+      "related": [
+        "C02",
+        "C13"
+      ],
+      "finding": "--full 후 이력이 삭제되는 문제를 안내문만으로 해결하거나 잘못된 수집 범위를 기본 전체 범위로 바꾸면 위험이 남는다.",
+      "instruction": "비파괴 refresh와 원자적 캐시 교체를 먼저 제공한다. 범위·경로 오류는 fail closed, 성능 설정만 명시적 정규화한다."
+    },
+    {
+      "id": "AC08",
+      "related": [
+        "D13"
+      ],
+      "finding": "INI 없음 행 수와 추정 시간 비율은 다른 단위다. 사건 표식의 3분과 화면 병합 8분도 실제 점유시간이 아니다.",
+      "instruction": "행 품질·시간 근거·시각화 표식을 별도 지표로 관리한다."
+    }
+  ],
+  "execution_contract": {
+    "entry": [
+      "git status와 현재 HEAD를 기록한다. 진행상황.md → CLAUDE.md → 해당 하위 AGENTS.md가 있으면 읽는다.",
+      "본 문서의 SHA와 다르면 각 항목의 symbol·fixture로 재검증한다. 이미 해결된 항목은 근거를 남기고 중복 수정하지 않는다.",
+      "D48·D52·D53·D54가 과거 문구보다 최신이다. 특히 TEST 부분 문자열 규칙(D53)을 옛 토큰 규칙으로 되돌리지 않는다.",
+      "첨부 원본을 다시 올려 달라고 요구할 필요 없이 이 JSON의 원 항목·보고 근거·수정안을 사용한다. 실제 샘플은 저장소 경로에서 확인한다."
+    ],
+    "preserve": [
+      "NAS 읽기 전용 및 쓰기 함수의 nas_guard",
+      "30대 허용 목록과 범위 밖 캐시 보존",
+      "정확한 INI 경로만 확인하며 Scanresult 재귀 탐색 금지",
+      "Python은 수집, 정적 단일 HTML은 표시; 외부 폰트·CDN·fetch·자동 NAS 읽기 0",
+      "수집 시각 기준 재현성, 라이트 결과 화면, 현재 4탭 구조",
+      "Test는 가동률 분자와 Error 집계에서 제외한다는 확정 범위를 재확인하되 D53 부분 문자열 규칙은 유지",
+      "원문 Job·Lot·Report·status 보존, Job 정규화는 집계 전용",
+      "UI 문자열은 ko.py, 결과 HTML 문구는 기존 template 상수; 원천 데이터와 분리",
+      "MODEL_VERSION·ROW_SCHEMA_VERSION·PARSER_VERSION·캐시 형식 버전은 바뀐 계층만 올림",
+      "사용자 파일·샘플·캐시를 무단 삭제하지 않음"
+    ],
+    "autonomy": "구현 세부 선택과 안전한 수정에는 반복 질문하지 않는다. 결정을 바꾸는 항목만 decision_queue의 전후 증거를 만든 뒤 묶어서 질문한다. 응답이 없으면 호환 동작을 유지하며 나머지 작업을 완료한다.",
+    "approval_boundary": "새로운 제품 의미론·배포 채널 선택·보존 데이터 삭제는 이 개선안의 추천만으로 확정하지 않는다. 이번 문서에 없는 기존 세션의 명시적 사용자 승인이 확인되면 재질문하지 않는다.",
+    "commits": "작은 기능 단위의 한국어 커밋에 진행상황.md를 동반한다. 사용자 작업을 reset/overwrite하지 않는다. 현재 요청만으로 PR·main merge·배포를 수행하지 않는다.",
+    "stop_conditions": [
+      "범위 밖 NAS 접근 또는 NAS 쓰기가 감지되면 해당 작업 중단",
+      "데이터 손실·원문 변경·이력 소실이면 승격 중단",
+      "필수 테스트 skip·미검증 업데이트·서명/해시 불일치면 배포 후보 생성 중단",
+      "불변식 실패를 cap·반올림·fixture 수정으로 감추지 않음"
+    ],
+    "done": "각 원 항목 51개와 추가 2개에 implemented / already_fixed / blocked_decision / deferred_with_evidence 중 하나와 근거를 남겨라. 검사 미실행을 통과로 적지 마라."
+  },
+  "decision_queue": [
+    {
+      "id": "Q_TIME",
+      "affects": [
+        "D01",
+        "D02",
+        "D13"
+      ],
+      "question": "추정 Scan/Rescan이 섞이거나 확정 기록끼리 충돌할 때 시간 배분을 어떻게 보여줄까요?",
+      "recommended": "확정 구간 우선, 배치 추정은 남은 시간만 사용. Scan/Rescan을 확정 못 하는 생산 시간은 별도 근거로 보존하고 총 가동에만 포함. 시각 없는 Error의 3분은 표식으로만 처리.",
+      "alternatives": [
+        "Error를 항상 최우선으로 배타 배정하는 단순 정책",
+        "현행 수치 유지 + 겹침/추정 진단만 추가"
+      ],
+      "before_question": "직접 fixture와 30일 샘플에서 정책별 장비-일 차이, 충돌 목록, 시각 없는 Error 시간 변화 및 화면 한 장을 만든다.",
+      "without_answer": "진단 및 shadow 계산만 구현; 현재 제품 수치와 용어 유지.",
+      "warning": "다수결·Wafer 비례 배분은 실제 시간을 안다는 뜻이 아니므로 기본안으로 채택하지 않는다."
+    },
+    {
+      "id": "Q_DEN",
+      "affects": [
+        "D03",
+        "D06"
+      ],
+      "question": "수집일 분모를 장비별 마지막 기록으로 유지할지, 전체 장비 공통 관측 종료로 맞출지 정해 주세요.",
+      "recommended": "정상 수집 장비는 공통 데이터 관측 종료 시각 사용. 수집 실패·이력 공백 장비는 상태를 구분해 평균에서 제외하고 유효 장비 수 표시.",
+      "alternatives": [
+        "현행 장비별 마지막 기록 유지",
+        "수집 완료 시각 사용 — 마지막 스캔 기준과 다르므로 별도 승인 필요"
+      ],
+      "before_question": "장비별 분모·가동분·가동률, 단순평균과 가중평균, 제외 장비 수를 나란히 제시.",
+      "without_answer": "현행 D17·D46 유지. 날짜 누락을 0으로 바꾸지 않는다."
+    },
+    {
+      "id": "Q_REFRESH",
+      "affects": [
+        "C02"
+      ],
+      "question": "안전한 재읽기는 신규 --refresh-window로 제공하고 기존 --full 의미는 유지할까요?",
+      "recommended": "--refresh-window와 --rebuild-all을 분리. GUI 권장 동작은 이력 보존 refresh. --full은 호환 별칭으로 유지하되 새 캐시 검증 후만 교체.",
+      "alternatives": [
+        "--backfill을 강제 재읽기로 변경하되 CLI 호환성 마이그레이션",
+        "--full을 이력 보존 동작으로 변경하고 문서·스크립트 일괄 갱신"
+      ],
+      "before_question": "retention 90일/backfill 30일에서 각 모드가 읽고 보존하는 Report 수와 dry-run 계획을 만든다.",
+      "without_answer": "새 refresh 기능을 추가하고 기존 full을 현장에서 실행하지 않는다."
+    },
+    {
+      "id": "Q_RELEASE",
+      "affects": [
+        "C01",
+        "S02",
+        "S16"
+      ],
+      "question": "배포 대상을 main에서 테스트 성공한 SHA로 제한할지, 검증된 release manifest로 승격할지 정해 주세요.",
+      "recommended": "초기에는 정확한 SHA의 필수 CI 성공 확인, 안정화 후 승인된 manifest 채널로 분리. 검증 실패·네트워크 차단 때 현재 버전 유지.",
+      "alternatives": [
+        "검증된 SHA만 지정하는 수동 오프라인 배포",
+        "검증된 release manifest 채널로 바로 전환"
+      ],
+      "before_question": "사내 프록시에서 사용하는 truststore 경로와 main 보호·Actions 권한·현재 런처 호환성을 읽기 전용으로 확인하고 후보 패키지를 준비.",
+      "without_answer": "TLS·SHA 고정·payload·롤백 수정과 CI 작성은 완료. 배포 채널·서버 설정 변경은 보류."
+    },
+    {
+      "id": "Q_REPORT",
+      "affects": [
+        "D07",
+        "D14"
+      ],
+      "question": "리포트에 미표기 Job도 포함하고 경보 문턱·층 정보를 설정에서 받도록 확장할까요?",
+      "recommended": "현재 표기명 보기 기본 유지, 전체 Job 보기 추가. 임계값 기본 40%·3건 유지, 층은 명시적 meta 및 미지정 상태.",
+      "alternatives": [
+        "현재 표기명 21개만 유지하고 포함 비율만 표시"
+      ],
+      "before_question": "현재 그룹 수·누락 비율·검색/필터 시안을 보여 준다.",
+      "without_answer": "현재 필터 유지, 범위 설명과 누락 요약을 명확히 한다."
+    },
+    {
+      "id": "Q_ARCHIVE",
+      "affects": [
+        "S07",
+        "S08",
+        "S09",
+        "S15"
+      ],
+      "question": "옛 화면·샘플은 삭제 없이 보관 폴더로 이동하고 gzip으로 줄일까요?",
+      "recommended": "원문 보존 archive + 링크 갱신 + 압축 전후 SHA256 확인. 생성 가능 pyc만 추적 제외.",
+      "alternatives": [
+        "파일 위치 유지, STATUS.md와 배포 제외만 적용"
+      ],
+      "before_question": "참조 검색 결과와 이동 계획을 만든다.",
+      "without_answer": "삭제·이동 없이 상태 표기 및 배포 제외만 수행."
+    }
+  ],
+  "technical_design": {
+    "time_model": {
+      "target_symbols": [
+        "template.html:buildModel",
+        "dayStats",
+        "S.segsOf",
+        "S.util",
+        "S.fleetUtil",
+        "reportHtml"
+      ],
+      "data_layers": [
+        {
+          "layer": "source_row",
+          "purpose": "원문 24열·수집 근거·원본 시도 ID 보존. 수정·표식 때문에 원문 시각을 채우지 않는다."
+        },
+        {
+          "layer": "attempt",
+          "purpose": "Report와 원래 Wafer 시도. Scan/Rescan·Job 정규화·INI 소유권 판정은 날짜 분할 전에 한 번만 수행."
+        },
+        {
+          "layer": "event",
+          "purpose": "Error 사건. event_id=(stable_device_key, report_identity, cause). 발생 건수와 영향 Slot/Wafer 수를 분리."
+        },
+        {
+          "layer": "candidate_interval",
+          "purpose": "start/end·state·basis·source_ids·report_id를 가진 절대 구간. basis는 MEASURED_INI / MEASURED_FAILED_BATCH / ESTIMATED_PASS_BATCH / INFERRED_ERROR_WAIT / VISUAL_MARKER로 분리."
+        },
+        {
+          "layer": "canonical_interval",
+          "purpose": "동일 장비의 시간축을 중복 없는 반열린 구간 [start,end)으로 분해한 결과. winner와 suppressed source 및 reason을 연결."
+        },
+        {
+          "layer": "day_slice",
+          "purpose": "자정별 표시 조각. 원 event_id/attempt_id를 유지하며 사건 수·회귀 표본을 새로 만들지 않는다."
+        }
+      ],
+      "algorithm": [
+        "날짜 파서는 형식별로 숫자 범위를 검증하고 Date 역변환으로 2월 30일·월 13·25시의 자동 보정을 차단한다. null을 NaN 날짜로 변환하지 않는다.",
+        "Report 식별자와 raw index로 원 시도를 만들고 원문 outcome을 판정한다. INI 소유권은 time_basis/ini_match를 존중한다. STALE 시각을 확정 interval로 되살리지 않는다.",
+        "분할 전 시도 순서를 정한다. 정확히 동일한 시각은 임의 row 순서로 선후를 만들지 않는다. 동시 그룹은 그룹 이전 기록만 보고 분류한 뒤 seen을 갱신한다.",
+        "측정 구간을 먼저 구성한다. Pass 배치 추정 후보는 Report당 최대 한 개이며, 행별 추정 대상 수는 별도 카운터로 남긴다. Report 내부 확정 시간과 다른 Report의 확정 시간에 덮인 부분은 추정분에서 제외한다.",
+        "시각 없는 Error는 event로 남긴다. 3분 사각형은 minimum display width일 뿐으로 분리하는 안을 Q_TIME에서 확인한다. 현재 의미 변경 전에는 기존과 후보 수치를 둘 다 기록한다.",
+        "모든 시작·종료 경계로 sweep-line 분할한다. 확정 근거가 추정보다 우선한다. 같은 근거 수준의 충돌 정책은 Q_TIME으로 고정한다. 추천은 Error > Test > 생산이며 Scan/Rescan 혼재는 production_unclassified로 남긴다.",
+        "생산 미분류 시간은 Pass 근거의 생산 점유를 알지만 Scan/Rescan 비중을 모르는 경우만 허용한다. 출처 불명 충돌은 unknown으로 둔다. 이를 임의로 Scan에 몰거나 50:50으로 나누지 않는다.",
+        "Error 후 대기는 최종 활동 구간에서 산출한다. Error 종료 시 이미 활동 중인 구간이 있으면 그 Error의 후속 대기는 0이다. 없으면 다음 활동 시작까지, 마지막 Error는 min(관측 종료, 해당 날짜 자정)까지만.",
+        "Error 대기 union에서 모든 활동 구간을 빼 중복을 제거한다. 시간은 한 번만 배정하고 여러 Error 유형 사이 배분 합계도 같은 길이여야 한다. 원인 불명 공백을 실제 고장 지속으로 단정하지 않는다.",
+        "반열린 구간을 장비 현지 날짜 경계로 분할한다. 23:50~00:10은 각 날짜 10분이며 00:00 종료는 다음 날에 0길이 조각을 만들지 않는다. 48시간 이상도 반복 분할한다.",
+        "내부는 정수 밀리초 또는 초로 계산하고 합계 후 표시만 분으로 반올림한다. 레거시 3분 시간 병합과 표시용 8분 병합은 각각 명시된 정책으로 격리한다. 8분 병합·min-width가 KPI를 바꿔서는 안 된다. 3분 공백을 포함하는 현행 계산은 shadow diff 후 Q_TIME에 포함한다.",
+        "KPI·타임라인·팝업·리포트는 canonical model을 공유한다. 화면 함수에서 다시 gap·den을 계산하지 않는다. Math.min(100)으로 계산 오류를 숨기지 않는다."
+      ],
+      "proposed_invariants_after_Q_TIME": [
+        "각 장비·날짜에 0 <= start < end <= denominator_end인 canonical interval만 존재한다.",
+        "canonical interval의 내부 교집합 길이는 0이다. 원 후보 겹침은 diagnostics에 보존한다.",
+        "scan+rescan+production_unclassified+test+error+error_wait+idle+unknown = denominator_seconds.",
+        "production = scan+rescan+production_unclassified; utilization=production/denominator. denominator=0이면 null.",
+        "과거 날짜 분모=86400초. 수집일 분모는 Q_DEN 정책이며 미래는 분모 밖. 시간 자체가 없는 장비를 idle=86400으로 채우지 않는다.",
+        "sum(day_slices.duration)=원 interval의 유효 관측 범위 내 duration.",
+        "sum(event_count_by_day)=고유 event_id 수. sum(wafer_count_by_day)=실제 wafer attempt 수. batch/slot 합성행은 Wafer 수에 포함하지 않는다.",
+        "sum(cause error_wait allocation)=error_wait union length. 원문 행이 많다는 이유로 시간이 늘지 않는다.",
+        "행 순서 변경·worker 수 변경·중복 입력 정규화·사본 저장/재열기로 계산 결과가 바뀌지 않는다."
+      ],
+      "diagnostics": [
+        "overlap_union_seconds=동시 후보 수가 2 이상인 구간의 union 길이",
+        "excess_claim_seconds=sum(candidate durations)-union(candidate intervals); overlap_union과 서로 다른 값",
+        "suppressed_seconds_by_basis_and_state",
+        "estimated_only_seconds",
+        "production_unclassified_seconds",
+        "unknown_seconds",
+        "duplicate_report_count",
+        "invalid_time_row_count"
+      ],
+      "versioning": "현행 MODEL_VERSION=2임을 시작 시 다시 확인하고 새 제품 의미론을 활성화할 때 다음 버전으로 올린다. 기존 디자인 동일성은 legacy profile에서만 유지하며 새 모델 정답으로 사용하지 않는다. RULES boolean을 무한 추가하지 말고 이름 있는 model profile로 격리한다.",
+      "time_zone": "현장 시각은 현재 naive 문자열이다. 브라우저 OS timezone에 따라 값이 달라지지 않게 site_timezone 또는 명시적 현지 날짜/초 연산을 도입한다. 한국 현장 24시간 계약은 유지; 다중 시간대·DST 지원은 별도 범위로 두고 무작정 UTC로 읽지 않는다.",
+      "test_error_conflict": "현재 template는 w.c를 w.test보다 먼저 분류하지만 CLAUDE.md의 Test 설명에는 Error 집계 제외가 있다. D53은 TEST 부분 문자열 여부만 확정한다. TEST Lot+원인 Error fixture를 만들어 이 충돌을 Q_TIME 비교에 포함하고, 옛 낱말 판정으로 돌아가거나 제외 정책을 조용히 바꾸지 않는다.",
+      "dedup_and_split_order": "Report/row identity 정규화 → 원 시도 분류 → Error event 식별 → canonical interval → 날짜별 시간 조각 순서다. count의 발생일은 event 최초 유효 발생시각(없으면 batch start)로 고정하고 시각을 전혀 모르면 undated bucket에 보존한다."
+    },
+    "collection_and_identity": {
+      "modes": [
+        {
+          "mode": "incremental",
+          "read": "신규·수정 Report와 기존 복구 정책 대상",
+          "keep": "retention 내 기존 항목"
+        },
+        {
+          "mode": "backfill",
+          "read": "지정 기간까지 검색 확대. 현행 캐시 재읽기 여부는 유지하고 도움말에 명시",
+          "keep": "기존 항목"
+        },
+        {
+          "mode": "refresh_window (신규 제안)",
+          "read": "기간 내 캐시된 Report도 재읽기",
+          "keep": "창 밖 항목과 재읽기 실패한 이전 성공본을 보존"
+        },
+        {
+          "mode": "rebuild_all (신규 제안)",
+          "read": "승인된 retention 전 범위를 새 후보 캐시에 수집",
+          "keep": "원 캐시를 검증·교체 전까지 유지; 범위 밖 캐시와 미접근 장비 이력은 보존"
+        },
+        {
+          "mode": "rederive",
+          "read": "NAS 접근 없이 캐시 원문에서 재분류",
+          "keep": "원문과 이력; 새 필드를 원문에서 복원할 수 없으면 재수집 필요 상태 표시"
+        }
+      ],
+      "stable_identity": "stable_device_key는 장비 설정에서 지속되는 불변 키다. 경로 기반 id는 연결용으로 유지한다. 검증된 drive/UNC 경로 별칭만 같은 장비에 연결한다. Report key=(stable_device_key, normalized_relative_report_path). 같은 key의 내용 변화는 revision이며 같은 파일명이 다른 폴더에 있으면 별개다.",
+      "dedup": "Report를 이미 읽을 때 SHA256을 구해 원문 지문으로 사용한다. 중복 판정 때문에 NAS 전체 파일을 추가 재읽지 않는다. 오래된 캐시에 지문이 없으면 metadata+rows digest를 후보 확인용으로만 사용; 모호하면 충돌로 남기고 자동 삭제하지 않는다.",
+      "cache_migration": "레거시 키 → 신규 키 대응표와 충돌·이관 건수를 만든다. 읽을 수 없는 Report의 마지막 정상 rows와 실패 상태를 따로 보관. parser/schema/identity/cache_format 버전과 원본 SHA를 기록하고 멱등 이관을 보장한다.",
+      "dirty_tracking": "rows만 보지 말고 reports·last_mtime·failed retry·retention 삭제·parser migration·device mapping 변경을 dirty 사유로 추적한다. 완전 no-op일 때만 저장하지 않는다. seen을 모든 항목에 무조건 갱신해서 매번 dirty가 되지 않게 한다.",
+      "write_transaction": "로컬 임시 파일에 strict UTF-8 → flush/fsync → JSON 및 필수 metadata 검증 → atomic replace. HTML도 같은 방식. 실패 시 기존 파일 보존. 임시 파일명은 실행별 고유하고 정리도 자신이 만든 파일만 한다. 동시 GUI/CLI는 로컬 실행 lock 또는 버전 충돌 감지로 lost update를 막는다.",
+      "partial_success": "collect_status와 artifacts_status를 분리. HTML 성공/CSV 실패는 completed_with_warnings. UI는 결과 열기를 제공하고 CSV 사유를 안내. CLI는 계약된 partial 결과 코드를 문서화하여 스케줄러가 전체 실패와 구분 가능하게 한다.",
+      "scope": "identity 이관, 병렬 장비 확인, 캐시 재생성 어디서도 장비 범위 gate 앞에서 stat/scandir/open을 호출하지 않는다. 역매핑을 위해 네트워크 전체 공유를 나열하지 않는다."
+    },
+    "updater_and_release": {
+      "transaction": [
+        "현재 버전·대상 full SHA·배포 채널을 검증된 연결로 결정",
+        "선택 SHA에 대한 필수 CI 성공 또는 신뢰된 manifest를 확인",
+        "archive/<full_sha>.zip 또는 그 SHA용 배포 자산 다운로드",
+        "안전한 압축 검증 후 allowlist만 app.new.part에 스테이징",
+        "필수 파일·버전·앱 import/템플릿 smoke·의존성 조건 검증",
+        "완성 트리만 app.new로 atomic rename",
+        "런처에서 새 앱 건강 상태를 확인한 뒤 app.old 삭제; 실패 시 이전 버전 복원"
+      ],
+      "tls": "CERT_NONE 자동 fallback을 제거하고 truststore 또는 승인된 사내 CA를 사용한다. 검증 실패면 설치/적용 중단. insecure 데이터로 본 version 정보도 신뢰 가능한 target으로 사용하지 않는다. 경고를 보여 준다는 이유로 실행 허용하지 않는다.",
+      "sha_integrity": "대상 SHA·다운로드 주소·VERSION·로그가 같은 full SHA를 가리켜야 한다. 압축 루트명 검사는 보조 검증. 로컬 sha256은 무결성 기록이며 원격 콘텐츠 인증의 대체가 아니다.",
+      "archive_defense": "예상 루트 1개, 절대 경로/.. traversal/드라이브/UNC/심볼릭 링크 및 case-insensitive 충돌 거부. 파일 수·압축 해제 총 크기 상한을 후보에서 정하고 초과 시 중단. symlink/reparse 처리를 실제 추출 함수로 테스트한다. 기존 z.extract가 취약하다고 단정하지 말고 요구 조건을 검증한다.",
+      "payload": "앱 main.py·requirements.txt·aoi_capacity 필수 리소스·선별 scripts·생성 VERSION을 manifest로 정의. 앱 업데이트 manifest와 exe-lite 런타임 manifest를 분리해 python/·런처를 오삭제하지 않는다. pyc·log·cache·docs·진행상황.md·개발 스크린샷은 제외.",
+      "ci_gating": "필수 검사 성공은 현재 대상 SHA·기대 workflow·신뢰된 event에 연결한다. 이전 커밋의 성공·pending·skipped·cancelled를 성공으로 보지 않는다. 조회 불가면 현재 버전을 유지하며 채널 변경이나 브랜치 보호 설정은 Q_RELEASE 범위다.",
+      "dependencies": "pip timeout만으로 원자성이 보장되지 않는다. 현재 환경에 새 패키지를 설치하면 실패 후에도 일부 변경이 남을 수 있다. 최소 단계는 timeout·자식 프로세스 종료·marker 성공 시만 기록; 중기 단계는 새 의존성 환경/검증된 wheel bundle의 staging으로 분리. 실제 pip는 테스트에서 실행하지 않는다.",
+      "rollback": "각 파일 작업을 prepared/old_moved/new_moved로 저널링한다. old_moved 뒤 new_moved 전에 실패해도 현재 항목을 복원한다. 실패한 복원은 삭제하지 않고 진단 및 복구 경로를 남긴다. 앱 코드와 로컬 사용자 데이터·캐시를 같은 트랜잭션에 넣지 않는다."
+    },
+    "report_statistics": {
+      "sample_unit": "unique Report 한 개 = 한 표본. 자정 분할된 Lot/일 조각은 회귀에 반복 투입하지 않는다. x는 실제 Wafer 수이며 합성 batch/slot 행 수가 아니다. y는 원 Batch Start~End의 초/분 차이.",
+      "filters": "Error 제외·Wafer 5장 미만 제외 등 현재 필터의 의미와 n을 공개한다. 회귀 최소 표본 Report 수 5(D49)와 배치 내 Wafer 5장 필터를 구분한다. 미표기 Job 포함은 Q_REPORT.",
+      "fit": "기본 OLS 유지. n>=5, 서로 다른 x가 2개 이상, sxx>0, 유효 기간·양수 기울기·residual 검사. 기울기 0/음수 또는 심한 부적합은 이유와 함께 —. 음수 절편을 물리적인 음수 준비 시간으로 단정하거나 조용히 0으로 자르지 않는다.",
+      "uncertainty": "기존 ±는 표준오차이며 95% 구간이 아니다. 라벨에 명시한다. 이후 95% CI를 추가하면 자유도 n-2의 t 분포와 mean/prediction interval을 구별. 5개 표본으로 고신뢰를 선언하지 않는다.",
+      "confounding": "장비별 처리 속도·setup 차이가 섞이면 pooled slope를 개선 효과로 해석하지 않는다. 현재 장비별 하위 행에 sample n·장수 범위·잔차를 함께 제공. robust regression은 민감도 분석으로 먼저 비교하며 기존 OLS를 조용히 대체하지 않는다.",
+      "faults": "결측을 0으로 바꾸지 않는다. 유효 faults 행의 합/유효 실제 Wafer 수가 평균 fault. scanned_dice/yield는 원문 값 그대로 보존하고 weighted yield가 필요하면 sum(scanned_dice*yield)/sum(scanned_dice) 등 단위 확인 후 별도 정의. 합성행·NaN·음수·% 표기의 파싱 실패는 coverage에 포함.",
+      "scope_boundary": "회귀 정보 보강과 전체 Job 확장은 제안이다. 기존 사용자가 승인한 리포트 범위·배치 최소 장수 필터는 Q_REPORT로 확인하며 임의로 삭제하지 않는다."
+    },
+    "ui_interaction": {
+      "structure": "현재 4탭·라이트 테마·요약 카드 수를 유지하고 데이터 품질은 한 줄과 펼침 패널로 제공. 수치가 없을 때 —와 사유를 짧게 표시한다.",
+      "copy": {
+        "quality_line": "추정 {percent}% · 확인 필요 {count}건",
+        "collect_partial": "수집 완료 · CSV 저장 실패",
+        "unknown_time": "시각 미확인",
+        "unclassified_job": "표기명 미등록",
+        "overlap": "시간 겹침 확인 필요"
+      },
+      "copy_constraints": "새 문구는 제안이다. 대기·Error 구간·에러 후 대기·합계 x+s의 의미를 혼합하지 않는다. 화면 기존 용어 D48을 무단 변경하지 않고 제목과 계산 정의를 함께 맞춘다.",
+      "targets": "좁은 막대는 행/리스트를 기본 선택 영역으로 삼고 막대 개별 hover는 보조로 제공. 조작 버튼 권장 32px 이상, 주요 버튼/터치 40~44px; 타임라인 1px 막대의 클릭영역을 겹치게 늘려 여러 항목이 동시에 반응하게 하지 않는다.",
+      "hover": "진입 150ms 안팎 지연, 이탈 100ms 안팎 유지, viewport clamp. 포인터는 최근접 구간 하나만 선택하며 동률은 명시적 chooser. tooltip에서 Report를 자동으로 열지 않는다. focus로 동일 내용을 제공하고 Escape로 닫는다.",
+      "focus": "data-focus-key를 report_id/device_id/action으로 구성. render 전 focus·scroll 기록, 후 같은 semantic key 복원. 모달마다 title/aria-labelledby·focus trap·배경 inert·return focus를 관리. 중첩 모달은 최상단만 활성; 닫을 때 열린 부모로 돌아간다.",
+      "layout": "리포트 표는 overflow-x:auto 및 최소 열 너비로 모든 열 접근 보장. 800/1024/1440px와 200% zoom 점검. Lot 92개는 선택 항목·Error 항목 우선 + 나머지 목록 접기/검색. 이름표와 지시선 겹침을 무한 확장으로 해결하지 않는다.",
+      "motion": "동일 작업 중 선택/scroll을 유지하고 불필요한 전면 rerender를 줄인다. 이동/펼침 애니메이션은 120~180ms 제안, prefers-reduced-motion에서는 제거. 숫자 카운트업으로 원 데이터처럼 보이는 중간값을 만들지 않는다.",
+      "render_constraints": "큰 전면 리팩터 전에 focus/scroll wrapper를 도입. 부분 렌더링은 프로파일에 따라 후속 적용. 외부 JS 프레임워크·폰트·번들 서버를 추가하지 않는다."
+    },
+    "performance": {
+      "first_changes": [
+        "dirty 캐시 저장 생략",
+        "HTML 템플릿 prefix/data/suffix 순차 쓰기",
+        "device_id 사전 인덱스",
+        "정확 경로 후보 case-insensitive 중복 제거",
+        "장비 확인 bounded concurrency"
+      ],
+      "measure": "같은 입력·같은 머신에서 cold 1회와 warm 최소 5회, 중간값과 범위 기록. 장비 확인/나열/INI 읽기/캐시/HTML/JS 모델/렌더를 분리. 5회만으로 p95를 주장하지 않는다.",
+      "success_targets_not_promises": [
+        "완전 no-op 수집의 cache bytes_written=0",
+        "출력 HTML의 데이터·구조 동일성과 기존 파일 보존",
+        "read_workers=1/2/8/32 결과 동일",
+        "장비별 캐시 분할·SQLite·문자열 풀은 측정상 임계 초과가 확인될 때만 도입"
+      ],
+      "advanced_trigger": "30일·90일에서 메모리 상한/체감 응답 문제가 남으면 reports 테이블·rows payload·cursors 트랜잭션을 갖는 SQLite를 비교 검토. 지금 바로 JSON+문자열풀+분할+DB를 동시에 도입하지 않는다."
+    }
+  },
+  "findings": [
+    {
+      "id": "C01",
+      "original_title": "인증서 검증 실패 시 조용히 검증 없이 재시도해 코드를 내려받고, 받은 zip 이 확인한 SHA 와 같은지 확인하지 않는다",
+      "original_severity": "high",
+      "priority": "P0",
+      "package": "release",
+      "source_locator": "aoi_capacity/utils/updater.py:117-129, 41, 502",
+      "reported_evidence": "_urlopen 이 SSL 검증 오류면 CERT_NONE 으로 다시 열고 그 zip 이 그대로 app.new 가 된다. insecure_fallback_used() 는 정의만 있고 호출부 0. zip 은 archive/refs/heads/{branch}.zip(브랜치 HEAD)이라 API 로 확인한 target_sha 와 내용이 다를 수 있는데 VERSION 에는 target_sha 를 쓴다",
+      "verification_in_this_review": "confirmed_in_source",
+      "implementation_steps": [
+        "updater._urlopen의 CERT_NONE 자동 fallback을 제거하고 truststore/승인 CA의 검증된 TLS만 사용한다. 환경변수 insecure 적용도 코드 설치에는 허용하지 않는다.",
+        "check→download 사이 branch HEAD가 바뀌어도 target_sha의 archive만 받도록 고정한다. VERSION은 검증한 SHA와 일치해야 한다.",
+        "압축 경로·사이즈·루트·case 충돌 검사, 파일 manifest 검증, 실패 시 현행 앱 보존. CI 게이트는 S02와 연결한다."
+      ],
+      "acceptance": [
+        "SSL 검증 실패 mock에서 비검증 opener 호출 0·app.new 없음",
+        "브랜치 SHA가 바뀌는 mock에서도 요청 ZIP·VERSION은 최초 검증 SHA",
+        "zip 변조/루트 불일치/실패 후 구버전 보존"
+      ],
+      "risk_and_mitigation": "사내 프록시에서 업데이트가 막힐 수 있다. CA 안내·검증된 오프라인 배포를 제공하며 경고 확인으로 검증을 해제하지 않는다.",
+      "expected_effect": "비검증 코드를 설치하는 경로 제거 및 버전/실제 코드 일치.",
+      "depends_on": [
+        "S01"
+      ],
+      "decision": "Q_RELEASE: 배포 채널만; TLS·SHA 수정은 진행",
+      "feasibility": "high",
+      "effort_estimate": "1~2일"
+    },
+    {
+      "id": "C02",
+      "original_title": "캐시된 Report 를 다시 읽는 유일한 길이 --full 인데 그러면 backfill 창(30일) 밖 60일치 이력이 사라진다; --backfill 문구는 '전부 다시 읽습니다' 지만 캐시된 파일은 건너뛴다",
+      "original_severity": "medium",
+      "priority": "P0",
+      "package": "collection",
+      "source_locator": "aoi_capacity/collect.py:763, 968-980 · aoi_capacity/i18n/ko.py:82-85 · aoi_capacity/cli.py:69",
+      "reported_evidence": "_list_new_reports 는 backfill 이면 since 만 넓히고 mtime 이 같은 캐시 항목은 known 으로 건너뛴다. _load_cache(full=True) 는 빈 캐시에서 시작해 마지막에 덮어쓴다. COLLECT_PLAN_BACKFILL_FMT = '최근 {days}일 Report 를 전부 다시 읽습니다'",
+      "verification_in_this_review": "confirmed_in_source",
+      "implementation_steps": [
+        "collect._load_cache와 _list_new_reports에 독립 refresh 정책을 추가한다. 캐시를 먼저 비우지 않고 기간 내 읽기 성공한 Report만 교체한다.",
+        "창 밖·범위 밖·미접근 장비·재읽기 실패 항목의 이전 성공 rows를 보존하고 stale/retry 상태를 분리한다.",
+        "plan_run에 읽을/보존할/복구할/실패할 수 있는 개수를 표시. 전체 재구축은 후보 캐시 검증 후 교체하며 현장 --full보다 먼저 구현한다."
+      ],
+      "acceptance": [
+        "90일 캐시+30일 refresh에서 앞 60일 fingerprint 유지",
+        "같은 mtime Report를 refresh에서는 재읽음",
+        "Report 하나 실패/취소/저장 실패해도 원 이력 보존"
+      ],
+      "risk_and_mitigation": "기존 CLI 의미를 바꾸면 예약 스크립트가 달라진다. 새 옵션부터 추가하고 Q_REFRESH 뒤 별칭만 변경.",
+      "expected_effect": "파서·INI 복구 후에도 기존 90일 이력 유지.",
+      "depends_on": [],
+      "decision": "Q_REFRESH",
+      "feasibility": "high",
+      "effort_estimate": "1~3일"
+    },
+    {
+      "id": "C03",
+      "original_title": "캐시 키가 Report 절대 경로(드라이브 문자)라 드라이브 재매핑·UNC 전환 시 같은 Report 가 두 번 들어가 이중 계산된다",
+      "original_severity": "medium",
+      "priority": "P1",
+      "package": "identity",
+      "source_locator": "aoi_capacity/collect.py:1132, 845-861, 822-832",
+      "reported_evidence": "reports[e.path] 로 경로 키, _rows_from_cache 는 (device, report) 로 중복을 걸러내지 않는다. 현장 경로는 X:·M:·V:·P:·Y:·I: 매핑 드라이브",
+      "verification_in_this_review": "confirmed_in_source",
+      "implementation_steps": [
+        "경로 id와 별개인 stable_device_key를 설정에 영속화하고 aliases에 명시적 경로 매핑을 둔다.",
+        "Report 상대경로+이미 읽은 내용의 digest로 중복 후보를 판정. basename·표시명만으로 합치지 않는다.",
+        "레거시 캐시 이관은 대응표·충돌 목록·백업을 남기고 두 번 실행해도 동일해야 한다. 동일 Report의 수정본과 복사본을 구분한다."
+      ],
+      "acceptance": [
+        "X:→UNC→M:의 승인된 동일 장비 매핑은 한 Report",
+        "서로 다른 장비/폴더의 같은 파일명은 각각 유지",
+        "모호한 키 충돌에서 rows 삭제 0; 이관 멱등"
+      ],
+      "risk_and_mitigation": "장비 ID를 잘못 합치면 이력 소실. 명확한 매핑만 자동화하며 새 NAS 전체 탐색 금지.",
+      "expected_effect": "재매핑·PC 이동에 따른 가동률/오류 건수 중복 방지.",
+      "depends_on": [
+        "C02",
+        "C15"
+      ],
+      "decision": null,
+      "feasibility": "high",
+      "effort_estimate": "2~4일"
+    },
+    {
+      "id": "C04",
+      "original_title": "30일치 156,109행이 캐시 dict 로 218MB(JSON 80MB)이고 변경 0건이어도 매 실행 캐시 전체를 다시 쓴다",
+      "original_severity": "medium",
+      "priority": "P1",
+      "package": "performance",
+      "source_locator": "aoi_capacity/collect.py:758-778, 863-872, 1171",
+      "reported_evidence": "측정: embedded JSON 18.6MB → 캐시 형태 dict 218MB → 캐시 JSON ~80MB. _save_cache 는 n_new==0 이어도 무조건 json.dump",
+      "verification_in_this_review": "confirmed_save_path; memory_is_reported",
+      "implementation_steps": [
+        "변경 사유별 dirty 상태를 reports/failed/cursors/retention/schema 이관에 부여하고 순수 no-op이면 _save_cache 호출 생략.",
+        "현재 RSS·JSON 크기·I/O bytes·단계 시간을 측정하고 C07과 함께 먼저 평가.",
+        "효과가 부족할 때만 장비별 shard 또는 SQLite 한 가지를 선택. 문자열 풀까지 한 번에 바꾸지 않는다."
+      ],
+      "acceptance": [
+        "완전 no-op cache mtime/bytes 동일",
+        "신규 rows=0이어도 retry/retention/version 변경은 저장",
+        "동일 입력 전후 출력 fingerprint 일치"
+      ],
+      "risk_and_mitigation": "dirty 누락은 커서·복구 상태를 잃게 한다. 변경 원인별 fixture 사용.",
+      "expected_effect": "변경 없는 수집에서 캐시 쓰기 0 목표. 메모리 절감률은 실측 후 제시.",
+      "depends_on": [],
+      "decision": null,
+      "feasibility": "high",
+      "effort_estimate": "0.5~1일(1차)"
+    },
+    {
+      "id": "C05",
+      "original_title": "대소문자 무시 파일시스템에서 지금 쓰는 Scanresult 폴더가 '백업' 으로 한 번 더 잡혀 없는 INI 마다 확인 횟수가 두 배가 된다",
+      "original_severity": "medium",
+      "priority": "P1",
+      "package": "collection",
+      "source_locator": "aoi_capacity/devices.py:164-168, 209 · aoi_capacity/collect.py:1041",
+      "reported_evidence": "find_subdir 는 isdir 이 참인 후보 철자를 돌려주고(실제 이름 아님), scan_dirs_of 는 e.name != primary 를 대소문자 구분으로 비교. 실제 폴더 'ScanResult' · 설정 'Scanresult' 면 같은 폴더가 backups 에 들어간다",
+      "verification_in_this_review": "source_reviewed",
+      "implementation_steps": [
+        "devices.find_subdir/scan_dirs_of의 primary 및 backups 비교를 Windows 경로 의미에 맞게 정규화한다.",
+        "실제 scandir 이름을 재사용하고 ntpath.normcase/normpath 기준으로 중복 제거. 대소문자뿐 아니라 끝 구분자 차이도 검사한다."
+      ],
+      "acceptance": [
+        "ScanResult/Scanresult/SCANRESULT가 한 루트",
+        "Linux 실행 ntpath fixture와 Windows 실제 테스트에서 같은 결과",
+        "현재 정확 경로/backup 우선순위 유지"
+      ],
+      "risk_and_mitigation": "os.path.normcase는 Linux에서 Windows 대소문자 규칙을 제공하지 않는다. OS 독립 fixture와 현장 검증을 분리.",
+      "expected_effect": "같은 폴더를 백업으로 재확인하는 NAS 호출 제거.",
+      "depends_on": [],
+      "decision": null,
+      "feasibility": "high",
+      "effort_estimate": "0.25~0.5일"
+    },
+    {
+      "id": "C06",
+      "original_title": "CSV 저장이 실패하면(Excel 이 열어 둔 파일에 os.replace → PermissionError) HTML·캐시는 멀쩡한데 수집 전체가 '실패' 로 보고된다",
+      "original_severity": "medium",
+      "priority": "P1",
+      "package": "collection",
+      "source_locator": "aoi_capacity/collect.py:1288-1304 · aoi_capacity/workers/collector.py:80-84",
+      "reported_evidence": "write_html 이 HTML 저장 뒤 _write_csv 를 예외 처리 없이 부르고 워커는 except Exception → failed 시그널",
+      "verification_in_this_review": "confirmed_in_source",
+      "implementation_steps": [
+        "HTML 주 산출물과 CSV 부가 산출물 결과를 분리해 구조화된 warnings로 워커·CLI까지 전달한다.",
+        "CSV OSError/PermissionError만 부가 실패로 처리하고 프로그래밍 오류를 무조건 삼키지 않는다. 이전 CSV와 새 HTML의 생성 시각을 안내한다.",
+        "자신이 만든 tmp를 정리하고 HTML 열기/CSV 재시도 경로를 제공한다."
+      ],
+      "acceptance": [
+        "Excel 잠금 mock에서 HTML 정상·warnings 있음·전체 failed 아님",
+        "HTML 쓰기 실패는 여전히 전체 실패",
+        "CLI partial code 및 UI 문구가 같은 의미"
+      ],
+      "risk_and_mitigation": "무조건 성공 반환하면 자동화가 CSV 실패를 놓친다. 완료 상태와 산출물 상태를 분리.",
+      "expected_effect": "정상 생성된 HTML을 실패로 오인하는 문제 해소.",
+      "depends_on": [],
+      "decision": null,
+      "feasibility": "high",
+      "effort_estimate": "0.5~1일"
+    },
+    {
+      "id": "C07",
+      "original_title": "HTML 생성이 data 문자열·치환 결과·emb 를 동시에 3벌 든다",
+      "original_severity": "low",
+      "priority": "P2",
+      "package": "performance",
+      "source_locator": "aoi_capacity/collect.py:1246-1286",
+      "reported_evidence": "json.dumps(emb) 18.6MB → tpl.replace 18.7MB → f.write, emb 도 살아 있음. 90일이면 각 ~55MB",
+      "verification_in_this_review": "confirmed_in_source",
+      "implementation_steps": [
+        "write_html에서 __DATA__ 위치가 정확히 한 개임을 검증하고 prefix/data/suffix를 같은 임시 파일에 순차 기록.",
+        "json.dumps와 HTML 닫는 태그 escaping을 유지한 1차 개선부터 적용. JSONEncoder.iterencode는 chunk 경계를 넘는 </ 처리까지 검증한 뒤 후속 도입.",
+        "최종 atomic replace·NAS guard·실패 tmp 정리를 유지하고 사용 종료한 emb 참조를 해제."
+      ],
+      "acceptance": [
+        "기존과 JSON 의미·HTML 태그 안전성 동일",
+        "문자열에 </script>·한글·U+2028이 있어도 실행/왕복 정상",
+        "쓰기 중 예외 때 기존 HTML 보존"
+      ],
+      "risk_and_mitigation": "단순 스트리밍은 escaping 회귀를 만든다. 먼저 tpl.replace의 큰 사본만 없앤다.",
+      "expected_effect": "템플릿 치환용 대형 문자열 사본 1개 제거; 실제 RSS 별도 측정.",
+      "depends_on": [
+        "C06"
+      ],
+      "decision": null,
+      "feasibility": "high",
+      "effort_estimate": "0.5일"
+    },
+    {
+      "id": "C08",
+      "original_title": "장비 확인 단계가 30대를 한 줄로 돌며 장비마다 isdir 최대 5번 + scandir + getmtime 을 직렬로 한다",
+      "original_severity": "low",
+      "priority": "P2",
+      "package": "performance",
+      "source_locator": "aoi_capacity/devices.py:238-243, 307-316, 326-346",
+      "reported_evidence": "devices_from_rows·_attach_dirs→with_dirs·scan_dirs_of 가 for 루프. 병렬 _run 은 나열 단계부터 쓰인다",
+      "verification_in_this_review": "source_reviewed",
+      "implementation_steps": [
+        "허용 장비 gate를 통과한 with_dirs 작업만 bounded pool로 실행한다. 순환 import를 피하도록 독립 helper 또는 상위 오케스트레이터에 병렬화 배치.",
+        "worker는 읽기만 하고 결과·로그·캐시는 입력 순서대로 병합. 취소 시 새 작업 제출 중단; SMB blocking call을 timeout으로 강제 종료 가능하다고 주장하지 않는다."
+      ],
+      "acceptance": [
+        "1/2/8/32 worker에서 결과/로그 정렬 동일",
+        "범위 밖 FS 호출 0",
+        "취소 후 캐시 원자성 유지"
+      ],
+      "risk_and_mitigation": "30대×후속 병렬 읽기의 중첩 pool은 부하 폭증. 전체 동시성 예산을 하나로 유지.",
+      "expected_effect": "장비 확인 지연 감소; 속도 배수는 NAS RTT 실측 후 제시.",
+      "depends_on": [
+        "C05",
+        "C13"
+      ],
+      "decision": null,
+      "feasibility": "high",
+      "effort_estimate": "0.5~1일"
+    },
+    {
+      "id": "C09",
+      "original_title": "캐시 Report 마다 장비 목록을 선형으로 돌며 is_under(경로 정규화)를 반복한다",
+      "original_severity": "low",
+      "priority": "P2",
+      "package": "performance",
+      "source_locator": "aoi_capacity/collect.py:834-843",
+      "reported_evidence": "측정 최악 34µs/항목 → 50k 항목 ≈ 1.7초, 90일이면 ~5초",
+      "verification_in_this_review": "confirmed_in_source",
+      "implementation_steps": [
+        "_cache_device에 by_id index를 주입하고 정확 ID가 있으면 즉시 반환. 경로 폴백은 ID 없음/레거시에만 수행.",
+        "정규화 device path를 호출 밖에서 한 번 준비. C03 이후 stable ID 조회 순서를 연결."
+      ],
+      "acceptance": [
+        "장비 rename/레거시 path fallback 결과 동일",
+        "N report×M device 반복 정규화 호출 감소"
+      ],
+      "risk_and_mitigation": "by_id를 Report마다 만들면 성능 개선이 사라진다. 수집 실행 단위로 재사용.",
+      "expected_effect": "Report 수에 비례하는 ID 조회를 O(1)로 전환.",
+      "depends_on": [
+        "C03"
+      ],
+      "decision": null,
+      "feasibility": "high",
+      "effort_estimate": "0.25~0.5일"
+    },
+    {
+      "id": "C10",
+      "original_title": "업데이트 적용 중 pip 를 timeout 없이 돌리는데 오버레이는 취소 불가라 프록시에서 pip 가 멈추면 앱이 갇힌다",
+      "original_severity": "low",
+      "priority": "P1",
+      "package": "release",
+      "source_locator": "aoi_capacity/utils/updater.py:464-484 · aoi_capacity/ui/main_window.py:356",
+      "reported_evidence": "subprocess.call(...) 에 timeout 없음, show_overlay(cancelable=False)",
+      "verification_in_this_review": "confirmed_in_source",
+      "implementation_steps": [
+        "_ensure_deps를 subprocess.run(timeout=설정값) 또는 Popen 수명 관리로 전환. 600초는 제안값이며 로그에 시작·종료 상태 기록.",
+        "timeout/취소 시 자식 pip 프로세스 종료·wait하고 성공 marker를 쓰지 않는다. 취소 버튼은 안전하게 중단 가능한 단계에서만 활성화.",
+        "설치 환경이 일부 변했는지 다음 시작에서 재검증. 새 환경 staging은 중기 개선으로 분리."
+      ],
+      "acceptance": [
+        "성공/비정상 종료/timeout/프로세스 종료 실패 mock",
+        "timeout 뒤 app.new 및 deps marker 없음",
+        "테스트 실제 pip 호출 0"
+      ],
+      "risk_and_mitigation": "pip 중단은 환경 롤백이 아니다. 현재 런타임 변조 가능성을 잔여 위험으로 기록.",
+      "expected_effect": "프록시에서 영구 대기하는 업데이트 방지.",
+      "depends_on": [
+        "C01"
+      ],
+      "decision": null,
+      "feasibility": "high",
+      "effort_estimate": "0.5~1일"
+    },
+    {
+      "id": "C11",
+      "original_title": "제품 코드에서 호출부가 없는 함수·상수가 여럿(material_key·norm_lot·is_unmapped_status·_STATUS_RULES·_in_batch_window·failed_batch_row·scope.lists_share·insecure_fallback_used·meta.limit)",
+      "original_severity": "low",
+      "priority": "P3",
+      "package": "maintenance",
+      "source_locator": "aoi_capacity/collect.py:179,194,220,255,607,651 · aoi_capacity/scope.py:81 · aoi_capacity/utils/updater.py:58",
+      "reported_evidence": "dev/tests 제외 grep 시 정의만 있음. failed_batch_row 는 '옛 호출 호환용' 인데 호출 0",
+      "verification_in_this_review": "reported_only",
+      "implementation_steps": [
+        "정적 참조뿐 아니라 테스트·동적 호출·외부 도구를 찾아 usage 표를 작성.",
+        "is_unmapped_status는 D13 진단에 재사용 가능하므로 제거 금지. 보안 fallback 함수는 C01 새 정책에 맞게 제거/교체.",
+        "실제 미사용 내부 helper만 정리하고 공개 호환 API와 레거시 profile은 deprecated 설명을 남긴다."
+      ],
+      "acceptance": [
+        "선택 함수별 참조 검색과 관련 기존 테스트 통과"
+      ],
+      "risk_and_mitigation": "grep 호출 0만으로 삭제하면 동적 API와 향후 진단 근거를 잃는다.",
+      "expected_effect": "중복 규칙 출처를 줄여 유지보수 판단 단순화.",
+      "depends_on": [
+        "C01",
+        "D13"
+      ],
+      "decision": null,
+      "feasibility": "high",
+      "effort_estimate": "0.5~1일"
+    },
+    {
+      "id": "C12",
+      "original_title": "행 데이터(data_issue)에 한국어 자유 문장을 저장하고 cli.py 출력도 i18n 밖이다 — 한글 리터럴 가드가 collect/cli/devices 를 검사하지 않는다",
+      "original_severity": "low",
+      "priority": "P2",
+      "package": "schema",
+      "source_locator": "aoi_capacity/collect.py:551,569-596,701,733 · aoi_capacity/cli.py:66-108 · dev/tests/test_no_hardcoded_korean.py:12-16",
+      "reported_evidence": "'백업 폴더에서 찾음: …' 같은 문장이 캐시·HTML·CSV 에 그대로 들어간다",
+      "verification_in_this_review": "source_reviewed",
+      "implementation_steps": [
+        "data_issue 원문은 legacy_message로 보존하고 issue_codes 및 params를 추가하는 후방 호환 표현을 설계.",
+        "KNOWN 코드의 한국어 문장은 UI/CSV 출력에서 생성. CLI 사용자 문구는 ko.py로 이동하고 로그 예외는 구분.",
+        "기존 자유문장을 손실 파싱하지 말고 old/new 혼재를 지원. 출력 행 계약 변경 시 해당 schema만 올린다."
+      ],
+      "acceptance": [
+        "옛 캐시+새 캐시 혼합 표시 가능",
+        "원문 params의 경로/한글 보존",
+        "문구 변경에 NAS 재수집 불필요"
+      ],
+      "risk_and_mitigation": "모든 한국어를 금지하면 사용자 데이터까지 막는다. 제품 문구만 검사.",
+      "expected_effect": "문구 변경과 데이터 재수집을 분리.",
+      "depends_on": [
+        "C02",
+        "C15"
+      ],
+      "decision": null,
+      "feasibility": "high",
+      "effort_estimate": "1~2일"
+    },
+    {
+      "id": "C13",
+      "original_title": "prefs.json·config.json 값의 형과 범위를 검사하지 않아 잘못된 값이 워커 안에서 ValueError 로 터지거나 조용히 아무것도 안 읽는다",
+      "original_severity": "low",
+      "priority": "P1",
+      "package": "collection",
+      "source_locator": "aoi_capacity/utils/prefs.py:47-53, 108-121 · aoi_capacity/cli.py:25-36",
+      "reported_evidence": "Prefs.from_dict 는 키만 거른다. int(p.backfill_days) 가 'abc' 면 워커 failed. config.json 의 backfill_days 0/음수면 Report 0개",
+      "verification_in_this_review": "confirmed_in_source",
+      "implementation_steps": [
+        "prefs/CLI 공통 normalize_config를 두고 타입·boolean·범위를 검사한다. bool(\"false\") 같은 변환 금지.",
+        "read_workers 1~32, backfill/retention 양수 및 상호관계를 검사하되 상한은 현재 UI/현장 계약과 합의한다.",
+        "잘못된 scope·경로는 실행 차단. 잘못된 성능 설정만 경고+명시적 default/clamp. invalid prefs_version 때문에 전체 설정을 기본 30대로 되돌리지 않는다."
+      ],
+      "acceptance": [
+        "문자/NaN/음수/0/null/bool/너무 큰 값/잘못된 scope fixture",
+        "GUI와 CLI가 같은 normalized config",
+        "invalid scope에서 NAS 호출 0"
+      ],
+      "risk_and_mitigation": "조용한 기본값 복원으로 허용 범위가 넓어질 수 있다. 보안/범위 값은 fail closed.",
+      "expected_effect": "워커 예외·무수집·범위 확대를 실행 전에 차단.",
+      "depends_on": [],
+      "decision": null,
+      "feasibility": "high",
+      "effort_estimate": "0.5~1일"
+    },
+    {
+      "id": "C14",
+      "original_title": "Windows 에서 cli --update 의 os.execv 는 부모를 즉시 끝내 스케줄러가 '완료' 를 잘못 보고, run_collect.bat 은 PYTHONNOUSERSITE 없이 collect.log 를 무한 append 한다",
+      "original_severity": "low",
+      "priority": "P2",
+      "package": "cli",
+      "source_locator": "aoi_capacity/cli.py:83-88 · scripts/run_collect.bat:5-7",
+      "reported_evidence": "os.execv(sys.executable, …); bat 은 >> 로그, run_aoi.bat·런처와 달리 PYTHONNOUSERSITE=1 없음",
+      "verification_in_this_review": "source_reviewed",
+      "implementation_steps": [
+        "Windows CLI 업데이트 후 자식 수집을 subprocess로 기다리고 종료 코드를 반환. 재실행 인자에서 --update를 제거해 루프 방지.",
+        "run_collect.bat에 PYTHONNOUSERSITE=1, Python 결과 ERRORLEVEL 보존. 로그 크기/보관 수 상한과 로컬 경로 사용.",
+        "자동 수집 스케줄을 새로 만들지는 않는다."
+      ],
+      "acceptance": [
+        "자식 종료 전 부모 완료 아님·실패 코드 전달",
+        "경로 공백/한글 및 update 재실행 1회",
+        "로그 rotation 후 종료 코드 보존"
+      ],
+      "risk_and_mitigation": "실제 Windows 프로세스 동작은 Linux mock만으로 완료 선언 불가.",
+      "expected_effect": "CLI 실행 상태와 작업 스케줄러 결과 일치.",
+      "depends_on": [
+        "C10"
+      ],
+      "decision": null,
+      "feasibility": "high",
+      "effort_estimate": "0.5~1일"
+    },
+    {
+      "id": "C15",
+      "original_title": "캐시 JSON 을 errors='replace' 로 읽어 손상 바이트가 조용히 U+FFFD 로 바뀌고, 저장 실패 시 .tmp 가 남는다",
+      "original_severity": "low",
+      "priority": "P1",
+      "package": "collection",
+      "source_locator": "aoi_capacity/collect.py:766, 868-872 · aoi_capacity/nas_guard.py:139-141",
+      "reported_evidence": "_load_cache 가 NAS Report 용 read_text(기본 replace)를 캐시에도 씀. _save_cache 는 dump 도중 예외면 tmp 잔재",
+      "verification_in_this_review": "confirmed_in_source",
+      "implementation_steps": [
+        "캐시만 UTF-8 strict로 읽고 손상 시 내용/오류 위치를 남긴 보존본을 만든다. NAS Report의 관대한 디코딩과 분리.",
+        "손상 캐시에서 빈 캐시 자동 저장으로 덮어쓰지 않는다. 마지막 정상본 또는 rebuild 계획으로 전환.",
+        "_save_cache에 unique tmp·finally 정리·atomic replace·버전 충돌 방지 적용. 캐시를 다른 함수에서 옮겨 NAS guard 계약을 우회하지 않는다."
+      ],
+      "acceptance": [
+        "UTF-8 손상/잘린 JSON/replace 실패에서 원본 보존",
+        "반쯤 쓴 tmp가 정상 캐시로 선택되지 않음",
+        "동시 실행 lost update 방지"
+      ],
+      "risk_and_mitigation": "bad로 이동만 해도 원 경로가 비어 다음 실행이 이력을 잃을 수 있다. 실패 상태를 명시하고 재구축 전 원본 보존.",
+      "expected_effect": "조용한 Lot/Job 문자열 오염 및 캐시 손실 방지.",
+      "depends_on": [],
+      "decision": null,
+      "feasibility": "high",
+      "effort_estimate": "0.5~1일"
+    },
+    {
+      "id": "C16",
+      "original_title": "의존성 설치 실패 안내의 input() 이 pythonw 에서는 EOFError 가 아니라 RuntimeError 를 낸다",
+      "original_severity": "low",
+      "priority": "P2",
+      "package": "bootstrap",
+      "source_locator": "main.py:60-66",
+      "reported_evidence": "except EOFError 만 잡음. pythonw 는 sys.stdin 이 None → RuntimeError: input(): lost sys.stdin",
+      "verification_in_this_review": "reported_only",
+      "implementation_steps": [
+        "main.py 실패 안내에서 stdin None이면 input을 건너뛰고 Windows MessageBoxW 또는 기존 GUI-safe 안내를 호출.",
+        "EOFError/RuntimeError를 방어하고 app.log 경로를 짧게 안내. 실패한 PyQt import를 다시 요구하지 않는 표준 라이브러리 경로 사용."
+      ],
+      "acceptance": [
+        "stdin=None/EOF stdin mock",
+        "PyQt 미설치 상태에서 안내 경로가 새 예외를 만들지 않음"
+      ],
+      "risk_and_mitigation": "pythonw 전용 경로는 실제 Windows 수동 smoke를 남긴다.",
+      "expected_effect": "설치 실패가 무반응 종료로 보이는 문제 완화.",
+      "depends_on": [],
+      "decision": null,
+      "feasibility": "high",
+      "effort_estimate": "0.25~0.5일"
+    },
+    {
+      "id": "D01",
+      "original_title": "INI 없는 Pass 행을 행마다 배치 구간으로 추정해 같은 배치 안의 Scan 과 Rescan 이 같은 구간을 두 번 센다 — 종류가 다른 구간의 겹침을 제거하는 규칙이 없다",
+      "original_severity": "high",
+      "priority": "P0",
+      "package": "model",
+      "source_locator": "aoi_capacity/ui/assets/template.html:293-301 (dayStats)",
+      "reported_evidence": "30일치: Scan∩Rescan 겹침 15,783분(263h, 추정 끄면 405분), 종류 무관 겹침 28,997분(483h, 565 장비-일), r+d+t+x+s > den 인 장비-일 16개(초과 2,981분). AOI-2 8/20: r=1345 d=888 → 합 2,233분/1,440. seg 에 [295,398,4] 와 [295,398,0] 이 나란히. S.util 의 Math.min(100,…) 이 100% 로 가려 화면에서는 안 보인다",
+      "verification_in_this_review": "confirmed_by_source_and_synthetic_execution",
+      "implementation_steps": [
+        "technical_design.time_model의 후보/확정/추정 분리와 sweep-line을 적용. Report 추정은 한 후보로 묶고 Scan/Rescan 혼재는 근거 미확정으로 보존.",
+        "같은 종류 사이의 중첩도 인접 비교가 아닌 union으로 제거. 모든 상태가 최종 한 시간 원장에서 집계되도록 한다.",
+        "Math.min(100)을 진단 대체로 쓰지 않는다. current와 candidate 결과 차이를 먼저 내고 Q_TIME 뒤 모델을 승격."
+      ],
+      "acceptance": [
+        "직접 fixture r=70,d=60의 130분 claim을 union 70분으로 진단",
+        "Scan 두 구간 사이 Error fixture의 r=120은 union 80분으로 진단; Error 우선 정책이면 생산 75분+Error 5분",
+        "배타적 시간 항등식·중복 row/순서 변화 멱등"
+      ],
+      "risk_and_mitigation": "임의 다수결은 Rescan을 지우고 추정이 Error를 덮을 수 있다. 출처·정책·suppressed 후보를 모두 남긴다.",
+      "expected_effect": "물리적 장비 시간 중복 계산 제거. 483h를 확정 절감시간으로 약속하지 않음.",
+      "depends_on": [
+        "D09",
+        "D17",
+        "N01"
+      ],
+      "decision": "Q_TIME",
+      "feasibility": "high",
+      "effort_estimate": "3~5일(D02/D04와 공통 엔진)"
+    },
+    {
+      "id": "D02",
+      "original_title": "Error 뒤 대기를 '시작 순 다음 구간' 까지로 계산해 스캔이 계속 도는 중에도 대기를 센다",
+      "original_severity": "high",
+      "priority": "P0",
+      "package": "model",
+      "source_locator": "aoi_capacity/ui/assets/template.html:307-316",
+      "reported_evidence": "fixture: 배치 08:00~09:00(INI 없는 Pass, 추정) + 08:30~08:33 Alignment Error + 다른 장비 12:30 기록 → r=60, x=3, s=237(08:33→12:30), den=750, 가동률 8%. 30일치 Scan∩Error 겹침 2,565분(추정 없이도 1,890분)",
+      "verification_in_this_review": "confirmed_by_source_and_synthetic_execution",
+      "implementation_steps": [
+        "mg[i+1] 대신 최종 활동 interval union에서 Error 종료 시 활동 여부와 다음 시작을 찾는다.",
+        "활동 중이면 gap=0; 없으면 다음 활동 또는 해당 날짜 관측 종료까지. 대기 합집합에서 모든 활동을 제외.",
+        "S.segsOf는 모델의 error_wait 조각을 그릴 뿐 자체 계산하지 않게 변경."
+      ],
+      "acceptance": [
+        "08:00~09:00 활동 안 08:30~08:33 Error에서 s=237→0 후보",
+        "중첩/연속 Error 여러 개의 대기 중복 0",
+        "마지막 Error는 관측 종료/자정까지만"
+      ],
+      "risk_and_mitigation": "추정 활동은 실제 복구 증명이 아니다. 진단 basis와 설명을 표시하고 Q_TIME에서 해석을 정한다.",
+      "expected_effect": "활동 중 Error 대기 과산정과 KPI/막대 불일치 제거.",
+      "depends_on": [
+        "D01"
+      ],
+      "decision": "Q_TIME",
+      "feasibility": "high",
+      "effort_estimate": "공통 엔진에 포함"
+    },
+    {
+      "id": "D03",
+      "original_title": "수집한 날의 분모가 장비별 '자기 마지막 기록' 이라 일찍 멈춘 장비의 가동률이 부풀고 평균이 왜곡된다",
+      "original_severity": "medium",
+      "priority": "P1",
+      "package": "model",
+      "source_locator": "aoi_capacity/ui/assets/template.html:352-353, 443",
+      "reported_evidence": "9/18(수집 12:59, 관측 종료 695분): 27대 중 11대가 den < 관측종료−60분(AOI-3 den 512, AOI-20 den 606 → 92.6%). 평균 66.5% ↔ 전 장비 den=관측 종료면 61.3%. fixture: 00:05~00:15 10분만 돈 장비 den=15 → 66.7%",
+      "verification_in_this_review": "confirmed_by_source_and_synthetic_execution",
+      "implementation_steps": [
+        "denominatorEnd 함수를 단일화하고 device_last_record/fleet_observed_end 정책을 shadow 비교.",
+        "공통 분모 도입 시 정상 수집·기록 없음·수집 실패를 구분. invalid 미래 시각으로 전체 분모가 커지지 않도록 D09 검증을 선행.",
+        "평균은 유효 장비 n을 표시. sum(production)/sum(den)와 기존 단순평균 차이는 진단에서 제공하고 제품 KPI 변경은 Q_DEN에 포함."
+      ],
+      "acceptance": [
+        "00:05~00:15 단독 기록의 현행 66.7%를 재현",
+        "공통 horizon fixture에서 모든 eligible 장비 den 동일",
+        "열람 날짜/OS 시각 변경으로 결과 불변"
+      ],
+      "risk_and_mitigation": "관측 종료는 장비 가용 상태의 보증이 아니다. 수집 실패를 0%로 채우지 않는다.",
+      "expected_effect": "장비 간 가동률 비교의 분모 일관성 개선.",
+      "depends_on": [
+        "D09",
+        "D01",
+        "D06"
+      ],
+      "decision": "Q_DEN",
+      "feasibility": "high",
+      "effort_estimate": "0.5~1일"
+    },
+    {
+      "id": "D04",
+      "original_title": "자정을 넘는 Wafer·배치는 시작일 24:00 에서 잘리고 다음 날 몫은 사라진다(리포트 회귀의 배치시간도 잘림)",
+      "original_severity": "medium",
+      "priority": "P0",
+      "package": "model",
+      "source_locator": "aoi_capacity/ui/assets/template.html:263-267, 289, 340-341, 825",
+      "reported_evidence": "샘플: 자정 넘는 Wafer 380행(뒷날 몫 1,900분 소실), 자정 넘는 INI 없는 Pass 배치 96개(추정 8,211분 소실), 자정 넘는 Report 497/12,665. 리포트 회귀 점 7,534개 중 659개가 0/1440 에 닿아 잘린 값; 표기명 Job 의 자정 넘는 배치 165개는 실제 평균 267분인데 137분으로 잘린다. 같은 Report 의 Error 가 이틀에 걸쳐 2번 센 Lot 2개",
+      "verification_in_this_review": "confirmed_by_source_and_synthetic_execution",
+      "implementation_steps": [
+        "원 시도를 분류한 뒤 유효 interval만 날짜 경계로 분할. 날짜 목록은 시작일뿐 아니라 모든 유효 조각으로 만든다.",
+        "event/wafer count는 원 시도 발생일에 1회, 시간은 걸친 날짜에 배분. cross-midnight Report의 회귀는 원 배치 duration과 고유 Report로 계산.",
+        "미래 날짜/수집 cutoff 밖 값은 D09 품질 진단과 연결; 날짜 분할이 데이터를 새로 수집한 것으로 보이지 않게 한다."
+      ],
+      "acceptance": [
+        "23:50→다음날00:10=10+10분",
+        "자정 종료·48시간 이상·월말/연말·윤일 보존",
+        "Error count·Wafer count·회귀 n 분할 전후 동일"
+      ],
+      "risk_and_mitigation": "L.w/list.length는 합성행도 포함한다. slicing만 고치지 말고 count 단위를 명시한다.",
+      "expected_effect": "야간 가동 누락과 배치 회귀시간 절단 방지.",
+      "depends_on": [
+        "D09",
+        "D17"
+      ],
+      "decision": null,
+      "feasibility": "high",
+      "effort_estimate": "1~2일(공통 엔진과 통합)"
+    },
+    {
+      "id": "D05",
+      "original_title": "렌더마다 #app 을 통째로 갈아 포커스가 body 로 떨어지고, 팝업에 포커스 이동·가둠·이름이 없다",
+      "original_severity": "medium",
+      "priority": "P1",
+      "package": "ui",
+      "source_locator": "aoi_capacity/ui/assets/template.html:400-406, 487-494, 647, 707, 760",
+      "reported_evidence": "Chromium 실측: 필터 버튼 Enter → activeElement=BODY; 장비 행 Enter 로 팝업 열림 → 포커스 BODY, Tab 한 번에 뒷배경 헤더로; role=dialog 3개 모두 aria-label 없음; 첫 장비 행까지 Tab 13번; ESC 후 포커스 복원 없음. 스크롤 위치도 렌더마다 초기화(팝업 닫으면 목록 맨 위)",
+      "verification_in_this_review": "source_pattern_confirmed; browser_measurements_reported",
+      "implementation_steps": [
+        "render 전 focus/scroll snapshot을 stable semantic key로 저장하고 후 복원.",
+        "최상위 dialog에 aria-labelledby/initial focus/Tab trap/background inert 적용; 닫으면 opener 복귀.",
+        "중첩 팝업·선택 Lot·뒤로 이동을 하나의 modal stack 계약으로 다룬다. H 배열 순번은 영속 키가 아니다."
+      ],
+      "acceptance": [
+        "필터 Enter 뒤 focus 유지",
+        "Tab/Shift+Tab 모달 밖 이동 없음",
+        "ESC는 한 단계만 닫고 이전 focus/scroll 복원"
+      ],
+      "risk_and_mitigation": "inert를 앱 전체에 걸어 모달까지 비활성화하지 않는다. topmost 활성 경계를 테스트.",
+      "expected_effect": "키보드·작은 창 탐색 흐름 유지.",
+      "depends_on": [
+        "D16",
+        "S06"
+      ],
+      "decision": null,
+      "feasibility": "high",
+      "effort_estimate": "1~2일"
+    },
+    {
+      "id": "D06",
+      "original_title": "그날 기록이 없는 장비(가동률 —)가 '살펴볼 장비' 에 포함된다",
+      "original_severity": "medium",
+      "priority": "P1",
+      "package": "ui",
+      "source_locator": "aoi_capacity/ui/assets/template.html:440, 543",
+      "reported_evidence": "S.alert: u===null||u<thU||e>=thE. 9/18 살펴볼 장비 13대 중 3대가 기록 없음, 5대 저가동, 5대 Error. 카드 설명은 '가동률 40% 미만 또는 Error 3건 이상' 뿐",
+      "verification_in_this_review": "confirmed_in_source",
+      "implementation_steps": [
+        "S.alert를 데이터 상태와 성능 경보로 분리. 수집 실패/기록 없음/정상 저가동/Error 경보 원인을 별도 값으로 반환.",
+        "현재 경보 정책 변경 전에도 설명에 null 포함 여부를 정확히 적는다. Q_DEN 승인 뒤 기록 없음 n대를 독립 표시.",
+        "0/—/수집 안 함은 서로 다른 값으로 유지."
+      ],
+      "acceptance": [
+        "null 장비가 저가동으로 오표시되지 않음",
+        "경보 카드 총합과 클릭 후 목록 일치",
+        "전체 무기록일에서 평균 0% 대신 —"
+      ],
+      "risk_and_mitigation": "null 제외만 하면 수집 장애가 사라진다. 별도 수집 상태 요약을 유지.",
+      "expected_effect": "경보 숫자와 설명 일치 및 무기록 원인 구별.",
+      "depends_on": [
+        "D09"
+      ],
+      "decision": "Q_DEN: 경보 정책 변경",
+      "feasibility": "high",
+      "effort_estimate": "0.5일"
+    },
+    {
+      "id": "D07",
+      "original_title": "리포트 탭은 하드코딩된 표기명 21개의 Job 만 다뤄 전체 Lot 의 27% 만 보인다",
+      "original_severity": "medium",
+      "priority": "P1",
+      "package": "report",
+      "source_locator": "aoi_capacity/ui/assets/template.html:371-392, 814-817",
+      "reported_evidence": "30일치 Lot 13,053개 중 표기명 그룹 3,499개(26.8%); 표기명 없는 Job 그룹 478개가 통째로 빠짐. 상위 미표기 Job: 2D@RE-WB90-74053-11C_0860101PD-0A(662 Lot), 2D@R2-15966PA0-BW2…(304), 2D@RE-DT-TB500C-A01…(295) — 4층 전부",
+      "verification_in_this_review": "confirmed_filter_in_source; coverage_reported",
+      "implementation_steps": [
+        "jobGroups의 전체 그룹을 먼저 만들고 JOB_ALIAS는 표시명 override로만 사용. alias 문자열을 그룹 ID로 쓰지 않아 동명이 다른 그룹을 합치지 않는다.",
+        "현재 표기명 보기 유지 + 전체 Job 보기를 제안. 미표기 그룹은 jobKey에서 안전하게 축약하되 원문 tooltip/펼침 제공.",
+        "포함 Report 수/전체 적격 Report 수·미표기 수를 표시. 478그룹에서 검색·정렬 성능 측정."
+      ],
+      "acceptance": [
+        "표기명 변경 전후 집계 identity 동일",
+        "미표기 그룹이 전체 보기에서 빠짐없이 등장",
+        "축약명 충돌해도 그룹/선택 분리"
+      ],
+      "risk_and_mitigation": "전체 포함은 필터와 표본 구성을 바꾼다. Q_REPORT 전에는 현재 범위를 유지.",
+      "expected_effect": "현재 alias 목록 밖 장비·Job의 분석 접근성 향상.",
+      "depends_on": [
+        "D04",
+        "D12"
+      ],
+      "decision": "Q_REPORT",
+      "feasibility": "high",
+      "effort_estimate": "1~2일"
+    },
+    {
+      "id": "D08",
+      "original_title": "'중단' 제외 분기는 도달 불가(항상 0)이고 '평균 fault' 열은 '수집 예정' 자리표시만 차지한다",
+      "original_severity": "medium",
+      "priority": "P1",
+      "package": "report",
+      "source_locator": "aoi_capacity/ui/assets/template.html:813, 822-823, 836, 848",
+      "reported_evidence": "L[10](st) 은 Error 있는 Lot 에만 채워져 !L[5] && ABORT.test(st) 는 성립 불가 — 30일치 해당 Lot 0개. faults/scanned_dice/yield 열은 ROW_SCHEMA 5 에 있으나 모델이 읽지 않고 열 하나가 '수집 예정' 텍스트만",
+      "verification_in_this_review": "confirmed_in_source",
+      "implementation_steps": [
+        "도달 불가능한 abort 제외와 문구를 제거하되 원 cause/outcome은 보존. 현재 D52 의미와 설명을 대조.",
+        "평균 fault를 actual Wafer의 유효 faults 값으로 계산. 결측 0 처리 금지; n과 coverage 표시.",
+        "기간 전체 유효 값 0일 때만 컬럼 숨김 또는 명확한 —. 행마다 컬럼을 숨겨 정렬을 깨지 않는다."
+      ],
+      "acceptance": [
+        "PASS+Aborted와 cause Error+Aborted가 D52에 맞게 분류",
+        "faults [0,2,missing] 평균=1, coverage=2/3",
+        "합성행/잘린 자정 조각이 평균 분모에 추가되지 않음"
+      ],
+      "risk_and_mitigation": "새 열이 schema에 있어도 옛 캐시에 값이 없을 수 있다. C02 refresh 없이 채워졌다고 표시하지 않는다.",
+      "expected_effect": "죽은 설명 제거·수집된 품질 수치 활용.",
+      "depends_on": [
+        "D04",
+        "C02"
+      ],
+      "decision": null,
+      "feasibility": "high",
+      "effort_estimate": "0.5~1일"
+    },
+    {
+      "id": "D09",
+      "original_title": "로더 예외·잘못된 날짜에 방어가 없어 '불러오는 중…' 에서 멈추거나 'NaN-NaN-NaN' 날짜가 생긴다",
+      "original_severity": "medium",
+      "priority": "P0",
+      "package": "loader",
+      "source_locator": "aoi_capacity/ui/assets/template.html:211-221, 227-237, 263-267",
+      "reported_evidence": "unfold({cols:['a'],pooled:[],pool:[]}) → TypeError — loadDemo 의 try 는 JSON.parse 만 감싼다. 월 약어 오타 '18-Sxp-26 …' → P() 가 Invalid Date 를 돌려주고 an 이 truthy 라 days 에 'NaN-NaN-NaN' 이 들어간다(헤더 'NaN월 NaN일')",
+      "verification_in_this_review": "confirmed_in_source",
+      "implementation_steps": [
+        "loadDemo의 JSON.parse→unfold→init 전체 실패를 화면의 오류 패널로 연결. 정상 빈 데이터와 손상 데이터 구별.",
+        "cols 유일성/필수 열/rows 길이/pooled 열/정수 pool index 범위를 검증. 잘못된 index를 빈 문자열로 바꿔 숨기지 않는다.",
+        "P의 Invalid Date와 날짜 rollover를 검출; 시간만 잘못된 행은 사건과 원문을 보존하고 시간만 제외. 전체 구조 손상은 중단."
+      ],
+      "acceptance": [
+        "잘못된 월 약어/2월30일/13월/25시/NaN이 날짜 key로 생기지 않음",
+        "손상 JSON·pool index·중복 cols에서 오류 패널",
+        "한 시각 오류 때문에 정상 rows가 사라지지 않음"
+      ],
+      "risk_and_mitigation": "모든 불량 행을 통째로 삭제하면 Error 사건이 줄어든다. 오류 계층별 degrade 정책을 둔다.",
+      "expected_effect": "로딩 고착·NaN 날짜·조용한 자료 손실 방지.",
+      "depends_on": [],
+      "decision": null,
+      "feasibility": "high",
+      "effort_estimate": "1~2일"
+    },
+    {
+      "id": "D10",
+      "original_title": "1000px 미만에서 리포트 표 오른쪽 열이 잘려 보이지 않고, Lot 92개 팝업은 이름표 단이 16개에서 겹친다",
+      "original_severity": "low",
+      "priority": "P2",
+      "package": "ui",
+      "source_locator": "aoi_capacity/ui/assets/template.html:84, 833, 690",
+      "reported_evidence": "800px 에서 .thead 마지막 열 right=985 vs 패널 right=787(.panel overflow:hidden) → 'Error 대기'·'평균 fault' 열 소실; 1024px 은 997/999. AOI-9 9/3 Lot 92개 팝업: 16단 전부 사용 → 겹침",
+      "verification_in_this_review": "reported_only",
+      "implementation_steps": [
+        "리포트 표를 가로 스크롤 래퍼로 감싸고 header/body 동일 grid width. 작은 창에서도 끝 열 도달 가능.",
+        "Lot 이름표는 선택/Error 우선·겹침 회피·나머지 n개 목록으로 전환. 표시 생략과 데이터 제외를 구분.",
+        "hover/focus hit area·tooltip clamp는 ui_interaction 계약을 따른다."
+      ],
+      "acceptance": [
+        "800/1024/1440px·200% zoom에서 모든 열 접근",
+        "92 Lot fixture에서 이름표 중첩/잘못된 Report 선택 없음",
+        "hover 1개/Enter 클릭 동등 동작"
+      ],
+      "risk_and_mitigation": "성능을 위해 DOM을 줄여도 키보드 목록 접근을 남긴다.",
+      "expected_effect": "좁은 화면과 Lot 밀집 화면의 정보 접근성 개선.",
+      "depends_on": [
+        "D16",
+        "S06"
+      ],
+      "decision": null,
+      "feasibility": "high",
+      "effort_estimate": "0.5~1일"
+    },
+    {
+      "id": "D11",
+      "original_title": "'대기' 가 두 뜻(유휴 vs Error 후 대기)으로 쓰이고, 안내문 몇 개가 실제 동작과 다르다",
+      "original_severity": "low",
+      "priority": "P2",
+      "package": "copy",
+      "source_locator": "aoi_capacity/ui/assets/template.html:503, 543-545, 746-770, 752",
+      "reported_evidence": "'대기 시간'(Error 탭·홈 카드: x+s) · '대기'(장비 팝업: 유휴) · '에러 후 대기'(범례) · 'Error 대기'(리포트) — 네 표기가 두 개념. errPopup '시각 미기록 Error n건은 막대에 없습니다' 지만 실제로는 배치 시작에 3분 표식으로 그려진다. '최근 21일' 창이 선택일 이후 날짜를 포함. '열람 시각 기준(비고정)' 배지는 뜨지만 모델은 열람 시계를 쓰지 않는다",
+      "verification_in_this_review": "reported_only",
+      "implementation_steps": [
+        "기존 확정 용어를 semantic key로 묶고 x(Error 구간)/s(에러 후 대기)/x+s(합계)의 제목·tooltip을 분리.",
+        "시각 미기록 표식 설명을 실제 동작에 맞춤. 최근21일은 선택일을 끝으로 하는 21개 달력 날짜인지 현재 data-days인지 명시하고 fixture로 고정.",
+        "열람 시각 기준 문구를 수집 기준 문구로 수정. 새로운 용어로 사용자 확정 D48을 덮지 않음."
+      ],
+      "acceptance": [
+        "카드/범례/팝업/리포트 같은 metric이 같은 의미",
+        "기준일 이후 날짜가 최근 창에 포함되지 않음",
+        "문구가 실제 marker/시간 계산과 일치"
+      ],
+      "risk_and_mitigation": "Error 대기 하나로 x와 s를 모두 뭉개면 원인 혼동. 합계 정의를 짧게 제공.",
+      "expected_effect": "숫자와 안내문 간 불일치 해소.",
+      "depends_on": [
+        "D02"
+      ],
+      "decision": null,
+      "feasibility": "high",
+      "effort_estimate": "0.5일"
+    },
+    {
+      "id": "D12",
+      "original_title": "Setup 이 4자리가 아닌 장비(AOI-10 SETUP)의 밑줄 Lot 은 마지막 조각만 남는다",
+      "original_severity": "low",
+      "priority": "P1",
+      "package": "identity",
+      "source_locator": "aoi_capacity/ui/assets/template.html:238-251",
+      "reported_evidence": "R_TB500_LIVE_PI3_SETUP_AMD Venice_U-Pad Dummy_18-Sep-26_(…)_BatchReport.htm → 'U-Pad Dummy'(표 Lot 은 'AMD Venice_U-Pad Dummy'). R2 는 split('_') 마지막 조각",
+      "verification_in_this_review": "confirmed_in_source",
+      "implementation_steps": [
+        "lotName R2 fallback에서 날짜 suffix를 벗긴 stem의 말미가 표 Lot과 경계 포함 case-insensitive 일치하면 표 Lot을 사용.",
+        "정상 R1의 기존 우선순위 유지. rawLot/canonicalLot/displayLot을 구분해 원문 손상 없이 정규화.",
+        "4자리 Setup 가정·밑줄·공백·비ASCII·suffix substring 오탐 fixture 추가."
+      ],
+      "acceptance": [
+        "SETUP_AMD Venice_U-Pad Dummy는 AMD Venice_U-Pad Dummy 보존",
+        "Lot ABC와 XABC가 잘못 매칭되지 않음",
+        "기존 R1 fixture 결과 유지"
+      ],
+      "risk_and_mitigation": "Lot이 material key에 들어가므로 변경 영향 Rescan diff를 함께 기록.",
+      "expected_effect": "Lot 절단에 따른 이름·자재 이력 오판 방지.",
+      "depends_on": [],
+      "decision": null,
+      "feasibility": "high",
+      "effort_estimate": "0.5~1일"
+    },
+    {
+      "id": "D13",
+      "original_title": "미분류 문구·INI 없음·추정 비율을 화면 어디서도 요약하지 않는다(옛 데이터 품질 목록 부재)",
+      "original_severity": "medium",
+      "priority": "P1",
+      "package": "quality",
+      "source_locator": "aoi_capacity/ui/assets/template.html:204, 532, 519-521",
+      "reported_evidence": "isUnmappedStatus/normStatus/CAUSE_CODES 는 정의만 되고 UI 미사용. 새 펌웨어 문구는 원인이 없어 Scan 시간으로 조용히 편입된다. INI 없음 16,742행 · STALE 7,296 · 추정 행 19,499(장비-일 581)은 홈 카드 '배치 시각 추정 포함 N대' 와 팝업 cv% 로만 보인다",
+      "verification_in_this_review": "source_reviewed; sample_counts_reported",
+      "implementation_steps": [
+        "행 품질 counts와 시간 basis seconds를 분리해 모델 meta에 제공. ini_missing/STALE/invalid/unmapped는 각 분모를 명시.",
+        "품질 한 줄+클릭 상세에서 device→Report→원문으로 추적. unknown 문구는 목록화하고 임의 Error/Pass로 새 매핑하지 않는다.",
+        "미분류가 KPI에 미친 시간/사건 수와 현재 fallback 정책을 보여 주고 의도된 분류 변경은 별도 검토."
+      ],
+      "acceptance": [
+        "추정 비율=최종 배정된 추정 생산시간/최종 생산시간; 0분이면 —",
+        "행 수 기반 INI 비율과 시간 비율 혼동 없음",
+        "상세 목록 합계가 요약과 일치"
+      ],
+      "risk_and_mitigation": "품질 점수를 확률처럼 만들지 않는다. 원문 상태 노출은 상세에 한정해 홈 문구를 간결하게 유지.",
+      "expected_effect": "재수집·모델 변경 효과를 근거별로 확인 가능.",
+      "depends_on": [
+        "D09",
+        "D01",
+        "C12"
+      ],
+      "decision": "Q_TIME: 새 수치 정책; 진단은 진행",
+      "feasibility": "high",
+      "effort_estimate": "1~2일"
+    },
+    {
+      "id": "D14",
+      "original_title": "경보 문턱(40%·3건)과 층 판정('4F' 접두 아니면 2층)이 코드 상수다",
+      "original_severity": "low",
+      "priority": "P2",
+      "package": "config",
+      "source_locator": "aoi_capacity/ui/assets/template.html:393, 441",
+      "reported_evidence": "PROPS={attentionUtil:40,attentionErr:3}; floorOf: n.indexOf('4F')===0?'4':'2'",
+      "verification_in_this_review": "confirmed_in_source",
+      "implementation_steps": [
+        "meta.dashboard_settings에 version·attention thresholds·device floor mapping을 전달.",
+        "이름 prefix fallback은 기존 2층/4층 장비에만 적용하고 새로운 층은 미지정. 범위 허용과 층 표시는 분리.",
+        "유효 값만 반영하며 예전 HTML은 기존 40%/3건으로 표시."
+      ],
+      "acceptance": [
+        "old meta fallback 동일",
+        "경계 39.9/40%·2/3건 fixture",
+        "새 이름이 근거 없이 2층으로 분류되지 않음"
+      ],
+      "risk_and_mitigation": "설정 UI를 과도하게 늘리지 않고 기본값 변경은 Q_REPORT에서만.",
+      "expected_effect": "현장 기준 변경을 코드 수정과 분리.",
+      "depends_on": [
+        "C13"
+      ],
+      "decision": "Q_REPORT",
+      "feasibility": "high",
+      "effort_estimate": "0.5~1일"
+    },
+    {
+      "id": "D15",
+      "original_title": "장비-일 추정(isEst/estBar/'(추정)' 통계 6개/PROPS.showRepeat)은 기본 RULES 에서 도달 불가",
+      "original_severity": "low",
+      "priority": "P3",
+      "package": "maintenance",
+      "source_locator": "aoi_capacity/ui/assets/template.html:432-438, 693-698, 393",
+      "reported_evidence": "isEst 는 !(D.rules.estimateFromBatch) 가 앞에 있어 기본값에서 항상 false; estBar·mEst 통계·문단·showRepeat false 경로 없음",
+      "verification_in_this_review": "confirmed_in_source",
+      "implementation_steps": [
+        "legacy design profile 전용 isEst/estBar를 제품 renderer와 분리하거나 실제 지원 여부에 따라 제거.",
+        "PROPS.showRepeat와 옛 추정 통계가 남은 이유를 문서화하고 기본 제품 미도달 분기만 정리.",
+        "원 디자인 비교 fixture는 보존하되 현 제품 기능으로 오해할 설명 제거."
+      ],
+      "acceptance": [
+        "현행 profile 결과/화면 불변",
+        "legacy 동일성 테스트가 유지되거나 archive 사유 명확"
+      ],
+      "risk_and_mitigation": "테스트 목적 레거시 분기를 죽은 코드로 간주해 무조건 제거하지 않는다.",
+      "expected_effect": "추정 모델의 실제 단일 경로가 명확해짐.",
+      "depends_on": [
+        "D01",
+        "S05"
+      ],
+      "decision": null,
+      "feasibility": "high",
+      "effort_estimate": "0.5일"
+    },
+    {
+      "id": "D16",
+      "original_title": "선택 Lot 키가 job|lot|시작분|배치시작분 이라 같은 분에 시작한 두 Report 가 함께 선택된다",
+      "original_severity": "low",
+      "priority": "P1",
+      "package": "ui",
+      "source_locator": "aoi_capacity/ui/assets/template.html:680",
+      "reported_evidence": "key=L[0]+'|'+L[1]+'|'+L[2]+'|'+(L[11]||0); Error 직후 재검사가 같은 분에 시작하면 두 이름표가 동시에 on, selH 는 첫 것만. L[8](Report 인덱스)이 있는데 쓰지 않는다",
+      "verification_in_this_review": "reported_only",
+      "implementation_steps": [
+        "selLot/evts.go 키에 Report pool index L[8] 포함. 장기적으로 stable report identity+device+day를 사용.",
+        "사본 저장/재로드 시 pool index가 달라질 수 있으므로 세션 내부 키와 영속 키를 구분.",
+        "Report 버튼이 현재 선택 항목의 원 경로를 여는지 연결 확인."
+      ],
+      "acceptance": [
+        "같은 분·같은 Lot·서로 다른 Report를 각각 선택",
+        "선택 이름표 1개와 Report 버튼 대상 일치"
+      ],
+      "risk_and_mitigation": "index 단독은 다른 장비·날짜에서 재사용될 수 있다. composite key 유지.",
+      "expected_effect": "동시 선택 및 다른 Report 열기 오류 제거.",
+      "depends_on": [],
+      "decision": null,
+      "feasibility": "high",
+      "effort_estimate": "0.25~0.5일"
+    },
+    {
+      "id": "D17",
+      "original_title": "slow 동일성 테스트는 같은 코드와 비교하고, 화면 도우미·render·자정·불변식은 검사가 없다",
+      "original_severity": "medium",
+      "priority": "P0",
+      "package": "tests",
+      "source_locator": "dev/tests/test_dashboard_js.py · dev/tests/js_harness.js · dev/tests/test_template_contract.py",
+      "reported_evidence": "동일성 테스트는 make_aoi_data.js 와 P/lotName/jobKey/mm 이 글자까지 같아 공유 버그(D01·D02·D04·D12)를 잡을 수 없다. fixture 는 d-Mon-yy AM/PM 한 형식뿐(샘플의 mdy 40,416값·24시간 표기 미검사). 없는 것: r+d+t+x+s≤den 불변식(현재 16 장비-일 위반), 자정, S.segsOf/util/alert/fleetUtil, reportUrl 실행, saveHtml 왕복, causeText·ABORTED, Invalid Date, render 전부",
+      "verification_in_this_review": "confirmed_harness_scope",
+      "implementation_steps": [
+        "하네스에 명시적 허용 entrypoint만 추가해 S.util/alert/reportUrl/save roundtrip을 실행. 문자열 eval 임의 입력은 노출하지 않는다.",
+        "독립적으로 계산한 작은 oracle fixture와 구간 보존 법칙을 추가. 디자인 JS 동일성만으로 새 모델을 승인하지 않는다.",
+        "30일치 전수·row order permutation·worker count·자정·시간 형식·동시시작·합성행 제외를 검사."
+      ],
+      "acceptance": [
+        "직접 확인한 D01/D02/D04/N01에 실패하는 회귀 fixture를 먼저 확보",
+        "수정 후 legacy와 current 각 profile 계약 통과",
+        "필수 Node 없는 CI는 skip 성공이 아니라 실패"
+      ],
+      "risk_and_mitigation": "잘못된 기존 숫자를 golden으로 고정하지 않는다. 의도된 delta의 근거를 원장에 남긴다.",
+      "expected_effect": "공유 버그와 새 회귀를 별도 검출.",
+      "depends_on": [],
+      "decision": null,
+      "feasibility": "high",
+      "effort_estimate": "1~2일 + 모델 개발 중 보강"
+    },
+    {
+      "id": "S01",
+      "original_title": "업데이트 페이로드가 차단 목록 방식이라 저장소 루트의 잡파일(v6*.png 664KB · 진행상황.md 68KB · .graphifyignore)이 현장 PC 의 app/ 로 그대로 배포된다",
+      "original_severity": "high",
+      "priority": "P0",
+      "package": "release",
+      "source_locator": "aoi_capacity/utils/updater.py:358-362 · dev/tests/test_update_payload.py:20-33",
+      "reported_evidence": "_stage_tree 를 실제로 돌린 스테이징 최상위 = .graphifyignore, aoi_capacity/, main.py, requirements.txt, scripts/, v6cmp.png, v6home.png, v6set.png, v6trend.png, 진행상황.md (5.5MB). 테스트는 '없어야 할 것' 만 본다",
+      "verification_in_this_review": "confirmed_in_source",
+      "implementation_steps": [
+        "updater._UPDATE_SKIP_TOP을 기본 거부 + 명시적 app allowlist로 전환; scripts의 기존 선별 규칙 유지.",
+        "build.py와 make_release_zip.py가 같은 앱 manifest를 참조하되 런처/python payload는 별도 규칙.",
+        "예상 top-level 집합과 필수 하위 asset 집합을 등식 검사. git ls-files만으로는 추적된 잡파일을 막지 못하므로 보조로만 사용."
+      ],
+      "acceptance": [
+        "진행상황.md/v6*.png/임의 신규 root 파일 배포 0",
+        "collect_sample.py 및 필수 실행 파일 누락 0",
+        "원 저장소 그대로 만든 staging의 집합이 manifest와 일치"
+      ],
+      "risk_and_mitigation": "allowlist 누락은 업데이트 불능을 만들 수 있다. exe-lite·source 설치 모두 staging smoke.",
+      "expected_effect": "개발 자료의 현장 유입 차단·배포 범위 예측 가능.",
+      "depends_on": [],
+      "decision": null,
+      "feasibility": "high",
+      "effort_estimate": "0.5~1일"
+    },
+    {
+      "id": "S02",
+      "original_title": "CI 에서 pytest 가 한 번도 돌지 않는다 — main 푸시가 곧 현장 배포인데 게이트가 없다",
+      "original_severity": "high",
+      "priority": "P0",
+      "package": "ci",
+      "source_locator": ".github/workflows/graphify.yml (유일한 워크플로)",
+      "reported_evidence": "워크플로는 graphify 지도 생성뿐. 업데이터는 main SHA 만 보고 배포. 이 환경엔 PyQt6 가 없어 test_ui_smoke.py·test_collector_worker.py 가 통째로 skip 되어 UI 층은 Windows 개발 PC 밖에서 실행된 적이 없다",
+      "verification_in_this_review": "workflow_tree_confirmed",
+      "implementation_steps": [
+        "tests.yml에 Linux core/Node+Qt offscreen, Windows 경로·CLI·런처, Chromium file:// smoke job을 구성. Python/Node/브라우저 버전과 설치를 명시.",
+        "required test dependencies가 없으면 preflight 실패. 필수 job은 optional skip으로 초록색 통과하지 않게 함.",
+        "C01과 정확한 SHA의 성공 상태를 연결. 브랜치 보호 설정이나 배포 채널 변경은 Q_RELEASE에서만 반영."
+      ],
+      "acceptance": [
+        "의도된 실패 fixture가 CI를 red로 만듦",
+        "Qt/Node/YAML/Chromium 필수 skip 0",
+        "pending/failed target SHA를 업데이터가 적용하지 않음"
+      ],
+      "risk_and_mitigation": "CI 추가만으로 배포를 막았다고 주장하지 않는다. 프로덕션 배포 경로를 끝까지 확인.",
+      "expected_effect": "현장에 도달하기 전 모델·UI·Windows 회귀 검출.",
+      "depends_on": [
+        "S10",
+        "S04"
+      ],
+      "decision": "Q_RELEASE: 배포 정책·관리 설정",
+      "feasibility": "high",
+      "effort_estimate": "1~2일"
+    },
+    {
+      "id": "S03",
+      "original_title": "README·설정 도움말이 코드와 반대인 주장 2건 — '`*` 행은 범위 제한 중 통째로 건너뜀'(고쳐진 지 오래) · '50% 미만인 날 추정'(D54 로 폐지)",
+      "original_severity": "high",
+      "priority": "P1",
+      "package": "docs",
+      "source_locator": "README.md:44,100,3,178 · aoi_capacity/i18n/ko.py:164",
+      "reported_evidence": "devices._discover_under 는 제한 중에도 * 행이 동작(규칙 2). template 은 D54 로 행 단위 추정이고 isEst 는 늘 false. README:3 '가동/Error/미가동' 은 폐기 용어, README:178 의 -m 'not ui' 는 CLAUDE.md 와 다름. test_readme_and_settings_help_follow_the_confirmed_rules 는 잡지 않는다",
+      "verification_in_this_review": "reported_only",
+      "implementation_steps": [
+        "README와 ko.py 도움말의 * 행·50% 추정·용어·테스트 명령을 최신 결정과 맞춘다.",
+        "정확 경로 허용 목록에서 *가 동작함, Pass 배치 추정은 D54, 화면은 D53을 따른다는 짧은 설명.",
+        "금지 문구 문자열 검사만 늘리지 말고 설정 예제·실제 mode 동작을 대조."
+      ],
+      "acceptance": [
+        "현재 코드를 근거로 관련 문단 수동 대조",
+        "기존 docs 테스트 및 설정 예제 점검"
+      ],
+      "risk_and_mitigation": "문서 수정 중 아직 승인되지 않은 새 모델을 이미 확정된 규칙으로 적지 않는다.",
+      "expected_effect": "현장 설정/추정 이해 오류 해소.",
+      "depends_on": [],
+      "decision": null,
+      "feasibility": "high",
+      "effort_estimate": "0.25~0.5일"
+    },
+    {
+      "id": "S04",
+      "original_title": "테스트 두 개가 저장소 작업 트리의 실제 파일을 쓴다(추적 중인 offline .dc.html 덮어쓰기 · 패키지 폴더에 임시 JS 생성)",
+      "original_severity": "medium",
+      "priority": "P1",
+      "package": "tests",
+      "source_locator": "dev/tests/test_design_bundle.py:58 → dev/tools/design_bundle.py:78 · dev/tests/test_graphify_build.py:58,71 → dev/tools/graphify_build.py:24,35",
+      "reported_evidence": "build() 가 OFFLINE_DC(추적 파일)를 무조건 다시 쓴다 — pytest 뒤 mtime 이 테스트 시각으로 바뀜(내용 같아 git status 만 깨끗). graphify 테스트는 aoi_capacity/ui/assets/_template_inline.js 를 실제로 만들었다 지운다. pytest-xdist 에서는 경쟁",
+      "verification_in_this_review": "reported_only",
+      "implementation_steps": [
+        "design_bundle.build와 graphify_build에 출력 경로 또는 workspace 인자를 추가; 테스트는 tmp_path 사용.",
+        "테스트 전후 tracked file bytes와 mtime을 비교해 같은 내용 덮어쓰기까지 검출.",
+        "offline 생성물 추적 해제는 보관 정책을 확인한 뒤; 일단 테스트의 작업 트리 쓰기부터 제거."
+      ],
+      "acceptance": [
+        "기본/병렬 테스트 후 추적 파일 hash·mtime 변경 0",
+        "동시 graphify/design 실행의 임시 경로 충돌 0"
+      ],
+      "risk_and_mitigation": "git status만으로 동일 내용 재쓰기를 검출할 수 없다.",
+      "expected_effect": "테스트가 실제 프로젝트 파일을 오염시키는 문제 제거.",
+      "depends_on": [],
+      "decision": null,
+      "feasibility": "high",
+      "effort_estimate": "0.5~1일"
+    },
+    {
+      "id": "S05",
+      "original_title": "template 계약 테스트 36건이 압축 JS 원문의 글자 일치를 요구한다 — 리팩터에는 깨지고 동작 회귀는 못 잡는다",
+      "original_severity": "medium",
+      "priority": "P1",
+      "package": "tests",
+      "source_locator": "dev/tests/test_template_contract.py:73-96, 115-125, 137-141, 149-156",
+      "reported_evidence": "'if(gap>240)gap=240;' · causeText 호출 원문 · 'sorted.sort((a,b)=>cmpDev(a.n,b.n))' 등을 문자열로 검사. 리포트 탭·3개 팝업·Report 열기·사본 저장은 어디서도 실행되지 않는다(js_harness 는 buildModel 만)",
+      "verification_in_this_review": "source_reviewed",
+      "implementation_steps": [
+        "template 문자열 계약을 제품 제약(외부 요청 0·__DATA__ 1개·라이트·금지 기능)에만 제한.",
+        "계산식 문자열/함수 호출 모양 검사는 D17 behavioral harness 또는 S06 browser로 대체.",
+        "기존 assertion을 삭제할 때 같은 의도를 검증하는 새 test ID를 매핑."
+      ],
+      "acceptance": [
+        "의미 동일 리팩터가 문자열 차이로 실패하지 않음",
+        "실제 동작 변경은 새 fixture에서 검출",
+        "삭제 검사→대체 검사 추적표"
+      ],
+      "risk_and_mitigation": "문자열 검사 제거를 테스트 약화로 끝내지 않는다.",
+      "expected_effect": "리팩터 자유와 동작 회귀 검출을 함께 확보.",
+      "depends_on": [
+        "D17",
+        "S06"
+      ],
+      "decision": null,
+      "feasibility": "high",
+      "effort_estimate": "1~2일"
+    },
+    {
+      "id": "S06",
+      "original_title": "화면 렌더 경로의 자동 테스트가 0 — Playwright·Chromium 이 설치돼 있는데 쓰는 테스트가 없다",
+      "original_severity": "medium",
+      "priority": "P1",
+      "package": "tests",
+      "source_locator": "dev/tests/js_harness.js:13-16 · aoi_capacity/ui/assets/template.html render/homeHtml/devPopupHtml 등 ~400줄",
+      "reported_evidence": "하네스는 loadDemo 를 제거하고 buildModel 만 실행. render·4탭·data-h 위임·ESC 스택·reportUrl·saveHtml 은 어떤 테스트도 실행하지 않는다. grep -rl playwright dev scripts → 0건(매 세션 수동 실측)",
+      "verification_in_this_review": "harness_scope_confirmed; absence_reported",
+      "implementation_steps": [
+        "실제 template와 작은 embedded fixture로 생성한 HTML을 Chromium file://로 연다.",
+        "4탭·필터·팝업·ESC·키보드·Report 열기·사본 Blob 다운로드/재열기·외부 요청 0·console/pageerror 0 자동 검사.",
+        "Report 열기는 가짜 file 경로를 캡처/차단해 실제 NAS를 읽지 않는다. sample30 browser case는 core smoke와 별도 시간을 기록."
+      ],
+      "acceptance": [
+        "모든 탭에서 의도된 내용 렌더",
+        "사본 저장/재열기 model fingerprint 동일",
+        "automatic http/https/websocket 요청 0",
+        "동일 분 Report 선택 및 focus 경로 확인"
+      ],
+      "risk_and_mitigation": "테스트 환경에 브라우저가 있다고 가정하지 않는다. 로컬 선택 skip은 가능하나 필수 CI는 install 실패 시 실패.",
+      "expected_effect": "빈 화면·클릭 위임·팝업·저장 회귀 자동 검출.",
+      "depends_on": [
+        "D09"
+      ],
+      "decision": null,
+      "feasibility": "high",
+      "effort_estimate": "1~2일"
+    },
+    {
+      "id": "S07",
+      "original_title": "재설계 폴더는 이식 뒤 대부분 낡았는데 '가장 중요 · 임의로 바꾸지 마세요' 라고 적혀 있다 — 살아 있는 것은 scripts/make_aoi_data.js·job_alias.js 뿐",
+      "original_severity": "medium",
+      "priority": "P2",
+      "package": "docs",
+      "source_locator": "docs/design/dashboard-redesign/{HANDOFF.md, RULES.md:11,22, github.md:14,47,49, PROMPT*.md, patch/, app/Err-Popup-A.dc.html, scripts/README.md:17}",
+      "reported_evidence": "RULES.md 의 '대기 최대 240분'·'00:00~24:00 고정' 은 채택하지 않은 규칙, github.md 의 '50% 추정' 은 D54 로 폐지, PROMPT_extract-script.md 는 답을 받은 요청문, patch/ 는 6b4a114 로 적용됨. scripts/README.md 바이트 수 2,246,732 ↔ 실제 2,246,736",
+      "verification_in_this_review": "reported_only",
+      "implementation_steps": [
+        "디자인 폴더 STATUS.md에 이식 완료/참고 자료/레거시 oracle 역할과 현재 규칙 문서 링크 표시.",
+        "아직 참조되는 make_aoi_data.js/job_alias.js/fixtures를 먼저 목록화. Q_ARCHIVE 후 완료 patch·PROMPT·시안을 archive 이동.",
+        "현재 product와 원 디자인의 규칙 차이를 작은 표로 유지; 오래된 문서의 강한 지시문은 역사적 설명으로 표시."
+      ],
+      "acceptance": [
+        "실행 도구/테스트 링크 모두 유효",
+        "현재 규칙과 레거시 규칙의 출처가 구분됨"
+      ],
+      "risk_and_mitigation": "디자인 원본을 현재에 맞게 수정하면 동일성 검증 근거가 사라진다. 원본 보존.",
+      "expected_effect": "다음 세션이 폐기 규칙을 복원할 가능성 감소.",
+      "depends_on": [],
+      "decision": "Q_ARCHIVE: 이동만",
+      "feasibility": "high",
+      "effort_estimate": "0.5~1일"
+    },
+    {
+      "id": "S08",
+      "original_title": "세션 진입점이 4일 만에 20KB→70KB(424줄)로 불었고 완료·폐기 항목이 그대로 남아 있다",
+      "original_severity": "medium",
+      "priority": "P2",
+      "package": "docs",
+      "source_locator": "진행상황.md:29, 93-219, 229-273, 275-293, 295-424",
+      "reported_evidence": "e95e1c7(9/16) 208줄 → 지금 424줄 70KB. '다음 할 일' 의 00000~0-1 항목은 전부 [x] 인데 34줄, '실물로 확인한 사실' 절반은 폐기된 옛 화면 실측, 테스트 수 '392개' 는 실측 399. 70KB 는 첫 Read 에서 잘려 나왔다(이번 세션 실측)",
+      "verification_in_this_review": "source_reviewed",
+      "implementation_steps": [
+        "진행상황.md 진입부를 현재 상태/활성 결정/다음 행동/검증 미완/기록 링크 중심으로 정리.",
+        "완료 기록·취소선·옛 실측은 Q_ARCHIVE 후 날짜별 history에 원문 보존. 결정 번호는 삭제/재사용하지 않음.",
+        "고정 테스트 총개수 대신 실제 실행 명령·artifact 위치 기록. 자의적 글자수/길이 제한 가드 추가 금지."
+      ],
+      "acceptance": [
+        "기존 결정과 실측의 원문 복원 가능",
+        "활성 할 일·차단 조건을 진입부에서 확인",
+        "링크 유효"
+      ],
+      "risk_and_mitigation": "요약하면서 승인 조건을 잃지 않게 active decision ID 목록으로 대조.",
+      "expected_effect": "세션 인수인계 읽기 부담 감소.",
+      "depends_on": [],
+      "decision": "Q_ARCHIVE",
+      "feasibility": "high",
+      "effort_estimate": "0.5~1일"
+    },
+    {
+      "id": "S09",
+      "original_title": "추적 중인 잡파일 — 옛 모듈 .pyc, 참조 없는 스크린샷 7장(1.1MB), 2MB 다크테마 옛 데모(Google Fonts 링크 포함)",
+      "original_severity": "medium",
+      "priority": "P2",
+      "package": "hygiene",
+      "source_locator": "__pycache__/aoi_collect.cpython-311.pyc · v6*.png · docs/screenshots/*.png · docs/aoi_collector_demo.html · README.md:190",
+      "reported_evidence": "git ls-files 로 확인. 스크린샷은 어떤 .md/.py/.html 도 참조하지 않으며 9/13 UI. 데모 HTML 은 data-theme=dark + fonts.googleapis.com 인데 README:190 이 '브라우저 데모' 로 안내",
+      "verification_in_this_review": "tracked_tree_confirmed",
+      "implementation_steps": [
+        "추적 pyc는 생성 가능 여부 확인 후 추적 제외하고 ignore 보완.",
+        "스크린샷/데모는 실제 참조 검색→보관/교체 계획. 루트 /*.png 일괄 ignore보다는 개발 산출물 경로를 좁게 지정.",
+        "구형 demo README 링크는 새 화면 또는 보관 설명으로 수정. 실제 현장 데이터가 들어간 데모를 외부 공개 산출물로 새 배포하지 않는다."
+      ],
+      "acceptance": [
+        "필수 문서 이미지 링크 깨짐 0",
+        "현장 payload에 옛 데모/이미지 포함 0"
+      ],
+      "risk_and_mitigation": "참조 없음은 삭제 허가가 아니다. 보존물 이동/삭제는 Q_ARCHIVE.",
+      "expected_effect": "저장소와 현장 배포 잡파일 감소.",
+      "depends_on": [
+        "S01"
+      ],
+      "decision": "Q_ARCHIVE: 보관물 변경",
+      "feasibility": "high",
+      "effort_estimate": "0.5일"
+    },
+    {
+      "id": "S10",
+      "original_title": "PyYAML 이 dev 의존성에 없어 워크플로 가드가 어디서나 조용히 skip 되고 Playwright 도 선언되지 않았다",
+      "original_severity": "low",
+      "priority": "P1",
+      "package": "ci",
+      "source_locator": "dev/requirements-dev.txt · dev/tests/test_graphify_build.py:83",
+      "reported_evidence": "pytest -rs: SKIPPED could not import 'yaml'. 'main 에 커밋하지 않는다' 계약을 보는 테스트가 개발 환경에도 CI 에도 안 돈다",
+      "verification_in_this_review": "dev_requirements_reviewed",
+      "implementation_steps": [
+        "dev 의존성에 PyYAML과 브라우저 테스트 설치 경로를 명시. 운영 requirements에 Playwright를 섞지 않음.",
+        "CI preflight에서 yaml/Node/Qt/browser 실제 import 및 실행을 확인. 버전 범위/핀은 호환 확인 후 기록."
+      ],
+      "acceptance": [
+        "workflow guard가 수집되고 실제 실행",
+        "필수 dependency 누락 CI 실패",
+        "운영 배포 dependency 증가 없음"
+      ],
+      "risk_and_mitigation": "선언만 하고 설치하지 않으면 skip이 남는다.",
+      "expected_effect": "필수 검사가 조용히 빠지는 상황 제거.",
+      "depends_on": [],
+      "decision": null,
+      "feasibility": "high",
+      "effort_estimate": "0.25~0.5일"
+    },
+    {
+      "id": "S11",
+      "original_title": "slow 3개가 합쳐 7.3초뿐인데 기본 명령에서 빠져 있다 — 가장 중요한 30일치 동일성 가드가 평소엔 안 돈다",
+      "original_severity": "low",
+      "priority": "P2",
+      "package": "tests",
+      "source_locator": "pytest.ini · dev/tests/test_dashboard_js.py:69 · test_design_extract.py:28 · test_sample_rows.py:30",
+      "reported_evidence": "4.85s(동일성) + 1.66s + 0.67s. 빠른 스위트 전체 4.0초",
+      "verification_in_this_review": "audit_claim_partly_refuted_by_pytest_ini",
+      "implementation_steps": [
+        "현재 기본 pytest가 slow를 포함함을 명시. 빠른 명령과 전체 명령을 구분한다.",
+        "CI required full job에 30일 샘플을 포함하고 실제 소요시간 확인. 이름을 sample30로 바꾸면 모든 문서/CI -m 표현을 함께 수정.",
+        "첨부 7.3초는 해당 환경 보고값으로만 보존."
+      ],
+      "acceptance": [
+        "pytest collect 목록에서 slow 포함 확인",
+        "CI에서 30일 동일성 및 새 불변식 실행"
+      ],
+      "risk_and_mitigation": "잘못된 감사 전제로 기본 설정을 수정하지 않는다.",
+      "expected_effect": "전수 검사의 실제 실행 여부가 명확해짐.",
+      "depends_on": [
+        "S02"
+      ],
+      "decision": null,
+      "feasibility": "high",
+      "effort_estimate": "0.25일"
+    },
+    {
+      "id": "S12",
+      "original_title": "테스트 이름·하네스 주석이 '제품 스위치 2개' 라 하는데 실제 RULES 는 4개다",
+      "original_severity": "low",
+      "priority": "P3",
+      "package": "docs",
+      "source_locator": "dev/tests/test_template_contract.py:73 · dev/tests/test_dashboard_js.py:70 · dev/tests/js_harness.js:4",
+      "reported_evidence": "…_with_two_product_switches / …_when_the_two_product_rules_are_off / 주석 rules?:{waitToObsEnd, denomToday} ↔ RULES 4개",
+      "verification_in_this_review": "confirmed_in_source",
+      "implementation_steps": [
+        "두 제품 스위치라는 이름/주석을 현재 네 규칙 또는 legacy profile이라는 의미로 수정.",
+        "하네스 입력 예시와 docstring을 실제 API에 맞춘다. 이후 새 policy/profile 구조 도입 시 다시 동기화."
+      ],
+      "acceptance": [
+        "참조 검색으로 오래된 switch 설명 제거; 기존 관련 테스트 실행"
+      ],
+      "risk_and_mitigation": "문구 수정 때문에 새 테스트를 양산하지 않는다.",
+      "expected_effect": "잘못된 모델 범위 안내 제거.",
+      "depends_on": [],
+      "decision": null,
+      "feasibility": "high",
+      "effort_estimate": "0.1~0.25일"
+    },
+    {
+      "id": "S13",
+      "original_title": "헤드리스 설정 예시에 read_workers·scope_devices 가 빠져 있다",
+      "original_severity": "low",
+      "priority": "P2",
+      "package": "config",
+      "source_locator": "docs/config.example.json · aoi_capacity/collect.py DEFAULT_CONFIG",
+      "reported_evidence": "set(DEFAULT_CONFIG) - set(example) = {read_workers, scope_devices}. 대조하는 테스트 없음",
+      "verification_in_this_review": "reported_only",
+      "implementation_steps": [
+        "config.example.json에 read_workers/scope_devices 및 새 옵션을 반영.",
+        "예제와 DEFAULT_CONFIG의 공개 키·타입을 대조하되 private/internal/default-generated 키는 명시적 예외 목록으로 구분."
+      ],
+      "acceptance": [
+        "예제 load→normalize 성공",
+        "unknown public key 차이 없음; 허용 범위 확대 없음"
+      ],
+      "risk_and_mitigation": "무조건 모든 내부 키를 예제에 노출하지 않는다.",
+      "expected_effect": "CLI 설정 예제의 지속적 정확성.",
+      "depends_on": [
+        "C13"
+      ],
+      "decision": null,
+      "feasibility": "high",
+      "effort_estimate": "0.25일"
+    },
+    {
+      "id": "S14",
+      "original_title": "진행상황.md 동반 커밋 후크가 옵트인이라 이 클론에서도 꺼져 있다",
+      "original_severity": "low",
+      "priority": "P2",
+      "package": "workflow",
+      "source_locator": "dev/hooks/pre-commit · git config core.hooksPath",
+      "reported_evidence": "git config core.hooksPath 미설정. 웹 세션은 매번 새 컨테이너라 '한 번 해 두기' 가 성립하지 않는다",
+      "verification_in_this_review": "reported_only",
+      "implementation_steps": [
+        "기존 hooksPath를 먼저 읽고 없을 때만 문서화된 dev setup으로 설정. 다른 사용자 hook을 덮지 않음.",
+        "CI에서 PR merge-base→HEAD diff 기준으로 코드 변경 시 진행상황.md 동반 여부 검사. HEAD 한 커밋만 보면 squash/merge에서 누락하므로 범위를 명시.",
+        "본 요청만으로 새로운 SessionStart 자동 실행 hook을 설치하지 않는다."
+      ],
+      "acceptance": [
+        "기존 hook 설정 유지",
+        "코드+문서 변경 pass, 코드만 변경 fail, 문서-only pass"
+      ],
+      "risk_and_mitigation": "현재 클론의 hooksPath 미설정은 원 감사 환경 사실이며 모든 클론 사실로 일반화하지 않는다.",
+      "expected_effect": "세션 기억에 의존하는 문서 갱신 규칙 보완.",
+      "depends_on": [
+        "S02"
+      ],
+      "decision": null,
+      "feasibility": "high",
+      "effort_estimate": "0.5일"
+    },
+    {
+      "id": "S15",
+      "original_title": "옛 샘플 2장(4.2MB 비압축)은 어떤 테스트·도구도 읽지 않는다 — 30일치 .gz 가 상위 집합",
+      "original_severity": "low",
+      "priority": "P3",
+      "package": "hygiene",
+      "source_locator": "dev/samples/AOI_capacity_2026-09-16_3일치.html · AOI_capacity_2026-09-17_30대.html · dev/samples/README.md",
+      "reported_evidence": "테스트·measure.py·원장은 전부 30일치 gz. README 의 행 추출 예시는 3일치 기준이라 gz 에는 안 맞음",
+      "verification_in_this_review": "tree_presence_confirmed; superset_not_verified",
+      "implementation_steps": [
+        "옛 샘플이 30일치의 내용상 상위집합인지 fingerprint와 상태 문구·형식 coverage로 확인. 날짜 범위만으로 단정하지 않음.",
+        "삭제 대신 gzip 보관 우선. 압축 전후 decompressed SHA256 일치·sample loader 호환 확인.",
+        "README 추출 예제를 sample_rows.load로 바꾸고 생성된 옛 JS를 실행하지 말고 데이터만 재생하는 흐름 안내."
+      ],
+      "acceptance": [
+        "원문 해시 보존·fixture coverage 유지",
+        "모든 샘플 경로 참조 갱신"
+      ],
+      "risk_and_mitigation": "오래된 파일이 독특한 파싱 회귀를 포함할 수 있다. 자동 삭제 금지.",
+      "expected_effect": "회귀 근거를 보존하면서 저장 용량 감소.",
+      "depends_on": [],
+      "decision": "Q_ARCHIVE",
+      "feasibility": "high",
+      "effort_estimate": "0.5일"
+    },
+    {
+      "id": "S16",
+      "original_title": "graphify 워크플로가 버전 고정 없는 pip 설치와 저장소 전체 contents:write 로 강제 푸시한다",
+      "original_severity": "low",
+      "priority": "P2",
+      "package": "ci",
+      "source_locator": ".github/workflows/graphify.yml:13-14,31,57",
+      "reported_evidence": "pip install 'graphifyy[sql]' 핀 없음, permissions: contents: write 가 잡 전체, git push --force graphify-out",
+      "verification_in_this_review": "workflow_reviewed",
+      "implementation_steps": [
+        "graphifyy 호환 버전을 실제 확인 후 고정하고 가능하면 실행 action도 immutable SHA로 고정.",
+        "분석 job read-only, publish job만 최소 contents:write로 분리. branch 규칙/전용 credential은 Q_RELEASE 검토.",
+        "graphify-out force update는 concurrency와 예상 ref/lease 검증을 사용; main push 경로가 없음을 test."
+      ],
+      "acceptance": [
+        "분석 job write 권한 없음",
+        "출력 브랜치만 갱신; main 대상 거부",
+        "동시 실행에서 최신 결과가 오래된 결과로 덮이지 않음"
+      ],
+      "risk_and_mitigation": "GitHub contents:write가 branch 범위로 제한되는 것처럼 설명하지 않는다. branch 보호는 별도 제어.",
+      "expected_effect": "분석 도구 변화와 토큰 권한 범위의 위험 축소.",
+      "depends_on": [],
+      "decision": "Q_RELEASE: 서버 보호/credential",
+      "feasibility": "high",
+      "effort_estimate": "0.5~1일"
+    },
+    {
+      "id": "S17",
+      "original_title": "배포 zip 포함 규칙이 __pycache__ 와 최상위 5개만 거른다 — .pytest_cache·낱개 *.pyc·로그가 dist 에 있으면 그대로 들어간다",
+      "original_severity": "low",
+      "priority": "P1",
+      "package": "release",
+      "source_locator": "scripts/make_release_zip.py:20,38-44",
+      "reported_evidence": "should_include 는 _SKIP_TOP 5개와 __pycache__ 만 본다",
+      "verification_in_this_review": "confirmed_in_source",
+      "implementation_steps": [
+        "release zip 규칙에 .pytest_cache/*.pyc/*.log/*.bak 및 stage/old 디렉터리 제외를 명시.",
+        "S01의 앱 manifest와 런타임 manifest로 기대 파일 목록을 검증. 파일명만 보고 런타임 필수 리소스를 제거하지 않음.",
+        "실행 후 오염된 dist fixture를 zip으로 만들고 archive 내부를 검사."
+      ],
+      "acceptance": [
+        "오염 dist에서도 cache/log/backup 미포함",
+        "런처/python/app/설치방법 및 필수 assets 유지"
+      ],
+      "risk_and_mitigation": "업데이트 앱 payload와 최초 설치 zip을 같은 top-level allowlist로 처리하지 않는다.",
+      "expected_effect": "빌드 PC 잔재의 배포 유입 차단.",
+      "depends_on": [
+        "S01"
+      ],
+      "decision": null,
+      "feasibility": "high",
+      "effort_estimate": "0.5일"
+    },
+    {
+      "id": "S18",
+      "original_title": "'문서가 코드와 어긋나는지' 가드는 사실상 '30대' 한 검사뿐이다",
+      "original_severity": "low",
+      "priority": "P2",
+      "package": "docs",
+      "source_locator": "dev/tests/test_progress_doc.py:74-78",
+      "reported_evidence": "PARSER_VERSION·ROW_SCHEMA_VERSION·MODEL_VERSION·24열·표기명 21개·테스트 개수는 대조하지 않는다",
+      "verification_in_this_review": "reported_only",
+      "implementation_steps": [
+        "코드에서 추출 가능한 parser/model/row schema 버전·열 수·alias 수를 작고 기계적으로 관리되는 metadata 블록과 대조.",
+        "산문 전체를 정규식으로 억지 검증하지 말고 문서 가드의 실제 범위를 docstring에 명시.",
+        "테스트 총개수처럼 쉽게 변하고 의미 없는 숫자는 문서에서 제거."
+      ],
+      "acceptance": [
+        "버전 변경 누락은 검사 실패",
+        "alias/열 계약 변경 시 문서 metadata 갱신 요구"
+      ],
+      "risk_and_mitigation": "또 하나의 수동 truth source를 만들지 않게 생성 또는 추출 방향을 한쪽으로 고정.",
+      "expected_effect": "새 세션의 낡은 버전·열 수 오판 방지.",
+      "depends_on": [
+        "S08",
+        "S12"
+      ],
+      "decision": null,
+      "feasibility": "high",
+      "effort_estimate": "0.5일"
+    }
+  ],
+  "additional_findings": [
+    {
+      "id": "N01",
+      "priority": "P0",
+      "title": "앞선 시도가 Pass인지 확인하지 않고 원인이 없다는 이유만으로 Rescan 판정",
+      "source_locator": "aoi_capacity/ui/assets/template.html:all.sort / seen loop (약 277~279행)",
+      "evidence": "w.rel=(p&&!p.c)?1:0는 이전 outcome이 PASS인지 검사하지 않는다. Node fixture에서 앞선 Wafer Skipped. 다음 Pass가 d=10분으로 잡혔다. D48-③의 앞선 Pass 조건과 다르다.",
+      "verification": "confirmed_by_source_and_synthetic_execution",
+      "implementation_steps": [
+        "앞선 유효 시도의 outcome===PASS인지 명시적으로 검사. 원인 없음과 성공을 동일시하지 않음. 원인 Error 뒤 정상 Scan 규칙 유지.",
+        "동일 material key의 same-report 중복 row·batch/slot 합성행을 앞선 wafer 시도로 취급하지 않는다. Job/Lot/Wafer 불충분 시 식별 불가로 남겨 빈 키끼리 합치지 않는다.",
+        "시각 같은 시도는 이전 시각 그룹 상태만 사용해 입력 순서가 선후를 만들지 않게 한다. Report ID 정렬은 결정성만 제공하며 실제 선후 증거는 아니다.",
+        "jobKey의 R접두·PI/RDL 단계 구분과 장비 무관 이력은 기존 규칙 유지. 분할 전에 한 번 판정한다."
+      ],
+      "acceptance": [
+        "Skipped/Unknown/중단 뒤 Pass를 이전 Pass처럼 Rescan으로 처리하지 않음",
+        "Pass 뒤 같은 material은 Rescan, Error 뒤 정상 Scan",
+        "동시시작 row 순서 permutation에서 Report별 판정 동일",
+        "동일 Report 중복 행 또는 합성행 추가가 재스캔을 새로 만들지 않음"
+      ],
+      "risk": "Unknown 사이에 더 오래된 Pass를 찾을지 가장 최근 시도만 볼지는 D48-③의 앞선 시도 문맥으로 먼저 fixture화한다. 확정 근거가 없으면 최근 시도 미확정→Scan 유지/미확정 진단을 제안하고 검토 받는다.",
+      "expected_effect": "오류 원인이 없다는 이유만으로 발생하는 가짜 Rescan 제거.",
+      "depends_on": [
+        "D09",
+        "D12"
+      ],
+      "effort_estimate": "0.5~1.5일"
+    },
+    {
+      "id": "N02",
+      "priority": "P0",
+      "title": "제자리 업데이트가 구파일 이동 후 새파일 이동에 실패하면 현재 항목을 롤백하지 못함",
+      "source_locator": "aoi_capacity/utils/updater.py:_promote_in_place (약 417~454행)",
+      "evidence": "dst.rename(aside) 후 shutil.move가 성공한 다음에야 done.append한다. 이동 실패를 주입하자 app/main.py는 사라지고 main.py.old-update만 남았다.",
+      "verification": "confirmed_by_extracted_current_function_failure_injection",
+      "implementation_steps": [
+        "old rename 전 저널 등록 또는 현재 단계 상태를 따로 기록. old_moved 후 new_moved 실패 시 현재 항목부터 복원.",
+        "rollback 오류를 pass로 숨기지 말고 원인·남은 파일·복구 지침을 남긴다. 이전 파일이 복원될 때까지 aside를 정리하지 않는다.",
+        "파일별 교체뿐 아니라 전체 트리 승격 가능성을 검토하되 실행 중 Windows 잠금·source 모드와 exe 모드를 구분.",
+        "런처의 app.old 삭제 시점과 의존성 환경 변경 실패도 함께 조사하되 미검증 경로를 이미 취약하다고 단정하지 않는다."
+      ],
+      "acceptance": [
+        "첫 번째/중간/마지막 항목의 old rename 직후 failure에서 원본 전부 복원",
+        "새 파일 이동/검증/cleanup failure별 결과 명시",
+        "rollback 자체 실패 시 백업 보존과 actionable error"
+      ],
+      "risk": "복원 실패를 덮어쓰거나 뒤늦은 cleanup으로 백업을 지우면 복구 불가. rollback 경로를 우선 테스트.",
+      "expected_effect": "업데이트 실패 뒤 앱 실행 파일 누락 방지.",
+      "depends_on": [],
+      "effort_estimate": "0.5~1일"
+    }
+  ],
+  "creative_extensions": [
+    {
+      "id": "I01",
+      "name": "숫자의 근거 펼치기",
+      "related": [
+        "D01",
+        "D02",
+        "D13"
+      ],
+      "proposal": "가동률·대기 숫자를 선택하면 원 시간 조각→Report→INI/배치 근거와 제외된 겹침을 보여 주는 경량 상세 패널. 홈에는 숫자와 품질 한 줄만 유지.",
+      "implementation": "canonical interval source_ids와 reason code를 기반으로 선택한 장비-일만 지연 구성. 모델을 다시 계산하지 않고 이미 만든 인덱스를 조회.",
+      "benefit": "왜 이 값인지 현장에서 직접 확인 가능; 잘못된 합산을 시각으로 발견.",
+      "risk": "원문·경로를 홈에 과다 노출하지 않음. 큰 데이터는 선택한 범위만 DOM 생성.",
+      "gate": "Q_TIME 후, 현재 팝업 확장 범위로 구현"
+    },
+    {
+      "id": "I02",
+      "name": "수치 변화 분해 원장",
+      "related": [
+        "D01",
+        "D03",
+        "D04",
+        "N01"
+      ],
+      "proposal": "동일 원천 데이터에 baseline과 각 변경을 순차 적용해 차이를 중복 제거/자정 복원/분모/분류/기타로 분해한 개발용 JSON·CSV를 생성.",
+      "implementation": "고정 적용 순서와 기준 SHA/profile 기록. delta_i=metric(profile_i)-metric(profile_i-1), sum(delta_i)=최종-기준. 비선형 상호작용 때문에 단독 효과의 단순 합으로 설명하지 않음.",
+      "benefit": "가동률이 왜 바뀌었는지 수치로 검토 가능.",
+      "risk": "변경 적용 순서 의존성을 명시. 사용자 화면에 전기간 비교를 추가하지 않음.",
+      "gate": "즉시 개발 도구로 구현 가능"
+    },
+    {
+      "id": "I03",
+      "name": "재수집 우선순위 계획",
+      "related": [
+        "C02",
+        "D13"
+      ],
+      "proposal": "추정·STALE가 KPI에 미치는 unresolved 시간을 기준으로 어떤 Report부터 재읽을지 dry-run 목록을 만든다.",
+      "implementation": "score=미확정 영향 초×가중치/예상 NAS 읽기 비용. 비용은 같은 실행의 device RTT와 INI 후보 수에서 추정하며 실측 없으면 순위만 제공. 중복 Report는 한 번만 읽는다.",
+      "benefit": "전체 --full보다 적은 읽기로 데이터 품질을 먼저 개선할 후보를 제시.",
+      "risk": "점수를 생산 손실/복구 확률로 설명하지 않음. 허용 장비·정확 경로·수동 시작만 유지.",
+      "gate": "refresh 안전성 확보 후 옵션; 자동 실행 금지"
+    },
+    {
+      "id": "I04",
+      "name": "HTML 재현성 기록",
+      "related": [
+        "D09",
+        "S06",
+        "S18"
+      ],
+      "proposal": "HTML meta에 schema/model/parser/source SHA/rules digest/입력 digest/수집 기준시각을 넣어 어느 규칙과 자료로 만든 숫자인지 확인.",
+      "implementation": "메타 버전 추가 및 옛 파일 fallback. input digest는 원문 정규화 규칙을 고정하고 self digest 필드를 제외. 사본 저장 뒤 의미 fingerprint를 대조.",
+      "benefit": "서로 다른 세션/PC의 숫자 차이를 입력 차이와 모델 차이로 분리.",
+      "risk": "digest는 데이터 신뢰성 또는 전자서명이 아니다. 네트워크 전송·개인정보 추가 없음.",
+      "gate": "후방 호환 메타로 진행 가능"
+    },
+    {
+      "id": "I05",
+      "name": "실데이터에서 최소 회귀 사례 뽑기",
+      "related": [
+        "D17",
+        "S06"
+      ],
+      "proposal": "30일치에서 불변식 위반 장비-일을 찾으면 관련 Report만 남긴 작은 익명 fixture를 생성.",
+      "implementation": "위반을 유지하는 Report subset을 줄이는 delta debugging을 개발 도구로 사용. 원문 ID는 일관된 로컬 별칭으로 치환하고 시각 간격/상태/소유권 관계 유지. 제품 데이터는 수정하지 않음.",
+      "benefit": "15만 행 실패를 몇 행의 재현 사례로 바꾸어 다음 모델 수정 비용 절감.",
+      "risk": "익명화가 material key 관계를 바꿀 수 있어 원 위반과 동일함을 확인. 실데이터를 외부로 보내지 않음.",
+      "gate": "반복 실패가 발생할 때 도입; 필수 기능 완성 지연 금지"
+    },
+    {
+      "id": "I06",
+      "name": "추정 의존도와 회귀 민감도",
+      "related": [
+        "D08",
+        "D13"
+      ],
+      "proposal": "추정 포함 가동률과 같은 분모의 확정 근거만 사용한 가동률을 상세에서 함께 보여 주고 회귀는 outlier 포함/제외 민감도를 개발 보고서에서 비교.",
+      "implementation": "동일 denominator와 canonical basis 집계를 사용. 값 차이는 추정 의존도로 부르며 신뢰구간으로 부르지 않음. 회귀 n·x 범위·residual·장비 구성도 함께 제공.",
+      "benefit": "좋아 보이는 숫자가 실측 증가인지 추정 증가인지 구분.",
+      "risk": "측정 전용 수치가 실제 가동률의 엄밀한 하한이라고 단정하지 않음. outlier 자동 삭제 금지.",
+      "gate": "Q_TIME/Q_REPORT 후 선택 상세; 초기에는 개발 보고서"
+    }
+  ],
+  "delivery_phases": [
+    {
+      "phase": "P0_baseline",
+      "goal": "수정 전 증거와 보호장치",
+      "work": [
+        "현재 SHA/규칙/작업 트리 확인",
+        "첨부 51개 현행 재분류",
+        "D09 로더 fixture·D17/N01/N02 재현",
+        "30일 baseline·성능 및 source fingerprint 저장"
+      ],
+      "exit": "측정/보고/추정 구분과 재현 명령이 있고 원천 데이터가 보존됨",
+      "parallelism": "에이전트 분담은 필수가 아니며 저장소 지침과 사용자 승인이 있을 때만. 도구 수준 독립 조회는 병렬 가능."
+    },
+    {
+      "phase": "P1_protection",
+      "goal": "고장 확대·이력 손실·미검증 배포 방지",
+      "work": [
+        "N02 롤백",
+        "S01/S17 payload",
+        "C01 TLS/SHA",
+        "C10 timeout",
+        "C15 캐시 원자성",
+        "C02 비파괴 refresh",
+        "S04/S10/S02 CI 토대"
+      ],
+      "exit": "실패 주입에서 원 앱·원 캐시 보존; 미검증 SHA 적용 불가; full 현장 실행은 아직 하지 않음"
+    },
+    {
+      "phase": "P2_model_candidate",
+      "goal": "시간 계산 후보를 독립 검증",
+      "work": [
+        "D09 엄격 로더",
+        "D12/N01 식별·재스캔",
+        "D04 자정/사건/회귀 분리",
+        "D01/D02 canonical interval",
+        "I02 변화 원장",
+        "Q_TIME/Q_DEN 비교 증거"
+      ],
+      "exit": "불변식·원문/이벤트 보존 통과. 정책 미확정이면 candidate/shadow 유지, 현재 수치 자동 승격 금지"
+    },
+    {
+      "phase": "P3_collection",
+      "goal": "안전한 증분 수집과 성능",
+      "work": [
+        "C03 ID 이관",
+        "C04/C07/C09 메모리·I/O",
+        "C05/C08 경로·병렬화",
+        "C06 부분 성공",
+        "C12/C13 schema·설정",
+        "C14/C16 실행 흐름"
+      ],
+      "exit": "90일 이력 보존·no-op 캐시 쓰기0·worker 결과 동일·Windows 검증 항목 기록"
+    },
+    {
+      "phase": "P4_display",
+      "goal": "화면·수치·사용자 행동 일치",
+      "work": [
+        "D05/D10/D16 focus/표/선택",
+        "D06/D11 상태·문구",
+        "D07/D08 리포트",
+        "D13 품질",
+        "D14 설정",
+        "S06 브라우저 검증"
+      ],
+      "exit": "4탭/팝업/Report/사본 저장 정상; 800px 및 키보드 접근; 외부 자동 요청0"
+    },
+    {
+      "phase": "P5_consolidation",
+      "goal": "검증 체계와 문서 정리",
+      "work": [
+        "S05/S11/S12 행동 검사·설명",
+        "S03/S07/S08/S13/S18 문서",
+        "C11/D15 정리",
+        "S09/S15 보존 정책",
+        "S14/S16 개발·CI"
+      ],
+      "exit": "51+2 항목 상태/근거 완성. 미실행·보류·현장 검증 잔여를 명시"
+    },
+    {
+      "phase": "P6_reviewable_candidate",
+      "goal": "현장에 적용하기 전 구체적인 검토 패키지",
+      "work": [
+        "변경 요약·전후 원장·테스트 결과·candidate zip manifest",
+        "Windows 로컬 복제 캐시로 refresh rehearsal",
+        "대표 정상/INI누락/4층/자정 장비별 점검 절차",
+        "승격/rollback 절차와 Q_RELEASE 결정안"
+      ],
+      "exit": "사용자는 숫자·화면·패키지를 검토할 수 있음. 이번 프롬프트만으로 remote push·merge·실장비 전체 실행하지 않음"
+    }
+  ],
+  "validation": {
+    "execution_levels": [
+      {
+        "level": "fast",
+        "content": "작은 독립 fixture·변경 모듈 테스트; 네트워크·NAS·pip 실제 접근 없음"
+      },
+      {
+        "level": "sample30",
+        "content": "보관 gzip을 sample_rows로 복원해 최신 template 모델 실행. 원 파일의 옛 JS는 실행하지 않음. 51개 보고값의 해당 항목을 재측정"
+      },
+      {
+        "level": "browser",
+        "content": "Chromium file://; 4탭·모달·hover/focus·download/reopen·external request 검사"
+      },
+      {
+        "level": "windows",
+        "content": "ntpath/SMB mock + PyQt offscreen/런처/CLI/Excel 잠금은 실제 Windows로 별도 확인"
+      },
+      {
+        "level": "field",
+        "content": "사용자 승인과 접근이 있는 대표 장비만 읽기 전용 refresh. 30대 전체 --full을 검증 대체로 사용하지 않음"
+      }
+    ],
+    "commands": [
+      {
+        "purpose": "기존 전체 검사",
+        "command": "QT_QPA_PLATFORM=offscreen python -m pytest -q",
+        "note": "이 명령은 현재 slow 포함. Windows에서는 해당 환경변수를 shell에 맞게 설정."
+      },
+      {
+        "purpose": "빠른 반복",
+        "command": "QT_QPA_PLATFORM=offscreen python -m pytest -q -m \"not ui and not slow and not browser\"",
+        "note": "browser marker는 구현 후 등록. 이 빠른 결과만으로 전체 통과 선언 금지."
+      },
+      {
+        "purpose": "실데이터 전후",
+        "command": "python dev/tools/measure.py dev/samples/AOI_capacity_2026-09-18_30일치.html.gz",
+        "note": "현재 도구 옵션/출력을 읽어 사용. 새 delta ledger 도구는 별도 구현."
+      }
+    ],
+    "reference_cases": [
+      {
+        "id": "T01",
+        "input": "앞선 Pass 07:00~07:10 + 같은 배치08:00~09:00의 미시각 Pass 2장(하나는 Rescan)",
+        "current_observed": "r=70,d=60; 생산 claim130분",
+        "required": "후보 시간 union70분. 60분의 Scan/Rescan 분류를 다수결로 확정하지 않음"
+      },
+      {
+        "id": "T02",
+        "input": "08:00~09:00 활동 +08:30~08:33 Error +다른 장비12:30 기록",
+        "current_observed": "s=237분",
+        "required": "동일 장비에서 Error 종료 시 활동 중이면 gap0. Error 우선 상태 배분이라면 r57+x3"
+      },
+      {
+        "id": "T03",
+        "input": "Scan08:00~09:00, Error08:10~08:15, Scan08:20~09:20",
+        "current_observed": "r120+x5+s5",
+        "required": "활동 union80분; Error 우선 후보 r75+x5+s0"
+      },
+      {
+        "id": "T04",
+        "input": "23:50~다음날00:10",
+        "current_observed": "시작일10분만 존재",
+        "required": "10분+10분, 원 attempt1개/회귀표본1개; 수집 cutoff를 다음날 이후로 둔 fixture"
+      },
+      {
+        "id": "T05",
+        "input": "00:05~00:15 활동, 공통 관측 종료12:30",
+        "current_observed": "장비별 den15이면66.7%",
+        "required": "Q_DEN 공통 분모 후보10/750*100=1.333...%; 24h 기준으로 몰래 변경하지 않음"
+      },
+      {
+        "id": "T06",
+        "input": "같은 자재 앞선 Skipped→뒤 Pass",
+        "current_observed": "뒤 Pass d10분",
+        "required": "앞선 PASS 아님; 새 Rescan으로 오판하지 않음"
+      },
+      {
+        "id": "T07",
+        "input": "동일 시각의 2 Report +행 순서 역전",
+        "required": "각 Report의 분류/사건/시간 동일. 사전순 정렬을 물리적 선후로 해석하지 않음"
+      },
+      {
+        "id": "T08",
+        "input": "INI 시각을 여러 Report가 참조, strict owner 하나/없음/복수",
+        "required": "기존 소유권 정책 유지·시간 중복0·원문 사건 보존"
+      },
+      {
+        "id": "T09",
+        "input": "시각 없는 Error +시각 없는 Pass +Test/Skipped/Unknown",
+        "required": "Q_TIME candidate에서 시각 없는 Error는 event와 marker, 가짜 duration0; D53 TEST 부분 문자열 유지"
+      },
+      {
+        "id": "T10",
+        "input": "Invalid Date/잘못된 pool index/중복 열/빈 정상 데이터",
+        "required": "명시적 오류/품질 상태; NaN 날짜·무한 로더·조용한 빈 행 변환 없음"
+      },
+      {
+        "id": "T11",
+        "input": "90일 캐시+30일 refresh, 일부 NAS read 실패",
+        "required": "앞60일/실패항목 마지막 정상본 유지. 실패가 retry 상태에 남음"
+      },
+      {
+        "id": "T12",
+        "input": "drive→UNC 재매핑, 동일 basename 다른 장비/폴더",
+        "required": "승인된 동일 identity만 dedup. 다른 Report 유지"
+      },
+      {
+        "id": "T13",
+        "input": "cache dirty 없음 / retention만 변경 / retry만 변경",
+        "required": "no-op만 bytes_written0; 나머지 저장"
+      },
+      {
+        "id": "T14",
+        "input": "CSV 잠금/HTML replace 실패/캐시 UTF-8 손상",
+        "required": "상태별 partial/failed를 구분하고 이전 파일 보존"
+      },
+      {
+        "id": "T15",
+        "input": "TLS 실패/확인 후 HEAD 변경/악성 zip/CI pending",
+        "required": "미검증 적용0·선택 SHA 일치·경로 이탈0"
+      },
+      {
+        "id": "T16",
+        "input": "old rename 뒤 new move 실패",
+        "current_observed": "main.py 없음, main.py.old-update 존재",
+        "required": "원 main.py 복원; rollback 실패 시 백업 보존·오류 보고"
+      },
+      {
+        "id": "T17",
+        "input": "800px,200%zoom,92Lot,같은 분2Report,모달3단계",
+        "required": "모든 열 접근·선택1개·Report일치·focus복원·scroll보존"
+      },
+      {
+        "id": "T18",
+        "input": "같은 HTML을 다른 날/다른 timezone에서 재열기 및 사본 저장",
+        "required": "지원하는 site time 규칙에서 같은 model fingerprint·자정 분할. 외부 자동 요청0"
+      }
+    ],
+    "sample30_acceptance": [
+      "입력 행·Report·실제 Wafer attempt·Error event 보존 검증",
+      "canonical interval 교집합0·시간 항등식·자정 보존",
+      "기준/최종 수치 차이가 I02 원장 항목 합계와 일치",
+      "표시 숫자·선택 팝업·표 합계 일치",
+      "의도하지 않은 Job/material merge 변화0",
+      "SHA/정책/원문 hash/환경/명령/skip 목록을 결과에 기록"
+    ],
+    "browser_measurement_record": "viewport·deviceScaleFactor·zoom·브라우저 버전·파일 크기·초기 표시/상호작용 시간·tooltip bounding box·click target bounding box·focus key를 기록. 기존 첨부 측정값을 새 측정으로 재사용하지 않는다.",
+    "data_safety": "실데이터 검사·브라우저에서 외부 NAS 요청을 하지 않는다. 테스트가 실제 pip/network 실행하지 않도록 기존 guard 유지. 샘플 fingerprint는 로컬 검증 용도.",
+    "stop_testing_rule": "관련 위험과 필수 gate를 충족하면 임의의 반복 검사를 늘리지 않는다. 새로운 실패/성능 회귀가 있을 때만 범위를 넓힌다."
+  },
+  "final_report_contract": {
+    "required_artifacts_for_implementer": [
+      "implementation_status.json: 51+2개 ID별 결과/commit/변경파일/검증/보류 이유",
+      "model_delta_ledger.json 또는 csv: baseline SHA·profile·입력 hash·장비-일 전후·변화 원인",
+      "validation_summary.json: 실행명령/환경/pass/fail/skip/미실행/Windows·현장 잔여",
+      "review 화면: 작은 창·선택 Report·품질 상세·실패 안내 캡처",
+      "배포 후보 manifest와 rollback 절차(배포는 권한 범위 안에서 별도)"
+    ],
+    "user_summary_order": [
+      "가장 중요한 동작 변화",
+      "측정된 전후 숫자와 단위·분모",
+      "검증 결과와 실제 미실행 범위",
+      "미확정 규칙에 대한 추천+대안+영향",
+      "남은 위험과 다음 구체적 행동"
+    ],
+    "forbidden_completion_claims": [
+      "문자열 테스트만으로 화면 정상",
+      "테스트 skip을 통과로 계산",
+      "원 감사 수치를 이번 세션 실측으로 표기",
+      "미확정 추천을 사용자 확정 결정으로 기록",
+      "100% cap 덕분에 불변식 정상",
+      "다운로드 zip 폴더명 일치로 코드 진위 검증 완료",
+      "I/O 감소를 실제 장비 생산성 향상으로 환산"
+    ],
+    "handoff_resume": "진행상황.md에 마지막 완성 phase·현재 SHA·입력 hash·실행 명령·다음 항목 ID·확정/미확정 결정·실패한 gate를 남긴다. 원 첨부의 D01은 감사 항목이며 저장소의 D01 결정번호와 다른 namespace임을 항상 표시한다."
+  },
+  "prioritization": {
+    "rule": "데이터/코드 손실·오류 수치의 확산 경로를 P0로 둔다. 의미가 미확정인 기능은 shadow 작업과 제품 승격을 분리해 전체 진척을 막지 않는다.",
+    "score_formula": "triage_score=(impact_1to5 * reach_1to5 * evidence_confidence_0to1) / estimated_person_days_midpoint",
+    "score_note": "이 점수는 작업 순서 보조다. 운영 장애/데이터 손실/필수 의존성이 점수보다 우선한다. reach와 effort는 실제 환경에서 다시 입력하며 임의의 실측처럼 채우지 않는다.",
+    "planning_estimate": "핵심 보호·모델·브라우저/Windows 검증까지 1명 기준 약 10~18 개발일, 전체 정리·선택 확장까지 15~25일을 초기 범위로 잡는다. 병렬성·실장비 접근·정책 결정에 따라 달라지며 보장 일정이 아니다.",
+    "estimate_caution": "항목별 공수가 공통 엔진·CI를 중복 포함하므로 단순 합산하지 않는다. S/M/L의 1시간 안 분류를 그대로 일정 약속으로 사용하지 않는다."
+  },
+  "coverage_map": {
+    "C01": "release",
+    "C02": "collection",
+    "C03": "identity",
+    "C04": "performance",
+    "C05": "collection",
+    "C06": "collection",
+    "C07": "performance",
+    "C08": "performance",
+    "C09": "performance",
+    "C10": "release",
+    "C11": "maintenance",
+    "C12": "schema",
+    "C13": "collection",
+    "C14": "cli",
+    "C15": "collection",
+    "C16": "bootstrap",
+    "D01": "model",
+    "D02": "model",
+    "D03": "model",
+    "D04": "model",
+    "D05": "ui",
+    "D06": "ui",
+    "D07": "report",
+    "D08": "report",
+    "D09": "loader",
+    "D10": "ui",
+    "D11": "copy",
+    "D12": "identity",
+    "D13": "quality",
+    "D14": "config",
+    "D15": "maintenance",
+    "D16": "ui",
+    "D17": "tests",
+    "S01": "release",
+    "S02": "ci",
+    "S03": "docs",
+    "S04": "tests",
+    "S05": "tests",
+    "S06": "tests",
+    "S07": "docs",
+    "S08": "docs",
+    "S09": "hygiene",
+    "S10": "ci",
+    "S11": "tests",
+    "S12": "docs",
+    "S13": "config",
+    "S14": "workflow",
+    "S15": "hygiene",
+    "S16": "ci",
+    "S17": "release",
+    "S18": "docs"
+  },
+  "namespace_note": "findings의 C01/D01/S01은 감사 항목 ID다. 진행상황.md의 D01~D55는 사용자 결정 ID다. 본문에서 Q_*는 미확정 결정 묶음, N_*은 이번 추가 결함, I_*는 선택적 확장이다."
+}
