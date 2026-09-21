@@ -74,8 +74,8 @@ button{font:inherit;color:inherit}
 .hbar i{transition:width .38s var(--ease)}
 .chart .f{transition:height .38s var(--ease),background-color .25s}
 .seg button,.nav button,.btn,.callout,.rowbtn,.link{transition:background-color .16s,color .16s,border-color .16s}
-.stage{position:relative;transform-origin:50% 0;transition:transform .42s var(--ease),filter .42s var(--ease);overflow-x:clip}   /* 탭 전환의 가로 미끄러짐이 가로 스크롤을 만들지 않게 */
-.stage.behind{transform:scale(.986);filter:brightness(.93)}
+.stage{position:relative;transition:filter .3s var(--ease);overflow-x:clip}   /* 탭 전환의 가로 미끄러짐이 가로 스크롤을 만들지 않게. 팝업 뒤에서 움직이지 않는다(9/21 — 물러남 scale 이 '뒷배경 재생성' 으로 보였다) */
+.stage.behind{filter:brightness(.97)}
 .lt{display:block}.lt svg{display:block;width:100%;height:100%}
 .brand .lt{width:22px;height:22px;margin-right:2px}
 .lt-empty{display:flex;align-items:center;gap:12px;padding:6px 0;font-size:12.5px;color:#5A6673}.lt-empty .lt{width:44px;height:44px;flex:none}
@@ -129,11 +129,9 @@ button{font:inherit;color:inherit}
 .btn:active,.seg button:active,.nav button:active,.ib:active,.x:active,.fbtn:active,.callout:active{transform:scale(.96)}
 .callout:hover{transform:translateY(-1px);box-shadow:0 2px 6px rgba(15,21,28,.10)}
 .chev{display:inline-block;transition:transform .18s var(--ease),color .18s}.rowbtn:hover .chev{transform:translateX(3px);color:var(--ink)}
-[data-bar].swap{animation:barSwap .32s ease-out}@keyframes barSwap{from{opacity:.45}to{opacity:1}}
 .dot{width:5px;height:5px;border-radius:50%;flex:none}.dot.alert{animation:pulseDot 1.4s ease-out 3}
 @keyframes pulseDot{0%{box-shadow:0 0 0 0 rgba(197,69,60,.45)}100%{box-shadow:0 0 0 7px rgba(197,69,60,0)}}
 .cards>div{transition:background-color .2s}.cards>div:hover{background:#FBFCFD}
-.dlg.pop{animation:popFront .5s var(--ease)}@keyframes popFront{0%{filter:brightness(1.10)}100%{filter:brightness(1)}}
 .legend i.gloss{background-image:linear-gradient(180deg,rgba(255,255,255,.30),rgba(255,255,255,0) 55%,rgba(15,21,28,.07))}
 
 /* ── 머리 ── */
@@ -227,7 +225,7 @@ main{max-width:1420px;margin:0 auto;padding:22px 24px 90px}
 .kv .k{color:var(--ink-3)}
 .link{border:0;background:none;font:inherit;font-size:12.5px;color:#2B5F97;cursor:pointer;padding:0;text-decoration:underline;text-underline-offset:3px}
 .tline{position:relative;height:26px;border-radius:5px;background:#EEF2F6;overflow:hidden;margin-bottom:6px}
-.tline i{position:absolute;top:0;bottom:0;min-width:3px;border-radius:2px;animation:fadeIn .3s ease-out}
+.tline i{position:absolute;top:0;bottom:0;min-width:3px;border-radius:2px}
 .tbl-h{display:grid;gap:10px;padding:8px 14px;background:#FBFCFD;border-bottom:1px solid #EDF1F5;font-size:11.5px;font-weight:600;color:var(--ink-3)}
 .box{border:1px solid #E7ECF1;border-radius:11px;overflow:hidden}
 .members{margin-top:8px;padding:10px 12px;background:#F7F9FB;border:1px solid #E7ECF1;border-radius:10px}
@@ -825,7 +823,7 @@ function sweepBars(root){if(!G()||reduced()){for(const el of root.querySelectorA
   const fresh=[],changed=[];for(const el of root.querySelectorAll("[data-bar]")){if(el.__bar===undefined)fresh.push(el);else if(el.__bar!==el.dataset.bar)changed.push(el);el.__bar=el.dataset.bar;}
   const each=Math.min(.02,.45/Math.max(1,fresh.length));
   fresh.forEach((el,i)=>gsap.fromTo(el,{clipPath:"inset(0 100% 0 0 round 10px)"},{clipPath:"inset(0 0% 0 0 round 10px)",duration:.6,ease:"power2.out",delay:i*each,clearProps:"clipPath"}));
-  for(const el of changed){el.classList.remove("swap");void el.offsetWidth;el.classList.add("swap");}}   /* CSS 로 — 같은 요소의 sweep 트윈과 겹치면 clearProps 가 건너뛰어진다(실측) */
+  void changed;}   /* 다른 날의 막대로 바뀔 때는 아무 연출도 없다(9/21 — 흐려졌다 돌아오는 것도 30개가 한꺼번에면 번쩍임으로 보인다) */
 /* 무엇이든 새로 들어올 때(뷰 · 키 바뀐 차트 · 팝업): 카드는 차례로 떠오르고, 막대 그래프는 바닥에서 자라고, 히트맵 칸은 차례로 켜진다 — 한 번의 '등장', 이후 값 변화는 CSS transition */
 function enterView(root){if(!G()||reduced())return;
   const cards=root.querySelectorAll(".cards>div");if(cards.length)gsap.from(cards,{y:8,opacity:0,duration:.32,ease:"power3.out",stagger:.04,clearProps:"transform,opacity"});
@@ -840,7 +838,7 @@ function navInd(root){const nav=root.querySelector(".nav"),ind=nav&&nav.querySel
 /* 펼침(data-reveal): 높이 0 에서 열린다 — 리포트 행 펼침 · Job 이름 묶음 */
 function reveals(root){for(const el of root.querySelectorAll("[data-reveal]")){if(el.__rv)continue;el.__rv=1;if(!G()||reduced())continue;gsap.from(el,{height:0,opacity:0,duration:.32,ease:"power3.out",clearProps:"height,opacity"});}}
 /* 장비 팝업 이름표(다른 장비·날짜가 되면 차례로 내려온다) · Error 팝업 타임라인 표식(차례로 선다) */
-function sigEnter(root){for(const el of root.querySelectorAll("[data-sig]")){const sg=el.dataset.sig;if(el.__sig===sg)continue;const first=el.__sig===undefined;el.__sig=sg;if(!G()||reduced())continue;
+function sigEnter(root){for(const el of root.querySelectorAll("[data-sig]")){const sg=el.dataset.sig;if(el.__sig!==undefined){el.__sig=sg;continue;}const first=true;el.__sig=sg;if(!G()||reduced())continue;
   const co=el.querySelectorAll(".callout");if(co.length)gsap.from(co,{y:-10,opacity:0,duration:.3,ease:"power3.out",stagger:{each:Math.min(.02,.4/co.length)},clearProps:"transform,opacity",delay:first?.15:0});
   const mk=el.querySelectorAll(":scope>i");if(mk.length)gsap.from(mk,{scaleY:.15,opacity:0,transformOrigin:"50% 100%",duration:.35,ease:"power3.out",stagger:{each:Math.min(.015,.4/mk.length)},clearProps:"transform,opacity"});}}
 let _prevDayI=null;
@@ -864,15 +862,25 @@ function morphChildren(from,to){
   if(anim)flipAfter(from,before);
 }
 const keyed=p=>[...p.children].filter(c=>keyOf(c)&&!leaving(c));
-function flipBefore(p){gInit();const els=keyed(p);const rect=new Map();for(const c of els){const r=c.getBoundingClientRect();rect.set(c,{top:r.top,left:r.left,w:r.width,h:r.height});}
-  return{rect,state:Flip.getState(els)};}
+function flipBefore(p){gInit();const els=keyed(p),el=p.getAttribute("data-anim")==="el";const rect=new Map();for(const c of els){const r=c.getBoundingClientRect();rect.set(c,{top:r.top,left:r.left,w:r.width,h:r.height});}
+  return{rect,el,order:els.map(keyOf),state:el?null:Flip.getState(els)};}
+/* 새로 들어온 노드의 등장 — 팝업(.ov)은 animate.css fadeIn + 대화상자 살짝 떠오름, 뷰(main)는 내비 방향으로, 그 밖은 살짝 위로 */
+function enterAnim(c,rm){
+  if(c.classList.contains("ov")){c.classList.add("animate__animated","animate__fadeIn");const d=c.querySelector(".dlg");if(d&&!rm)gsap.fromTo(d,{opacity:0,y:10,scale:.985},{opacity:1,y:0,scale:1,duration:.26,clearProps:"transform,opacity"});if(d)enterView(d);}
+  else{const dir=c.tagName==="MAIN"?(state.viewDir||0):0;gsap.fromTo(c,rm?{opacity:0}:{opacity:0,x:dir*28,y:dir?0:8},{opacity:1,x:0,y:0,duration:rm?.12:(dir?.3:.24),clearProps:"transform,opacity"});enterView(c);}}
 function flipAfter(p,before){
   const rm=reduced(),els=keyed(p);
-  for(const c of els)if(c.hasAttribute("data-entered"))c.removeAttribute("data-entered");
-  /* 자리 이동은 Flip(앞뒤 상태 차이를 transform 으로 되감기), 새 노드는 등장 — 팝업(.ov)은 animate.css fadeIn + 대화상자가 살짝 떠오른다 */
-  Flip.from(before.state,{targets:els,duration:rm?0:.32,ease:"power3.out",scale:false,nested:true,
-    onEnter:els2=>{for(const c of els2){if(c.classList.contains("ov")){c.classList.add("animate__animated","animate__fadeIn");const d=c.querySelector(".dlg");if(d&&!rm)gsap.fromTo(d,{opacity:0,y:10,scale:.985},{opacity:1,y:0,scale:1,duration:.26,clearProps:"transform,opacity"});if(d)enterView(d);}
-      else{const dir=c.tagName==="MAIN"?(state.viewDir||0):0;gsap.fromTo(c,rm?{opacity:0}:{opacity:0,x:dir*28,y:dir?0:8},{opacity:1,x:0,y:0,duration:rm?.12:(dir?.3:.24),clearProps:"transform,opacity"});enterView(c);}}}});
+  const entered=els.filter(c=>c.hasAttribute("data-entered"));for(const c of entered)c.removeAttribute("data-entered");
+  /* 틀은 그대로, 내용만(9/21): 루트·무대(data-anim="el")는 들고남만 애니메이션한다 — 예전엔 header·본문·바닥글에도 Flip 이 걸려 클릭마다 몇 px 씩 흔들렸다(실측).
+     목록 컨테이너도 **키 순서가 바뀌었거나 행이 들고났을 때만** Flip 한다 — 행 안의 내용만 바뀐 렌더(펼침·값 갱신)에는 아무 노드도 건드리지 않는다. */
+  const now=els.filter(c=>!entered.includes(c)).map(keyOf),nowSet=new Set(now);
+  const prev=before.order.filter(k=>nowSet.has(k)),left=before.order.length-prev.length;
+  const reordered=prev.join("\u0001")!==now.join("\u0001");
+  if(!before.el&&(reordered||left>0||entered.length>0)){
+    /* 실제로 3px 이상 움직인 행만 Flip 대상 — 제자리 행에 1~2px 트윈이 붙으면 목록 전체가 흔들려 보인다(실측) */
+    const targets=els.filter(c=>{const b=before.rect.get(c);if(!b)return true;const r=c.getBoundingClientRect();return Math.abs(r.top-b.top)>=3||Math.abs(r.left-b.left)>=3||Math.abs(r.width-b.w)>=3||Math.abs(r.height-b.h)>=3;});
+    if(targets.length)Flip.from(before.state,{targets,duration:rm?0:.32,ease:"power3.out",scale:false,nested:true,onEnter:els2=>{for(const c of els2)enterAnim(c,rm);}});}
+  else for(const c of entered)enterAnim(c,rm);
 }
 function flipLeave(p,o,b){
   const cs=getComputedStyle(o),rm=reduced();
@@ -901,7 +909,7 @@ function layoutDeck(app,top){if(!top)return;const wt=top.offsetWidth||0;
   for(const ov of app.querySelectorAll(".ov.behind")){const d=+ov.style.getPropertyValue("--d")||1,dl=ov.querySelector(".dlg");if(!dl)continue;
     const wb=(dl.offsetWidth||wt)*(1-d*.04);const shift=Math.round(130*d+Math.max(0,(wt-wb)/2)+24);ov.style.setProperty("--shift",shift+"px");}}
 function bringToFront(k){if(state.stack[state.stack.length-1]===k)return;setState({stack:pushTop(k)});
-  const d=document.querySelector(".ov:not(.behind):not([data-leaving]) .dlg");if(d&&!reduced()){d.classList.remove("pop");void d.offsetWidth;d.classList.add("pop");}}
+}
 /* scrim 클릭: 그 자리에 뒤 카드가 있으면 그 카드를 앞으로, 없으면 맨 위를 닫는다 */
 function behindAt(x,y){/* inert·pointer-events 와 무관하게 기하로 맞춘다(transform 이 반영된 rect) — 위에 있는 카드부터 */
   const ds=[...document.querySelectorAll(".ov.behind .dlg")].filter(d=>!leaving(d.parentElement)).reverse();
@@ -925,9 +933,9 @@ function render(){
   if(!D||!D.days.length)html=headerHtml(null)+`<div class="stage" data-key="stage"><main data-key="view:none"><div class="panel" style="padding:28px 24px"><h2>아직 수집한 데이터가 없습니다</h2><p class="muted" style="margin-top:6px">수집 프로그램에서 '수집' 을 실행한 뒤 이 파일을 다시 여세요.</p></div></main></div>`+footHtml();
   else{const V=state.view;let body="";
     if(V==="home")body=homeHtml();else if(V==="errors")body=errorsHtml();else if(V==="trend")body=trendHtml();else body=reportHtml();
-    html=headerHtml(V)+`<div class="stage" data-key="stage" data-anim><main data-key="view:${V}">${body}</main></div>`+footHtml()+popupsHtml();}
+    html=headerHtml(V)+`<div class="stage" data-key="stage" data-anim="el"><main data-key="view:${V}">${body}</main></div>`+footHtml()+popupsHtml();}
   const tpl=document.createElement("template");tpl.innerHTML=html;
-  if(!app.hasAttribute("data-anim"))app.setAttribute("data-anim","");
+  if(app.getAttribute("data-anim")!=="el")app.setAttribute("data-anim","el");
   morphChildren(app,tpl.content);
   const top=topDlg(),topK=top?top.dataset.dlg:null;
   for(const el of app.querySelectorAll(":scope>header,:scope>.stage,:scope>.foot"))el.inert=!!top;
@@ -940,7 +948,7 @@ function render(){
   else if(!topK&&prevTop){target=_openerFk?app.querySelector(`[data-fk="${CSS.escape(_openerFk)}"]`):null;_openerFk=null;}
   else if(fk&&document.activeElement!==ae){const c=(top||app).querySelector(`[data-fk="${CSS.escape(fk)}"]`);if(c&&!c.disabled)target=c;}
   if(target)try{target.focus({preventScroll:true});}catch(e){}
-  _lastTop=topK;
+  _lastTop=topK;state.viewDir=0;
 }
 function trapTab(e){const top=topDlg();if(!top)return;
   const f=[...top.querySelectorAll('button:not([disabled]),[href],input,select,textarea,[tabindex]:not([tabindex="-1"])')].filter(x=>x.offsetParent!==null);
