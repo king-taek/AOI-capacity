@@ -83,6 +83,9 @@ button{font:inherit;color:inherit}
 [data-leaving]{pointer-events:none}
 /* 팝업 겹침: 맨 위 팝업만 살아 있고, 그 아래 팝업은 옆으로 물러나 어두워진다(앱 전환 화면처럼 — 뒤에 무엇이 열려 있는지 보인다) */
 .dlg{transition:transform .42s var(--ease),filter .42s var(--ease),opacity .3s;transform-origin:left center}
+.dlg.in{animation:dlgIn .26s var(--ease)}.dlg.out{animation:dlgOut .15s ease-in forwards}
+@keyframes dlgIn{from{opacity:0;transform:translateY(10px) scale(.985)}to{opacity:1;transform:none}}
+@keyframes dlgOut{to{opacity:0;transform:translateY(6px) scale(.985)}}
 .ov{perspective:1600px;perspective-origin:50% 30%}
 .ov.behind{background:transparent;backdrop-filter:none;pointer-events:none;overflow:hidden}
 /* 뒤 팝업은 새 팝업의 **왼쪽 뒤**로 물러난다(카드 덱). 깊이(--d)마다 더 왼쪽·더 작게·더 어둡게. 맨 위 팝업의 scrim 을 누르면 그 자리에 있는 뒤 카드가 앞으로 온다(elementsFromPoint). */
@@ -125,11 +128,11 @@ button{font:inherit;color:inherit}
 .hbar{background:var(--crit-soft)}.hbar i{transition:width .38s var(--ease),filter .18s}.rowbtn:hover .hbar i{filter:brightness(1.06)}
 .heat{display:flex;gap:3px}.heat button{flex:1;height:18px;border:0;border-radius:3px;padding:0;cursor:pointer;transition:transform .16s var(--ease),box-shadow .16s;position:relative}
 .heat button:hover{transform:scale(1.3);box-shadow:0 3px 10px rgba(15,21,28,.28),inset 0 0 0 1px rgba(255,255,255,.75);z-index:2}
-.btn,.seg button,.nav button,.ib,.x,.fbtn,.callout,.th{transition:background-color .16s,color .16s,border-color .16s,transform .1s var(--ease),box-shadow .16s}
-.btn:active,.seg button:active,.nav button:active,.ib:active,.x:active,.fbtn:active,.callout:active{transform:scale(.96)}
-.callout:hover{transform:translateY(-1px);box-shadow:0 2px 6px rgba(15,21,28,.10)}
+.btn,.seg button,.nav button,.ib,.x,.fbtn,.th{transition:background-color .16s,color .16s,border-color .16s,transform .1s var(--ease),box-shadow .16s}
+.btn:active,.seg button:active,.nav button:active,.ib:active,.x:active,.fbtn:active{transform:scale(.96)}
+.callout{transition:background-color .16s,color .16s,border-color .16s,box-shadow .16s}.callout:hover{box-shadow:0 2px 6px rgba(15,21,28,.10)}
 .chev{display:inline-block;transition:transform .18s var(--ease),color .18s}.rowbtn:hover .chev{transform:translateX(3px);color:var(--ink)}
-.dot{width:5px;height:5px;border-radius:50%;flex:none}.dot.alert{animation:pulseDot 1.4s ease-out 3}
+.dot{width:5px;height:5px;border-radius:50%;flex:none}.dot.alert{animation:pulseDot 1.4s ease-out 1}
 @keyframes pulseDot{0%{box-shadow:0 0 0 0 rgba(197,69,60,.45)}100%{box-shadow:0 0 0 7px rgba(197,69,60,0)}}
 .cards>div{transition:background-color .2s}.cards>div:hover{background:#FBFCFD}
 .legend i.gloss{background-image:linear-gradient(180deg,rgba(255,255,255,.30),rgba(255,255,255,0) 55%,rgba(15,21,28,.07))}
@@ -829,12 +832,12 @@ function enterView(root){if(!G()||reduced())return;
   const cards=root.querySelectorAll(".cards>div");if(cards.length)gsap.from(cards,{y:8,opacity:0,duration:.32,ease:"power3.out",stagger:.04,clearProps:"transform,opacity"});
   /* 막대는 scaleY 로 자란다(높이 inline 값을 건드리면 clearProps 가 그 값까지 지운다 — 5차에서 실측) */
   const fills=root.querySelectorAll(".chart .f");if(fills.length)gsap.from(fills,{scaleY:0,transformOrigin:"50% 100%",duration:.5,ease:"power3.out",stagger:{each:Math.min(.012,.4/fills.length)},clearProps:"transform"});
-  const cells=root.querySelectorAll('.heat button');if(cells.length){const rows=root.querySelectorAll('.heat').length,cols=Math.round(cells.length/rows)||1;
-    gsap.from(cells,{opacity:0,scale:.55,transformOrigin:"50% 50%",duration:.38,ease:"power2.out",stagger:{amount:Math.min(.8,.012*cells.length),grid:[rows,cols],from:[0,0]},clearProps:"transform,opacity"});}}
+  const rows=root.querySelectorAll('.heat');if(rows.length)gsap.from(rows,{opacity:0,duration:.28,ease:"power2.out",stagger:{each:Math.min(.02,.5/rows.length)},clearProps:"opacity"});}
 /* 내비 표시자: 켜진 탭 아래로 미끄러진다 */
 function navInd(root){const nav=root.querySelector(".nav"),ind=nav&&nav.querySelector(".ind"),on=nav&&nav.querySelector("button.on");if(!ind||!on)return;
-  const x=on.offsetLeft,w=on.offsetWidth;if(ind.__x===undefined||!G()||reduced()){ind.style.transform=`translateX(${x}px)`;ind.style.width=w+"px";}
-  else gsap.to(ind,{x,width:w,duration:.32,ease:"power3.out"});ind.__x=x;}
+  const x=on.offsetLeft,w=on.offsetWidth;if(ind.__x===x&&ind.__w===w)return;   /* 같은 탭이면 손대지 않는다(예전엔 렌더마다 트윈이 돌았다 — 감사 9/21) */
+  if(ind.__x===undefined||!G()||reduced()){ind.style.transform=`translateX(${x}px)`;ind.style.width=w+"px";}
+  else gsap.to(ind,{x,width:w,duration:.32,ease:"power3.out"});ind.__x=x;ind.__w=w;}
 /* 펼침(data-reveal): 높이 0 에서 열린다 — 리포트 행 펼침 · Job 이름 묶음 */
 function reveals(root){for(const el of root.querySelectorAll("[data-reveal]")){if(el.__rv)continue;el.__rv=1;if(!G()||reduced())continue;gsap.from(el,{height:0,opacity:0,duration:.32,ease:"power3.out",clearProps:"height,opacity"});}}
 /* 장비 팝업 이름표(다른 장비·날짜가 되면 차례로 내려온다) · Error 팝업 타임라인 표식(차례로 선다) */
@@ -853,8 +856,9 @@ function morphChildren(from,to){
   for(const n of news){
     const k=keyOf(n);let match=null;
     if(k){const c=byKey.get(k);if(c&&!used.has(c))match=c;}
-    else{let c=cur;while(c&&(used.has(c)||keyOf(c)||leaving(c)))c=c.nextSibling;
-      if(c&&c.nodeType===n.nodeType&&(n.nodeType!==1||c.tagName===n.tagName))match=c;}
+    else{const fits=c=>c.nodeType===n.nodeType&&(n.nodeType!==1||c.tagName===n.tagName);const free=c=>{while(c&&(used.has(c)||keyOf(c)||leaving(c)))c=c.nextSibling;return c;};
+      let c=free(cur),steps=0;while(c&&!fits(c)&&steps<6){c=free(c.nextSibling);steps++;}   /* 조건부 형제(<p> 안내 등)가 사라져도 뒤 형제들이 통째로 재생성되지 않게(감사 9/21) */
+      if(c&&fits(c))match=c;}
     if(match){used.add(match);if(match===cur)cur=cur.nextSibling;else from.insertBefore(match,cur);morph(match,n);}
     else{const nn=n.cloneNode(true);from.insertBefore(nn,cur);used.add(nn);if(anim)nn.setAttribute("data-entered","");}
   }
@@ -866,7 +870,7 @@ function flipBefore(p){gInit();const els=keyed(p),el=p.getAttribute("data-anim")
   return{rect,el,order:els.map(keyOf),state:el?null:Flip.getState(els)};}
 /* 새로 들어온 노드의 등장 — 팝업(.ov)은 animate.css fadeIn + 대화상자 살짝 떠오름, 뷰(main)는 내비 방향으로, 그 밖은 살짝 위로 */
 function enterAnim(c,rm){
-  if(c.classList.contains("ov")){c.classList.add("animate__animated","animate__fadeIn");const d=c.querySelector(".dlg");if(d&&!rm)gsap.fromTo(d,{opacity:0,y:10,scale:.985},{opacity:1,y:0,scale:1,duration:.26,clearProps:"transform,opacity"});if(d)enterView(d);}
+  if(c.classList.contains("ov")){c.classList.add("animate__animated","animate__fadeIn");const d=c.querySelector(".dlg");if(d&&!rm)d.classList.add("in");if(d)enterView(d);}
   else{const dir=c.tagName==="MAIN"?(state.viewDir||0):0;gsap.fromTo(c,rm?{opacity:0}:{opacity:0,x:dir*28,y:dir?0:8},{opacity:1,x:0,y:0,duration:rm?.12:(dir?.3:.24),clearProps:"transform,opacity"});enterView(c);}}
 function flipAfter(p,before){
   const rm=reduced(),els=keyed(p);
@@ -879,7 +883,7 @@ function flipAfter(p,before){
   if(!before.el&&(reordered||left>0||entered.length>0)){
     /* 실제로 3px 이상 움직인 행만 Flip 대상 — 제자리 행에 1~2px 트윈이 붙으면 목록 전체가 흔들려 보인다(실측) */
     const targets=els.filter(c=>{const b=before.rect.get(c);if(!b)return true;const r=c.getBoundingClientRect();return Math.abs(r.top-b.top)>=3||Math.abs(r.left-b.left)>=3||Math.abs(r.width-b.w)>=3||Math.abs(r.height-b.h)>=3;});
-    if(targets.length)Flip.from(before.state,{targets,duration:rm?0:.32,ease:"power3.out",scale:false,nested:true,onEnter:els2=>{for(const c of els2)enterAnim(c,rm);}});}
+    if(targets.length)Flip.from(before.state,{targets,duration:rm?0:.26,ease:"power3.out",scale:false,nested:true,onEnter:els2=>{for(const c of els2)enterAnim(c,rm);}});}
   else for(const c of entered)enterAnim(c,rm);
 }
 function flipLeave(p,o,b){
@@ -889,7 +893,7 @@ function flipLeave(p,o,b){
   o.setAttribute("data-leaving","");o.removeAttribute("data-key");o.inert=true;
   const done=()=>{if(o.parentNode)o.parentNode.removeChild(o);};
   if(o.classList.contains("ov")){o.classList.remove("animate__fadeIn");o.classList.add("animate__animated","animate__fadeOut");o.style.setProperty("--animate-duration",rm?"1ms":".15s");
-    const d=o.querySelector(".dlg");if(d&&!rm)gsap.to(d,{opacity:0,y:6,scale:.985,duration:.15,ease:"power2.in"});setTimeout(done,rm?20:170);}
+    const d=o.querySelector(".dlg");if(d&&!rm){d.classList.remove("in");d.classList.add("out");}setTimeout(done,rm?20:170);}
   else{const dir=o.tagName==="MAIN"?(state.viewDir||0):0;gsap.to(o,rm?{opacity:0,duration:.1,onComplete:done}:{opacity:0,x:-dir*22,y:dir?0:-4,duration:.15,ease:"power2.in",onComplete:done});}
   setTimeout(done,500);}
 
@@ -918,12 +922,12 @@ function scrimClick(e){const d=e&&e.clientX!=null?behindAt(e.clientX,e.clientY):
 let _hv=false;document.addEventListener("mousemove",e=>{if(_hv)return;const t=e.target;if(!t||!t.classList||!t.classList.contains("scrim"))return;_hv=true;
   requestAnimationFrame(()=>{_hv=false;const d=behindAt(e.clientX,e.clientY);for(const ov of document.querySelectorAll(".ov.behind"))ov.classList.toggle("hover",!!d&&ov===d.parentElement);t.style.cursor=d?"pointer":"default";t.title=d?"이 팝업을 앞으로":"닫기";});},{passive:true});
 function stackbarHtml(ks){if(ks.length<2)return"";
-  return `<div class="stackbar" role="navigation" aria-label="열린 팝업">${ks.map((k,i)=>{const cur=i===ks.length-1,t=POPUP_TITLE[k]?POPUP_TITLE[k]():k;
+  return `<div class="stackbar" data-key="stackbar" role="navigation" aria-label="열린 팝업">${ks.map((k,i)=>{const cur=i===ks.length-1,t=POPUP_TITLE[k]?POPUP_TITLE[k]():k;
     return (i?`<span class="arrow" aria-hidden="true">›</span>`:"")+(cur?`<span class="sb cur" title="지금 보는 팝업">${POPUP_ICON[k]||""}<span>${esc(t)}</span></span>`
-      :`<button class="sb animate__animated animate__fadeInDown" data-h="${h(()=>bringToFront(k))}" title="${esc(t)} 팝업을 앞으로">${POPUP_ICON[k]||""}<span>${esc(t)}</span></button>`);}).join("")}</div>`;}
+      :`<button class="sb" data-h="${h(()=>bringToFront(k))}" title="${esc(t)} 팝업을 앞으로">${POPUP_ICON[k]||""}<span>${esc(t)}</span></button>`);}).join("")}</div>`;}
 function popupsHtml(){const ks=state.stack.filter(k=>POPUP[k]);const n=ks.length;
   return ks.map((k,i)=>{const html=POPUP[k]();if(!html)return"";const d=n-1-i;
-    return html.replace(/^<div class="ov ([^"]*)"/,`<div class="ov $1${d?" behind":""}" data-key="ov:${k}" style="z-index:${50+i};--d:${d}"`).replace(/<button class="scrim"[^>]*><\/button>/,`<button class="scrim" data-h="${h(scrimClick)}" aria-label="닫기"></button>${d?"":stackbarHtml(ks)}`);}).join("");}
+    return html.replace(/^<div class="ov ([^"]*)"/,`<div class="ov $1${d?" behind":""}" data-key="ov:${k}" style="z-index:${50+i};--d:${d}"`).replace(/<div class="dlg /,`<div data-key="dlg" class="dlg `).replace(/<button class="scrim"[^>]*><\/button>/,`<button class="scrim" data-h="${h(scrimClick)}" aria-label="닫기"></button>${d?"":stackbarHtml(ks)}`);}).join("");}
 function render(){
   H=[];
   const app=$("#app");
