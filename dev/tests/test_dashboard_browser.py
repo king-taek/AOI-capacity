@@ -266,7 +266,7 @@ def test_error_tab_period_popup_filters_and_no_total_link(page):
 
 def test_error_lists_keep_rows_in_place_and_only_text_changes(page):
     """Error 탭에서 날짜를 바꿔도 유형별·장비별·Job별 줄은 제자리(순위 칸 slot:i 가 같은 노드 · 이동 트윈 없음)이고
-    안의 글자만 바뀐다 — 바뀐 글자는 흐림→또렷(tx-in), 숫자는 세기가 끝나면 정확히 새 값(9/23 사용자 요청: 목록이 출렁인다)."""
+    안의 글자만 바뀐다 — 숫자는 세고 글자는 제자리에서 넘어가며(흐림·번쩍임 없음), 끝나면 정확히 새 값(9/23 사용자 요청: 목록이 출렁인다)."""
     pg, errors, _ = page
     pg.locator('button[data-fk="nav:errors"]').click()
     pg.wait_for_selector('main[data-key="view:errors"]')
@@ -279,8 +279,10 @@ def test_error_lists_keep_rows_in_place_and_only_text_changes(page):
     rows = "[...document.querySelectorAll('main .errlist .row2, main .errlist > .rowbtn')]"
     assert pg.evaluate(f"{rows}.every(r => !r.style.transform && !r.hasAttribute('data-leaving'))")
     assert pg.evaluate(f"typeof gsap === 'undefined' || gsap.getTweensOf({rows}).length === 0")  # Flip·등장 트윈 없음
-    assert pg.evaluate("window.__t.querySelector('[data-tx]').classList.contains('tx-in')")      # 바뀐 이름은 흐림→또렷
     pg.wait_for_timeout(450)
+    nm = "window.__t.querySelector('[data-tx]')"
+    assert pg.evaluate(f"{nm}.textContent") == "SCAN_ERROR"                                    # 넘어가기가 끝나면 정확히 새 이름
+    assert pg.evaluate(f"{nm}.__tr") == 1 and pg.evaluate(f"{nm}.getAnimations().length") == 0    # 한 번 넘어갔고, CSS 흐림·깜박임 없음
     bad = pg.evaluate("[...document.querySelectorAll('main .errlist [data-txn][data-txf=\"n\"]')].filter(e => e.textContent !== e.dataset.txn + '건').length")
     assert bad == 0                                                                          # 세기가 끝나면 정확히 새 값
     assert errors == []

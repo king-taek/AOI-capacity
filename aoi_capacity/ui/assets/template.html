@@ -126,10 +126,8 @@ button{font:inherit;color:inherit}
 .chart .v{transition:transform .18s var(--ease),color .18s}
 .chart button:hover .f{filter:brightness(1.07) saturate(1.06)}.chart button:hover .v{transform:translateY(-2px);color:var(--ink)}
 .hbar{background:var(--crit-soft)}.hbar i{transition:width .38s var(--ease),filter .18s}.rowbtn:hover .hbar i{filter:brightness(1.06)}
-/* Error 탭 목록: 줄은 제자리, 막대는 0.2초로 짧게, 바뀐 글자는 옅게 흐려졌다 또렷해진다(txAnim) */
+/* Error 탭 목록: 줄은 제자리, 막대는 0.2초로 짧게, 바뀐 숫자·글자는 제자리에서 넘어간다(txAnim) */
 .errlist .hbar i,.errlist .jbar i{transition:width .2s ease-out,filter .18s}
-@keyframes txin{from{opacity:.15;filter:blur(1.5px)}to{opacity:1;filter:none}}
-.tx-in{animation:txin .22s ease-out}
 .heat{display:flex;gap:3px}.heat button{flex:1;height:18px;border:0;border-radius:3px;padding:0;cursor:pointer;transition:transform .16s var(--ease),box-shadow .16s;position:relative}
 .heat button:hover{transform:scale(1.3);box-shadow:0 3px 10px rgba(15,21,28,.28),inset 0 0 0 1px rgba(255,255,255,.75);z-index:2}
 .btn,.seg button,.nav button,.ib,.x,.fbtn,.th{transition:background-color .16s,color .16s,border-color .16s,transform .1s var(--ease),box-shadow .16s}
@@ -826,17 +824,29 @@ const cnt=(v,dec=0)=>`<span data-count="${Number(v)||0}" data-dec="${dec}">${(Nu
 function countUp(root){for(const el of root.querySelectorAll("[data-count]")){const v=+el.dataset.count,d=+(el.dataset.dec||0),prev=el.__cv;el.__cv=v;
   if(prev===undefined||prev===v||!G()||reduced()||!el.closest(".cards"))continue;const o={v:prev};gsap.to(o,{v,duration:.55,ease:"power2.out",onUpdate:()=>{el.textContent=o.v.toFixed(d);},onComplete:()=>{el.textContent=v.toFixed(d);}});}}
 /* Error 탭 목록(유형별·장비별·Job별, 9/23 사용자 요청 — "날짜를 바꾸면 목록이 출렁인다"): 줄은 순위 칸(slot:i)에 고정되고 그 안의 내용만 바뀐다.
-   숫자(data-txn)는 이전 값에서 새 값으로 0.2초 동안 세고(막대 폭 transition 과 같은 길이), 글자(data-tx)는 옅게 흐려졌다가 또렷해진다. 자리 이동·등장 연출 없음.
-   처음 나타날 때는 아무 연출도 없다 — 값이 바뀐 칸만. */
+   숫자(data-txn)는 이전 값에서 새 값으로 0.2초 동안 세고(막대 폭 transition 과 같은 길이), 글자(data-tx)도 숫자처럼 제자리에서 넘어간다 —
+   왼쪽부터 한 글자씩 새 글자로 바뀌고, 바뀌는 경계의 두 칸만 같은 종류의 글자(숫자는 숫자, 영문은 영문)로 몇 번 넘어간 뒤 멈춘다(번쩍임·흐림 없음).
+   같은 글자는 그대로 둔다(AOI-16 → AOI-19 는 끝 한 칸만). 자리 이동·등장 연출 없음. 처음 나타날 때는 아무 연출도 없다 — 값이 바뀐 칸만. */
 const TXF={n:v=>Math.round(v)+"건",hm:v=>hm(v)};
 const txn=(v,f)=>`data-txn="${Number(v)||0}" data-txf="${f}"`;
-function txAnim(root){const on=!!G()&&!reduced(),fade=[];
+const TX_D="0123456789",TX_U="ABCDEFGHIJKLMNOPQRSTUVWXYZ",TX_L="abcdefghijklmnopqrstuvwxyz";
+const txSet=c=>/[0-9]/.test(c)?TX_D:/[A-Z]/.test(c)?TX_U:/[a-z]/.test(c)?TX_L:null;
+/* from → to 의 k(0~1) 시점 글자 — 결정적(난수 없음): 경계 칸은 위치·프레임으로 고른 같은 종류 글자 */
+function txMix(from,to,k,f){const a=[...from],b=[...to],L=Math.max(a.length,b.length),front=k*(L+2);let out="";
+  for(let i=0;i<L;i++){const x=a[i]||"",y=b[i]||"";
+    if(i<front-2||k>=1)out+=y;
+    else if(i<front){const set=x!==y&&txSet(y||x);out+=set?set[(i*7+f*3)%set.length]:y;}
+    else out+=x;}
+  return out;}
+function txAnim(root){const on=!!G()&&!reduced();
   for(const el of root.querySelectorAll("[data-txn]")){const v=+el.dataset.txn,f=TXF[el.dataset.txf],prev=el.__tv;el.__tv=v;
     if(prev===undefined||prev===v||!on||!f)continue;
     const from=el.__tc!==undefined?el.__tc:prev;if(el.__tw)el.__tw.kill();const o={v:from};el.textContent=f(from);
     el.__tw=gsap.to(o,{v,duration:.2,ease:"power1.out",onUpdate:()=>{el.__tc=o.v;el.textContent=f(o.v);},onComplete:()=>{el.__tc=undefined;el.__tw=null;el.textContent=f(v);}});}
-  for(const el of root.querySelectorAll("[data-tx]")){const t=el.textContent,prev=el.__tt;el.__tt=t;if(prev!==undefined&&prev!==t&&on)fade.push(el);}
-  if(fade.length){for(const el of fade)el.classList.remove("tx-in");void root.offsetWidth;for(const el of fade)el.classList.add("tx-in");}}
+  for(const el of root.querySelectorAll("[data-tx]")){const t=el.textContent,prev=el.__tt;el.__tt=t;
+    if(prev===undefined||prev===t||!on)continue;
+    const from=el.__ts!==undefined?el.__ts:prev;if(el.__tw)el.__tw.kill();const o={k:0};let fr=0;el.textContent=from;el.__tr=(el.__tr||0)+1;
+    el.__tw=gsap.to(o,{k:1,duration:.24,ease:"none",onUpdate:()=>{el.__ts=txMix(from,t,o.k,fr++);el.textContent=el.__ts;},onComplete:()=>{el.__ts=undefined;el.__tw=null;el.textContent=t;}});}}
 /* 24시간 막대의 sweep: 막대가 새로 그려지거나 다른 날의 것으로 바뀌면 왼쪽에서 오른쪽으로 드러난다(시간이 흐르는 방향) */
 function sweepBars(root){if(!G()||reduced()){for(const el of root.querySelectorAll("[data-bar]"))el.__bar=el.dataset.bar;return;}
   const fresh=[],changed=[];for(const el of root.querySelectorAll("[data-bar]")){if(el.__bar===undefined)fresh.push(el);else if(el.__bar!==el.dataset.bar)changed.push(el);el.__bar=el.dataset.bar;}
