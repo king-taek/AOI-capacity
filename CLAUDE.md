@@ -63,8 +63,10 @@ Camtek AOI 장비의 BatchReport/WaferInfo.ini 를 읽어 장비별 가동률을
    가드 `test_no_hardcoded_korean.py` 는 `cli.py`·`utils/config.py` 도 본다 — CLI 도움말·출력은 ko.py `CLI_*`, 설정 검사 문구는 `CFG_*`(C12·C13).
    행 데이터의 `data_issue` 자유 문장도 새 행에는 쓰지 않는다 — 코드(`issue_codes`)만 캐시에 두고 문장은 출력 때 `ko.ISSUE_TEXTS` 로 만든다(아래 행 계약).
 9. **긴 작업은 UI 스레드 밖에서.** 코어 함수는 `progress(done, total, phase)` 콜백을 받고, 총량을 모르면 `total<=0`(busy) 로 보고한다.
-   NAS 읽기는 **기다리는 시간이 대부분**이라(SMB 왕복 지연) 장비 나열도 Report 읽기도 `read_workers` 개씩
-   동시에 한다(`collect._run`, 기본 8 · 1 이면 예전처럼 한 줄로). ★ 스레드는 **읽기만** 한다 —
+   NAS 읽기는 **기다리는 시간이 대부분**이라(SMB 왕복 지연) 장비 나열도 Report 읽기도 **NAS 마다** `read_workers` 개씩
+   동시에 한다(`collect._run(group=nas_group)`, 기본 8 · 1 이면 예전처럼 한 줄로 · 전체 `MAX_READ_THREADS` 64 상한). NAS 는 경로 글자로만 가른다 —
+   UNC 는 호스트, 드라이브 문자는 연결된 UNC 의 호스트(모르면 문자). 드라이브 X·M·V·P·Y·I 는 서로 다른 NAS 다(사용자 확인 9/23) —
+   장비 순서로 줄 세우면 스레드가 한 NAS 에 몰렸다(9/18 30일치 실측 읽기 79분). 풀은 하나, 한 작업이 예외면 새 작업을 꺼내지 않고 입력 순서로 가장 앞선 예외를 던진다. ★ 스레드는 **읽기만** 한다 —
    캐시·커서·오류 목록에 넣는 일은 전부 메인 스레드가 `plan` 순서대로 하므로 결과가 순서에 좌우되지 않는다.
    회귀 가드: `test_collect_incremental.py` 가 1·2·8·32개로 읽은 결과의 지문과 커서가 같은지 본다.
    장비 확인(Report/Scanresult 폴더 · 백업 나열 · 연결 확인)도 `devices._pmap` 으로 `read_workers` 개씩 동시에 하되 **범위 게이트를 지난 장비만**, 결과·로그는 입력 순서,
@@ -202,9 +204,13 @@ Camtek AOI 장비의 BatchReport/WaferInfo.ini 를 읽어 장비별 가동률을
 `collect.collect(cfg, full, backfill, *, recover, refresh_window_days, rebuild_all)` 하나를 GUI·CLI·예약이 같이 쓴다.
 증분(기본) · `--backfill`(검색 창만 `backfill_days` 로 넓힘, **캐시된 파일은 건너뜀**) · `--refresh-window N`(최근 N일은 캐시에 있어도 다시 읽음, 창 밖 이력 보존, 실패한 파일은 이전 행 유지 + 다음 수집에서 재시도) ·
 `--rebuild-all`(보관 기간 전부를 **후보 캐시**로 새로 읽고 검증 뒤 교체 — 실패하면 기존 캐시 그대로, `RebuildRejected`) · `--full` 은 `--rebuild-all` 의 별칭(**이력 삭제 없음**) · `--recover`(시간 미확인 Report 다시 읽기).
+**Report 목록(9/23)**: 커서가 있는 장비의 증분 수집은 폴더 전체 대신 Report 이름의 날짜(`…_26-Sep-16_(12.38.36)_BatchReport.htm`, 배치 종료일 = 파일이 생긴 날)로
+`*_YY-Mon-DD_(*` 패턴을 커서 전날~내일만큼 만들어 **NAS 가 거르게** 한다(`report_name_patterns` · `PATTERN_LISTER` = `nas_guard.find_pattern`, Windows `FindFirstFileExW` · 다른 OS 는 None).
+고르는 규칙은 전체 나열과 같다(부분집합만 받는다). 처음 보는 장비 · backfill · refresh · recover · rebuild · 패턴 14일 초과 · 패턴 실패 · 마지막 전체 나열(캐시 `full_listed`)이 20시간(`FULL_LIST_EVERY_SEC`) 넘음이면 **전체 나열** —
+이름 규칙 밖 파일(`EXPORT.htm`)·나중에 다시 쓰인 옛 Report 는 그때 잡힌다(가드 `test_collect_listing.py`, 목록 단계 9/18 실측 5.5분).
 GUI 체크 '최근 N일 다시 읽기(이력 보존)' 은 `refresh_window_days`(N 은 '처음 수집 기간' 스핀 값). 캐시 저장은 고유 tmp → fsync → strict 재읽기 검증 → `os.replace`, 손상 캐시는 덮어쓰지 않고 `aoi_cache.json.bad-<시각>` 으로 보존(C15).
 CSV 를 못 쓰는 OS 오류(Excel 잠금)는 실패가 아니라 **부분 성공**(`warnings`, CLI exit 3, 워커 `completed_with_warnings`) — HTML 이 주 산출물이다(C06). 회귀 가드: `test_collect_incremental.py` · `test_collector_worker.py`.
-캐시는 **바뀐 이유(`_Dirty`: created · corrupt · format · parser · cursor · identity · device_mapping · reports · reports_updated · failed · retention · rebuild)가 있을 때만 저장**한다 — 아무것도 안 바뀐 실행은 파일을 건드리지 않는다(mtime·바이트 동일), rows 0 이어도 커서·재시도·보관 정리는 저장(C04, `stats["cache_dirty"]`·`cache_saved`).
+캐시는 **바뀐 이유(`_Dirty`: created · corrupt · format · parser · cursor · identity · device_mapping · reports · reports_updated · failed · retention · rebuild · listing)가 있을 때만 저장**한다 — 아무것도 안 바뀐 실행은 파일을 건드리지 않는다(mtime·바이트 동일), rows 0 이어도 커서·재시도·보관 정리는 저장(C04, `stats["cache_dirty"]`·`cache_saved`).
 `write_html` 은 `__DATA__` 가 정확히 하나임을 확인하고 앞부분·데이터·뒷부분을 같은 임시 파일에 차례로 쓴다(C07, 30일치 최고점 181 → 107MB). 크기·메모리 측정은 `python dev/tools/measure_cache.py <샘플> --out <임시>`.
 `python -m aoi_capacity.cli --update` 는 갱신되면 같은 인자(`--update` 제외)로 **자식 프로세스**를 띄워 기다리고 그 종료 코드를 돌려준다(exec 아님 — 스케줄러가 '완료' 를 잘못 보지 않게, C14).
 `scripts/run_collect.bat` 은 `PYTHONNOUSERSITE=1`, ERRORLEVEL 보존, `collect.log` 5MB 초과 시 `.1~.4` 회전. 의존성 설치 실패 안내는 `main._pause_or_notify` — stdin 없음/EOF/RuntimeError(pythonw)면 MessageBoxW(ctypes) 또는 print, PyQt6 재import 없음(C16).

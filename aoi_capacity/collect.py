@@ -38,11 +38,13 @@
 """
 from __future__ import annotations
 
+import collections
 import csv
 import datetime as dt
 import hashlib
 import json
 import logging
+import ntpath
 import os
 import re
 import threading
@@ -62,7 +64,20 @@ _LOG = logging.getLogger("aoi.collect")
 #: INI 존재 확인·읽기가 붙어 3일치 30대면 왕복이 수만 번이다. 한 줄로 읽으면 그 지연이 전부 더해지므로
 #: 여러 개를 동시에 읽는다. 읽기만 하니 순서가 바뀌어도 결과는 같다(합치는 일은 메인 스레드가 한다).
 #: 0·1 이면 예전처럼 한 줄로 읽는다. 너무 키우면 NAS 가 되레 느려져 8 로 둔다.
+#: ★ 이 수는 **NAS 한 대당**이다(9/23): 장비들이 여러 NAS(드라이브 X·M·V·P·Y·I = 서로 다른 NAS, 사용자 확인)에 흩어져 있어
+#:   작업을 장비 순서로 줄 세우면 스레드가 한 NAS 에 몰리고 나머지는 쉰다(9/18 30일치 실측: 읽기 79분 중 X: 7대 몫이 먼저 통째로).
+#:   `_run` 이 NAS(`nas_group`)마다 이 수만큼 번갈아 돌린다 — 전체 스레드는 NAS 수 × 이 값, `MAX_READ_THREADS` 상한.
 READ_WORKERS = 8
+MAX_READ_THREADS = 64
+#: 증분 수집의 Report 목록은 **파일 이름의 날짜로 NAS 가 거르게** 한다(9/23, Windows `FindFirstFileExW` 패턴).
+#: Report 이름 끝은 `…_26-Sep-16_(12.38.36)_BatchReport.htm` 이고 그 날짜는 배치 종료일(= 파일이 생긴 날)이다 — 샘플 12,663개 중 12,662개 일치.
+#: 폴더 전체(장비당 최대 5,849개)를 매번 받아 오던 목록 단계가 9/18 30일치 실측 5.5분이었다. 이름 규칙 밖 파일(`EXPORT.htm` 같은)과
+#: 나중에 다시 쓰인 옛 Report 를 놓치지 않도록 **전체 나열은 처음·backfill·rebuild·recover·refresh 와 장비마다 `FULL_LIST_EVERY_SEC` 에 한 번** 한다.
+FULL_LIST_EVERY_SEC = 20 * 3600
+PATTERN_MAX_DAYS = 14          # 커서가 이보다 오래됐으면(며칠 수집을 쉬었으면) 패턴 여러 개보다 전체 나열이 낫다
+_MONTHS = ("Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec")
+#: 패턴 나열 함수(폴더, 패턴) → 항목 목록. Windows 에서만 있다 — 다른 OS(개발·CI)는 None 이라 예전처럼 전체 나열만 한다(테스트는 가짜로 바꿔 끼운다).
+PATTERN_LISTER: Optional[Callable[[str, str], list]] = nas_guard.find_pattern if os.name == "nt" else None
 
 DEFAULT_CONFIG: Dict[str, object] = {
     "devices_csv": "",
@@ -886,6 +901,7 @@ CACHE_FORMAT = 2
 DIRTY_CREATED, DIRTY_CORRUPT, DIRTY_FORMAT, DIRTY_PARSER = "created", "corrupt", "format", "parser"
 DIRTY_CURSOR, DIRTY_IDENTITY, DIRTY_MAPPING = "cursor", "identity", "device_mapping"
 DIRTY_REPORTS, DIRTY_UPDATED, DIRTY_FAILED, DIRTY_RETENTION, DIRTY_REBUILD = "reports", "reports_updated", "failed", "retention", "rebuild"
+DIRTY_LISTING = "listing"      # 장비의 마지막 전체 나열 시각(`full_listed`) — 패턴 나열을 쓸 수 있는 PC(Windows)에서만 적는다
 #: identity 기록의 충돌 목록 상한 — 요약이지 원장(ledger)이 아니다. 건수는 `n_conflicts` 에 전부 남는다.
 _MAX_CONFLICTS = 200
 
@@ -1456,21 +1472,88 @@ def _workers(cfg: dict, n_tasks: int) -> int:
     return max(1, min(want, max(1, n_tasks)))
 
 
-def _run(cfg: dict, tasks, fn, should_stop) -> list:
+def nas_group(path) -> str:
+    """같은 NAS 를 가리키는 경로끼리 같은 값 — 동시 읽기를 NAS 마다 나눠 배정하는 열쇠(`_run`).
+
+    UNC(`\\\\host\\share\\…`)는 호스트, 네트워크 드라이브(`X:`)는 연결된 UNC 의 호스트(OS 가 알려 줄 때), 모르면 드라이브 문자.
+    드라이브·UNC 가 없는 경로(개발 PC 의 로컬 폴더)는 모두 한 묶음("")이다. 경로 문자열만 보고 NAS 에는 접근하지 않는다."""
+    p = str(path or "")
+    drive = ntpath.splitdrive(p)[0]
+    if not drive:
+        return ""
+    if drive.startswith("\\\\"):
+        return drive[2:].split("\\")[0].lower()
+    return _drive_host(drive.upper())
+
+
+_DRIVE_HOSTS: Dict[str, str] = {}
+
+
+def _drive_host(drive: str) -> str:
+    hit = _DRIVE_HOSTS.get(drive)
+    if hit is None:
+        unc = nas_guard._unc_for_drive(drive + "\\")
+        hit = _DRIVE_HOSTS[drive] = unc[2:].split("\\")[0].lower() if unc and unc.startswith("\\\\") else drive
+    return hit
+
+
+def _run(cfg: dict, tasks, fn, should_stop, group: Optional[Callable[[object], str]] = None) -> list:
     """작업들을 동시에(또는 한 줄로) 돌리고 **입력 순서 그대로** 결과를 돌려준다.
 
+    `group` 을 주면 작업을 NAS 별로 나눠(`nas_group`) **NAS 마다 `read_workers` 개씩** 번갈아 돌린다 — 한 NAS 에 스레드가 몰려
+    다른 NAS 가 노는 일이 없다(9/23). 전체 스레드 = NAS 수 × read_workers(`MAX_READ_THREADS` 상한), 풀은 하나다.
+    같은 NAS 안에서는 입력 순서대로 꺼낸다.
+
     ★ 여기서 하는 일은 NAS **읽기**뿐이다. 캐시·행을 합치는 일은 부르는 쪽(메인 스레드)이 한다 —
-      스레드가 공유 dict 를 고치지 않으니 순서가 바뀌어도 결과가 달라지지 않는다."""
+      스레드가 공유 dict 를 고치지 않으니 순서가 바뀌어도 결과가 달라지지 않는다.
+      작업 하나가 예외(취소 포함)를 내면 새 작업을 꺼내지 않고, 입력 순서로 가장 앞선 예외를 다시 던진다."""
     tasks = list(tasks)
     if not tasks:
         return []
     n = _workers(cfg, len(tasks))
     if n == 1:
         return [fn(t) for t in tasks]
-    with ThreadPoolExecutor(max_workers=n, thread_name_prefix="aoi-read") as pool:
-        out = list(pool.map(fn, tasks))
+    queues: "collections.OrderedDict[str, collections.deque]" = collections.OrderedDict()
+    for i, t in enumerate(tasks):
+        queues.setdefault(group(t) if group else "", collections.deque()).append(i)
+    per = max(1, min(n, MAX_READ_THREADS // len(queues)))
+    lanes = [(q, min(per, len(q))) for q in queues.values()]
+    results: list = [None] * len(tasks)
+    failed: List[Tuple[int, BaseException]] = []
+    lock, stop = threading.Lock(), threading.Event()
+
+    def lane(q):
+        while not stop.is_set():
+            with lock:
+                if not q:
+                    return
+                i = q.popleft()
+            try:
+                results[i] = fn(tasks[i])
+            except BaseException as e:  # noqa: BLE001 — 취소·예외는 모아서 메인 스레드가 다시 던진다
+                with lock:
+                    failed.append((i, e))
+                stop.set()
+                return
+
+    with ThreadPoolExecutor(max_workers=sum(k for _, k in lanes), thread_name_prefix="aoi-read") as pool:
+        for f in [pool.submit(lane, q) for q, k in lanes for _ in range(k)]:
+            f.result()
+    if failed:
+        raise min(failed, key=lambda x: x[0])[1]
     _check(should_stop)                      # 취소는 각 작업 안에서도 보지만, 끝나고 한 번 더 본다
-    return out
+    return results
+
+
+def report_name_patterns(since: float, now: float) -> Optional[List[str]]:
+    """`since`(커서) 이후에 생겼을 수 있는 Report 의 이름 패턴 — 커서 날짜 하루 전부터 오늘 하루 뒤까지(설비 시계 차이 여유).
+    며칠이 `PATTERN_MAX_DAYS` 를 넘으면 None(전체 나열이 낫다). 월 약어는 로캘과 무관하게 영어 고정."""
+    d0 = dt.date.fromtimestamp(since) - dt.timedelta(days=1)
+    d1 = dt.date.fromtimestamp(now) + dt.timedelta(days=1)
+    days = (d1 - d0).days + 1
+    if days > PATTERN_MAX_DAYS or days < 1:
+        return None
+    return [f"*_{d.year % 100:02d}-{_MONTHS[d.month - 1]}-{d.day:02d}_(*" for d in (d0 + dt.timedelta(days=k) for k in range(days))]
 
 
 def _list_new_reports(devs, cache, cfg, backfill, log, progress, on_device, should_stop, recover=False,
@@ -1486,8 +1569,14 @@ def _list_new_reports(devs, cache, cfg, backfill, log, progress, on_device, shou
     `window_days` 는 backfill 창 길이(기본 `backfill_days`; rebuild 는 `retention_days`).
 
     돌려주는 `known` 은 '이미 캐시에 잘 들어 있는 파일들의 수정시각' — 커서를 어디까지 밀어도 되는지
-    계산할 때 쓴다(읽기에 실패한 파일을 커서가 넘어가 버리지 않게)."""
+    계산할 때 쓴다(읽기에 실패한 파일을 커서가 넘어가 버리지 않게).
+
+    ★ 나열 방식(9/23): 커서가 있는 장비의 **증분 수집**이면 폴더 전체 대신 이름의 날짜 패턴(`report_name_patterns`)으로
+    NAS 가 거른 파일만 받는다(`PATTERN_LISTER`, Windows). 고르는 규칙은 위와 똑같다 — 받은 목록이 전체의 부분집합일 뿐이다.
+    처음 보는 장비 · backfill · rebuild · recover · refresh · 마지막 전체 나열이 `FULL_LIST_EVERY_SEC` 보다 오래됨 · 패턴이 너무 많음
+    · 패턴 나열 실패는 전부 예전처럼 **전체 나열**. `dm["listing"]` 에 어느 쪽이었는지("full" · "pattern") 남긴다."""
     reports, last, failed = cache["reports"], cache["last_mtime"], cache.get("failed") or {}
+    full_listed = cache.get("full_listed") if isinstance(cache.get("full_listed"), dict) else {}
     now = time.time()
     backfill_since = now - float(cfg["backfill_days"] if window_days is None else window_days) * 86400
     refresh_since = (now - float(refresh_days) * 86400) if refresh_days and refresh_days > 0 else None
@@ -1510,14 +1599,34 @@ def _list_new_reports(devs, cache, cfg, backfill, log, progress, on_device, shou
               "refreshed": 0, "retried": 0, "kept": 0}
         rep_dir = os.path.join(d["path"], str(d.get("report_dir") or cfg["report_dir"]))
         try:
-            files = [e for e in nas_guard.scandir(rep_dir) if e.is_file() and e.name.lower().endswith((".htm", ".html"))]
-            files.sort(key=lambda e: e.stat().st_mtime, reverse=True)
             # 누락 복구는 커서와 무관하게 backfill 창 전체를 다시 훑되, 다시 읽는 건 복구 대상뿐이다(아래)
             since = backfill_since if (backfill or recover or dk not in last) else float(last[dk]) - CLOCK_SKEW_SEC
             if refresh_since is not None:
                 since = min(since, refresh_since)          # refresh 창은 커서보다 앞서도 훑는다
             if dk in pending_since:
                 since = min(since, pending_since[dk] - 1)  # 재시도할 Report 까지는 훑는다
+            files = None
+            lister = PATTERN_LISTER
+            incremental = not (backfill or recover or refresh_since is not None or dk not in last)
+            if lister is not None and incremental and now - float(full_listed.get(dk) or 0) < FULL_LIST_EVERY_SEC:
+                pats = report_name_patterns(since, now)
+                if pats:
+                    try:
+                        seen, files = set(), []
+                        for pat in pats:
+                            for e in lister(rep_dir, pat):
+                                if e.name not in seen:
+                                    seen.add(e.name)
+                                    files.append(e)
+                        dm["listing"], dm["pattern_days"] = "pattern", len(pats)
+                    except Exception as ex:  # noqa: BLE001 — 패턴 나열만 안 되는 경우(드문 SMB 구현 · ctypes) — 전체 나열로 되돌아간다
+                        _LOG.warning("[%s] 이름 패턴 나열 실패(%s) — 전체 나열로 되돌아갑니다", d["name"], ex)
+                        files = None
+            if files is None:
+                files = list(nas_guard.scandir(rep_dir))
+                dm["listing"] = "full"
+            files = [e for e in files if e.is_file() and e.name.lower().endswith((".htm", ".html"))]
+            files.sort(key=lambda e: e.stat().st_mtime, reverse=True)
             pick, known = [], []
             for e in files:
                 m = e.stat().st_mtime
@@ -1551,7 +1660,7 @@ def _list_new_reports(devs, cache, cfg, backfill, log, progress, on_device, shou
         progress(i, len(devs), i18n.KO.COLLECT_PHASE_LIST_FMT.format(device=d["name"], i=i, n=len(devs)))
         return out
 
-    plan = _run(cfg, devs, one, should_stop)
+    plan = _run(cfg, devs, one, should_stop, group=lambda d: nas_group(d["path"]))
     for d, dm, pick, _known in plan:              # 로그는 장비 순서대로 한 번에(스레드에서 섞이지 않게)
         if dm["error"]:
             _say(log, f"[{d['name']}] {dm['error']}")
@@ -1561,7 +1670,8 @@ def _list_new_reports(devs, cache, cfg, backfill, log, progress, on_device, shou
                      f"재시도 {dm['retried']}개" if dm.get("retried") else ""]
             extra = [x for x in extra if x]
             rec = f" ({' · '.join(extra)} 포함)" if extra else ""
-            _say(log, f"[{d['name']}] Report {dm['found']}개 중 읽을 파일 {len(pick)}개{rec} · 그대로 두는 캐시 {dm['kept']}개")
+            how = f"최근 {dm['pattern_days']}일 이름으로 거른 " if dm.get("listing") == "pattern" else ""
+            _say(log, f"[{d['name']}] {how}Report {dm['found']}개 중 읽을 파일 {len(pick)}개{rec} · 그대로 두는 캐시 {dm['kept']}개")
     return plan
 
 
@@ -1679,6 +1789,16 @@ def collect(cfg: dict, full: bool = False, backfill: bool = False, *, recover: b
     plan = _list_new_reports(devs, cache, cfg, backfill, log, progress, on_device, should_stop, recover=recover,
                              refresh_days=0 if rebuild else refresh_days, window_days=window_days)
     stats["list_ms"] = int((clock() - t1) * 1000)
+    stats["list_pattern"] = sum(1 for _d, dm, _p, _k in plan if dm.get("listing") == "pattern")
+    if PATTERN_LISTER is not None:                            # 패턴 나열을 쓰는 PC 에서만 — 다음 전체 나열 시각을 정하는 근거
+        fl = cache.get("full_listed")
+        if not isinstance(fl, dict):
+            fl = cache["full_listed"] = {}
+        stamp = time.time()
+        for d, dm, _p, _k in plan:
+            if not dm["error"] and dm.get("listing") == "full":
+                fl[str(d["key"])] = stamp
+                dirty.add(DIRTY_LISTING)
     t2 = clock()
 
     reports, last, failed = cache["reports"], cache["last_mtime"], cache["failed"]
@@ -1731,7 +1851,8 @@ def collect(cfg: dict, full: bool = False, backfill: bool = False, *, recover: b
 
     by_dev: Dict[str, dict] = {str(d["key"]): {"ok": list(known), "blocked": []}
                                for d, dm, _pick, known in plan if not dm["error"]}
-    for (d, _dm, e, key, _scan, _bk), mtime, rows_of, err, sec, sha in _run(cfg, jobs, read_one, should_stop):
+    for (d, _dm, e, key, _scan, _bk), mtime, rows_of, err, sec, sha in _run(cfg, jobs, read_one, should_stop,
+                                                                          group=lambda j: nas_group(j[0]["path"])):
         dk, did = str(d["key"]), str(d["id"])
         _dm["read_sum_ms"] = _dm.get("read_sum_ms", 0) + int(sec * 1000)   # 병렬로 겹치는 시간의 **합**(경과시간 아님)
         if err is None:
@@ -1823,12 +1944,13 @@ def collect(cfg: dict, full: bool = False, backfill: bool = False, *, recover: b
                   "reports_kept": sum(int(dm.get("kept") or 0) for dm in dev_meta),
                   "mode": "rebuild" if rebuild else "refresh" if refresh_days > 0 else "recover" if recover
                           else "backfill" if backfill else "incremental",
-                  "read_workers": _workers(cfg, max(1, len(jobs))), "total_ms": int((clock() - t0) * 1000)})
+                  "read_workers": _workers(cfg, max(1, len(jobs))), "nas_groups": len({nas_group(d["path"]) for d in devs}),
+                  "total_ms": int((clock() - t0) * 1000)})
     _say(log, f"새로 읽은 Report {n_new}개 · 캐시 Report {len(reports)}개 · Wafer 행 {len(rows)} · 오류 {len(errors)}건"
               f" · 캐시 저장 {'함(' + dirty.summary() + ')' if stats['cache_saved'] else '생략'}")
     _say(log, "단계별 경과: 장비 확인 {devices_ms}ms · 목록 {list_ms}ms · 읽기 {read_ms}ms"
               "(Report {reports_read}개 · INI 요청 {ini_asked}건 → 실제 {ini_unique}건, 없음 {ini_missing}) · 캐시 {cache_ms}ms"
-              " · 동시 {read_workers}개".format(**stats))
+              " · NAS {nas_groups}대 × 동시 {read_workers}개 · 이름 패턴 나열 {list_pattern}대".format(**stats))
     if hidden:
         _say(log, f"수집 범위({scope.describe(cfg)}) 밖 장비의 캐시 {hidden}행은 화면에서 제외했습니다(캐시는 그대로 둡니다)")
     return render_issue_rows(rows), dev_meta, errors     # 출력용 행 — issue_codes 의 사람 문장은 여기서(캐시에는 코드만, C12)

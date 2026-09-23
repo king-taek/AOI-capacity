@@ -8,6 +8,7 @@
 - `assert_local(path, roots)`  path 가 어느 NAS 루트 아래면 `NasWriteRefused`.
 - `check_cfg(cfg)`       cache_file / output_dir 이 NAS 아래가 아닌지 확인(collect 진입 시와 쓰기 직전, 이중 방어).
 - `read_text/read_bytes/scandir`  NAS 를 읽을 때 쓰는 헬퍼(읽기 모드만 존재한다).
+- `find_pattern`         폴더에서 이름 패턴에 맞는 항목만 NAS(SMB 서버)가 걸러 돌려준다(Windows `FindFirstFileExW`, 읽기 전용 · 한 단계).
 
 쓰기 API(`open(...,'w')`, `os.replace/rename/remove/makedirs`, `shutil.*`)는 collect.py 의
 `_save_cache` · `write_html` · `_write_csv` 안에만 있고, 각 함수가 첫 줄에서 `assert_local` 을 부른다.
@@ -157,3 +158,82 @@ def read_bytes(path) -> bytes:
 
 def scandir(path):
     return os.scandir(path)
+
+
+class FoundEntry:
+    """`find_pattern` 이 돌려주는 항목 — `os.DirEntry` 에서 수집이 쓰는 부분(name · path · is_file · stat().st_mtime)만."""
+
+    __slots__ = ("name", "path", "_mtime", "_is_file")
+
+    class _Stat:
+        __slots__ = ("st_mtime",)
+
+        def __init__(self, m: float) -> None:
+            self.st_mtime = m
+
+    def __init__(self, name: str, path: str, mtime: float, is_file: bool) -> None:
+        self.name, self.path, self._mtime, self._is_file = name, path, mtime, is_file
+
+    def is_file(self) -> bool:
+        return self._is_file
+
+    def stat(self):
+        return FoundEntry._Stat(self._mtime)
+
+
+def find_pattern(dir_path, pattern: str) -> List[FoundEntry]:
+    """폴더 안에서 이름이 `pattern`(Windows 와일드카드 `*` `?`)에 맞는 항목만 — **NAS(SMB 서버)가 거른다**.
+
+    `os.scandir` 는 폴더 전체를 받아 온 뒤 걸러야 하지만, `FindFirstFileExW` 에 패턴을 주면 그 패턴이 SMB 요청에 실려
+    서버가 맞는 항목만 돌려준다(한 단계 나열 · 읽기 전용 · 재귀 없음). `FIND_FIRST_EX_LARGE_FETCH` 로 왕복도 줄인다.
+    Windows 전용이다 — 다른 OS 에서는 `OSError`. 맞는 것이 없으면 빈 목록."""
+    if os.name != "nt":
+        raise OSError("find_pattern 은 Windows 에서만 쓴다")
+    import ctypes
+    from ctypes import wintypes
+
+    class _FT(ctypes.Structure):
+        _fields_ = [("lo", wintypes.DWORD), ("hi", wintypes.DWORD)]
+
+    class _FD(ctypes.Structure):
+        _fields_ = [("attr", wintypes.DWORD), ("ctime", _FT), ("atime", _FT), ("mtime", _FT),
+                    ("size_hi", wintypes.DWORD), ("size_lo", wintypes.DWORD), ("r0", wintypes.DWORD), ("r1", wintypes.DWORD),
+                    ("name", wintypes.WCHAR * 260), ("alt", wintypes.WCHAR * 14)]
+
+    k32 = ctypes.WinDLL("kernel32", use_last_error=True)  # type: ignore[attr-defined]
+    first = k32.FindFirstFileExW
+    first.argtypes = [wintypes.LPCWSTR, ctypes.c_int, ctypes.c_void_p, ctypes.c_int, ctypes.c_void_p, wintypes.DWORD]
+    first.restype = wintypes.HANDLE
+    nxt = k32.FindNextFileW
+    nxt.argtypes = [wintypes.HANDLE, ctypes.c_void_p]
+    nxt.restype = wintypes.BOOL
+    close = k32.FindClose
+    close.argtypes = [wintypes.HANDLE]
+    invalid = wintypes.HANDLE(-1).value
+    FIND_EX_INFO_BASIC, FIND_EX_SEARCH_NAME_MATCH, FIND_FIRST_EX_LARGE_FETCH = 1, 0, 2
+    ERROR_FILE_NOT_FOUND, ERROR_NO_MORE_FILES = 2, 18
+    base = str(dir_path)
+    data = _FD()
+    h = first(os.path.join(base, pattern), FIND_EX_INFO_BASIC, ctypes.byref(data), FIND_EX_SEARCH_NAME_MATCH, None,
+              FIND_FIRST_EX_LARGE_FETCH)
+    if h is None or h == invalid:
+        err = ctypes.get_last_error()
+        if err in (ERROR_FILE_NOT_FOUND, ERROR_NO_MORE_FILES):
+            return []
+        raise ctypes.WinError(err)  # type: ignore[attr-defined]
+    out: List[FoundEntry] = []
+    try:
+        while True:
+            name = data.name
+            if name not in (".", ".."):
+                ticks = (data.mtime.hi << 32) | data.mtime.lo
+                out.append(FoundEntry(name, os.path.join(base, name), ticks / 1e7 - 11644473600.0,
+                                      not (data.attr & 0x10)))      # FILE_ATTRIBUTE_DIRECTORY
+            if not nxt(h, ctypes.byref(data)):
+                err = ctypes.get_last_error()
+                if err == ERROR_NO_MORE_FILES:
+                    break
+                raise ctypes.WinError(err)  # type: ignore[attr-defined]
+    finally:
+        close(h)
+    return out
