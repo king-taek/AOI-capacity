@@ -102,6 +102,32 @@ def output_html(configured: str = "") -> Path:
     return output_dir(configured) / "AOI_capacity.html"
 
 
+#: 결과 HTML 이 한도(`split_mb`)를 넘어 기간별로 나뉠 때 옛 구간 파일의 이름 — `AOI_capacity_2026-06-25~2026-08-10.html`.
+#: 가장 최근 구간은 원래 이름(`output_name`) 그대로라 더블클릭하던 파일이 바뀌지 않는다.
+def part_name(output_name: str, day_from: str, day_to: str) -> str:
+    stem, ext = os.path.splitext(output_name)
+    return f"{stem}_{day_from}~{day_to}{ext}"
+
+
+def part_re(output_name: str):
+    """`part_name` 이 만든 이름만 맞는 정규식 — 옛 분할 파일을 찾아 정리할 때 이 모양 밖의 파일은 절대 건드리지 않는다."""
+    import re
+
+    stem, ext = os.path.splitext(output_name)
+    return re.compile(rf"^{re.escape(stem)}_(\d{{4}}-\d\d-\d\d)~(\d{{4}}-\d\d-\d\d){re.escape(ext)}$", re.I)
+
+
+def output_parts(configured: str = "", output_name: str = "AOI_capacity.html") -> list:
+    """옛 구간 파일들(새 것부터). 나뉘지 않았으면 빈 목록."""
+    folder = output_dir(configured)
+    rx = part_re(output_name)
+    try:
+        names = [n for n in os.listdir(folder) if rx.match(n)]
+    except OSError:
+        return []
+    return [folder / n for n in sorted(names, key=lambda n: rx.match(n).group(1), reverse=True)]
+
+
 def ensure_user_files() -> bool:
     """첫 실행: 데이터 폴더에 devices.csv 가 없으면 동봉 예시를 복사한다. 복사했으면 True."""
     dst = devices_csv_path()

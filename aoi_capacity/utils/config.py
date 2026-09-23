@@ -31,6 +31,7 @@ RULES: Dict[str, Tuple[str, Any, Optional[int], Optional[int]]] = {
     "refresh_window_days": (INT, 0, 0, MAX_DAYS),
     "attention_util": (INT, 40, 0, 100),          # D14: 살펴볼 장비 — 가동률 미만(%)
     "attention_err": (INT, 3, 0, 999),            # D14: 살펴볼 장비 — Error 건수 이상
+    "split_mb": (INT, 30, 0, 2000),               # 결과 HTML 이 이 크기(MB)를 넘으면 기간별로 나눈다(0 = 나누지 않음, 9/23)
     "write_csv": (BOOL, False, None, None),
     "rebuild_all": (BOOL, False, None, None),
     "report_dir": (NAME, "Report", None, None),

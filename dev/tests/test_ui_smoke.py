@@ -167,3 +167,50 @@ def test_read_concurrency_is_editable_and_saved(window, styled_qapp):
     _pump(styled_qapp)
     assert prefs.load().read_workers == 4
     assert prefs.to_collect_cfg(prefs.load())["read_workers"] == 4
+
+
+def test_split_size_is_editable_and_reaches_the_collect_cfg(window, styled_qapp):
+    """결과 HTML 분할 기준(MB) — 설정에서 바꾸면 수집 cfg 의 split_mb 로 간다(0 = 나누지 않음)."""
+    from aoi_capacity.utils import prefs
+
+    window.settings_page._split.setValue(12)
+    _pump(styled_qapp)
+    assert prefs.load().split_mb == 12 and prefs.to_collect_cfg(prefs.load())["split_mb"] == 12
+
+
+def test_mode_cards_pick_one_situation_and_map_to_worker_options(window, styled_qapp):
+    """상황 카드: 하나만 고르고, 카드 → 워커 인자(full, backfill, recover) · '최근 며칠' 은 refresh_window_days 로.
+    처음 수집(캐시 없음)이면 문제 해결 카드는 잠기고 평소 카드가 '처음 수집' 이 된다. 수집이 끝나면 평소 수집으로 돌아간다."""
+    from aoi_capacity import i18n
+    from aoi_capacity.utils import prefs
+
+    page = window.collect_page
+    page.wait_for_plan()
+    _pump(styled_qapp, 0.2)
+    assert page.mode() == "normal" and page.options() == (False, False, False)
+    assert page._cards["normal"].title() == i18n.KO.MODE_FIRST_TITLE            # 아직 캐시가 없다
+    assert not page._cards["rebuild"].available()
+    page._pick("rebuild")
+    assert page.mode() == "normal"                                              # 잠긴 카드는 고를 수 없다
+    window._start_collect(False, False)
+    t0 = time.time()
+    while window.is_collecting() and time.time() - t0 < 20:
+        _pump(styled_qapp)
+    page.wait_for_plan()
+    _pump(styled_qapp, 0.3)
+    assert page._cards["rebuild"].available() and page._cards["normal"].title() == i18n.KO.MODE_NORMAL_TITLE
+    for key, args in (("backfill", (False, True, False)), ("recover", (False, False, True)), ("rebuild", (True, False, False))):
+        page._pick(key)
+        assert page.options() == args and page._cards[key].property("selected") == "true"
+        assert sum(c.property("selected") == "true" for c in page._cards.values()) == 1
+        assert i18n.KO.MODE_RUN_FMT.format(title=page._cards[key].title()) == page._b_run.text()
+    page._refresh_days.setValue(5)
+    page._pick("refresh")
+    assert prefs.load().refresh_window_days == 5 and page.options() == (False, False, False)
+    page._pick("normal")
+    assert prefs.load().refresh_window_days == 0
+    page._pick("recover")
+    page.set_running(True)
+    page.set_running(False)
+    assert page.mode() == "normal"
+    page.wait_for_plan()

@@ -180,11 +180,20 @@ Camtek AOI 장비의 BatchReport/WaferInfo.ini 를 읽어 장비별 가동률을
   여는 주체는 사람이 연 그 탭이지 이 화면이 아니다 — 화면은 여전히 바깥으로 요청을 한 건도 보내지 않는다. 수집 상태 칩(`collectChip`: 수집 실패 · 일부 누락)과 '수집 범위 / 수집 안 함' 은 `meta` 에서 그린다. **사본 저장**(`saveHtml`)은 수집기가 준 열·풀 구조 그대로 다시 접는다.
 - 추이 화면에 **전 기간 대비(전주·전월·전일)는 두지 않는다**(사용자 확정, 가드: `test_no_period_over_period_comparison_anywhere`). 선택한 기간의 값만 보여 준다.
 - 결과 HTML 의 위치·생성은 `utils/results.py` 한 곳에서만 묻는다(`html_path` · `ensure_html` · `last_collect_time`).
+- **결과 HTML 분할(9/23, 사용자 요청)**: `write_html` 은 파일이 `split_mb`(기본 30, 0 = 안 나눔 — cfg · prefs · 설정 페이지)를 넘으면 `split_rows_by_day` 로 **날짜 구간별 자립형 HTML 여러 장**을 쓴다.
+  가장 최근 구간이 원래 이름(`AOI_capacity.html`), 옛 구간은 `paths.part_name` = `AOI_capacity_<첫날>~<끝날>.html`. 날짜 = 행의 배치 시작일(한 Report 는 한 파일).
+  각 파일에는 구간 앞뒤 하루치 행 · 같은 (장비, Report 이름) 행 · 구간 안 Wafer ID 의 **앞선 시도 전부**(Rescan = 앞선 시도 PASS, D63 — 기간 제한 없음)를 **맥락**으로 더 넣고,
+  화면(`buildModelV3`)은 `meta.part.from~to` 밖 날을 그리지 않는다 → **각 날의 장비-일 값이 나누지 않은 파일과 같다**(원래 행 순서 유지 — 모델의 동점 처리가 입력 순서를 따른다, 실측).
+  헤더에 `분할 n/m · 기간` 칩(`partChip`, 다른 파일 이름은 링크가 아니라 글자). 필요 없어진 옛 구간 파일은 `part_re` 모양 이름만 지운다(가드 `test_html_split.py`).
 - 장비는 `key`(**영속 안정 키** `dev:AOI-25`, C03) · `id`(정규화 경로 — **연결용**, 안정 키를 찾는 열쇠) · `path` · `name`(표시명 `AOI-25` · `4F-AOI-01`) · `aliases`(옛 표시명) · `path_aliases` 로 나눠 다룬다.
   안정 키는 처음 볼 때 표시명에서 한 번 만들어 캐시의 `devices` 대응표(`{key: {name, ids, aliases}}`)에 영속한다 — 표시명·드라이브 문자를 바꿔도 이력이 갈라지지 않는다.
   **Report 캐시 키 = `dev:<장비>|<Report 폴더 아래 상대 경로>`**(절대 경로가 아니다). 같은 장비로 잇는 다른 경로 표기는 **검증·승인된 것만** — OS 가 알려 준 드라이브의 UNC 동치(`devices.UNC_RESOLVER`)와 cfg `device_path_aliases`;
   폴더 이름·표시명이 같다는 이유로는 절대 합치지 않는다(이름 충돌은 새 키 + `identity.conflicts` 기록). Report 를 읽을 때 SHA256 을 함께 두어 같은 키의 내용 변화는 `revision`, 다른 폴더의 같은 파일명은 다른 키다.
   옛 절대 경로 캐시는 `_migrate_identity` 가 한 번 옮긴다(멱등 · 행 삭제 0 · 중복은 `superseded_by` 로 출력에서만 제외, `cache_format` 2, 가드 `test_cache_identity.py`). 홈 정렬은 `devices.sort_key`(= template 의 `cmpDev`) — AOI-1…AOI-25 뒤에 4F-AOI-01….
+- **수집 창 UI(9/23 개편, 사용자 요청 — "HTML 테마에 맞게", "어떤 상황에 어떤 옵션을 눌러야 하는지 직관적으로")**: 결과 HTML 과 같은 틀 — 상단 바(`widgets/nav_bar.NavBar`: 브랜드 · 내비 탭 · 마지막 수집, 옛 왼쪽 사이드바 대체)와
+  가운데 정렬 페이지, 라이트가 기본(prefs v4 가 옛 기본값 "dark" 만 옮긴다 · 어두운 화면은 설정), 글꼴은 HTML 의 `--sans`/`--mono`. 수집 페이지는 체크박스 대신 **상황 카드**(`collect_page.ModeCard`):
+  평소 수집(캐시가 없으면 '처음 수집' — 이때 나머지 카드는 잠김) + '결과가 이상하거나 비어 있을 때만' 네 장(빠진 날 채우기 = backfill · 최근 며칠 다시 읽기 = refresh(카드 안 일수, prefs `refresh_pick_days`) ·
+  시간 미확인 복구 = recover(캐시로 센 대상 수 표시) · 전체 다시 만들기 = rebuild). 카드마다 '이럴 때' · '무엇을 하나' · 걸리는 시간 배지, 실행 버튼 이름이 고른 카드를 따르고, 수집이 끝나면 평소 수집으로 돌아간다.
 - 시각 테마의 단일 출처는 `aoi_capacity/ui/assets/template.html` 의 `:root` 토큰 두 블록(dark · light). `ui/theme.py` 는 그 값을 그대로 쓴다(가드: `test_theme.py`).
   결과 화면은 라이트 단일(D48-⑥, `<html data-theme="light">`)이고 dark 블록은 수집 창의 다크 모드 값이다. CSS 주석에 `:root{` 를 적지 않는다(파서가 첫 블록으로 오인한다 — 실측).
 - 사용자 데이터는 `%LOCALAPPDATA%\AOI_Capacity`(`utils/paths.data_root()`), 절대 `app/` 안이 아니다(업데이트가 `app/` 를 통째로 교체).

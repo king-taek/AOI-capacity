@@ -23,5 +23,7 @@
   "output_dir": "C:\\AOI_capacity\\out",
   "output_name": "AOI_capacity.html",
   "write_csv": false,
+  "_분할": "split_mb: 결과 HTML 이 이 크기(MB)를 넘으면 기간별로 여러 장으로 나눕니다(0 = 나누지 않음). 가장 최근 구간이 output_name 그대로이고, 옛 구간은 이름 뒤에 _시작일~끝일 이 붙습니다. 각 파일은 따로 더블클릭해 열 수 있습니다.",
+  "split_mb": 30,
   "cache_file": "C:\\AOI_capacity\\aoi_cache.json"
 }

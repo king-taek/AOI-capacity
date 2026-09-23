@@ -237,7 +237,7 @@ def test_prefs_from_dict_keeps_good_fields_and_never_resets_scope_for_a_bad_vers
                                               "retention_days": 120, "write_csv": "false", "color_mode": 3}), encoding="utf-8")
     p = prefs.load()
     assert p.scope_devices == mine                                  # ★ 장비 목록은 기본 30대로 돌아가지 않는다
-    assert p.retention_days == 120 and p.backfill_days == 30 and p.write_csv is False and p.color_mode == "dark"
+    assert p.retention_days == 120 and p.backfill_days == 30 and p.write_csv is False and p.color_mode == "light"   # 잘못된 값 → 기본값(9/23 부터 light)
     assert p.prefs_version == prefs.PREFS_VERSION
     # 옛 기본값 그대로인 목록 + 잘못된 버전: 사용자가 고른 것인지 알 수 없으니 **넓히지 않는다**(fail closed)
     paths.prefs_file().write_text(json.dumps({"prefs_version": None, "scope_devices": ["AOI-25"]}), encoding="utf-8")

@@ -49,7 +49,7 @@ class DevicesPage(QWidget):
         lay.setSpacing(12)
 
         h = QLabel(i18n.KO.DEV_PAGE_TITLE, self)
-        h.setProperty("role", "h2")
+        h.setProperty("role", "h1")
         help_ = QLabel(i18n.KO.DEV_PAGE_HELP, self)
         help_.setProperty("role", "help")
         help_.setWordWrap(True)

@@ -18,7 +18,7 @@ from .. import scope as _scope
 from . import config as _config
 from . import paths
 
-PREFS_VERSION = 3
+PREFS_VERSION = 4
 
 
 @dataclass
@@ -32,12 +32,14 @@ class Prefs:
     scan_dir: str = "Scanresult"
     threshold_util: int = 40          # 주의 장비: 가동률 미만
     threshold_err: int = 3            # 주의 장비: 오류 건수 이상
-    color_mode: str = "dark"          # dark | light
+    color_mode: str = "light"         # light | dark — 9/23 부터 라이트가 기본(결과 HTML 과 같은 모양)
     window_width: int = 0
     window_height: int = 0
     window_maximized: bool = False
     last_view: str = "collect"
     scope_devices: List[str] = field(default_factory=lambda: list(_scope.DEFAULT_SCOPE))  # ★ 수집 허용 장비
+    refresh_pick_days: int = 3        # 수집 페이지 '최근 N일 다시 읽기' 카드의 N(고를 때만 refresh_window_days 로 들어간다)
+    split_mb: int = 30                # 결과 HTML 이 이 MB 를 넘으면 기간별로 나눈다(0 = 안 나눔)
     refresh_window_days: int = 0      # D60: 최근 N일 안의 Report 는 캐시에 있어도 다시 읽기(0 = 끔). 수집 페이지 체크박스가 켜고 끈다
     prefs_version: int = PREFS_VERSION
     extra: Dict[str, Any] = field(default_factory=dict)
@@ -84,9 +86,13 @@ def migrate(p: Prefs) -> Prefs:
 
     v2: 수집 범위가 AOI-25 한 대에서 AOI-1 · AOI-8 · AOI-9 · AOI-25 로 늘었다.
     v3: 4대 현장 테스트를 마치고 30대 전부로 늘었다(사용자 확정).
-        어느 쪽이든 **옛 기본값 그대로인 설정만** 새 목록으로 바꾼다 — `_scope.PAST_DEFAULTS` 참조."""
+        어느 쪽이든 **옛 기본값 그대로인 설정만** 새 목록으로 바꾼다 — `_scope.PAST_DEFAULTS` 참조.
+    v4(9/23): 화면 기본이 어두운 화면 → 밝은 화면(결과 HTML 과 같은 모양, 사용자 요청). 옛 기본값("dark")인 설정만 옮긴다 —
+        v4 뒤에 사용자가 어두운 화면을 고르면 그대로 남는다."""
     if p.prefs_version < PREFS_VERSION and list(p.scope_devices or []) in _scope.PAST_DEFAULTS:
         p.scope_devices = list(_scope.DEFAULT_SCOPE)
+    if p.prefs_version < 4 and p.color_mode == "dark":
+        p.color_mode = "light"
     if p.prefs_version < PREFS_VERSION:
         p.prefs_version = PREFS_VERSION
     return p
@@ -155,6 +161,7 @@ def to_collect_cfg(p: Prefs) -> Dict[str, Any]:
         "rebuild_all": False,          # GUI 의 '전체 다시 만들기' 는 워커 인자(full)로 넘긴다 — 설정에 남기지 않는다
         "attention_util": p.threshold_util,   # D14: 결과 HTML 의 meta.dashboard_settings 로 나간다(prefs 의 이름은 옛 그대로 threshold_*)
         "attention_err": p.threshold_err,
+        "split_mb": p.split_mb,
     })
     # ★ CLI(config.json)와 같은 규칙으로 정규화한다 — 성능·기간 값은 고치고, 범위·경로 문제는 그대로 두어 수집 진입점이 막는다(C13)
     cfg, _problems = _config.normalize_config(cfg)

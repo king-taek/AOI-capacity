@@ -1,55 +1,80 @@
 /* AOI Capacity — Qt 크롬 스타일. 토큰(달러 기호 자리표시자)은 theme.py 가 template.html 의 :root 값으로 채운다.
+   9/23: 결과 HTML 과 같은 모양 — 흰 패널 + 옅은 선 + 둥근 모서리 13px, 버튼·세그먼트·내비는 HTML 의 .btn · .seg · .nav 와 같은 치수.
    규칙: 전역 QWidget 에는 배경을 칠하지 않는다(면은 역할별로만). */
 
-QWidget { color: $ink; font-family: $font_body; font-size: 14px; }
+QWidget { color: $ink; font-family: $font_body; font-size: 13.5px; }
 QMainWindow, QDialog { background: $bg; }
-QToolTip { background: $raise_; color: $ink; border: 1px solid $line_2; padding: 6px 8px; border-radius: 6px; }
+QWidget[role="main"] { background: $bg; }
+QToolTip { background: $surface; color: $ink; border: 1px solid $line_2; padding: 6px 8px; border-radius: 6px; }
 
-/* 상단 바 · 사이드바 */
+/* 상단 바(HTML .hdr) — 브랜드 · 내비 · 마지막 수집 */
 QWidget[role="top"] { background: $surface; border-bottom: 1px solid $line; }
-QWidget[role="side"] { background: $surface; border-right: 1px solid $line; }
-QLabel[role="brand"] { font-family: $font_display; font-size: 17px; font-weight: 700; }
-QLabel[role="logo"] { background: $accent; border-radius: 8px; }
-QLabel[role="eyebrow"] { font-size: 11px; font-weight: 600; color: $ink_3; letter-spacing: 1px; }
-QLabel[role="pill"] { background: $accent_soft; color: $accent_2; border-radius: 10px; padding: 2px 10px; font-size: 12px; font-weight: 600; }
+QLabel[role="brand"] { font-family: $font_display; font-size: 15px; font-weight: 700; }
+QLabel[role="logo"] { background: $accent; border-radius: 2px; }
+QPushButton[role="nav"] { background: transparent; color: $ink_3; border: none; border-radius: 7px; padding: 6px 13px; font-size: 13px; font-weight: 600; }
+QPushButton[role="nav"]:hover { background: $surface_2; color: $ink; }
+QPushButton[role="nav"][current="true"] { background: $accent_soft; color: $nav_on; }
+QLabel[role="stamp"] { font-family: $font_mono; font-size: 12px; color: $ink_3; }
+QLabel[role="foot"] { font-size: 11.5px; color: $ink_3; }
+QLabel[role="eyebrow"] { font-size: 11px; font-weight: 700; color: $ink_3; letter-spacing: 0.5px; }
+
+/* 페이지 머리 */
+QLabel[role="h1"] { font-family: $font_display; font-size: 22px; font-weight: 700; }
+QLabel[role="h2"] { font-family: $font_display; font-size: 20px; font-weight: 700; }
+QLabel[role="sub"] { color: $ink_3; font-size: 13px; }
+QLabel[role="help"] { color: $ink_2; font-size: 13px; }
+QLabel[role="muted"] { color: $ink_3; font-size: 12.5px; }
+QLabel[role="mono"] { font-family: $font_mono; font-size: 12.5px; color: $ink_2; }
+
+/* 패널(HTML .panel) */
+QFrame[role="card"] { background: $surface; border: 1px solid $line; border-radius: 13px; }
+QFrame[role="card"] QLabel[role="cardTitle"] { font-family: $font_display; font-size: 14.5px; font-weight: 700; }
+QFrame[role="notice"] { background: $accent_soft; border-radius: 10px; }
+QFrame[role="notice"] QLabel { color: $nav_on; }
+QFrame[role="rule"] { background: $row; max-height: 1px; min-height: 1px; border: none; }
+
+/* 상황별 수집 카드 — 누르면 고른다. 고른 카드는 파란 테두리(HTML 비교 페이지의 .opt 와 같은 표현) */
+QFrame[role="mode"] { background: $surface; border: 2px solid $line; border-radius: 12px; }
+QFrame[role="mode"]:hover { border-color: $accent_2; }
+QFrame[role="mode"][selected="true"] { border-color: $accent; background: $surface; }
+QFrame[role="mode"][enabled="false"] { background: $surface_2; }
+QFrame[role="mode"] QLabel[role="modeTitle"] { font-size: 14px; font-weight: 700; }
+QFrame[role="mode"][enabled="false"] QLabel[role="modeTitle"] { color: $ink_3; }
+QFrame[role="mode"] QLabel[role="modeWhen"] { color: $ink_2; font-size: 12.5px; }
+QFrame[role="mode"] QLabel[role="modeWhat"] { color: $ink_3; font-size: 12px; }
+QLabel[role="dot"] { border: 2px solid $line_2; border-radius: 7px; background: $surface; }
+QLabel[role="dot"][on="true"] { border: 4px solid $accent; }
+
+/* 알약(HTML .pill · .st) */
+QLabel[role="badge"] { border-radius: 9px; padding: 1px 8px; font-size: 11.5px; font-weight: 700; background: $accent_soft; color: $nav_on; }
+QLabel[role="badge"][kind="rec"] { background: $good_soft; color: $good_ink; }
+QLabel[role="badge"][kind="warn"] { background: $warn_soft; color: $warn_ink; }
+QLabel[role="badge"][kind="slow"] { background: $off; color: $ink_3; }
+QLabel[role="badge"][kind="bad"] { background: $crit_soft; color: $crit_ink; }
+QLabel[role="pill"] { background: $accent_soft; color: $nav_on; border-radius: 10px; padding: 2px 10px; font-size: 12px; font-weight: 600; }
 QLabel[role="pill"][kind="live"] { background: $good_soft; color: $good_ink; }
 QLabel[role="pill"][kind="stale"] { background: $warn_soft; color: $warn_ink; }
 QLabel[role="pill"][kind="bad"] { background: $crit_soft; color: $crit_ink; }
 
-QFrame[role="navItem"] { background: transparent; border-radius: 8px; border-left: 2px solid transparent; }
-QFrame[role="navItem"]:hover { background: $raise_; }
-QFrame[role="navItem"][current="true"] { background: $accent_soft; border-left: 2px solid $accent; }
-QLabel[role="navTitle"] { font-size: 14px; color: $ink_2; }
-QFrame[role="navItem"][current="true"] QLabel[role="navTitle"] { color: $accent_2; font-weight: 600; }
-QLabel[role="navSub"] { font-size: 11px; color: $ink_3; }
-QLabel[role="foot"] { font-size: 11.5px; color: $ink_3; }
-
-/* 페이지 */
-QLabel[role="h2"] { font-family: $font_display; font-size: 20px; font-weight: 700; }
-QLabel[role="help"] { color: $ink_2; font-size: 13px; }
-QLabel[role="muted"] { color: $ink_3; font-size: 12.5px; }
-QLabel[role="mono"] { font-family: $font_mono; font-size: 12.5px; }
-QFrame[role="card"] { background: $surface; border: 1px solid $line; border-radius: 14px; }
-QFrame[role="card"] QLabel[role="cardTitle"] { font-family: $font_display; font-size: 15px; font-weight: 600; }
-QFrame[role="notice"] { background: $accent_soft; border-radius: 10px; }
-QFrame[role="notice"] QLabel { color: $accent_2; }
-
-/* 버튼 */
-QPushButton { background: $surface; color: $ink; border: 1px solid $line_2; border-radius: 8px; padding: 6px 12px; font-size: 13px; font-weight: 500; }
-QPushButton:hover { background: $raise_; }
+/* 버튼(HTML .btn) */
+QPushButton { background: $surface; color: $ink_2; border: 1px solid $line_2; border-radius: 7px; padding: 6px 12px; font-size: 12.5px; font-weight: 600; }
+QPushButton:hover { border-color: $accent_2; color: $ink; }
 QPushButton:pressed { background: $accent_soft; }
-QPushButton:disabled { color: $ink_3; border-color: $line; }
-QPushButton[role="primary"] { background: $accent; color: $accent_ink; border-color: $accent; font-weight: 600; }
-QPushButton[role="primary"]:hover { background: $accent_2; border-color: $accent_2; }
+QPushButton:disabled { color: $ink_3; border-color: $line; background: $surface_2; }
+QPushButton[role="primary"] { background: $accent; color: $accent_ink; border-color: $accent; }
+QPushButton[role="primary"]:hover { background: $nav_on; border-color: $nav_on; color: $accent_ink; }
 QPushButton[role="primary"]:disabled { background: $raise_; color: $ink_3; border-color: $line; }
+QPushButton[size="lg"] { padding: 10px 22px; font-size: 14px; border-radius: 9px; }
 QPushButton[role="ghost"] { background: transparent; border-color: transparent; color: $ink_2; }
-QPushButton[role="ghost"]:hover { background: $raise_; color: $ink; }
+QPushButton[role="ghost"]:hover { background: $surface_2; color: $ink; }
 QPushButton[role="danger"] { background: $crit_soft; color: $crit_ink; border-color: transparent; }
+QPushButton[role="link"] { background: transparent; border: none; color: $accent; padding: 2px 4px; font-weight: 600; }
+QPushButton[role="link"]:hover { color: $nav_on; text-decoration: underline; }
 
 /* 입력 */
-QLineEdit, QSpinBox, QComboBox, QPlainTextEdit, QTextEdit { background: $surface; color: $ink; border: 1px solid $line_2; border-radius: 8px; padding: 5px 8px; selection-background-color: $accent_soft; selection-color: $ink; }
+QLineEdit, QSpinBox, QComboBox, QPlainTextEdit, QTextEdit { background: $surface; color: $ink; border: 1px solid $line_2; border-radius: 7px; padding: 5px 8px; selection-background-color: $accent_soft; selection-color: $ink; }
 QLineEdit:focus, QSpinBox:focus, QComboBox:focus { border-color: $accent; }
-QLineEdit:disabled, QSpinBox:disabled { color: $ink_3; }
+QLineEdit:disabled, QSpinBox:disabled { color: $ink_3; background: $surface_2; }
 QLineEdit[role="mono"] { font-family: $font_mono; }
 QSpinBox::up-button, QSpinBox::down-button { width: 14px; border: none; background: transparent; }
 QComboBox::drop-down { border: none; width: 22px; }
@@ -59,15 +84,15 @@ QCheckBox::indicator { width: 16px; height: 16px; border: 1px solid $line_2; bor
 QCheckBox::indicator:checked { background: $accent; border-color: $accent; }
 
 /* 표 */
-QTableWidget, QTableView { background: $surface; alternate-background-color: $surface_2; gridline-color: $line; border: 1px solid $line; border-radius: 10px; selection-background-color: $accent_soft; selection-color: $ink; }
+QTableWidget, QTableView { background: $surface; alternate-background-color: $surface_2; gridline-color: $row; border: 1px solid $line; border-radius: 10px; selection-background-color: $accent_soft; selection-color: $ink; }
 QTableWidget::item { padding: 4px 8px; }
-QHeaderView::section { background: $surface; color: $ink_3; font-size: 11.5px; font-weight: 600; padding: 6px 8px; border: none; border-bottom: 1px solid $line; }
+QHeaderView::section { background: $surface; color: $ink_3; font-size: 12px; font-weight: 600; padding: 7px 8px; border: none; border-bottom: 1px solid $line; }
 QTableCornerButton::section { background: $surface; border: none; }
 
 /* 진행 · 콘솔 */
 QProgressBar { background: $raise_; border: none; border-radius: 3px; height: 6px; text-align: center; color: transparent; }
 QProgressBar::chunk { background: $accent; border-radius: 3px; }
-QPlainTextEdit[role="console"] { background: $console_bg; color: $console_ink; font-family: $font_mono; font-size: 12px; border: 1px solid $line; border-radius: 8px; }
+QPlainTextEdit[role="console"] { background: $console_bg; color: $console_ink; font-family: $font_mono; font-size: 12px; border: 1px solid $line; border-radius: 10px; padding: 6px 8px; }
 
 /* 스크롤바 */
 QScrollBar:vertical { background: transparent; width: 10px; margin: 0; }
@@ -81,11 +106,11 @@ QScrollArea > QWidget > QWidget { background: transparent; }
 
 /* 시트(팝업) · 로딩 카드 */
 QFrame[role="sheet"] { background: $surface; border: 1px solid $line_2; border-radius: 14px; }
-QLabel[role="sheetTitle"] { font-family: $font_display; font-size: 16px; font-weight: 600; }
+QLabel[role="sheetTitle"] { font-family: $font_display; font-size: 16px; font-weight: 700; }
 QLabel[role="sheetBody"] { color: $ink_2; font-size: 13.5px; }
 QFrame[role="loadCard"] { background: $surface; border: 1px solid $line_2; border-radius: 16px; }
-QLabel[role="loadTitle"] { font-family: $font_display; font-size: 17px; font-weight: 600; }
+QLabel[role="loadTitle"] { font-family: $font_display; font-size: 17px; font-weight: 700; }
 QLabel[role="loadPhase"] { font-size: 13.5px; color: $ink; }
 QLabel[role="loadDetail"] { font-family: $font_mono; font-size: 11.5px; color: $ink_3; }
-QLabel[role="loadCount"] { font-family: $font_display; font-size: 22px; font-weight: 600; }
+QLabel[role="loadCount"] { font-family: $font_display; font-size: 22px; font-weight: 700; }
 QLabel[role="legend"] { font-size: 11.5px; color: $ink_2; }

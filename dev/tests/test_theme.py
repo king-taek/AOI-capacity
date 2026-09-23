@@ -23,8 +23,9 @@ def test_render_qss_has_no_unsubstituted_tokens():
 def test_modes_differ_and_normalize():
     assert theme.colors("dark")["bg"] != theme.colors("light")["bg"]
     assert theme.normalize_color_mode("LIGHT") == "light"
-    assert theme.normalize_color_mode(None) == "dark"
-    assert theme.normalize_color_mode("weird") == "dark"
+    assert theme.normalize_color_mode(None) == "light"          # 9/23: 결과 HTML 과 같은 라이트가 기본
+    assert theme.normalize_color_mode("weird") == "light"
+    assert theme.normalize_color_mode("DARK") == "dark"
 
 
 def test_all_hex_colors():

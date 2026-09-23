@@ -15,7 +15,8 @@ from typing import Dict, Optional
 from ..utils import paths
 
 MODES = ("dark", "light")
-_mode = "dark"
+#: 9/23: 수집 창도 결과 HTML 과 같은 라이트가 기본이다(사용자 요청 — "HTML 테마에 맞게"). 어두운 화면은 설정에서 고를 수 있다.
+_mode = "light"
 
 # template.html :root 토큰명 → theme 키 (CSS 의 --raise 는 파이썬 예약어가 아니지만 일관되게 raise_ 로)
 _TOKEN_KEYS = {
@@ -48,13 +49,17 @@ FALLBACK: Dict[str, Dict[str, str]] = {
 }
 # HTML 에는 없는, Qt 전용 보조 토큰
 EXTRA: Dict[str, Dict[str, str]] = {
-    "dark": {"console_bg": "#0A0E14", "console_ink": "#c8d3de", "scrim": "rgba(15,19,25,170)", "good_ink": "#3DCC8E", "warn_ink": "#F0C25A"},
-    "light": {"console_bg": "#0f1720", "console_ink": "#dfe6ee", "scrim": "rgba(15,23,32,110)", "good_ink": "#106b46", "warn_ink": "#7a5200"},
+    "dark": {"console_bg": "#0A0E14", "console_ink": "#c8d3de", "scrim": "rgba(15,19,25,170)", "good_ink": "#3DCC8E", "warn_ink": "#F0C25A",
+             "nav_on": "#7EC8F0", "row": "#1A2130"},
+    # 라이트 콘솔은 결과 HTML 의 표면색(밝은 회청) — 검은 콘솔이 화면에서 혼자 튀지 않게(9/23). nav_on·row 는 HTML 의 --nav-on · 행 구분선.
+    "light": {"console_bg": "#F7F9FB", "console_ink": "#4B5866", "scrim": "rgba(15,23,32,110)", "good_ink": "#276B48", "warn_ink": "#7A5200",
+              "nav_on": "#1D4E82", "row": "#F1F4F7"},
 }
-FONT_DISPLAY = '"Outfit", "Segoe UI", "Malgun Gothic", "Apple SD Gothic Neo", sans-serif'
-FONT_BODY = '"DM Sans", "Segoe UI", "Malgun Gothic", "Apple SD Gothic Neo", sans-serif'
-FONT_MONO = '"Cascadia Mono", "Consolas", "D2Coding", monospace'
-FONT_FAMILIES = ["DM Sans", "Segoe UI", "Malgun Gothic", "Apple SD Gothic Neo"]
+# 결과 HTML 의 --sans · --mono 와 같은 글꼴(9/23) — 두 화면이 같은 제품으로 보이게.
+FONT_DISPLAY = '"Segoe UI", "Malgun Gothic", "Apple SD Gothic Neo", "Noto Sans CJK KR", sans-serif'
+FONT_BODY = FONT_DISPLAY
+FONT_MONO = '"Consolas", "Cascadia Mono", "D2Coding", monospace'
+FONT_FAMILIES = ["Segoe UI", "Malgun Gothic", "Apple SD Gothic Neo", "Noto Sans CJK KR"]
 
 _parsed: Optional[Dict[str, Dict[str, str]]] = None
 _qss_cache: Dict[str, str] = {}
@@ -88,7 +93,7 @@ def palettes() -> Dict[str, Dict[str, str]]:
 
 
 def normalize_color_mode(mode: Optional[str]) -> str:
-    return "light" if str(mode or "").lower() == "light" else "dark"
+    return "dark" if str(mode or "").lower() == "dark" else "light"
 
 
 def set_color_mode(mode: str) -> None:

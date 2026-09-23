@@ -99,6 +99,7 @@ DEFAULT_CONFIG: Dict[str, object] = {
     devices_mod.PATH_ALIASES_CFG: {},
     "attention_util": 40,                         # D14: 살펴볼 장비 = 가동률 이 값(%) 미만 — 결과 HTML 의 meta.dashboard_settings 로 나간다
     "attention_err": 3,                           # D14: 또는 Error 건수 이 값 이상
+    "split_mb": 30,                               # 결과 HTML 이 이 MB 를 넘으면 기간별 여러 장으로 나눈다(0 = 안 나눔, 9/23)
 }
 MAX_READ_RETRY = 3   # 읽기에 실패한 Report 를 몇 번까지 다시 시도하고 커서를 붙잡아 둘지
 INI_KEYS = {
@@ -2090,6 +2091,97 @@ def _embed_rows(rows: List[dict]) -> dict:
 
 #: `write_html(..., warnings=[])` 에 쌓이는 부가 산출물 경고의 종류 — CSV 가 잠겨 있어(Excel) 못 쓴 경우.
 WARN_CSV = "csv"
+MB = 1024 * 1024
+
+
+def _payload(emb: dict, meta: dict) -> str:
+    """접힌 행 + meta → HTML 에 박을 JSON 문자열. `</` → `<\\/` 는 JSON 으로는 같은 문자열이면서 HTML 파서가 `</script>` 로 읽지 못하게 한다."""
+    emb["meta"] = meta
+    return json.dumps(emb, ensure_ascii=False, separators=(",", ":")).replace("</", "<\\/")
+
+
+def _utf8_len(text: str) -> int:
+    return len(text.encode("utf-8"))
+
+
+def _wafer_key(r: dict) -> str:
+    """같은 자재일 수 있는 행을 묶는 열쇠 — Wafer ID 의 영숫자만 대문자로. 화면의 자재 키(`matKey` = Job 묶음|Report 파일명의 Lot|Wafer)는
+    이 값을 그대로 포함하므로 이 열쇠로 모은 행은 **항상 상위집합**이다(Lot 은 파일명에서 오므로 행의 Lot 으로 좁히면 놓친다 — 30일치 실측).
+    합성 행 · LoadPort/Slot 자리표시는 자재가 아니다(전부 한 열쇠로 묶여 버린다)."""
+    if r.get("kind") or _is_placeholder(r):
+        return ""
+    return re.sub(r"[^A-Z0-9]", "", str(r.get("wafer_id") or "").upper())
+
+
+def split_rows_by_day(rows: List[dict], budget: int) -> List[Tuple[str, str, List[dict]]]:
+    """결과 HTML 이 한도를 넘을 때(9/23) 행을 **날짜 구간**으로 나눈다 → [(첫날, 끝날, 그 파일에 넣을 행)] 새 구간부터.
+
+    - 날짜는 행의 배치 시작일(없으면 Wafer 시작일) — 한 Report 의 행은 같은 파일에 들어간다. 날짜를 모르는 행은 가장 최근 파일에.
+    - 각 파일에는 구간 **앞뒤 하루치 행**(자정을 넘는 배치 · 에러 후 대기)과 **구간 안 Wafer 의 더 앞선 시도들**(Rescan 은 같은 자재의
+      앞선 시도가 PASS 였는지로 정한다 — D63, 기간 제한 없음)을 맥락으로 더 넣는다. 화면은 `meta.part.from~to` 밖의 날을 그리지 않으므로
+      맥락 행은 계산에만 쓰이고 두 번 보이지 않는다 → 각 날의 장비-일 값이 나누지 않은 파일과 같다(가드 `test_html_split.py`).
+    - 구간은 날마다 따로 접어 잰 크기로 새 날부터 넓히고, 맥락까지 넣어 실제로 접은 크기가 `budget` 을 넘으면 하루씩 줄인다.
+      하루치만으로 넘으면 그 하루가 한 파일이다(더 쪼개지 않는다)."""
+    memo: Dict[str, str] = {}
+
+    def day_of(r: dict) -> str:
+        raw = str(r.get("batch_start") or r.get("wafer_start_time") or "")
+        if raw not in memo:
+            d = parse_dt(raw)
+            memo[raw] = d.date().isoformat() if d else ""
+        return memo[raw]
+
+    def size_of(rs: List[dict]) -> int:
+        return _utf8_len(json.dumps(_embed_rows(rs), ensure_ascii=False, separators=(",", ":")))
+
+    by: Dict[str, List[dict]] = {}
+    for r in rows:
+        by.setdefault(day_of(r), []).append(r)
+    undated = by.pop("", [])
+    days = sorted(by)
+    if not days:
+        return [("", "", list(rows))]
+    first_seen: Dict[str, int] = {}                     # Wafer 열쇠 → 처음 나온 날의 번호(그보다 앞선 시도는 없다)
+    for k, d in enumerate(days):
+        for r in by[d]:
+            first_seen.setdefault(_wafer_key(r), k)
+    order = {id(r): k for k, r in enumerate(rows)}
+    by_rep: Dict[tuple, List[dict]] = {}              # 맥락은 Report 통째로 — 일부 행만 넣으면 그 Report 의 배치 창 나누기가 달라진다
+    for r in rows:
+        by_rep.setdefault((r.get("device"), r.get("report")), []).append(r)
+    size = [size_of(by[d]) for d in days]
+    acc = [0]
+    for v in size:
+        acc.append(acc[-1] + v)
+
+    def build(lo: int, hi: int, newest: bool) -> List[dict]:
+        a, b = max(0, lo - 1), min(len(days) - 1, hi + 1)
+        part = [r for k in range(a, b + 1) for r in by[days[k]]]
+        keys = {_wafer_key(r) for r in part}            # 맥락 날의 행도 — 전날 23시에 시작한 배치의 Wafer 는 자정 뒤(구간 첫날)에 칠해진다
+        start = min((first_seen[kk] for kk in keys if kk), default=a)
+        same = {(r.get("device"), r.get("report")) for r in part}   # 화면은 (장비, Report 이름)으로 묶는다 — 이름이 같은 다른 날 행까지
+        have = {id(r) for r in part}
+        part += [r for rk in same for r in by_rep[rk] if id(r) not in have]
+        have = {id(r) for r in part}
+        part += [r for k in range(start, a) for r in by[days[k]] if id(r) not in have and _wafer_key(r) and _wafer_key(r) in keys]
+        if newest:
+            part.extend(undated)
+        part.sort(key=lambda r: order[id(r)])            # 원래 행 순서 그대로 — 화면 모델의 동점 처리가 입력 순서를 따른다(실측)
+        return part
+
+    out: List[Tuple[str, str, List[dict]]] = []
+    hi = len(days) - 1
+    while hi >= 0:
+        lo = hi
+        while lo - 1 >= 0 and acc[min(len(days) - 1, hi + 1) + 1] - acc[max(0, lo - 2)] <= budget * 0.85:   # 앞선 시도 맥락 몫을 남긴다
+            lo -= 1
+        part = build(lo, hi, not out)
+        while lo < hi and size_of(part) > budget:        # 맥락까지 넣으니 넘친다 — 하루씩 줄인다
+            lo += 1
+            part = build(lo, hi, not out)
+        out.append((days[lo], days[hi], part))
+        hi = lo - 1
+    return out
 
 
 def write_html(cfg: dict, rows: List[dict], dev_meta: List[dict], errors: List[dict], started: float, *,
@@ -2126,30 +2218,58 @@ def write_html(cfg: dict, rows: List[dict], dev_meta: List[dict], errors: List[d
     emb = _embed_rows(rows)
     if meta["timing"]:
         meta["timing"]["html_ms"] = int((time.perf_counter() - t_html) * 1000)   # 템플릿 읽기 + 접기까지(쓰기 전)
-    emb["meta"] = meta
-    # `</` → `<\/` 는 JSON 으로는 같은 문자열이면서 HTML 파서가 `</script>` 로 읽지 못하게 한다. U+2028·한글은 JSON 그대로(스크립트가 아니라 데이터 블록).
-    data = json.dumps(emb, ensure_ascii=False, separators=(",", ":")).replace("</", "<\\/")
+    data = _payload(emb, meta)
     del emb                                        # 접힌 dict 는 문자열이 됐다 — 큰 참조를 놓는다(C07)
     os.makedirs(cfg["output_dir"], exist_ok=True)
     target = os.path.join(cfg["output_dir"], cfg["output_name"])
-    tmp = _unique_tmp(target)
-    size = len(prefix) + len(data) + len(suffix)
-    try:
-        with open(tmp, "w", encoding="utf-8", errors="strict") as f:
-            f.write(prefix)
-            f.write(data)
-            f.write(suffix)
-            f.flush()
-            os.fsync(f.fileno())
-        del data
-        os.replace(tmp, target)
-    finally:
-        if os.path.isfile(tmp):                     # 자기가 만든 임시 파일만 지운다(원본에는 손대지 않는다)
+    fixed = _utf8_len(prefix) + _utf8_len(suffix)
+    limit = int(cfg.get("split_mb") or 0) * MB
+    total = fixed + _utf8_len(data)
+    # ★ 9/23: 한도(split_mb)를 넘으면 기간별 여러 장으로 — 가장 최근 구간이 원래 이름, 옛 구간은 이름에 기간. 각 파일은 따로 열린다.
+    jobs: List[Tuple[str, str]] = [(target, data)]
+    if limit and total > limit and rows:
+        del data, jobs
+        budget = max(MB, limit - fixed - _utf8_len(json.dumps(meta, ensure_ascii=False)) - MB // 2)   # meta·여유 몫을 뺀 데이터 몫
+        pieces = split_rows_by_day(rows, budget)
+        names = [cfg["output_name"] if k == 0 else paths.part_name(cfg["output_name"], a, b) for k, (a, b, _r) in enumerate(pieces)]
+        files = [{"name": n, "from": a, "to": b} for n, (a, b, _r) in zip(names, pieces)]
+        jobs = []
+        for k, ((a, b, part_rows), name) in enumerate(zip(pieces, names)):
+            pm = dict(meta)
+            pm["part"] = {"index": k + 1, "count": len(pieces), "from": a, "to": b, "files": files}
+            jobs.append((os.path.join(cfg["output_dir"], name), _payload(_embed_rows(part_rows), pm)))
+        _say(log, f"결과 HTML 이 {total / MB:.1f}MB 로 한도 {limit // MB}MB 를 넘어 기간별 {len(jobs)}장으로 나눕니다"
+                  f"(가장 최근 구간이 {cfg['output_name']})")
+    keep = {os.path.basename(t) for t, _d in jobs}
+    for path_k, data_k in jobs:
+        tmp = _unique_tmp(path_k)
+        size = fixed + _utf8_len(data_k)
+        try:
+            with open(tmp, "w", encoding="utf-8", errors="strict") as f:
+                f.write(prefix)
+                f.write(data_k)
+                f.write(suffix)
+                f.flush()
+                os.fsync(f.fileno())
+            os.replace(tmp, path_k)
+        finally:
+            if os.path.isfile(tmp):                     # 자기가 만든 임시 파일만 지운다(원본에는 손대지 않는다)
+                try:
+                    os.remove(tmp)
+                except OSError:
+                    pass
+        _say(log, f"HTML 저장: {path_k} ({size // 1024} KB)" + (" — 한도보다 큽니다(하루치가 한도를 넘음)" if limit and size > limit else ""))
+    del jobs
+    # 지난 수집이 남긴 옛 구간 파일 중 이번에 만들지 않은 것 — `paths.part_re` 모양의 이름만, 출력 폴더(로컬) 안에서만 지운다
+    rx = paths.part_re(cfg["output_name"])
+    for stale in sorted(os.listdir(cfg["output_dir"])):
+        if rx.match(stale) and stale not in keep:
+            nas_guard.assert_local(os.path.join(cfg["output_dir"], stale), nas_guard.roots_for_cfg(cfg))
             try:
-                os.remove(tmp)
-            except OSError:
-                pass
-    _say(log, f"HTML 저장: {target} ({size // 1024} KB)")
+                os.remove(os.path.join(cfg["output_dir"], stale))
+                _say(log, f"지난 분할 파일 정리: {stale}")
+            except OSError as ex:
+                _say(log, f"지난 분할 파일을 지우지 못했습니다(열려 있을 수 있음): {stale} — {ex}")
     if cfg.get("write_csv"):
         csv_path = os.path.splitext(target)[0] + ".csv"
         try:
