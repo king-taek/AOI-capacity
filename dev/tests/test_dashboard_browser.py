@@ -245,7 +245,7 @@ def test_error_tab_period_popup_filters_and_no_total_link(page):
     assert "전체 기간 합계로" not in pg.inner_text("main")
     pg.locator('button[data-fk="seg:최근 7일"]').click()
     pg.wait_for_selector('button[data-fk="seg:최근 7일"].on')
-    pg.locator('main button.rowbtn[data-key="dev:AOI-1"]').click()
+    pg.locator('main button.rowbtn[data-row="dev:AOI-1"]').click()
     pg.wait_for_selector('.dlg[data-dlg="err"]')
     txt = pg.locator('.dlg[data-dlg="err"]').inner_text()
     assert "· 2일" in txt and "하루씩 보기" in txt and "날짜별" in txt and "09/17" in txt      # 9/17 + 9/18 두 날
@@ -256,11 +256,33 @@ def test_error_tab_period_popup_filters_and_no_total_link(page):
     pg.keyboard.press("Escape")
     pg.wait_for_selector('.dlg[data-dlg="err"]', state="detached")
     # 유형 필터: 첫 유형의 깔때기 → 카드 라벨·칩, 목록은 그 유형만
-    pg.locator('main .row2[data-key^="type:"] .fbtn').first.click()
+    pg.locator('main .row2[data-row^="type:"] .fbtn').first.click()
     pg.wait_for_selector('main .fchip')
-    assert "Error (필터)" in pg.inner_text("main") and pg.locator('main .row2[data-key^="type:"]').count() == 1
+    assert "Error (필터)" in pg.inner_text("main") and pg.locator('main .row2[data-row^="type:"]').count() == 1
     pg.locator('main .fchip').first.click()
     pg.wait_for_selector('main .fchip', state="detached")
+    assert errors == []
+
+
+def test_error_lists_keep_rows_in_place_and_only_text_changes(page):
+    """Error 탭에서 날짜를 바꿔도 유형별·장비별·Job별 줄은 제자리(순위 칸 slot:i 가 같은 노드 · 이동 트윈 없음)이고
+    안의 글자만 바뀐다 — 바뀐 글자는 흐림→또렷(tx-in), 숫자는 세기가 끝나면 정확히 새 값(9/23 사용자 요청: 목록이 출렁인다)."""
+    pg, errors, _ = page
+    pg.locator('button[data-fk="nav:errors"]').click()
+    pg.wait_for_selector('main[data-key="view:errors"]')
+    first = 'main .errlist .row2[data-key="slot:0"]'
+    assert pg.get_attribute(first, "data-row") == "type:ALIGN_ERROR"                     # 9/18 하루
+    pg.evaluate(f"window.__t = document.querySelector('{first}')")
+    pg.locator('[data-key="chart:errors"] button[title^="09/17"]').click()
+    pg.wait_for_selector('main .errlist .row2[data-row="type:SCAN_ERROR"]')
+    assert pg.evaluate(f"document.querySelector('{first}') === window.__t")               # 같은 줄 노드, 내용만 교체
+    rows = "[...document.querySelectorAll('main .errlist .row2, main .errlist > .rowbtn')]"
+    assert pg.evaluate(f"{rows}.every(r => !r.style.transform && !r.hasAttribute('data-leaving'))")
+    assert pg.evaluate(f"typeof gsap === 'undefined' || gsap.getTweensOf({rows}).length === 0")  # Flip·등장 트윈 없음
+    assert pg.evaluate("window.__t.querySelector('[data-tx]').classList.contains('tx-in')")      # 바뀐 이름은 흐림→또렷
+    pg.wait_for_timeout(450)
+    bad = pg.evaluate("[...document.querySelectorAll('main .errlist [data-txn][data-txf=\"n\"]')].filter(e => e.textContent !== e.dataset.txn + '건').length")
+    assert bad == 0                                                                          # 세기가 끝나면 정확히 새 값
     assert errors == []
 
 
