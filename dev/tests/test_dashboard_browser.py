@@ -226,11 +226,14 @@ def test_home_rows_follow_device_order_and_save_copy_refolds_the_same_columns(pa
 def test_render_morphs_in_place_instead_of_rebuilding(page):
     """깜박임의 근원(#app 통째 innerHTML) 제거 — 상태가 바뀌어도 main·패널·바뀌지 않은 행 노드는 같은 객체로 남는다."""
     pg, errors, _ = page
-    pg.evaluate("window.__m = document.querySelector('main'); window.__p = document.querySelector('main .panel'); window.__r = document.querySelector('button.rowbtn[data-fk=\"dev:AOI-2\"]')")
+    pg.evaluate("window.__m = document.querySelector('main'); window.__p = document.querySelector('main .panel'); window.__r = document.querySelector('main button.rowbtn[data-key=\"slot:0\"]'); window.__d0 = window.__r.dataset.row")
     pg.locator('button[data-fk="seg:가동률 낮은 순"]').click()
     pg.wait_for_selector('button[data-fk="seg:가동률 낮은 순"].on')
     assert pg.evaluate("document.querySelector('main') === window.__m && document.querySelector('main .panel') === window.__p")
-    assert pg.evaluate("document.querySelector('button.rowbtn[data-fk=\"dev:AOI-2\"]') === window.__r")     # 순서만 바뀐 행도 같은 노드(FLIP 대상)
+    # 줄은 제자리(9/24): 순위 칸 노드는 그대로, 그 칸에 오는 장비만 바뀐다 — 행이 자리를 옮기거나 떠오르지 않는다
+    assert pg.evaluate("document.querySelector('main button.rowbtn[data-key=\"slot:0\"]') === window.__r")
+    assert pg.evaluate("window.__r.dataset.row") != pg.evaluate("window.__d0")
+    assert pg.evaluate("[...document.querySelectorAll('main button.rowbtn')].every(r => !r.getAnimations().some(a => a.constructor.name !== 'CSSTransition' && a.effect && a.effect.getKeyframes().some(k => k.transform)))")
     pg.locator('button[data-fk="nav:errors"]').click()
     pg.wait_for_selector('main[data-key="view:errors"]')
     assert pg.evaluate("document.querySelector('main[data-key=\"view:errors\"]') !== window.__m")             # 뷰가 바뀌면 main 은 새 노드
@@ -252,12 +255,14 @@ def test_error_tab_period_popup_filters_and_no_total_link(page):
     assert "SCAN_ERROR" in txt and "ALIGN_ERROR" in txt                                      # 두 날의 Error 가 함께
     pg.locator('.dlg[data-dlg="err"] button', has_text="하루씩 보기").click()
     pg.wait_for_selector('.dlg[data-dlg="err"] h3', state="attached")
-    assert "언제 났나" in pg.locator('.dlg[data-dlg="err"]').inner_text()
+    # 바뀐 글자는 제자리에서 0.24초 동안 넘어간다(9/24) — 다 넘어간 뒤 읽는다
+    pg.wait_for_function("document.querySelector('.dlg[data-dlg=\"err\"]').innerText.includes('언제 났나')", timeout=3000)
     pg.keyboard.press("Escape")
     pg.wait_for_selector('.dlg[data-dlg="err"]', state="detached")
     # 유형 필터: 첫 유형의 깔때기 → 카드 라벨·칩, 목록은 그 유형만
     pg.locator('main .row2[data-row^="type:"] .fbtn').first.click()
     pg.wait_for_selector('main .fchip')
+    pg.wait_for_function("document.querySelector('main').innerText.includes('Error (필터)')", timeout=3000)   # 글자 넘김(0.24초) 뒤
     assert "Error (필터)" in pg.inner_text("main") and pg.locator('main .row2[data-row^="type:"]').count() == 1
     pg.locator('main .fchip').first.click()
     pg.wait_for_selector('main .fchip', state="detached")
@@ -312,14 +317,14 @@ def test_report_tab_groups_and_sorts_by_column(page):
     pg.wait_for_selector('main[data-key="view:report"]')
     groups = pg.evaluate("[...document.querySelectorAll('.grp')].map(g => g.firstChild.textContent)")
     assert groups == ["Kendall", "TB500"]
-    order = pg.evaluate("[...document.querySelectorAll('[data-key^=\"job:\"]')].map(e => e.dataset.key.slice(4))")
+    order = pg.evaluate("[...document.querySelectorAll('[data-row^=\"job:\"]')].map(e => e.dataset.row.slice(4))")
     assert order == ["Kendall FS", "TB500 PI2"]                                          # 그룹 순서 · 이름순
     hdr = pg.locator('.thead button.th', has_text="배치")
     hdr.click()
     pg.wait_for_selector('.thead button.th[aria-sort="descending"]')
     hdr.click()
     pg.wait_for_selector('.thead button.th[aria-sort="ascending"]')
-    assert "오름차순" in pg.inner_text("main")
+    pg.wait_for_function("document.querySelector('main').innerText.includes('오름차순')", timeout=3000)   # 글자 넘김(0.24초) 뒤
     assert errors == []
 
 
@@ -362,8 +367,10 @@ def test_popup_deck_click_behind_brings_it_to_front_and_stackbar_lists_them(page
     # 스택 바의 첫 칩(장비 팝업) → 앞으로
     pg.locator('.stackbar button.sb').first.click()
     pg.wait_for_timeout(500)
-    st = pg.evaluate("[...document.querySelectorAll('.ov:not([data-leaving])')].map(o => o.dataset.key + ':' + (o.classList.contains('behind') ? 'behind' : 'top'))")
+    # 팝업의 DOM 순서는 고정이고 겹침은 z-index 로만 바뀐다(9/24 — 요소를 옮기면 CSS 전환이 끊겨 번쩍였다)
+    st = pg.evaluate("[...document.querySelectorAll('.ov:not([data-leaving])')].sort((a, b) => +a.style.zIndex - +b.style.zIndex).map(o => o.dataset.key + ':' + (o.classList.contains('behind') ? 'behind' : 'top'))")
     assert st == ["ov:err:behind", "ov:dev:top"]
+    assert pg.evaluate("[...document.querySelectorAll('.ov:not([data-leaving])')].map(o => o.dataset.key)") == ["ov:dev", "ov:err"]
     # scrim 을 뒤 카드가 있는 자리에서 누르면 그 카드가 앞으로, 빈 자리를 누르면 맨 위가 닫힌다
     # 뒤 카드가 보이는 띠(뒤 카드의 왼쪽 ~ 앞 카드의 왼쪽) 가운데를 누른다 — 뷰포트 밖으로 밀린 부분은 뺀다
     r = pg.evaluate("(() => { const b = document.querySelector('.ov.behind .dlg').getBoundingClientRect(), t = document.querySelector('.ov:not(.behind) .dlg').getBoundingClientRect(); return [(Math.max(b.left, 0) + t.left) / 2, Math.max(b.top, 0) + 120]; })()")
@@ -376,4 +383,35 @@ def test_popup_deck_click_behind_brings_it_to_front_and_stackbar_lists_them(page
     assert pg.evaluate("[...document.querySelectorAll('.ov:not([data-leaving]) .dlg')].map(d => d.dataset.dlg)") == ["dev"]
     pg.keyboard.press("Escape")
     pg.wait_for_selector('.dlg[data-dlg="dev"]', state="detached")
+    assert errors == []
+
+
+def test_stackbar_stays_top_left_while_the_popup_scrolls_and_lot_panel_fades_in_once(page):
+    """스택 바는 팝업 덮개 밖(#app)에 있어 팝업을 스크롤해도 왼쪽 위에 고정된다(.ov 의 perspective 가 fixed 기준 상자가 되던 문제, 9/24).
+    선택 Lot 상세 박스는 처음 나타날 때만 제자리 페이드(fadeIn — 아래에서 올라오지 않음), 다른 Lot 으로 바꾸면 같은 박스에서 글자만 바뀐다."""
+    pg, errors, _ = page
+    pg.set_viewport_size({"width": 1280, "height": 420})
+    pg.locator('button.rowbtn[data-fk="dev:AOI-1"]').click()
+    pg.wait_for_selector('.dlg[data-dlg="dev"]')
+    pg.locator('.dlg[data-dlg="dev"] button', has_text="Error 보기").click()
+    pg.wait_for_selector('.stackbar .sb')
+    assert pg.evaluate("document.querySelector('.stackbar').parentElement.id") == "app"
+    top0 = pg.evaluate("document.querySelector('.stackbar').getBoundingClientRect().top")
+    scrolled = pg.evaluate("(() => { const o = document.querySelector('.ov:not(.behind):not([data-leaving])'); o.scrollTop = 400; return o.scrollTop; })()")
+    assert scrolled > 0
+    assert pg.evaluate("document.querySelector('.stackbar').getBoundingClientRect().top") == top0
+    pg.keyboard.press("Escape")
+    pg.wait_for_selector('.dlg[data-dlg="err"]', state="detached")
+    pg.wait_for_timeout(700)
+    calls = pg.locator('.dlg[data-dlg="dev"] .callout')
+    assert calls.count() >= 2
+    calls.nth(0).click()
+    pg.wait_for_selector('.dlg[data-dlg="dev"] .sel')
+    assert pg.evaluate("document.querySelector('.dlg[data-dlg=\"dev\"] .sel').getAnimations().map(a => a.animationName)") == ["fadeIn"]
+    pg.wait_for_timeout(500)
+    pg.evaluate("window.__sel = document.querySelector('.dlg[data-dlg=\"dev\"] .sel'); window.__st = window.__sel.getAnimations()[0].startTime")
+    calls.nth(1).click()
+    pg.wait_for_timeout(60)
+    assert pg.evaluate("document.querySelector('.dlg[data-dlg=\"dev\"] .sel') === window.__sel")                     # 같은 박스
+    assert pg.evaluate("window.__sel.getAnimations().every(a => a.startTime === window.__st)")                          # 페이드를 다시 돌리지 않는다
     assert errors == []

@@ -89,11 +89,16 @@ button{font:inherit;color:inherit}
 .ov{perspective:1600px;perspective-origin:50% 30%}
 .ov.behind{background:transparent;backdrop-filter:none;pointer-events:none;overflow:hidden}
 /* 뒤 팝업은 새 팝업의 **왼쪽 뒤**로 물러난다(카드 덱). 깊이(--d)마다 더 왼쪽·더 작게·더 어둡게. 맨 위 팝업의 scrim 을 누르면 그 자리에 있는 뒤 카드가 앞으로 온다(elementsFromPoint). */
-.ov.behind .dlg{transform:translate3d(calc(-1 * var(--shift,300px)),calc(var(--d,1)*-6px),calc(var(--d,1)*-140px)) rotateY(calc(6deg + var(--d,1)*6deg)) scale(calc(1 - var(--d,1)*.04));transform-origin:50% 40%;filter:brightness(calc(.78 - var(--d,1)*.12)) saturate(.85);box-shadow:0 30px 80px rgba(15,21,28,.45)}
-.ov.behind.hover .dlg{filter:brightness(.92) saturate(.95);transform:translate3d(calc(-1 * var(--shift,300px) + 14px),calc(var(--d,1)*-6px),calc(var(--d,1)*-140px + 30px)) rotateY(calc(4deg + var(--d,1)*6deg)) scale(calc(1 - var(--d,1)*.04))}
-.ov.behind .dlg::after{content:"";position:absolute;inset:0;border-radius:inherit;background:rgba(15,21,28,.08);pointer-events:none}
+.ov.behind .dlg{transform:translate3d(calc(-1 * var(--shift,300px)),calc(var(--d,1)*-6px),calc(var(--d,1)*-140px)) rotateY(calc(6deg + var(--d,1)*6deg)) scale(calc(1 - var(--d,1)*.04));transform-origin:50% 40%;box-shadow:0 30px 80px rgba(15,21,28,.45)}
+.ov.behind.hover .dlg{transform:translate3d(calc(-1 * var(--shift,300px) + 14px),calc(var(--d,1)*-6px),calc(var(--d,1)*-140px + 30px)) rotateY(calc(4deg + var(--d,1)*6deg)) scale(calc(1 - var(--d,1)*.04))}
+/* 뒤로 가는 팝업은 천천히 어두워지고(0.8s, 느리게 시작해 느리게 끝나는 곡선) 물러나는 움직임도 같은 곡선(0.6s) — 0.42s 감속 곡선은 100ms 만에 75% 가 어두워져 번쩍임으로 보였다(사용자 9/24).
+   앞으로 오는 팝업은 조금 더 빨리 밝아진다(0.5s) — 두 전환이 겹쳐 흐르며 교차한다. */
+.ov.behind .dlg{transition:transform .55s cubic-bezier(.45,0,.25,1),opacity .3s}
+.ov.behind .dlg::after{background-color:rgba(15,21,28,calc(.5 + var(--d,1)*.08));transition:background-color .6s cubic-bezier(.45,0,.25,1)}
+.ov:not(.behind) .dlg::after{transition:background-color .5s cubic-bezier(.33,1,.68,1)}
+.dlg.lifting,.dlg.lifting::after{transition:none!important}   /* C안 연출(WAAPI)이 도는 동안 CSS 전환은 쉰다 — 전환이 애니메이션보다 cascade 에서 이긴다 */.ov.behind.hover .dlg::after{background-color:rgba(15,21,28,.38)}
 @media (max-width:860px){.ov.behind .dlg,.ov.behind.hover .dlg{transform:translate3d(0,calc(var(--d,1)*-16px),calc(var(--d,1)*-120px)) scale(calc(1 - var(--d,1)*.05))}}
-.stackbar{position:fixed;left:16px;top:12px;z-index:3;display:flex;gap:6px;align-items:center;flex-wrap:wrap;max-width:60vw;--animate-duration:.24s}
+.stackbar{position:fixed;left:16px;top:calc(12px + env(safe-area-inset-top,0px));z-index:95;display:flex;gap:6px;align-items:center;flex-wrap:wrap;max-width:60vw;--animate-duration:.24s}
 .stackbar .sb{display:inline-flex;align-items:center;gap:6px;padding:5px 11px;border-radius:999px;border:1px solid rgba(255,255,255,.35);background:rgba(15,21,28,.55);color:#fff;font:inherit;font-size:12px;font-weight:600;cursor:pointer;backdrop-filter:blur(6px);white-space:nowrap;max-width:260px;transition:background .16s,transform .16s}
 .stackbar .sb span{overflow:hidden;text-overflow:ellipsis}.stackbar .sb:hover{background:rgba(15,21,28,.8);transform:translateY(-1px)}
 .stackbar .sb.cur{background:#fff;color:#0F151C;cursor:default;border-color:#fff}.stackbar .sb.cur:hover{transform:none}
@@ -208,7 +213,10 @@ main{max-width:1420px;margin:0 auto;padding:22px 24px 90px}
 .toast.animate__animated{transition:none;--animate-duration:.28s}
 
 /* ── 팝업 ── */
-.ov{position:fixed;inset:0;display:flex;align-items:flex-start;justify-content:center;padding:34px 20px;background:rgba(15,21,28,.42);backdrop-filter:blur(2px);overflow:auto;--animate-duration:.16s}
+.ov{position:fixed;inset:0;display:flex;align-items:flex-start;justify-content:center;padding:34px 20px;background:transparent;overflow:auto;--animate-duration:.16s}
+.deckscrim{position:fixed;inset:0;z-index:49;background:rgba(15,21,28,.42);pointer-events:none}
+.ov .dlg{will-change:transform}
+.ov .dlg::after{content:"";position:absolute;inset:0;border-radius:inherit;background-color:rgba(15,21,28,0);pointer-events:none;z-index:10;transition:background-color .42s var(--ease)}
 .ov.z55{z-index:55;padding-top:44px}.ov.z50{z-index:50}.ov.z60{z-index:60}
 .ov .scrim{position:fixed;inset:0;border:0;background:none;cursor:default;padding:0}
 .dlg{position:relative;background:#fff;border-radius:16px;box-shadow:0 24px 70px rgba(15,21,28,.28)}
@@ -808,8 +816,22 @@ let _gReady=false;function gInit(){if(_gReady||!G())return;gsap.registerPlugin(F
 const canAnim=()=>!!G();
 const keyOf=n=>n&&n.nodeType===1?n.getAttribute("data-key"):null;
 const leaving=n=>n&&n.nodeType===1&&n.hasAttribute("data-leaving");
+/* 줄은 제자리, 글자만(9/24 사용자 요청 — '글자가 변경돼야 되는 모든 부분에'): 이미 화면에 있던 글자 노드의 내용이 바뀌면 그 자리에서 왼쪽부터 한 글자씩 넘어간다.
+   숫자 세기(data-txn · data-count)와 이름 넘김(data-tx)을 이미 하는 칸, 새로 생긴 노드(뷰·팝업 첫 등장)는 제외. 렌더가 끝난 뒤 한꺼번에 시작(runRolls). */
+let _rolls=[];
+function rollable(node,a,b){if(!canAnim()||reduced()||!node.isConnected)return false;const p=node.parentElement;
+  if(!p||p.closest("[data-tx],[data-txn],[data-count],[data-static],[data-leaving],style,script,title"))return false;
+  if(p.closest(".btn,.seg,.x,.ib,.link,.fbtn,.th,.nav,.stackbar,.fchip,.toast"))return false;   /* 조작 요소(버튼·탭·정렬 단추·칩)의 이름은 즉시 바뀐다 — 데이터 글자만 넘긴다 */
+  return !!a.trim()&&!!b.trim()&&a.length<=60&&b.length<=60;}
+function runRolls(){const list=_rolls;_rolls=[];
+  for(const [node,a,b] of list){if(node.__tw)node.__tw.kill();node.__tgt=b;const o={k:0};let fr=0;
+    node.__tw=gsap.to(o,{k:1,duration:.24,ease:"none",onUpdate:()=>{node.nodeValue=txMix(a,b,o.k,fr++);},onComplete:()=>{node.nodeValue=b;node.__tgt=undefined;node.__tw=null;}});}}
 function morph(from,to){
-  if(from.nodeType!==1){if(from.nodeValue!==to.nodeValue)from.nodeValue=to.nodeValue;return;}
+  if(from.nodeType!==1){const cur=from.__tgt!==undefined?from.__tgt:from.nodeValue;
+    if(cur!==to.nodeValue){if(from.nodeType===3&&rollable(from,cur,to.nodeValue))_rolls.push([from,cur,to.nodeValue]);
+      else{if(from.__tw){from.__tw.kill();from.__tw=null;}from.__tgt=undefined;from.nodeValue=to.nodeValue;}}
+    else if(from.__tgt===undefined&&from.nodeValue!==to.nodeValue)from.nodeValue=to.nodeValue;
+    return;}
   for(const a of [...from.attributes])if(!to.hasAttribute(a.name))from.removeAttribute(a.name);
   for(const a of [...to.attributes])if(from.getAttribute(a.name)!==a.value)from.setAttribute(a.name,a.value);
   if(from.hasAttribute("data-static"))return;      /* Lottie 가 그린 SVG 처럼 렌더가 만들지 않은 자식은 건드리지 않는다 */
@@ -832,7 +854,7 @@ function countUp(root){for(const el of root.querySelectorAll("[data-count]")){co
    숫자(data-txn)는 이전 값에서 새 값으로 0.2초 동안 세고(막대 폭 transition 과 같은 길이), 글자(data-tx)도 숫자처럼 제자리에서 넘어간다 —
    왼쪽부터 한 글자씩 새 글자로 바뀌고, 바뀌는 경계의 두 칸만 같은 종류의 글자(숫자는 숫자, 영문은 영문)로 몇 번 넘어간 뒤 멈춘다(번쩍임·흐림 없음).
    같은 글자는 그대로 둔다(AOI-16 → AOI-19 는 끝 한 칸만). 자리 이동·등장 연출 없음. 처음 나타날 때는 아무 연출도 없다 — 값이 바뀐 칸만. */
-const TXF={n:v=>Math.round(v)+"건",hm:v=>hm(v)};
+const TXF={n:v=>Math.round(v)+"건",hm:v=>hm(v),pct:v=>Math.round(v)+"%"};
 const txn=(v,f)=>`data-txn="${Number(v)||0}" data-txf="${f}"`;
 const TX_D="0123456789",TX_U="ABCDEFGHIJKLMNOPQRSTUVWXYZ",TX_L="abcdefghijklmnopqrstuvwxyz";
 const txSet=c=>/[0-9]/.test(c)?TX_D:/[A-Z]/.test(c)?TX_U:/[a-z]/.test(c)?TX_L:null;
@@ -853,6 +875,8 @@ function txAnim(root){const on=!!G()&&!reduced();
     const from=el.__ts!==undefined?el.__ts:prev;if(el.__tw)el.__tw.kill();const o={k:0};let fr=0;el.textContent=from;el.__tr=(el.__tr||0)+1;
     el.__tw=gsap.to(o,{k:1,duration:.24,ease:"none",onUpdate:()=>{el.__ts=txMix(from,t,o.k,fr++);el.textContent=el.__ts;},onComplete:()=>{el.__ts=undefined;el.__tw=null;el.textContent=t;}});}}
 /* 24시간 막대의 sweep: 막대가 새로 그려지거나 다른 날의 것으로 바뀌면 왼쪽에서 오른쪽으로 드러난다(시간이 흐르는 방향) */
+function listBars(root){for(const el of root.querySelectorAll("[data-listsig]")){const s=el.getAttribute("data-listsig"),prev=el.__ls;el.__ls=s;
+  if(prev===undefined||prev===s)continue;for(const b of el.querySelectorAll("[data-bar]")){gsap.killTweensOf(b);b.__bar=undefined;}}}   /* sweepBars 가 처음 그려지는 막대로 보고 sweep */
 function sweepBars(root){if(!G()||reduced()){for(const el of root.querySelectorAll("[data-bar]"))el.__bar=el.dataset.bar;return;}
   const fresh=[],changed=[];for(const el of root.querySelectorAll("[data-bar]")){if(el.__bar===undefined)fresh.push(el);else if(el.__bar!==el.dataset.bar)changed.push(el);el.__bar=el.dataset.bar;}
   const each=Math.min(.02,.45/Math.max(1,fresh.length));
@@ -870,27 +894,32 @@ function navInd(root){const nav=root.querySelector(".nav"),ind=nav&&nav.querySel
   if(ind.__x===undefined||!G()||reduced()){ind.style.transform=`translateX(${x}px)`;ind.style.width=w+"px";}
   else gsap.to(ind,{x,width:w,duration:.32,ease:"power3.out"});ind.__x=x;ind.__w=w;}
 /* 펼침(data-reveal): 높이 0 에서 열린다 — 리포트 행 펼침 · Job 이름 묶음 */
-function reveals(root){for(const el of root.querySelectorAll("[data-reveal]")){if(el.__rv)continue;el.__rv=1;if(!G()||reduced())continue;gsap.from(el,{height:0,opacity:0,duration:.32,ease:"power3.out",clearProps:"height,opacity"});}}
+let _rvPrev=new Set();
+function reveals(root){const now=new Set();for(const el of root.querySelectorAll("[data-reveal]")){const k=el.getAttribute("data-reveal")||"";now.add(k);if(el.__rv)continue;el.__rv=1;if(_rvPrev.has(k)||!G()||reduced())continue;gsap.from(el,{height:0,opacity:0,duration:.32,ease:"power3.out",clearProps:"height,opacity"});}_rvPrev=now;}
 /* 장비 팝업 이름표(다른 장비·날짜가 되면 차례로 내려온다) · Error 팝업 타임라인 표식(차례로 선다) */
 function sigEnter(root){for(const el of root.querySelectorAll("[data-sig]")){const sg=el.dataset.sig;if(el.__sig!==undefined){el.__sig=sg;continue;}const first=true;el.__sig=sg;if(!G()||reduced())continue;
   const co=el.querySelectorAll(".callout");if(co.length)gsap.from(co,{y:-10,opacity:0,duration:.3,ease:"power3.out",stagger:{each:Math.min(.02,.4/co.length)},clearProps:"transform,opacity",delay:first?.15:0});
   const mk=el.querySelectorAll(":scope>i");if(mk.length)gsap.from(mk,{scaleY:.15,opacity:0,transformOrigin:"50% 100%",duration:.35,ease:"power3.out",stagger:{each:Math.min(.015,.4/mk.length)},clearProps:"transform,opacity"});}}
 let _prevDayI=null;
 function slideDay(root){const el=root.querySelector(".daylab");if(!el)return;const cur=state.dayI;
-  if(_prevDayI!==null&&cur!==_prevDayI&&G()&&!reduced()){const dir=cur>_prevDayI?1:-1;gsap.fromTo(el,{x:dir*16,opacity:0},{x:0,opacity:1,duration:.3,ease:"power3.out",clearProps:"all"});}_prevDayI=cur;}
+  _prevDayI=cur;}   /* 날짜 라벨은 글자만 넘어간다(runRolls) — 옆으로 미끄러지지 않는다 */
 function morphChildren(from,to){
   const anim=canAnim()&&from.hasAttribute("data-anim");
   const before=anim?flipBefore(from):null;
   const olds=[...from.childNodes],news=[...to.childNodes];
   const byKey=new Map();for(const o of olds){const k=keyOf(o);if(k&&!leaving(o))byKey.set(k,o);}
   const used=new Set();let cur=from.firstChild;
+  /* 곧 지워질 노드(새 목록에 없는 키 · 퇴장 중)는 건너뛰고 끼운다 — 그 앞에 끼우려고 살아 있는 노드를 옮기면(insertBefore) 브라우저가 진행 중인 CSS 전환을 버린다.
+     실측: 앞에 있던 팝업의 스택 바가 사라질 때 대화상자가 옮겨져, 뒤로 가는 팝업이 한 번에 어두워졌다(9/24). */
+  const newKeys=new Set(news.map(keyOf).filter(Boolean));
+  const skipDead=stop=>{while(cur&&cur!==stop&&((keyOf(cur)&&!newKeys.has(keyOf(cur)))||leaving(cur)))cur=cur.nextSibling;};
   for(const n of news){
     const k=keyOf(n);let match=null;
     if(k){const c=byKey.get(k);if(c&&!used.has(c))match=c;}
     else{const fits=c=>c.nodeType===n.nodeType&&(n.nodeType!==1||c.tagName===n.tagName);const free=c=>{while(c&&(used.has(c)||keyOf(c)||leaving(c)))c=c.nextSibling;return c;};
       let c=free(cur),steps=0;while(c&&!fits(c)&&steps<6){c=free(c.nextSibling);steps++;}   /* 조건부 형제(<p> 안내 등)가 사라져도 뒤 형제들이 통째로 재생성되지 않게(감사 9/21) */
       if(c&&fits(c))match=c;}
-    if(match){used.add(match);if(match===cur)cur=cur.nextSibling;else from.insertBefore(match,cur);morph(match,n);}
+    if(match){skipDead(match);used.add(match);if(match===cur)cur=cur.nextSibling;else from.insertBefore(match,cur);morph(match,n);}
     else{const nn=n.cloneNode(true);from.insertBefore(nn,cur);used.add(nn);if(anim)nn.setAttribute("data-entered","");}
   }
   for(const o of olds){if(used.has(o)||leaving(o))continue;if(anim&&o.nodeType===1&&before.rect.has(o))flipLeave(from,o,before.rect.get(o));else from.removeChild(o);}
@@ -900,8 +929,12 @@ const keyed=p=>[...p.children].filter(c=>keyOf(c)&&!leaving(c));
 function flipBefore(p){gInit();const els=keyed(p),el=p.getAttribute("data-anim")==="el";const rect=new Map();for(const c of els){const r=c.getBoundingClientRect();rect.set(c,{top:r.top,left:r.left,w:r.width,h:r.height});}
   return{rect,el,order:els.map(keyOf),state:el?null:Flip.getState(els)};}
 /* 새로 들어온 노드의 등장 — 팝업(.ov)은 animate.css fadeIn + 대화상자 살짝 떠오름, 뷰(main)는 내비 방향으로, 그 밖은 살짝 위로 */
+/* 등장 애니메이션 클래스는 끝나는 즉시 뗀다 — 다음 렌더(뒤로 보내기 등)에서 morph 가 이 클래스를 지우는 순간과 뒤 팝업 전환이 겹치면 Chrome 이 전환을 건너뛰어 한 번에 어두워졌다(실측) */
+function onEnd(el,cls){const f=e=>{if(e.target!==el)return;el.removeEventListener("animationend",f);el.classList.remove(...cls);};el.addEventListener("animationend",f);}
 function enterAnim(c,rm){
-  if(c.classList.contains("ov")){c.classList.add("animate__animated","animate__fadeIn");const d=c.querySelector(".dlg");if(d&&!rm)d.classList.add("in");if(d)enterView(d);}
+  if(c.classList.contains("stackbar"))return;   /* 스택 바는 등장 연출 없이 바로 */
+  if(c.classList.contains("deckscrim")){c.classList.add("animate__animated","animate__fadeIn");c.style.setProperty("--animate-duration",rm?"1ms":".2s");onEnd(c,["animate__animated","animate__fadeIn"]);return;}
+  if(c.classList.contains("ov")){c.classList.add("animate__animated","animate__fadeIn");onEnd(c,["animate__animated","animate__fadeIn"]);const d=c.querySelector(".dlg");if(d&&!rm){d.classList.add("in");onEnd(d,["in"]);}if(d)enterView(d);}
   else{const dir=c.tagName==="MAIN"?(state.viewDir||0):0;gsap.fromTo(c,rm?{opacity:0}:{opacity:0,x:dir*28,y:dir?0:8},{opacity:1,x:0,y:0,duration:rm?.12:(dir?.3:.24),clearProps:"transform,opacity"});enterView(c);}}
 function flipAfter(p,before){
   const rm=reduced(),els=keyed(p);
@@ -923,6 +956,8 @@ function flipLeave(p,o,b){
     Object.assign(o.style,{position:"absolute",top:(b.top-pr.top)+"px",left:(b.left-pr.left)+"px",width:b.w+"px",height:Math.min(b.h,window.innerHeight||b.h)+"px",overflow:"hidden",margin:"0",boxSizing:"border-box"});}
   o.setAttribute("data-leaving","");o.removeAttribute("data-key");o.inert=true;
   const done=()=>{if(o.parentNode)o.parentNode.removeChild(o);};
+  if(o.classList.contains("stackbar")){done();return;}
+  if(o.classList.contains("deckscrim")){o.classList.remove("animate__fadeIn");o.classList.add("animate__animated","animate__fadeOut");o.style.setProperty("--animate-duration",rm?"1ms":".16s");setTimeout(done,rm?20:180);return;}
   if(o.classList.contains("ov")){o.classList.remove("animate__fadeIn");o.classList.add("animate__animated","animate__fadeOut");o.style.setProperty("--animate-duration",rm?"1ms":".15s");
     const d=o.querySelector(".dlg");if(d&&!rm){d.classList.remove("in");d.classList.add("out");}setTimeout(done,rm?20:170);}
   else{const dir=o.tagName==="MAIN"?(state.viewDir||0):0;gsap.to(o,rm?{opacity:0,duration:.1,onComplete:done}:{opacity:0,x:-dir*22,y:dir?0:-4,duration:.15,ease:"power2.in",onComplete:done});}
@@ -931,7 +966,8 @@ function flipLeave(p,o,b){
 /* D05: 포커스(data-fk)·창/팝업 스크롤은 morph 덕에 대부분 그대로 남지만, 팝업이 열리면 제목으로 · 닫히면 열었던 버튼으로 포커스를 옮기고
    아래 화면(헤더·본문·아래 팝업)은 inert 로 막는다. Tab 은 맨 위 팝업 안에서만 돈다. */
 let _lastTop=null,_openerFk=null;
-function topDlg(){const d=[...document.querySelectorAll(".dlg[data-dlg]")].filter(x=>!leaving(x.parentElement));return d.length?d[d.length-1]:null;}
+const ovZ=o=>+(o.style.zIndex||0);
+function topDlg(){const d=[...document.querySelectorAll(".dlg[data-dlg]")].filter(x=>!leaving(x.parentElement)).sort((a,b)=>ovZ(a.parentElement)-ovZ(b.parentElement));return d.length?d[d.length-1]:null;}   /* 맨 위 = z-index 가 가장 큰 팝업(DOM 순서는 고정) */
 const POPUP={type:()=>typePopupHtml(),dev:()=>devPopupHtml(),err:()=>errPopupHtml()};
 const POPUP_TITLE={type:()=>{const mt=state.modalType,mj=state.modalJob;if(mt)return mt;const G=D&&D.jobGroups[mj];const raw=G?(D.pool.job[G.l]||""):"";return JOB_ALIAS[raw]||raw||"Job";},
   dev:()=>(state.modalDev||"")+" · "+md(D.days[state.modalDayI]||""),
@@ -947,7 +983,7 @@ function bringToFront(k){if(state.stack[state.stack.length-1]===k)return;setStat
 }
 /* scrim 클릭: 그 자리에 뒤 카드가 있으면 그 카드를 앞으로, 없으면 맨 위를 닫는다 */
 function behindAt(x,y){/* inert·pointer-events 와 무관하게 기하로 맞춘다(transform 이 반영된 rect) — 위에 있는 카드부터 */
-  const ds=[...document.querySelectorAll(".ov.behind .dlg")].filter(d=>!leaving(d.parentElement)).reverse();
+  const ds=[...document.querySelectorAll(".ov.behind .dlg")].filter(d=>!leaving(d.parentElement)).sort((a,b)=>ovZ(b.parentElement)-ovZ(a.parentElement));
   for(const d of ds){const r=d.getBoundingClientRect();if(x>=r.left&&x<=r.right&&y>=r.top&&y<=r.bottom)return d;}return null;}
 function scrimClick(e){const d=e&&e.clientX!=null?behindAt(e.clientX,e.clientY):null;if(d)bringToFront(d.dataset.dlg);else closeTop();}
 let _hv=false;document.addEventListener("mousemove",e=>{if(_hv)return;const t=e.target;if(!t||!t.classList||!t.classList.contains("scrim"))return;_hv=true;
@@ -956,12 +992,29 @@ function stackbarHtml(ks){if(ks.length<2)return"";
   return `<div class="stackbar" data-key="stackbar" role="navigation" aria-label="열린 팝업">${ks.map((k,i)=>{const cur=i===ks.length-1,t=POPUP_TITLE[k]?POPUP_TITLE[k]():k;
     return (i?`<span class="arrow" aria-hidden="true">›</span>`:"")+(cur?`<span class="sb cur" title="지금 보는 팝업">${POPUP_ICON[k]||""}<span>${esc(t)}</span></span>`
       :`<button class="sb" data-h="${h(()=>bringToFront(k))}" title="${esc(t)} 팝업을 앞으로">${POPUP_ICON[k]||""}<span>${esc(t)}</span></button>`);}).join("")}</div>`;}
-function popupsHtml(){const ks=state.stack.filter(k=>POPUP[k]);const n=ks.length;
-  return ks.map((k,i)=>{const html=POPUP[k]();if(!html)return"";const d=n-1-i;
-    return html.replace(/^<div class="ov ([^"]*)"/,`<div class="ov $1${d?" behind":""}" data-key="ov:${k}" style="z-index:${50+i};--d:${d}"`).replace(/<div class="dlg /,`<div data-key="dlg" class="dlg `).replace(/<button class="scrim"[^>]*><\/button>/,`<button class="scrim" data-h="${h(scrimClick)}" aria-label="닫기"></button>${d?"":stackbarHtml(ks)}`);}).join("");}
+const POPUP_ORDER=["type","dev","err"];
+function popupsHtml(){const ks=state.stack.filter(k=>POPUP[k]);const n=ks.length;if(!n)return"";
+  return `<div class="deckscrim" data-key="deckscrim" aria-hidden="true"></div>`+POPUP_ORDER.filter(k=>ks.includes(k)).map(k=>{const i=ks.indexOf(k);const html=POPUP[k]();if(!html)return"";const d=n-1-i;
+    return html.replace(/^<div class="ov ([^"]*)"/,`<div class="ov $1${d?" behind":""}" data-key="ov:${k}" style="z-index:${50+i};--d:${d}"`).replace(/<div class="dlg /,`<div data-key="dlg" class="dlg `).replace(/<button class="scrim"[^>]*><\/button>/,`<button class="scrim" data-h="${h(scrimClick)}" aria-label="닫기"></button>`);}).join("")+stackbarHtml(ks);}   /* 스택 바는 덮개 밖 — 팝업 스크롤과 무관하게 왼쪽 위 고정 */
+/* ── 뒤 팝업이 앞으로 올 때(C안, 9/24 사용자 선택): 예전엔 0.42s 이동이 0.5s 밝아짐보다 먼저 끝나 도착할 때 밝기 74% — '빠르게, 어두운 채로 넘어온다'.
+   이제 그 자리에서 앞으로 살짝 들리며 밝기 대부분을 되찾고(앞 30%), 이어서 제자리로 부드럽게 내려앉는다. 도착할 때 밝기 99%. 칩·뒤 카드 클릭·맨 위 닫기 모두 같다. */
+const LIFT={T:620,split:.3,out:"cubic-bezier(.33,1,.68,1)",io:"cubic-bezier(.45,0,.25,1)"};
+function deckSnap(app){const m=new Map();for(const ov of app.querySelectorAll(".ov[data-key]")){if(leaving(ov))continue;const d=ov.querySelector(".dlg");if(!d)continue;
+  m.set(ov.dataset.key,{behind:ov.classList.contains("behind"),d:+ov.style.getPropertyValue("--d")||1,sh:parseFloat(ov.style.getPropertyValue("--shift"))||300,
+    tf:getComputedStyle(d).transform,dim:getComputedStyle(d,"::after").backgroundColor});}return m;}
+function liftFront(app,snap){if(!canAnim()||reduced()||!snap.size)return;const narrow=matchMedia("(max-width:860px)").matches;
+  for(const ov of app.querySelectorAll(".ov[data-key]:not(.behind)")){const was=snap.get(ov.dataset.key);if(!was||!was.behind)continue;const dl=ov.querySelector(".dlg");if(!dl)continue;
+    const d=was.d,sh=was.sh,from=was.tf&&was.tf!=="none"?was.tf:(narrow?`translate3d(0px,${-16*d}px,${-120*d}px) scale(${1-.05*d})`:`translate3d(${-sh}px,${-6*d}px,${-140*d}px) rotateY(${6+6*d}deg) scale(${1-.04*d})`);
+    const lift=narrow?`translate3d(0px,${-16*d-4}px,${-120*d+90}px) scale(${(1-.05*d+.03).toFixed(3)})`:`translate3d(${-sh}px,${-6*d-4}px,${-140*d+90}px) rotateY(${3+3*d}deg) scale(${(1-.04*d+.03).toFixed(3)})`;
+    const end=narrow?"translate3d(0px,0px,0px) scale(1)":"translate3d(0px,0px,0px) rotateY(0deg) scale(1)";
+    for(const a of dl.getAnimations())if(a.transitionProperty)a.cancel();
+    dl.classList.add("lifting");
+    const t=dl.animate([{transform:from,easing:LIFT.out},{transform:lift,offset:LIFT.split,easing:LIFT.io},{transform:end}],{duration:LIFT.T});
+    dl.animate([{backgroundColor:was.dim||"rgba(15,21,28,.58)",easing:LIFT.out},{backgroundColor:"rgba(15,21,28,.05)",offset:LIFT.split,easing:LIFT.io},{backgroundColor:"rgba(15,21,28,0)"}],{duration:LIFT.T,pseudoElement:"::after"});
+    const done=()=>dl.classList.remove("lifting");t.onfinish=done;t.oncancel=done;}}
 function render(){
   H=[];
-  const app=$("#app");
+  const app=$("#app");const _snap=deckSnap(app);
   const ae=document.activeElement,fk=ae&&ae.getAttribute?ae.getAttribute("data-fk"):null;
   const prevTop=_lastTop;
   let html;
@@ -975,8 +1028,8 @@ function render(){
   const top=topDlg(),topK=top?top.dataset.dlg:null;
   for(const el of app.querySelectorAll(":scope>header,:scope>.stage,:scope>.foot"))el.inert=!!top;
   {const st=app.querySelector(":scope>.stage");if(st)st.classList.toggle("behind",!!top);}
-  layoutDeck(app,top);
-  mountLotties(app);countUp(app);txAnim(app);sweepBars(app);slideDay(app);navInd(app);reveals(app);sigEnter(app);
+  layoutDeck(app,top);liftFront(app,_snap);
+  mountLotties(app);countUp(app);txAnim(app);if(G()&&!reduced())listBars(app);runRolls();sweepBars(app);slideDay(app);navInd(app);reveals(app);sigEnter(app);
   for(const d of app.querySelectorAll(".dlg[data-dlg]")){const ov=d.parentElement;if(!leaving(ov))ov.inert=d!==top;}
   let target=null;
   if(topK&&topK!==prevTop){if(!prevTop&&fk&&!/^x:/.test(fk))_openerFk=fk;target=top.querySelector("h2[tabindex]");}
@@ -1035,12 +1088,12 @@ function homeHtml(){
   else sorted.sort((a,b)=>cmpDev(a.n,b.n));
   const q=items.reduce((a,x)=>{if(x.t){a.w+=x.t.w||0;a.ne+=x.t.ne||0;if(S.noRec(x.t))a.no++;}else a.no++;return a;},{w:0,ne:0,no:0});
   const isToday=D.today&&day===D.today;
-  const rowsH=sorted.map(x=>{const u=S.util(x.t),al=S.alert(x.t),es=S.hasEst(x.t);
-    return `<button class="rowbtn" data-key="dev:${esc(x.n)}" data-h="${h(S.open(x.n))}" data-fk="dev:${esc(x.n)}" title="${esc(x.n)} 하루 상세 팝업 열기${es?" · INI 가 없는 "+x.t.ne+"장은 Report 배치 창의 빈 시간으로 추정했습니다":""}" style="grid-template-columns:96px 58px 1fr 76px 30px;gap:13px;padding:9px 18px;min-height:44px">
-      <span style="display:flex;align-items:center;gap:6px;font-weight:600;font-size:13.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis"><span class="dot${al?" alert":""}" style="background:${u===null?"#C9D1DA":(al?ERR:(u>=70?RUN:"#C9D1DA"))}"></span><span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis">${esc(x.n)}${collectChip(x.n)}</span></span>
-      <span class="num" style="text-align:right;font-size:14.5px;font-weight:600;color:${u===null?"#5A6673":(u<S.thU()?"#B4402F":"#0F151C")}">${u===null?"—":cnt(u,0)+"%"}</span>
+  const rowsH=sorted.map((x,i)=>{const u=S.util(x.t),al=S.alert(x.t),es=S.hasEst(x.t);
+    return `<button class="rowbtn" data-key="slot:${i}" data-row="dev:${esc(x.n)}" data-h="${h(S.open(x.n))}" data-fk="dev:${esc(x.n)}" title="${esc(x.n)} 하루 상세 팝업 열기${es?" · INI 가 없는 "+x.t.ne+"장은 Report 배치 창의 빈 시간으로 추정했습니다":""}" style="grid-template-columns:96px 58px 1fr 76px 30px;gap:13px;padding:9px 18px;min-height:44px">
+      <span style="display:flex;align-items:center;gap:6px;font-weight:600;font-size:13.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis"><span class="dot${al?" alert":""}" style="background:${u===null?"#C9D1DA":(al?ERR:(u>=70?RUN:"#C9D1DA"))}"></span><span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis"><span data-tx>${esc(x.n)}</span>${collectChip(x.n)}</span></span>
+      <span class="num" style="text-align:right;font-size:14.5px;font-weight:600;color:${u===null?"#5A6673":(u<S.thU()?"#B4402F":"#0F151C")}">${u===null?`<span data-tx>—</span>`:`<span ${txn(u,"pct")}>${Math.round(u)}%</span>`}</span>
       <span data-bar="${day}|${esc(x.n)}" style="display:block;height:20px;border-radius:10px;background:#E9EDF2;overflow:hidden;background-image:${S.bar(x.t)}"></span>
-      <span class="num" style="text-align:right;font-size:13px;color:${x.t&&x.t.e>=S.thE()?"#B4402F":"#4B5866"}">${x.t&&x.t.e?cnt(x.t.e)+"건":"—"}</span>
+      <span class="num" style="text-align:right;font-size:13px;color:${x.t&&x.t.e>=S.thE()?"#B4402F":"#4B5866"}">${x.t&&x.t.e?`<span ${txn(x.t.e,"n")}>${x.t.e}건</span>`:`<span data-tx>—</span>`}</span>
       <span class="chev" style="text-align:right;color:#5A6673;font-size:15px">›</span></button>`;}).join("");
   return `<section class="cards">
       <div><p class="k">평균 가동률</p><p class="v num">${cnt(S.fleetUtil(day,devs),1)}<small>%</small></p>${isToday?`<p class="s">수집한 날 · 00:00 ~ 모든 장비의 마지막 기록</p>`:""}${D.partialDays&&D.partialDays.includes(day)?`<p class="s" style="color:var(--warn)">보관 기간 첫날 — 수집 창이 도중에 시작해 하루 전체가 아닙니다</p>`:""}<p class="s">기록 있는 ${items.length-q.no}대 평균${q.no?` · 기록 없음 ${q.no}대 제외`:""}</p>${q.ne?`<p class="s" title="INI(시각 기록)가 없어 Report 배치 창의 빈 시간을 나눠 가진 Wafer">배치 창으로 추정 ${q.ne}장 / ${q.w}장</p>`:""}</div>
@@ -1048,7 +1101,7 @@ function homeHtml(){
       <div><p class="k" title="같은 Lot 에서 같은 유형이 여러 번 나도 1건으로 셉니다">Error</p><p class="v num">${cnt(items.reduce((a,b)=>a+(b.t?b.t.e:0),0))}<small>건</small></p><p class="s">Error ${hm(items.reduce((a,b)=>a+(b.t?b.t.x:0),0))} · 에러 후 대기 ${hm(items.reduce((a,b)=>a+(b.t?b.t.s:0),0))}</p></div>
     </section>
     <div class="bar-h"><h2>${isToday?"오늘의 가동률":dayName(day)+" 가동률"}</h2><div class="spacer"></div>${segHtml(floors)}${segHtml(sorts)}</div>
-    <div class="panel" data-anim>
+    <div class="panel homelist" data-listsig="${state.floor}|${state.sort}|${day}">
       <div class="legend"><span><i class="gloss" style="background-color:${RUN}"></i>Scan</span><span><i class="gloss" style="background-color:${DUP}"></i>Rescan</span><span><i class="gloss" style="background-color:${TEST}"></i>Test</span><span><i class="gloss" style="background-color:${ERR}"></i>Error</span><span><i class="gloss" style="background-color:${STOP}"></i>에러 후 대기</span><span><i class="gloss" style="background-color:${IDLE}"></i>대기</span>${isToday?`<span><i style="background:${FUTURE};box-shadow:inset 0 0 0 1px #DCE2E9"></i>아직 오지 않은 시간</span>`:""}</div>
       <div class="thead" style="grid-template-columns:96px 58px 1fr 76px 30px;gap:13px"><span>장비</span><span style="text-align:right">가동률</span>${ticksHtml()}<span style="text-align:right">Error</span><span></span></div>
       ${rowsH||`<p class="empty">이 날 기록이 있는 장비가 없습니다.</p>`}
@@ -1165,10 +1218,10 @@ function typePopupHtml(){
     <div style="padding:16px 22px 0">
       <section class="cards xs" style="margin-bottom:16px">${[{k:"Error",v:sumN+"건"},{k:"Error 대기",v:hm(sumM)},{k:"장비",v:Object.keys(pkDev).length+"대"},{k:mt?"Lot 기록":"Lot",v:mt?(hit.length+"건"):(JA.eLots+" / "+JA.lots+"개")}].map(s=>`<div><p class="k">${s.k}</p><p class="v num">${esc(s.v)}</p></div>`).join("")}</section>
       ${G&&G.m.length>1?`<div style="margin-bottom:14px"><button class="link" style="color:#5A6673;font-size:11.5px" data-h="${h(()=>setState({showMembers:!state.showMembers}))}">이름 ${G.m.length}개를 묶었습니다 — 보기</button>
-        ${state.showMembers?`<div class="members" data-reveal>${G.m.map(([i,c])=>`<p style="display:flex;gap:10px;align-items:baseline;font-size:12.5px"><span class="mono" style="flex:1;min-width:0;word-break:break-all">${esc(P.job[i]||"(Job 없음)")}</span><span class="num" style="color:#5A6673;white-space:nowrap">${c}회</span></p>`).join("")}</div>`:""}</div>`:""}
+        ${state.showMembers?`<div class="members" data-reveal="members">${G.m.map(([i,c])=>`<p style="display:flex;gap:10px;align-items:baseline;font-size:12.5px"><span class="mono" style="flex:1;min-width:0;word-break:break-all">${esc(P.job[i]||"(Job 없음)")}</span><span class="num" style="color:#5A6673;white-space:nowrap">${c}회</span></p>`).join("")}</div>`:""}</div>`:""}
       ${!pickDay?`<div><h3 class="s" style="margin-bottom:9px">날짜별 대기 시간 <span style="font-weight:400;color:#5A6673;font-size:12px">${spanDays.length===D.days.length?("전체 "+D.days.length+"일"):("최근 "+spanDays.length+"일")}</span></h3>${barsHtml(dayBars,112,false)}<div style="height:12px"></div></div>`:""}
       <h3 class="s" style="margin:0 0 6px">장비별 Error 대기</h3>
-      ${dv.map(([n,v])=>`<button class="rowbtn" data-key="dev:${esc(n)}" data-h="${h(S.openErr(n,eDayI,{job:mj,type:mt},pickDay?null:useDays))}" title="${esc(n)} Error 상세 열기${mt?" (이 유형만)":" (이 Job 만)"}${pickDay?"":" · "+useDays.length+"일"}" style="grid-template-columns:88px 1fr 56px 72px;gap:10px;padding:5px 0;border-bottom:0">
+      ${dv.map(([n,v],i)=>`<button class="rowbtn" data-key="slot:${i}" data-row="dev:${esc(n)}" data-h="${h(S.openErr(n,eDayI,{job:mj,type:mt},pickDay?null:useDays))}" title="${esc(n)} Error 상세 열기${mt?" (이 유형만)":" (이 Job 만)"}${pickDay?"":" · "+useDays.length+"일"}" style="grid-template-columns:88px 1fr 56px 72px;gap:10px;padding:5px 0;border-bottom:0">
         <span style="font-size:12.5px;font-weight:600">${esc(n)}</span><span class="hbar" style="height:10px"><i style="width:${Math.round(v[1]/dvmx*100)}%"></i></span><span class="num" style="text-align:right;font-size:12.5px;color:#4B5866">${v[0]}건</span><span class="num" style="text-align:right;font-size:12.5px;font-weight:600;white-space:nowrap">${hm(v[1])}</span></button>`).join("")}
     </div>
     <div class="tbl-h" style="grid-template-columns:88px 66px 190px 1fr 66px;padding:16px 22px 8px;margin-top:14px"><span>장비</span><span>날짜</span><span>Lot</span><span>원문</span><span style="text-align:right">대기 시간</span></div>
@@ -1212,7 +1265,7 @@ function devPopupHtml(){
   const stats=[{k:"가동률",v:u===null?"기록 없음":u.toFixed(1)+"%",h:u===null?null:cnt(u,1)+"%",ink:u!==null&&u<S.thU()?"#B4402F":"#0F151C"},{k:"Scan",v:t?hm(t.r):"—",ink:"#0F151C"},{k:"Rescan",v:t?hm(t.d):"—",ink:"#0F151C"},{k:"Test",v:t?hm(t.t):"—",ink:t&&t.t?"#7A5BA8":"#4B5866"},{k:"Error",v:t?(t.e+"건"+(t.x?" · "+hm(t.x):"")):"—",ink:t&&t.e>=S.thE()?"#B4402F":"#0F151C"},{k:"에러 후 대기",v:t?hm(t.s):"—",ink:t&&t.s?"#B4402F":"#4B5866"},{k:"대기",v:hm(idle),ink:"#4B5866"}].concat(S.hasEst(t)?[{k:"시각 확인",v:t.cv+"%",ink:"#B4402F"}]:[]);
   const lotFilters=S.segGroup([{k:"all",label:"전체"},{k:"err",label:"Error 있는 Lot"}],state.lotFilter,k=>setState({lotFilter:k,selLot:null}));
   const selH=sel?(()=>{const a=LA(sel),b=Math.max(LB(sel),a+1);const types=Object.entries(sel[9]).sort((x,y)=>y[1][1]-x[1][1]);const rep=P.rep[sel[8]]||"";
-    return `<div class="sel animate__animated animate__fadeInUp"><div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:10px"><b style="font-size:14.5px">${esc(P.lot[sel[1]]||"(Lot 확인 불가)")}</b>
+    return `<div class="sel animate__animated animate__fadeIn" data-key="sel"><div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:10px"><b style="font-size:14.5px">${esc(P.lot[sel[1]]||"(Lot 확인 불가)")}</b>
       ${types.map(([k,v])=>`<span class="pill err mono">${esc(k)} ${hm(v[1])}</span>`).join("")}${types.length?"":`<span class="pill ok">Error 없음</span>`}<div class="spacer"></div><button class="link" style="color:#5A6673;text-decoration:none" data-h="${h(()=>setState({selLot:null}))}">선택 해제</button></div>
       <div class="kv"><span class="k">시간</span><span class="num">${clock(a)} – ${clock(b)} (${hm(b-a)})</span><span class="k">Wafer</span><span>${sel[4]?sel[4]+"장":"전날 시작한 배치(장수는 전날에)"}${sel[6]?" · Rescan "+sel[6]+"장":""}${sel[7]?" · Test "+sel[7]+"장":""}</span>
       <span class="k">Job</span><span class="mono" style="word-break:break-all">${esc(P.job[sel[0]]||"(Job 없음)")}</span>${sel[10]>=0?`<span class="k">원문</span><span class="mono" style="color:#4B5866;word-break:break-all">${esc(P.st[sel[10]])}</span>`:""}
@@ -1297,7 +1350,7 @@ function errPopupHtml(){
       <div class="tline" data-sig="${esc(eDev)}|${eDay}|${ft||""}|${fj==null?"":fj}">${marks.map(k=>`<i title="${esc(k.title)}" style="left:${k.l}%;width:${k.w}%;background-color:${k.c}"></i>`).join("")}</div>
       <p style="margin:0 0 18px;font-size:11.5px;color:#5A6673">${marks.length?("진한 빨강이 Error, 연한 빨강이 그 뒤 대기입니다. Error 대기 = Error 시간 + Report 가 끝난 뒤 다음 활동까지."+(untimed?" 시간을 받지 못한 Error "+untimed+"건(배치 창에 빈 시간이 없음)은 막대에 없습니다.":"")):(totN?"시간을 받은 Error 가 없어 막대를 그리지 않았습니다(배치 창에 빈 시간이 없음).":"Error 없음")}</p>`}
       <h3 class="s">유형별</h3>
-      <div data-anim>${ct.map(([c,v])=>`<div data-key="ct:${esc(c)}" style="display:grid;grid-template-columns:190px 1fr 46px 72px;gap:10px;align-items:center;padding:4px 0"><span class="mono" title="${esc(c)}" style="font-size:12.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(c)}</span><span class="hbar" style="height:8px"><i style="width:${Math.round(v[1]/cmax*100)}%"></i></span><span class="num" style="text-align:right;font-size:12.5px">${v[0]}건</span><span class="num" style="text-align:right;font-size:12.5px;font-weight:600;white-space:nowrap">${hm(v[1])}</span></div>`).join("")||`<div class="lt-empty"><span class="lt" data-lottie="check" data-static aria-hidden="true"></span><p>${multi?"이 기간":"이 날"} 이 장비의 Error 가 없습니다.</p></div>`}</div>
+      <div>${ct.map(([c,v],i)=>`<div data-key="slot:${i}" data-row="ct:${esc(c)}" style="display:grid;grid-template-columns:190px 1fr 46px 72px;gap:10px;align-items:center;padding:4px 0"><span class="mono" title="${esc(c)}" style="font-size:12.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(c)}</span><span class="hbar" style="height:8px"><i style="width:${Math.round(v[1]/cmax*100)}%"></i></span><span class="num" style="text-align:right;font-size:12.5px">${v[0]}건</span><span class="num" style="text-align:right;font-size:12.5px;font-weight:600;white-space:nowrap">${hm(v[1])}</span></div>`).join("")||`<div class="lt-empty"><span class="lt" data-lottie="check" data-static aria-hidden="true"></span><p>${multi?"이 기간":"이 날"} 이 장비의 Error 가 없습니다.</p></div>`}</div>
       <h3 class="s" style="margin-top:18px">${md(win[0])} ~ ${md(win[win.length-1])} 이 장비의 Error <span style="font-weight:400;color:#5A6673;font-size:12px">${multi?"진한 막대가 보고 있는 기간":"선택한 날까지 "+win.length+"일"} · 막대를 누르면 그 날로</span></h3>
       ${barsHtml(trend,74,true)}
       <h3 class="s" style="margin-top:18px">Lot 별 Error${evts.length?" · "+evts.length+"건":""}</h3>
@@ -1328,8 +1381,8 @@ function trendHtml(){
     <section class="panel pad"><div style="display:flex;align-items:baseline;gap:10px;margin-bottom:12px"><h2>${U==="day"?"날짜별 평균 가동률":(U==="week"?"주별 평균 가동률":"월별 평균 가동률")}</h2><span style="font-size:12.5px;color:#5A6673;white-space:nowrap">평균 ${avg.toFixed(1)}%${PD.size?" · 첫날(부분) 제외":""}</span></div>
       <div data-anim><div data-key="chart:trend" style="position:relative"><span style="position:absolute;left:0;right:0;bottom:${(avg/mx*100).toFixed(1)}%;border-top:1px dashed #B0862F;z-index:1;pointer-events:none;height:0;top:auto"></span>${barsHtml(bars,180,true)}</div></div></section>
     <div class="bar-h"><h2>장비별 ${D.days.length}일</h2></div>
-    <div class="panel" data-anim>
-      ${heat.map(hh=>`<div data-key="heat:${esc(hh.n)}" style="display:grid;grid-template-columns:96px 1fr 54px;gap:12px;align-items:center;padding:5px 18px;border-top:1px solid #F1F4F7"><button class="link" style="text-decoration:none;font-size:13px;font-weight:600;color:#0F151C;text-align:left;padding:4px 0" data-h="${h(S.open(hh.n))}">${esc(hh.n)}</button>
+    <div class="panel heatlist">
+      ${heat.map((hh,i)=>`<div data-key="slot:${i}" data-row="heat:${esc(hh.n)}" style="display:grid;grid-template-columns:96px 1fr 54px;gap:12px;align-items:center;padding:5px 18px;border-top:1px solid #F1F4F7"><button class="link" style="text-decoration:none;font-size:13px;font-weight:600;color:#0F151C;text-align:left;padding:4px 0" data-h="${h(S.open(hh.n))}">${esc(hh.n)}</button>
         <span class="heat">${hh.cells.map(c=>`<button data-h="${h(c.go)}" title="${esc(c.title)}" style="background-color:${c.bg};box-shadow:${c.ring}"></button>`).join("")}</span>
         <span class="num" style="text-align:right;font-size:13px;font-weight:600;color:${hh.avgInk}">${hh.avgTxt}</span></div>`).join("")}
       <div style="display:flex;align-items:center;gap:8px;padding:11px 18px;background:#FBFCFD;font-size:12.5px;color:#4B5866;flex-wrap:wrap"><span>낮음</span><span style="display:flex;gap:3px">${HEAT.map(c=>`<i style="width:22px;height:11px;border-radius:3px;background:${c};display:block"></i>`).join("")}</span><span>높음</span><span style="display:inline-flex;align-items:center;gap:6px;margin-left:16px"><i style="width:22px;height:11px;border-radius:2px;background:transparent;box-shadow:inset 0 0 0 1px #DCE2E9;display:block"></i>시간 기록 없음</span></div>
@@ -1374,11 +1427,11 @@ function reportHtml(){
   const cell=(f,small)=>`<span class="num" style="text-align:right;font-size:${small?12.5:13}px;color:#4B5866;white-space:nowrap">${f.n}</span><span class="num" style="text-align:right;font-size:${small?12.5:13}px;${small?"":"font-weight:600;"}white-space:nowrap">${f.prep}</span><span class="num" style="text-align:right;font-size:${small?12.5:13}px;${small?"":"font-weight:600;"}white-space:nowrap">${f.per}</span>
     <span style="text-align:right;min-width:0"><span class="num" style="display:block;font-size:${small?12.5:13}px;${small?"":"font-weight:600;"}white-space:nowrap">${f.conv}</span><span style="display:block;font-size:11px;color:#5A6673;white-space:nowrap">${esc(f.convSub)}</span></span>
     <span class="num" style="text-align:right;font-size:${small?12.5:13}px;white-space:nowrap;color:${f.eInk}">${f.err}</span><span class="num" style="text-align:right;font-size:${small?12.5:13}px;white-space:nowrap;color:${f.eInk}">${f.wait}</span><span style="text-align:right;min-width:0"><span class="num" style="display:block;font-size:${small?12.5:13}px;white-space:nowrap">${f.fault}</span><span style="display:block;font-size:11px;color:#5A6673;white-space:nowrap">${esc(f.faultSub)}</span></span>`;
-  const rowH=al=>{const A=byAlias[al],f=fits[al],open=state.rptOpen===al,raws=Object.entries(A.raw).sort((a,b)=>b[1]-a[1]);
+  let _rs=0;const rowH=al=>{const A=byAlias[al],f=fits[al],open=state.rptOpen===al,raws=Object.entries(A.raw).sort((a,b)=>b[1]-a[1]);
     const devs=Object.keys(A.devs).sort(cmpDev).map(n=>({name:n,title:n+" · "+exTxt(A.devs[n]),...fit(A.devs[n])}));
-    return `<div data-key="job:${esc(al)}"><button class="rowbtn" data-h="${h(()=>setState({rptOpen:open?null:al}))}" title="${esc(raws.map(([k,c])=>k+" ("+c+")").join("\n")+"\n"+exTxt(A.all))}" style="grid-template-columns:${cols};gap:10px;padding:10px 18px;border-bottom:0;border-top:1px solid #F1F4F7;min-height:48px;background:${open?"#F7F9FB":"transparent"}">
+    return `<div data-key="slot:${_rs++}" data-row="job:${esc(al)}"><button class="rowbtn" data-h="${h(()=>setState({rptOpen:open?null:al}))}" title="${esc(raws.map(([k,c])=>k+" ("+c+")").join("\n")+"\n"+exTxt(A.all))}" style="grid-template-columns:${cols};gap:10px;padding:10px 18px;border-bottom:0;border-top:1px solid #F1F4F7;min-height:48px;background:${open?"#F7F9FB":"transparent"}">
       <span style="display:block;min-width:0"><span style="display:flex;align-items:center;gap:7px;font-size:13.5px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis"><span style="color:#5A6673;font-size:11px;width:10px;display:inline-block;flex:none">${open?"▾":"▸"}</span>${esc(al)}</span><span style="display:block;font-size:11.5px;color:#5A6673;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;padding-left:17px">표본 ${A.all.pts.length}개 / 배치 ${A.all.n}개 · 장비 ${devs.length}대${raws.length>1?" · 이름 "+raws.length+"개":""}</span></span>${cell(f,false)}</button>
-      ${open?`<div data-reveal style="background:#FBFCFD">${devs.map(d=>`<div title="${esc(d.title)}" style="display:grid;grid-template-columns:${cols};gap:10px;align-items:center;padding:7px 18px;border-top:1px solid #F1F4F7;font-size:12.5px"><span style="padding-left:17px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(d.name)}</span>${cell(d,true)}</div>`).join("")}</div>`:""}</div>`;};
+      ${open?`<div data-reveal="job:${esc(al)}" style="background:#FBFCFD">${devs.map(d=>`<div title="${esc(d.title)}" style="display:grid;grid-template-columns:${cols};gap:10px;align-items:center;padding:7px 18px;border-top:1px solid #F1F4F7;font-size:12.5px"><span style="padding-left:17px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(d.name)}</span>${cell(d,true)}</div>`).join("")}</div>`:""}</div>`;};
   /* 두 묶음: Kendall · TB500(표기명이 Kendall 로 시작하면 Kendall, 나머지는 TB500) */
   const groups=[["Kendall",names.filter(n=>/^Kendall/i.test(n)).sort(cmpV)],["TB500",names.filter(n=>!/^Kendall/i.test(n)).sort(cmpV)]];
   const gsum=ns=>ns.reduce((a,al)=>{const Sx=byAlias[al].all;a.n+=Sx.n;a.s+=Sx.pts.length;a.e+=Sx.err;a.m+=Sx.errMin;return a;},{n:0,s:0,e:0,m:0});
@@ -1390,7 +1443,7 @@ function reportHtml(){
   return `<div class="bar-h"><h1>TB500 · Kendall</h1><span style="font-size:12.5px;color:#5A6673">Kendall ${groups[0][1].length}개 · TB500 ${groups[1][1].length}개 · ${esc(sortLabel)}</span><div class="spacer"></div>${segHtml(spans)}</div>
     <p style="margin:-6px 0 14px;font-size:12.5px;color:#5A6673;word-break:keep-all">이 탭은 TB500 · Kendall 을 위한 것입니다 — 표기명 ${Object.keys(JOB_ALIAS).length}개 Job 만 봅니다(이 기간 Lot ${lotAll}개 중 ${lotIn}개, ${pct}%). 나머지 Job 은 가동률·Error 탭에 있습니다. 열 머리를 누르면 그 열로 정렬합니다.</p>
     <section class="cards sm" style="margin-bottom:16px">${[{k:"Job",h:cnt(names.length)+"개",s:"표기명이 있는 것만"},{k:"표본 배치",h:cnt(tot.s)+"개",s:"배치 "+tot.n+"개 중 (Error·5장 미만 제외)"},{k:"Error",h:cnt(tot.e)+"건",s:"Lot 단위"},{k:"Error 대기",h:esc(hm(tot.m)),s:"Error 구간 + 그 뒤 공백"}].map(s=>`<div><p class="k">${s.k}</p><p class="v num">${s.h}</p><p class="s">${esc(s.s)}</p></div>`).join("")}</section>
-    <div class="panel" style="overflow-x:auto"><div style="min-width:980px" data-anim><div class="thead" style="grid-template-columns:${cols};gap:10px;align-items:end">${COLS.map(th).join("")}</div>
+    <div class="panel" style="overflow-x:auto"><div style="min-width:980px"><div class="thead" style="grid-template-columns:${cols};gap:10px;align-items:end">${COLS.map(th).join("")}</div>
       ${rowsH}
       <p style="margin:0;padding:11px 18px;background:#FBFCFD;font-size:12px;color:#5A6673;border-top:1px solid #EDF1F5">배치시간 = 준비 + 장당 × 장수 로 1차 회귀 — 절편이 준비, 기울기가 장당, ± 는 회귀 표준오차. 환산은 최빈 장수 기준. 표본 5개 미만이면 내지 않음. 배치시간은 Report 의 배치 시작~종료. 평균 fault 는 Report 표 Faults 가 있는 행만(옛 캐시 행은 다시 읽어야 채워짐).</p></div></div>`;
 }
