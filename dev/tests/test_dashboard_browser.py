@@ -438,3 +438,24 @@ def test_tab_indicator_survives_in_tab_clicks_and_follows_the_tab(page):
     assert b1[0] == b1[2] and b1[1] == b1[3] and b1 != b0                              # 새 탭에 가서 선다
     assert errors == []
 
+
+def test_tab_indicator_moves_like_a_body_dragged_by_its_front(page):
+    """탭 표시자 물리(9/24 4차): 앞 끝이 먼저 가고 뒤가 딸려 와 움직이는 동안 늘어나며, 앞 끝이 도착한 뒤에는 폭이 늘지 않고 줄어들며 선다.
+    (3차는 반대였다 — 움직일 때 좁고 도착해서 넓어졌다.) 미리 계산한 표본(`__s.run.fr`)을 본다 — 시계와 무관하다."""
+    pg, errors, _ = page
+    pg.locator('button[data-fk="nav:report"]').click()
+    fr = pg.evaluate("(() => { const s = document.querySelector('.nav .ind').__s; return s && s.run ? s.run.fr.map(q => [q.x[0], q.x[q.x.length - 1]]) : null; })()")
+    if fr is None:
+        pytest.skip("애니메이션이 꺼진 환경(reduced motion / WAAPI 없음)")
+    (l0, r0), (tl, tr) = fr[0], fr[-1]
+    w0, wt = r0 - l0, tr - tl
+    assert tr > r0                                                                          # 오른쪽으로 간다
+    k = next(i for i, (l, r) in enumerate(fr) if r >= tr - 1.5)                            # 앞(오른쪽) 끝 도착
+    assert k > 1
+    assert max(r - l for l, r in fr[:k + 1]) > max(w0, wt) + 8                            # 움직이는 동안 늘어난다
+    assert max(r - l for l, r in fr[k:]) <= max(fr[k][1] - fr[k][0], wt) + 0.5            # 도착 뒤 더 넓어지지 않는다
+    assert min(r - l for l, r in fr[k:]) >= wt - 4                                          # 눌림은 조금만
+    assert max(r for _, r in fr) <= tr + 4                                                  # 앞 끝은 거의 지나치지 않는다
+    assert all(l <= l0 + 0.5 for l, _ in fr[:2])                                            # 뒤 끝은 늦게 출발한다
+    assert errors == []
+
