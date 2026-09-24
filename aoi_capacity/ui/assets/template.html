@@ -105,7 +105,7 @@ button{font:inherit;color:inherit}
 .stackbar .sb svg{width:12px;height:12px;flex:none;opacity:.8}.stackbar .arrow{color:rgba(255,255,255,.6);font-size:12px}
 .nav{position:relative}.nav .ind{position:absolute;inset:0;pointer-events:none;z-index:0}
 .nav .ind b{position:absolute;left:0;top:0;height:100%;background:var(--accent-soft);will-change:transform;transform:translateX(-999px)}
-.nav .ind .l{width:7px;border-radius:7px 0 0 7px}.nav .ind .r{width:7px;border-radius:0 7px 7px 0}.nav .ind .m{width:1px;transform-origin:0 0}
+.nav .ind .l{width:7px;border-radius:7px 0 0 7px;transform-origin:0 50%}.nav .ind .r{width:7px;border-radius:0 7px 7px 0;transform-origin:0 50%}.nav .ind .m{width:1px;transform-origin:0 50%}
 .nav button{position:relative;z-index:1}.nav button.on{background:transparent;color:var(--nav-on)}.nav button:not(.on):hover{color:var(--ink)}
 .loader{display:flex;flex-direction:column;align-items:center;gap:12px;padding:80px 0;color:var(--ink-3)}.loader .lt{width:56px;height:56px}
 [data-reveal]{overflow:hidden}
@@ -902,9 +902,18 @@ function enterView(root){if(!G()||reduced())return;
    ③ rAF 로 그리면 새 화면을 그리는 동안 끊긴다 → 스프링 궤적을 미리 계산해(60fps 표본) WAAPI transform 으로 넘긴다 — 합성 스레드에서 돌아
       메인 스레드가 바빠도 끊기지 않는다. 폭도 가운데 조각의 scaleX 라 합성 스레드에서 바뀌고, 끝 조각은 둥근 모서리를 그대로 지킨다.
    연달아 누르면 그 순간의 위치·속도(표본 보간)에서 다시 계산한다. 창 크기가 바뀌면 바로 제자리. 동작 줄이기면 이동 없이 바로. */
-const NAV_K=380,NAV_C=26,NAV_CAP=7,NAV_FPS=60;
+/* 물리(9/24 3차, 사용자: '최대한 물리법칙을 따르게' · '도착한 뒤에 늘어나는 스프링 느낌이라 부자연스럽다'):
+   박스는 두 끝(질량 각 0.5)을 단단한 내부 스프링으로 이은 말랑한 몸체다.
+   · 끄는 힘 = 중심을 목표로 당기는 스프링-감쇠(k 300 · c 23, ζ 0.66, 전체 질량 1) — 몸체 전체가 이동 거리의 약 5% 를 한 번 지나쳤다 돌아와 선다.
+     힘에는 상한(모터 한계 24000 px/s²)이 있어 먼 탭은 일정 가속으로 더 오래, 가까운 탭은 짧게 간다.
+   · **폭은 위치를 따라간다**: 내부 스프링의 휴지 길이 = 옛 폭→새 폭을 '간 거리의 비율' 로 보간 — 예전(두 끝을 따로 매단 A안)은 두 끝의 이동 거리가 달라
+     오른쪽 끝이 더 지나쳐 **도착한 뒤에 늘어났다 줄었다**(실측). 이제 도착 뒤 폭 변화 3px 이하.
+   · 끄는 힘은 가는 방향의 앞 끝에 더 걸린다(최대 75%, tanh 로 부드럽게) — 가속·감속 때만 관성으로 5~9% 늘고 줄며(내부 k 1400 · c 14) 멈추면 사라진다.
+   · 부피 보존: 늘어나면 두께가 조금 얇아진다(두께 ∝ (휴지 폭/폭)^0.25, 0.92~1.08).
+   운동량 보존 — 연달아 누르면 그 순간의 위치·속도에서 이어진다. */
+const NAV_KD=300,NAV_CD=23,NAV_FMAX=24000,NAV_KI=1400,NAV_CI=14,NAV_FRONT=.25,NAV_CAP=7,NAV_FPS=60;
 function navParts(ind){if(!ind.__p)ind.__p={l:ind.querySelector(".l"),m:ind.querySelector(".m"),r:ind.querySelector(".r")};return ind.__p;}
-const navTf=(L,R)=>{const w=Math.max(2*NAV_CAP,R-L);return {l:`translateX(${L.toFixed(2)}px)`,m:`translateX(${(L+NAV_CAP-1).toFixed(2)}px) scaleX(${Math.max(0,w-2*NAV_CAP+2).toFixed(2)})`,r:`translateX(${(L+w-NAV_CAP).toFixed(2)}px)`};};
+const navTf=(L,R,sy=1)=>{const w=Math.max(2*NAV_CAP,R-L),y=sy.toFixed(4);return {l:`translateX(${L.toFixed(2)}px) scaleY(${y})`,m:`translateX(${(L+NAV_CAP-1).toFixed(2)}px) scale(${Math.max(0,w-2*NAV_CAP+2).toFixed(2)},${y})`,r:`translateX(${(L+w-NAV_CAP).toFixed(2)}px) scaleY(${y})`};};
 function navSet(ind,L,R){const p=navParts(ind),t=navTf(L,R);for(const k of ["l","m","r"])if(p[k])p[k].style.transform=t[k];}
 function navCancel(ind){const p=navParts(ind);for(const k of ["l","m","r"])if(p[k])for(const a of p[k].getAnimations())a.cancel();}
 /* 지금 이 순간의 위치·속도(움직이는 중이면 표본 사이를 보간) */
@@ -916,13 +925,19 @@ function navGo(ind,tL,tR,animate){const s=ind.__s||(ind.__s={L:tL,R:tR,run:null}
   const cur=navState(ind)||{L:tL,R:tR,vL:0,vR:0};navCancel(ind);s.tL=tL;s.tR=tR;s.L=tL;s.R=tR;s.run=null;
   navSet(ind,tL,tR);   /* 끝 모습을 인라인에 먼저 — 애니메이션이 끝나거나 취소돼도 제자리 */
   if(!animate||!canAnim()||reduced()||typeof ind.animate!=="function")return;
-  /* 스프링을 240Hz 로 적분해 60fps 표본을 만든다 */
-  const fr=[[cur.L,cur.R,cur.vL,cur.vR]];let L=cur.L,R=cur.R,vL=cur.vL,vR=cur.vR;const h=1/240;
-  for(let n=1;n<=240*2;n++){vL+=(-NAV_K*(L-tL)-NAV_C*vL)*h;L+=vL*h;vR+=(-NAV_K*(R-tR)-NAV_C*vR)*h;R+=vR*h;
-    if(n%4===0){fr.push([L,R,vL,vR]);if(Math.abs(L-tL)+Math.abs(R-tR)<.1&&Math.abs(vL)+Math.abs(vR)<.5)break;}}
-  fr.push([tL,tR,0,0]);if(fr.length<3)return;
+  /* 두 질량 + 내부 스프링을 960Hz(반암시적 오일러)로 적분해 60fps 표본을 만든다. 휴지 길이는 간 거리의 비율로 옛 폭→새 폭. */
+  const fr=[[cur.L,cur.R,cur.vL,cur.vR,cur.R-cur.L]];let L=cur.L,R=cur.R,vL=cur.vL,vR=cur.vR;const h=1/960,m=.5,ct=(tL+tR)/2,c0=(L+R)/2,w0=R-L,wt=tR-tL,span=ct-c0;let rest=w0;
+  for(let n=1;n<=960*2.5;n++){
+    const c=(L+R)/2,vc=(vL+vR)/2;let F=-NAV_KD*(c-ct)-NAV_CD*vc;F=Math.max(-NAV_FMAX,Math.min(NAV_FMAX,F));
+    const FR=F*(.5+NAV_FRONT*Math.tanh(F/2500)),FL=F-FR;                                  /* 앞 끝에 더 걸리는 끄는 힘 */
+    const prog=Math.abs(span)<.5?1:Math.max(0,Math.min(1,(c-c0)/span));rest=w0+(wt-w0)*prog;   /* 폭은 위치를 따라간다 */
+    const Fi=-NAV_KI*((R-L)-rest)-NAV_CI*(vR-vL);                                          /* 내부 스프링: R 에 +, L 에 − */
+    vL+=((FL-Fi)/m)*h;vR+=((FR+Fi)/m)*h;L+=vL*h;R+=vR*h;
+    if(R-L<2*NAV_CAP){const mid=(L+R)/2;L=mid-NAV_CAP;R=mid+NAV_CAP;}
+    if(n%16===0){fr.push([L,R,vL,vR,rest]);if(Math.abs(L-tL)+Math.abs(R-tR)<.08&&Math.abs(vL)+Math.abs(vR)<.4)break;}}
+  fr.push([tL,tR,0,0,wt]);if(fr.length<3)return;
   const T=(fr.length-1)/NAV_FPS*1000,p=navParts(ind);
-  const kf={l:[],m:[],r:[]};for(const q of fr){const t=navTf(q[0],q[1]);kf.l.push({transform:t.l});kf.m.push({transform:t.m});kf.r.push({transform:t.r});}
+  const kf={l:[],m:[],r:[]};for(const q of fr){const sy=Math.max(.92,Math.min(1.08,Math.pow(q[4]/Math.max(1,q[1]-q[0]),.25)));const t=navTf(q[0],q[1],sy);kf.l.push({transform:t.l});kf.m.push({transform:t.m});kf.r.push({transform:t.r});}
   s.run={t0:performance.now(),fr};const run=s.run;let a0=null;
   for(const k of ["l","m","r"])if(p[k]){const a=p[k].animate(kf[k],{duration:T,easing:"linear"});if(!a0)a0=a;}
   if(a0)a0.onfinish=()=>{if(s.run===run)s.run=null;};}
