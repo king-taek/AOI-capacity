@@ -103,7 +103,7 @@ button{font:inherit;color:inherit}
 .stackbar .sb span{overflow:hidden;text-overflow:ellipsis}.stackbar .sb:hover{background:rgba(15,21,28,.8);transform:translateY(-1px)}
 .stackbar .sb.cur{background:#fff;color:#0F151C;cursor:default;border-color:#fff}.stackbar .sb.cur:hover{transform:none}
 .stackbar .sb svg{width:12px;height:12px;flex:none;opacity:.8}.stackbar .arrow{color:rgba(255,255,255,.6);font-size:12px}
-.nav{position:relative}.nav .ind{position:absolute;left:0;top:0;height:100%;width:0;border-radius:7px;background:var(--accent-soft);pointer-events:none;z-index:0}
+.nav{position:relative}.nav .ind{position:absolute;left:0;top:0;height:100%;width:0;border-radius:7px;background:var(--accent-soft);pointer-events:none;z-index:0;transform-origin:50% 50%;will-change:transform,width}
 .nav button{position:relative;z-index:1}.nav button.on{background:transparent;color:var(--nav-on)}
 .loader{display:flex;flex-direction:column;align-items:center;gap:12px;padding:80px 0;color:var(--ink-3)}.loader .lt{width:56px;height:56px}
 [data-reveal]{overflow:hidden}
@@ -891,8 +891,23 @@ function enterView(root){if(!G()||reduced())return;
 /* 내비 표시자: 켜진 탭 아래로 미끄러진다 */
 function navInd(root){const nav=root.querySelector(".nav"),ind=nav&&nav.querySelector(".ind"),on=nav&&nav.querySelector("button.on");if(!ind||!on)return;
   const x=on.offsetLeft,w=on.offsetWidth;if(ind.__x===x&&ind.__w===w)return;   /* 같은 탭이면 손대지 않는다(예전엔 렌더마다 트윈이 돌았다 — 감사 9/21) */
-  if(ind.__x===undefined||!G()||reduced()){ind.style.transform=`translateX(${x}px)`;ind.style.width=w+"px";}
-  else gsap.to(ind,{x,width:w,duration:.32,ease:"power3.out"});ind.__x=x;ind.__w=w;}
+  const s=ind.__s||(ind.__s={L:x,R:x+w,vL:0,vR:0,raf:0});s.tL=x;s.tR=x+w;
+  if(ind.__x===undefined||!canAnim()||reduced()){s.L=s.tL;s.R=s.tR;s.vL=s.vR=0;navPaint(ind,s);ind.__x=x;ind.__w=w;return;}
+  ind.__x=x;ind.__w=w;s.dir=(s.tL+s.tR)/2>(s.L+s.R)/2?1:-1;
+  if(!s.raf){s.last=performance.now();s.raf=requestAnimationFrame(t=>navStep(ind,s,t));}}
+/* 탭 표시자 — 젤리(C안, 9/24 사용자 선택, 아티팩트 세 안 중): 두 가장자리를 각각 스프링(질량 1)에 매단다. 가는 방향의 앞 가장자리는 빠르게(k 460 · c 24),
+   뒤 가장자리는 늦게(k 240 · c 20) 따라와 박스가 늘어났다 오므라들고, 둘 다 조금 지나쳤다 한두 번 출렁이며 멈춘다. 속도에 따라 높이가 최대 12% 눌린다.
+   연달아 누르면 달리던 속도를 이어받는다(트윈처럼 끊기지 않는다). 동작 줄이기면 바로 자리. */
+const NAV_LEAD=[460,24],NAV_TRAIL=[240,20];
+function navPaint(ind,s){const w=Math.max(8,s.R-s.L),v=Math.abs(s.vL+s.vR)/2,sy=1-Math.min(.12,v/9000);
+  ind.style.width=w+"px";ind.style.transform=`translateX(${s.L}px) scaleY(${sy.toFixed(3)})`;}
+function navStep(ind,s,now){let dt=(now-s.last)/1000;if(!(dt>0))dt=0;dt=Math.min(.05,dt);s.last=Math.max(s.last,now);   /* rAF 시각이 시작 시각보다 앞설 수 있다 — 음수 스텝 금지(실측: 첫 프레임에 튀었다) */const n=Math.max(1,Math.ceil(dt*240)),h=dt/n;
+  const pL=s.dir>0?NAV_TRAIL:NAV_LEAD,pR=s.dir>0?NAV_LEAD:NAV_TRAIL;
+  for(let i=0;i<n;i++){s.vL+=(-pL[0]*(s.L-s.tL)-pL[1]*s.vL)*h;s.L+=s.vL*h;s.vR+=(-pR[0]*(s.R-s.tR)-pR[1]*s.vR)*h;s.R+=s.vR*h;
+    if(s.R-s.L<24){const m=(s.L+s.R)/2;s.L=m-12;s.R=m+12;}}
+  const moving=Math.abs(s.L-s.tL)+Math.abs(s.R-s.tR)>.08||Math.abs(s.vL)+Math.abs(s.vR)>.4;
+  if(!moving||!ind.isConnected){s.L=s.tL;s.R=s.tR;s.vL=s.vR=0;navPaint(ind,s);s.raf=0;return;}
+  navPaint(ind,s);s.raf=requestAnimationFrame(t=>navStep(ind,s,t));}
 /* 펼침(data-reveal): 높이 0 에서 열린다 — 리포트 행 펼침 · Job 이름 묶음 */
 let _rvPrev=new Set();
 function reveals(root){const now=new Set();for(const el of root.querySelectorAll("[data-reveal]")){const k=el.getAttribute("data-reveal")||"";now.add(k);if(el.__rv)continue;el.__rv=1;if(_rvPrev.has(k)||!G()||reduced())continue;gsap.from(el,{height:0,opacity:0,duration:.32,ease:"power3.out",clearProps:"height,opacity"});}_rvPrev=now;}
