@@ -103,8 +103,10 @@ button{font:inherit;color:inherit}
 .stackbar .sb span{overflow:hidden;text-overflow:ellipsis}.stackbar .sb:hover{background:rgba(15,21,28,.8);transform:translateY(-1px)}
 .stackbar .sb.cur{background:#fff;color:#0F151C;cursor:default;border-color:#fff}.stackbar .sb.cur:hover{transform:none}
 .stackbar .sb svg{width:12px;height:12px;flex:none;opacity:.8}.stackbar .arrow{color:rgba(255,255,255,.6);font-size:12px}
-.nav{position:relative}.nav .ind{position:absolute;left:0;top:0;height:100%;width:0;border-radius:7px;background:var(--accent-soft);pointer-events:none;z-index:0;transform-origin:50% 50%;will-change:transform,width}
-.nav button{position:relative;z-index:1}.nav button.on{background:transparent;color:var(--nav-on)}
+.nav{position:relative}.nav .ind{position:absolute;inset:0;pointer-events:none;z-index:0}
+.nav .ind b{position:absolute;left:0;top:0;height:100%;background:var(--accent-soft);will-change:transform;transform:translateX(-999px)}
+.nav .ind .l{width:7px;border-radius:7px 0 0 7px}.nav .ind .r{width:7px;border-radius:0 7px 7px 0}.nav .ind .m{width:1px;transform-origin:0 0}
+.nav button{position:relative;z-index:1}.nav button.on{background:transparent;color:var(--nav-on)}.nav button:not(.on):hover{color:var(--ink)}
 .loader{display:flex;flex-direction:column;align-items:center;gap:12px;padding:80px 0;color:var(--ink-3)}.loader .lt{width:56px;height:56px}
 [data-reveal]{overflow:hidden}
 .thead button.th{all:unset;cursor:pointer;display:inline-flex;align-items:center;gap:4px;justify-content:flex-end;width:100%;color:var(--ink-3);font-weight:600;font-size:11.5px;white-space:nowrap}
@@ -750,7 +752,9 @@ const S={
   devList(){const f=state.floor;return D.devices.filter(n=>f==="all"||S.floorOf(n)===f);},
   fleetUtil(day,devs){const v=devs.map(n=>S.util(S.at(day,n))).filter(x=>x!==null);return v.length?v.reduce((a,b)=>a+b,0)/v.length:0;},
   segGroup(items,cur,on){return items.map(it=>({label:it.label,on:cur===it.k,pick:()=>on(it.k)}));},
-  go(view){return()=>{const o=VIEWS.indexOf(state.view),n=VIEWS.indexOf(view);state.viewDir=o<0||n<0||o===n?0:(n>o?1:-1);setState({view,modalType:null,modalJob:null,errDev:null,modalDev:null,selLot:null,stack:[]});window.scrollTo(0,0);};},
+  go(view){return()=>{const apply=()=>{const o=VIEWS.indexOf(state.view),n=VIEWS.indexOf(view);state.viewDir=o<0||n<0||o===n?0:(n>o?1:-1);setState({view,modalType:null,modalJob:null,errDev:null,modalDev:null,selLot:null,stack:[]});window.scrollTo(0,0);};
+    if(!canAnim()||reduced()||typeof requestAnimationFrame!=="function"){apply();return;}
+    navNow(view);const tok=S._goTok=(S._goTok||0)+1;requestAnimationFrame(()=>requestAnimationFrame(()=>{if(S._goTok===tok)apply();}));};},   /* 누르는 즉시 표시자 출발, 새 화면은 두 프레임 뒤 — 연달아 누르면 마지막 것만 그린다 */
   open(dev,dayI){return()=>setState({modalDev:dev,modalDayI:dayI===undefined?state.dayI:dayI,selLot:null,stack:pushTop("dev")});},
   /* days: 여러 날을 함께 보는 Error 팝업(Error 탭에서 7일·21일·전체를 고른 채로 장비를 누르면 그 기간 그대로) */
   openErr(dev,dayI,f,days){return()=>setState({errDev:dev,errDayI:dayI===undefined?state.dayI:dayI,errDays:days&&days.length>1?days.slice():null,errJob:f&&f.job!=null?f.job:null,errType:f&&f.type?f.type:null,stack:pushTop("err")});},
@@ -889,23 +893,46 @@ function enterView(root){if(!G()||reduced())return;
   const fills=root.querySelectorAll(".chart .f");if(fills.length)gsap.from(fills,{scaleY:0,transformOrigin:"50% 100%",duration:.5,ease:"power3.out",stagger:{each:Math.min(.012,.4/fills.length)},clearProps:"transform"});
   const rows=root.querySelectorAll('.heat');if(rows.length)gsap.from(rows,{opacity:0,duration:.28,ease:"power2.out",stagger:{each:Math.min(.02,.5/rows.length)},clearProps:"opacity"});}
 /* 내비 표시자: 켜진 탭 아래로 미끄러진다 */
+/* ── 탭 표시자 — 스프링(A안, 9/24 사용자 선택) ─────────────────────────────────────────────────────────────
+   박스 전체를 하나의 스프링(질량 1, k 380 · c 26)에 매단다: 목표를 약 6% 지나쳤다 한 번 되돌아와 선다(약 0.45s). 늘어나거나 눌리지 않는다.
+   완성도(9/24 2차, 실측으로 찾은 셋):
+   ① morph 가 렌더마다 인라인 스타일을 지워 같은 탭 안에서 버튼을 누르면 박스가 사라졌다 → 박스는 data-static(morph 가 속을 건드리지 않음),
+      모양은 세 조각(왼쪽 끝 · 가운데 · 오른쪽 끝)의 transform 으로만 그린다.
+   ② 새 화면을 다 그린 뒤에야 출발해 약 120ms 멈춰 있었다 → 누르는 즉시 탭 글자색과 박스를 먼저 움직이고(navNow), 새 화면은 두 프레임 뒤에 그린다.
+   ③ rAF 로 그리면 새 화면을 그리는 동안 끊긴다 → 스프링 궤적을 미리 계산해(60fps 표본) WAAPI transform 으로 넘긴다 — 합성 스레드에서 돌아
+      메인 스레드가 바빠도 끊기지 않는다. 폭도 가운데 조각의 scaleX 라 합성 스레드에서 바뀌고, 끝 조각은 둥근 모서리를 그대로 지킨다.
+   연달아 누르면 그 순간의 위치·속도(표본 보간)에서 다시 계산한다. 창 크기가 바뀌면 바로 제자리. 동작 줄이기면 이동 없이 바로. */
+const NAV_K=380,NAV_C=26,NAV_CAP=7,NAV_FPS=60;
+function navParts(ind){if(!ind.__p)ind.__p={l:ind.querySelector(".l"),m:ind.querySelector(".m"),r:ind.querySelector(".r")};return ind.__p;}
+const navTf=(L,R)=>{const w=Math.max(2*NAV_CAP,R-L);return {l:`translateX(${L.toFixed(2)}px)`,m:`translateX(${(L+NAV_CAP-1).toFixed(2)}px) scaleX(${Math.max(0,w-2*NAV_CAP+2).toFixed(2)})`,r:`translateX(${(L+w-NAV_CAP).toFixed(2)}px)`};};
+function navSet(ind,L,R){const p=navParts(ind),t=navTf(L,R);for(const k of ["l","m","r"])if(p[k])p[k].style.transform=t[k];}
+function navCancel(ind){const p=navParts(ind);for(const k of ["l","m","r"])if(p[k])for(const a of p[k].getAnimations())a.cancel();}
+/* 지금 이 순간의 위치·속도(움직이는 중이면 표본 사이를 보간) */
+function navState(ind){const s=ind.__s;if(!s)return null;const run=s.run;if(!run)return {L:s.L,R:s.R,vL:0,vR:0};
+  const f=Math.min(run.fr.length-1,Math.max(0,(performance.now()-run.t0)/1000*NAV_FPS)),i=Math.floor(f),j=Math.min(run.fr.length-1,i+1),u=f-i,a=run.fr[i],b=run.fr[j];
+  return {L:a[0]+(b[0]-a[0])*u,R:a[1]+(b[1]-a[1])*u,vL:a[2]+(b[2]-a[2])*u,vR:a[3]+(b[3]-a[3])*u};}
+function navGo(ind,tL,tR,animate){const s=ind.__s||(ind.__s={L:tL,R:tR,run:null});
+  if(s.tL===tL&&s.tR===tR&&(s.run||(s.L===tL&&s.R===tR)))return;   /* 같은 목표 — 움직이는 중이면 그대로 둔다 */
+  const cur=navState(ind)||{L:tL,R:tR,vL:0,vR:0};navCancel(ind);s.tL=tL;s.tR=tR;s.L=tL;s.R=tR;s.run=null;
+  navSet(ind,tL,tR);   /* 끝 모습을 인라인에 먼저 — 애니메이션이 끝나거나 취소돼도 제자리 */
+  if(!animate||!canAnim()||reduced()||typeof ind.animate!=="function")return;
+  /* 스프링을 240Hz 로 적분해 60fps 표본을 만든다 */
+  const fr=[[cur.L,cur.R,cur.vL,cur.vR]];let L=cur.L,R=cur.R,vL=cur.vL,vR=cur.vR;const h=1/240;
+  for(let n=1;n<=240*2;n++){vL+=(-NAV_K*(L-tL)-NAV_C*vL)*h;L+=vL*h;vR+=(-NAV_K*(R-tR)-NAV_C*vR)*h;R+=vR*h;
+    if(n%4===0){fr.push([L,R,vL,vR]);if(Math.abs(L-tL)+Math.abs(R-tR)<.1&&Math.abs(vL)+Math.abs(vR)<.5)break;}}
+  fr.push([tL,tR,0,0]);if(fr.length<3)return;
+  const T=(fr.length-1)/NAV_FPS*1000,p=navParts(ind);
+  const kf={l:[],m:[],r:[]};for(const q of fr){const t=navTf(q[0],q[1]);kf.l.push({transform:t.l});kf.m.push({transform:t.m});kf.r.push({transform:t.r});}
+  s.run={t0:performance.now(),fr};const run=s.run;let a0=null;
+  for(const k of ["l","m","r"])if(p[k]){const a=p[k].animate(kf[k],{duration:T,easing:"linear"});if(!a0)a0=a;}
+  if(a0)a0.onfinish=()=>{if(s.run===run)s.run=null;};}
+/* 렌더 뒤: 켜진 탭에 맞춘다(처음 그릴 때는 이동 없이). 이미 그 탭으로 움직이는 중이면 손대지 않는다. */
 function navInd(root){const nav=root.querySelector(".nav"),ind=nav&&nav.querySelector(".ind"),on=nav&&nav.querySelector("button.on");if(!ind||!on)return;
-  const x=on.offsetLeft,w=on.offsetWidth;if(ind.__x===x&&ind.__w===w)return;   /* 같은 탭이면 손대지 않는다(예전엔 렌더마다 트윈이 돌았다 — 감사 9/21) */
-  const s=ind.__s||(ind.__s={L:x,R:x+w,vL:0,vR:0,raf:0});s.tL=x;s.tR=x+w;
-  if(ind.__x===undefined||!canAnim()||reduced()){s.L=s.tL;s.R=s.tR;s.vL=s.vR=0;navPaint(ind,s);ind.__x=x;ind.__w=w;return;}
-  ind.__x=x;ind.__w=w;s.dir=(s.tL+s.tR)/2>(s.L+s.R)/2?1:-1;
-  if(!s.raf){s.last=performance.now();s.raf=requestAnimationFrame(t=>navStep(ind,s,t));}}
-/* 탭 표시자 — 스프링(A안, 9/24 사용자 선택, 아티팩트 세 안 중): 박스 전체를 하나의 스프링(질량 1, k 380 · c 26)에 매단다 — 두 가장자리가 같은 스프링이라
-   늘어나거나 눌리지 않고, 목표를 약 6% 지나쳤다가 한 번 되돌아와 선다(약 0.45s). 연달아 누르면 달리던 속도를 이어받는다(트윈처럼 끊기지 않는다). 동작 줄이기면 바로 자리. */
-const NAV_LEAD=[380,26],NAV_TRAIL=[380,26];
-function navPaint(ind,s){const w=Math.max(8,s.R-s.L);ind.style.width=w+"px";ind.style.transform=`translateX(${s.L}px)`;}
-function navStep(ind,s,now){let dt=(now-s.last)/1000;if(!(dt>0))dt=0;dt=Math.min(.05,dt);s.last=Math.max(s.last,now);   /* rAF 시각이 시작 시각보다 앞설 수 있다 — 음수 스텝 금지(실측: 첫 프레임에 튀었다) */const n=Math.max(1,Math.ceil(dt*240)),h=dt/n;
-  const pL=s.dir>0?NAV_TRAIL:NAV_LEAD,pR=s.dir>0?NAV_LEAD:NAV_TRAIL;
-  for(let i=0;i<n;i++){s.vL+=(-pL[0]*(s.L-s.tL)-pL[1]*s.vL)*h;s.L+=s.vL*h;s.vR+=(-pR[0]*(s.R-s.tR)-pR[1]*s.vR)*h;s.R+=s.vR*h;
-    if(s.R-s.L<24){const m=(s.L+s.R)/2;s.L=m-12;s.R=m+12;}}
-  const moving=Math.abs(s.L-s.tL)+Math.abs(s.R-s.tR)>.08||Math.abs(s.vL)+Math.abs(s.vR)>.4;
-  if(!moving||!ind.isConnected){s.L=s.tL;s.R=s.tR;s.vL=s.vR=0;navPaint(ind,s);s.raf=0;return;}
-  navPaint(ind,s);s.raf=requestAnimationFrame(t=>navStep(ind,s,t));}
+  navGo(ind,on.offsetLeft,on.offsetLeft+on.offsetWidth,!!ind.__s);}
+/* 누르는 즉시: 탭 글자색과 박스를 먼저 옮긴다(새 화면은 그다음) */
+function navNow(view){const nav=document.querySelector(".nav"),ind=nav&&nav.querySelector(".ind"),b=nav&&nav.querySelector(`button[data-fk="nav:${view}"]`);if(!ind||!b)return;
+  for(const x of nav.querySelectorAll("button"))x.classList.toggle("on",x===b);navGo(ind,b.offsetLeft,b.offsetLeft+b.offsetWidth,true);}
+if(typeof window!=="undefined"&&window.addEventListener)window.addEventListener("resize",()=>{const nav=document.querySelector(".nav"),ind=nav&&nav.querySelector(".ind"),on=nav&&nav.querySelector("button.on");if(ind&&on&&ind.__s)navGo(ind,on.offsetLeft,on.offsetLeft+on.offsetWidth,false);});   /* Node 하네스에는 window 가 없다 */
 /* 펼침(data-reveal): 높이 0 에서 열린다 — 리포트 행 펼침 · Job 이름 묶음 */
 let _rvPrev=new Set();
 function reveals(root){const now=new Set();for(const el of root.querySelectorAll("[data-reveal]")){const k=el.getAttribute("data-reveal")||"";now.add(k);if(el.__rv)continue;el.__rv=1;if(_rvPrev.has(k)||!G()||reduced())continue;gsap.from(el,{height:0,opacity:0,duration:.32,ease:"power3.out",clearProps:"height,opacity"});}_rvPrev=now;}
@@ -1066,7 +1093,7 @@ function headerHtml(V){
   if(!fixed&&gen)stampTxt+=" · 수집 시각 정보 없음";
   const nav=[["home","가동률"],["errors","Error"],["trend","추이"],["report","TB500 · Kendall"]];
   return `<header class="hdr" data-key="hdr"><div class="brand"><span class="lt" data-lottie="scan" data-loop="1" data-static aria-hidden="true"></span>AOI 가동 현황</div>
-    <nav class="nav"><i class="ind" data-key="ind" aria-hidden="true"></i>${nav.map(([k,l])=>`<button class="${V===k?"on":""}" data-h="${h(S.go(k))}" data-fk="nav:${k}">${l}</button>`).join("")}</nav>
+    <nav class="nav"><i class="ind" data-key="ind" data-static aria-hidden="true"><b class="l"></b><b class="m"></b><b class="r"></b></i>${nav.map(([k,l])=>`<button class="${V===k?"on":""}" data-h="${h(S.go(k))}" data-fk="nav:${k}">${l}</button>`).join("")}</nav>
     <div class="spacer"></div>
     ${hasD?`<div class="daynav"><button class="ib" data-h="${h(()=>{if(state.dayI>0)setState({dayI:state.dayI-1,pickDay:undefined});})}" title="이전 날짜" data-fk="day:prev" ${state.dayI>0?"":"disabled"}>‹</button>
       <span class="daylab num">${dayName(day)}${D.partialDays&&D.partialDays.includes(day)?`<span class="partial" title="보관 기간의 첫날 — 수집 창이 이 날 도중에 시작해 하루 전체가 아닙니다">부분</span>`:""}</span>

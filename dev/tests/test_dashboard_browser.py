@@ -173,6 +173,7 @@ def test_device_popup_focus_inert_tab_trap_and_escape_return(page):
 def test_error_popup_type_popup_trend_and_report_tab(page):
     pg, errors, _ = page
     pg.locator('button[data-fk="nav:errors"]').click()
+    pg.wait_for_selector('main[data-key="view:errors"]')   # 새 화면은 표시자가 출발한 두 프레임 뒤에 그린다
     pg.wait_for_selector("main")
     assert "Error 대기" in pg.inner_text("main")                                     # D11 지표 이름
     pg.locator("button.rowbtn").filter(has_text="ALIGN_ERROR").first.click()
@@ -187,8 +188,10 @@ def test_error_popup_type_popup_trend_and_report_tab(page):
     pg.keyboard.press("Escape")
     pg.wait_for_selector('.dlg[data-dlg="err"]', state="detached")
     pg.locator('button[data-fk="nav:trend"]').click()
+    pg.wait_for_selector('main[data-key="view:trend"]')   # 새 화면은 표시자가 출발한 두 프레임 뒤에 그린다
     assert "날짜별 평균 가동률" in pg.inner_text("main")
     pg.locator('button[data-fk="nav:report"]').click()
+    pg.wait_for_selector('main[data-key="view:report"]')   # 새 화면은 표시자가 출발한 두 프레임 뒤에 그린다
     rpt = pg.inner_text("main")
     assert "TB500 · Kendall" in rpt and "개 Job 만 봅니다" in rpt                    # D59
     assert "평균 fault" in rpt and "수집 예정" not in rpt                             # D08
@@ -200,6 +203,7 @@ def test_narrow_viewport_has_no_horizontal_page_scroll(page):
     pg, errors, _ = page
     pg.set_viewport_size({"width": 390, "height": 800})
     pg.locator('button[data-fk="nav:report"]').click()
+    pg.wait_for_selector('main[data-key="view:report"]')   # 새 화면은 표시자가 출발한 두 프레임 뒤에 그린다
     assert pg.evaluate("document.documentElement.scrollWidth") <= 390
     assert errors == []
 
@@ -415,3 +419,22 @@ def test_stackbar_stays_top_left_while_the_popup_scrolls_and_lot_panel_fades_in_
     assert pg.evaluate("document.querySelector('.dlg[data-dlg=\"dev\"] .sel') === window.__sel")                     # 같은 박스
     assert pg.evaluate("window.__sel.getAnimations().every(a => a.startTime === window.__st)")                          # 페이드를 다시 돌리지 않는다
     assert errors == []
+
+
+def test_tab_indicator_survives_in_tab_clicks_and_follows_the_tab(page):
+    """탭 표시자(9/24): 같은 탭 안에서 다른 버튼을 눌러도 사라지지 않고(morph 가 인라인 스타일을 지우던 문제), 탭을 옮기면 그 탭에 가서 선다."""
+    pg, errors, _ = page
+    box = "(() => { const p = [...document.querySelectorAll('.nav .ind b')].map(e => e.getBoundingClientRect()), on = document.querySelector('.nav button.on').getBoundingClientRect(); return [Math.round(p[0].left), Math.round(p[2].right), Math.round(on.left), Math.round(on.right)]; })()"
+    b0 = pg.evaluate(box)
+    assert b0[0] == b0[2] and b0[1] == b0[3]
+    pg.locator('button[data-fk="seg:가동률 낮은 순"]').click()
+    pg.wait_for_selector('button[data-fk="seg:가동률 낮은 순"].on')
+    pg.wait_for_timeout(100)
+    assert pg.evaluate(box) == b0                                                       # 같은 탭 안 — 그대로
+    pg.locator('button[data-fk="nav:trend"]').click()
+    pg.wait_for_selector('main[data-key="view:trend"]')
+    pg.wait_for_timeout(900)
+    b1 = pg.evaluate(box)
+    assert b1[0] == b1[2] and b1[1] == b1[3] and b1 != b0                              # 새 탭에 가서 선다
+    assert errors == []
+
