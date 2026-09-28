@@ -20,7 +20,8 @@
 실행(현장 PC — 앱과 같은 사용자로, 수집이 돌지 않을 때):
   * git 폴더:        python test.py
   * 배포본(exe-lite): test.py 를 `AOI_Capacity_Lite\\app\\` 에 두고 그 폴더에서  ..\\python\\python.exe test.py
-  * 빠르게:          python test.py --quick        (표본을 절반으로)
+  * 옵션 없이 실행하면(더블클릭 포함) 측정 방식·장비·시간 등을 차례로 묻는다 — Enter 만 누르면 기본값.
+  * 옵션으로 바로:   python test.py --quick        (표본을 절반으로, 묻지 않음 · --ask 를 붙이면 그래도 묻는다)
   * 장비 일부만:     python test.py --devices AOI-1,AOI-9,4F-AOI-01
   결과: `%LOCALAPPDATA%\\AOI_Capacity\\bench\\nas_bench_<시각>.json` — 이 파일 하나를 첨부한다. Ctrl+C 로 멈춰도 그때까지 결과를 쓴다.
   결과에는 장비 경로·Job·Lot·Wafer 이름이 들어간다(분석용). 기본 설정이면 보통 15~30분, `--max-minutes`(기본 40)를 넘으면 남은 단계를 건너뛴다.
@@ -756,6 +757,86 @@ def analyze(out) -> None:
     out["summary_lines"] = lines
 
 
+# ----------------------------------------------------------------------------- 대화형 입력(옵션 없이 실행했을 때)
+def _ask(prompt: str, default: str = "") -> str:
+    shown = f"{prompt} [{default}]: " if default != "" else f"{prompt}: "
+    try:
+        got = input(shown).strip()
+    except EOFError:
+        return default
+    return got or default
+
+
+def _ask_int(prompt: str, default: int, lo: int = 0, hi: int = 10 ** 6) -> int:
+    while True:
+        v = _ask(prompt, str(default))
+        try:
+            n = int(v)
+            if lo <= n <= hi:
+                return n
+        except ValueError:
+            pass
+        print(f"  {lo}~{hi} 사이 숫자로 입력해 주세요.")
+
+
+def _ask_yes(prompt: str, default: bool) -> bool:
+    while True:
+        v = _ask(prompt + " (y/n)", "y" if default else "n").lower()
+        if v in ("y", "yes", "예", "ㅛ"):
+            return True
+        if v in ("n", "no", "아니오", "ㅜ"):
+            return False
+        print("  y 또는 n 으로 입력해 주세요.")
+
+
+def interactive(args) -> bool:
+    """옵션 없이 실행하면 필요한 값을 차례로 묻는다. Enter 만 누르면 [기본값]. False 면 실행하지 않는다."""
+    print("=" * 64)
+    print(" AOI Capacity — NAS 읽기 성능 측정 (읽기 전용, NAS 에는 아무것도 쓰지 않습니다)")
+    print(" 값을 묻는 곳에서 Enter 만 누르면 [괄호 안 기본값]을 씁니다.")
+    print("=" * 64)
+    print(" 1) 기본 측정   — 보통 15~30분(권장)")
+    print(" 2) 빠른 측정   — 표본 절반, 보통 8~15분")
+    print(" 3) 직접 설정   — 표본 수·동시성 단계를 하나씩 정함")
+    mode = _ask_int("측정 방식 번호", 1, 1, 3)
+    if mode == 2:
+        args.quick = True
+    args.devices = _ask("측정할 장비(쉼표로 구분, 예: AOI-1,AOI-9 · 비우면 수집 범위 전체)", "")
+    if mode == 3:
+        args.days = _ask_int("Report 를 고를 최근 일수", args.days, 1, 60)
+        args.reports_per_device = _ask_int("장비마다 읽을 Report 수", args.reports_per_device, 1, 200)
+        args.serial_wafers = _ask_int("NAS 묶음마다 한 줄로 잴 Wafer 수", args.serial_wafers, 0, 5000)
+        args.api_wafers = _ask_int("NAS 묶음마다 파일 확인 방식 비교 Wafer 수", args.api_wafers, 0, 5000)
+        args.skip_listing = not _ask_yes("Report 목록 방식 비교를 할까요", True)
+        args.skip_sweep = not _ask_yes("동시성 곡선(1·2·4·8·16개)을 잴까요", True)
+        if not args.skip_sweep:
+            args.sweep_wafers = _ask_int("동시성 한 단계의 Wafer 수", args.sweep_wafers, 5, 5000)
+            while True:
+                lv = _ask("동시성 단계(쉼표로 구분)", args.levels)
+                try:
+                    if all(0 < int(x) <= 64 for x in lv.split(",") if x.strip()):
+                        args.levels = lv
+                        break
+                except ValueError:
+                    pass
+                print("  1~64 사이 숫자를 쉼표로 구분해 입력해 주세요.")
+    lot = _ask_yes("Lot 폴더 한 단계 나열(조사용, 최대 30개)도 할까요", True)
+    args.lot_list_max = args.lot_list_max if lot else 0
+    args.max_minutes = _ask_int("최대 실행 시간(분) — 넘으면 남은 단계를 건너뜀", int(args.max_minutes), 5, 600)
+    print("-" * 64)
+    print(f" 방식 {['', '기본', '빠른', '직접 설정'][mode]} · 장비 {args.devices or '수집 범위 전체'} · "
+          f"Lot 나열 {'함' if args.lot_list_max else '안 함'} · 최대 {args.max_minutes}분")
+    return _ask_yes("이대로 시작할까요", True)
+
+
+def _pause() -> None:
+    """더블클릭으로 연 창이 바로 닫히지 않게."""
+    try:
+        input("\nEnter 키를 누르면 창을 닫습니다...")
+    except EOFError:
+        pass
+
+
 # ----------------------------------------------------------------------------- main
 def main(argv=None) -> int:
     for stream in (sys.stdout, sys.stderr):
@@ -779,7 +860,26 @@ def main(argv=None) -> int:
     ap.add_argument("--quick", action="store_true", help="표본 절반")
     ap.add_argument("--skip-sweep", action="store_true")
     ap.add_argument("--skip-listing", action="store_true")
+    ap.add_argument("--ask", action="store_true", help="옵션을 주더라도 실행할 때 값을 물어본다")
     args = ap.parse_args(argv)
+    raw = sys.argv[1:] if argv is None else list(argv)
+    asked = args.ask or (not raw and sys.stdin is not None and sys.stdin.isatty())   # 옵션 없이 실행 → 값을 묻는다
+    if asked:
+        try:
+            go = interactive(args)
+        except KeyboardInterrupt:
+            go = False
+        if not go:
+            print("측정을 시작하지 않았습니다.")
+            _pause()
+            return 1
+    rc = _run(args)
+    if asked:
+        _pause()
+    return rc
+
+
+def _run(args) -> int:
     if args.quick:
         args.reports_per_device = max(3, args.reports_per_device // 2)
         args.serial_wafers, args.api_wafers, args.sweep_wafers = args.serial_wafers // 2, args.api_wafers // 2, args.sweep_wafers // 2
