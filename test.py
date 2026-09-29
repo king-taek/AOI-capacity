@@ -14,6 +14,9 @@
   G  전 묶음 동시 — 네 묶음을 함께 4·8·12개 × 2회(묶음끼리 간섭).
   C  카나리아    — 측정 내내 묶음마다 15초 간격으로 같은 파일 stat 1번 → NAS 부하의 시간 변화(다른 결과를 해석하는 기준선).
   A  탐색(A·B·C안) — 1판과 같은 직렬 탐색·부모 폴더 확인(작게).
+  ★ 실제 수집(메뉴 4 · --real-collect) — 최근 N일(기본 2)을 **앱의 collect.collect 그대로** 수집: 처음(빈 캐시) → 곧바로 다시(증분 ·
+    이름 패턴 목록) → 전체 목록 강제(하루 한 번 수집과 같은 모양). 앱이 부르는 NAS 읽기 함수(Report·INI 읽기 · 나열 · isfile/isdir)를
+    감싸 요청마다 시간을 재고, 단계별 시간·NAS 별 평균 동시 수·30초 창 타임라인을 남긴다. 캐시·HTML 은 측정용 로컬 폴더에만.
 
 지키는 것(CLAUDE.md 절대 규칙):
   * NAS 는 **읽기만** 한다 — open 은 'rb'/O_RDONLY, CreateFileW 는 GENERIC_READ + OPEN_EXISTING 만. 쓰는 파일은 로컬 결과 JSON 하나
@@ -1057,6 +1060,226 @@ def analyze(out) -> None:
     out["summary_lines"] = lines
 
 
+# ----------------------------------------------------------------------------- 실제 수집 측정(앱의 collect.collect 그대로, 최근 N일)
+class OpRecorder:
+    """앱이 부르는 NAS 읽기 함수를 감싸 시간만 잰다(동작은 그대로 — 예외도 그대로 올린다). NAS 경로만 센다."""
+
+    def __init__(self, roots) -> None:
+        self.roots = [r for r in roots if r]
+        self.rec: list = []
+        self.slow: list = []
+        self.lock = threading.Lock()
+        self.saved: list = []
+        self._gidx: dict = {}
+
+    def is_nas(self, path) -> bool:
+        try:
+            p = os.fspath(path)
+        except TypeError:
+            return False
+        return any(nas_guard.is_under(p, r) for r in self.roots)
+
+    def add(self, kind, path, t0, res) -> None:
+        ms = ms_since(t0)
+        try:
+            g = collect.nas_group(os.fspath(path))
+        except Exception:  # noqa: BLE001
+            g = "?"
+        with self.lock:
+            gi = self._gidx.setdefault(g, len(self._gidx))
+            self.rec.append((kind, gi, round(t0 - T0, 4), round(ms, 2), res))
+            if ms > 2000:
+                self.slow.append({"kind": kind, "ms": round(ms), "res": res, "path": os.fspath(path)})
+
+    def wrap(self, owner, name, kind, materialize=False, is_path_fn=True):
+        orig = getattr(owner, name)
+        rec = self
+
+        def w(path, *a, **k):
+            if not rec.is_nas(path):
+                return orig(path, *a, **k)
+            t0 = time.perf_counter()
+            try:
+                out = orig(path, *a, **k)
+                if materialize:
+                    out = list(out)
+                res = "ok"
+                if kind in ("isfile", "isdir") and not out:
+                    res = "false"
+                return iter(out) if materialize else out
+            except MISSING_EXC:
+                res = "missing"
+                raise
+            except BaseException:
+                res = "error"
+                raise
+            finally:
+                rec.add(kind, path, t0, res)
+
+        self.saved.append((owner, name, orig))
+        setattr(owner, name, w)
+        return w
+
+    def install(self) -> None:
+        self.wrap(nas_guard, "read_bytes", "read_report")
+        self.wrap(nas_guard, "read_text", "read_ini")
+        self.wrap(nas_guard, "scandir", "scandir", materialize=True)
+        if collect.PATTERN_LISTER is not None:
+            self.wrap(nas_guard, "find_pattern", "find_pattern")
+            self.saved.append((collect, "PATTERN_LISTER", collect.PATTERN_LISTER))
+            collect.PATTERN_LISTER = nas_guard.find_pattern
+        self.wrap(os.path, "isfile", "isfile")
+        self.wrap(os.path, "isdir", "isdir")
+        self.wrap(os.path, "getmtime", "getmtime")
+
+    def uninstall(self) -> None:
+        for owner, name, orig in reversed(self.saved):
+            setattr(owner, name, orig)
+        self.saved.clear()
+
+    def summary(self, wall_s: float) -> dict:
+        groups = {i: g for g, i in self._gidx.items()}
+        by_kind = collections.defaultdict(list)
+        by_group = collections.defaultdict(lambda: collections.defaultdict(list))
+        for kind, gi, _t, ms, res in self.rec:
+            by_kind[f"{kind}:{res}"].append(ms)
+            by_group[groups[gi]][f"{kind}:{res}"].append(ms)
+        out = {"ops": len(self.rec), "by_kind": {k: dist(v) for k, v in sorted(by_kind.items())}, "per_group": {}}
+        for g, d in by_group.items():
+            busy = sum(sum(v) for v in d.values()) / 1000.0
+            out["per_group"][g] = {"ops": sum(len(v) for v in d.values()), "busy_s": round(busy, 1),
+                                   "avg_concurrency": round(busy / wall_s, 2) if wall_s else None,
+                                   "by_kind": {k: {"n": len(v), "p50": pct(v, 50), "p95": pct(v, 95), "sum_s": round(sum(v) / 1000, 1)}
+                                               for k, v in sorted(d.items())}}
+        # 30초 창마다 묶음별 동시 진행 수(평균)
+        tl = collections.defaultdict(lambda: collections.defaultdict(float))
+        for _kind, gi, t, ms, _res in self.rec:
+            tl[int(t // 30)][groups[gi]] += ms / 1000.0
+        out["timeline_30s"] = {k * 30: {g: round(v / 30, 2) for g, v in d.items()} for k, d in sorted(tl.items())}
+        out["slowest"] = sorted(self.slow, key=lambda x: -x["ms"])[:40]
+        return out
+
+
+def real_collect_runs(cfg, args, out_dir, out) -> None:
+    """최근 N일을 **앱과 같은 collect.collect** 로 실제로 수집한다 — 캐시·HTML 은 측정용 로컬 폴더에만(평소 캐시·결과는 건드리지 않는다).
+
+    회차: 처음 수집(빈 캐시) → 곧바로 다시(증분 · 이름 패턴 목록) → 전체 목록 강제(하루 한 번 수집과 같은 모양). 동시 수마다 반복."""
+    import copy
+    import signal
+
+    run_root = os.path.join(out_dir, "real_" + dt.datetime.now().strftime("%Y%m%d_%H%M%S"))
+    nas_guard.assert_local(run_root, nas_guard.expand_roots(nas_guard.roots_for_cfg(cfg)))
+    os.makedirs(run_root, exist_ok=True)
+    roots = nas_guard.expand_roots(nas_guard.roots_for_cfg(cfg))
+    stop = threading.Event()
+    prev_handler = None
+    try:
+        prev_handler = signal.signal(signal.SIGINT, lambda *_: (stop.set(), log("Ctrl+C — 지금 회차를 멈춥니다(읽던 파일은 끝까지 읽고 멈춤)")))
+    except Exception:  # noqa: BLE001
+        pass
+    runs = []
+    deadline = Deadline(args.max_minutes)
+    workers = [int(x) for x in str(args.collect_workers).split(",") if x.strip()]
+    kinds = ["fresh"] + (["again"] if args.collect_again else []) + (["full_relist"] if args.collect_full_relist else [])
+    try:
+        for w in workers:
+            cache_file = os.path.join(run_root, f"cache_w{w}.json")
+            for kind in kinds:
+                if stop.is_set() or deadline.over():
+                    break
+                c2 = copy.deepcopy(cfg)
+                c2.update({"cache_file": cache_file, "output_dir": os.path.join(run_root, f"w{w}"), "read_workers": w,
+                           "backfill_days": args.collect_days, "retention_days": args.collect_days,
+                           "refresh_window_days": 0, "rebuild_all": False, "write_csv": False})
+                c2, problems = config_mod.normalize_config(c2)
+                if config_mod.fatal(problems):
+                    raise RuntimeError("측정용 설정 오류: " + "; ".join(p.message() for p in config_mod.fatal(problems)))
+                label = f"w{w}:{kind}"
+                log(f"━━ 실제 수집 {label} — 최근 {args.collect_days}일, NAS 마다 동시 {w}개")
+                rec = OpRecorder(roots)
+                saved_full = collect.FULL_LIST_EVERY_SEC
+                if kind == "full_relist":
+                    collect.FULL_LIST_EVERY_SEC = 0          # 마지막 전체 나열이 20시간 넘은 것처럼 — 하루 한 번 수집과 같은 목록
+                stats: dict = {}
+                phases: list = []
+                last = {"phase": None}
+
+                def progress(done, total, phase, _last=last, _phases=phases):
+                    ph = str(phase or "")
+                    key = "list" if "새 Report 찾는 중" in ph else ("read" if " · " in ph else ph)
+                    t = now_s()
+                    if key != _last["phase"] or t - _last.get("t", 0) >= 5:   # 단계가 바뀔 때와 5초마다 진행 수
+                        _last["phase"], _last["t"] = key, t
+                        _phases.append({"t": t, "phase": key, "done": done, "total": total})
+
+                logs: list = []
+                t0 = time.perf_counter()
+                status, err = "ok", ""
+                rows = dev_meta = errors = None
+                rec.install()
+                try:
+                    rows, dev_meta, errors = collect.collect(c2, progress=progress, log=logs.append, stats=stats,
+                                                             should_stop=lambda: stop.is_set() or deadline.over())
+                except collect.CollectCancelled:
+                    status = "cancelled"
+                except Exception as e:  # noqa: BLE001
+                    status, err = "error", traceback.format_exc()
+                    log(f"수집 오류: {e}")
+                finally:
+                    rec.uninstall()
+                    collect.FULL_LIST_EVERY_SEC = saved_full
+                wall = time.perf_counter() - t0
+                html_ms, html_mb = None, None
+                if status == "ok":
+                    t1 = time.perf_counter()
+                    try:
+                        warn: list = []
+                        path = collect.write_html(c2, rows, dev_meta, errors, time.time() - wall, mode="auto", timing=stats, warnings=warn)
+                        html_ms = round(ms_since(t1))
+                        html_mb = round(os.path.getsize(path) / 1e6, 2) if path and os.path.isfile(path) else None
+                    except Exception as e:  # noqa: BLE001
+                        log(f"HTML 쓰기 오류(측정용 폴더): {e}")
+                r = {"label": label, "workers": w, "kind": kind, "status": status, "error": err, "wall_s": round(wall, 1),
+                     "stats": stats, "html_ms": html_ms, "html_mb": html_mb, "phases": phases,
+                     "rows": len(rows or []), "errors": len(errors or []),
+                     "devices": [{k: d.get(k) for k in ("name", "reports", "found", "read_errors", "error", "listing", "read_sum_ms", "kept", "status")}
+                                 for d in (dev_meta or [])],
+                     "ops": rec.summary(wall), "log": logs[-400:]}
+                runs.append(r)
+                out["real_collect"] = {"run_dir": run_root, "days": args.collect_days, "runs": runs}
+                st = stats
+                log(f"   {label}: {wall:.0f}초 · 장비확인 {st.get('devices_ms', 0) / 1000:.1f}s · 목록 {st.get('list_ms', 0) / 1000:.1f}s · "
+                    f"읽기 {st.get('read_ms', 0) / 1000:.1f}s · 캐시 {st.get('cache_ms', 0) / 1000:.1f}s · HTML {((html_ms or 0) / 1000):.1f}s · "
+                    f"Report {st.get('reports_read', 0)}개 · INI {st.get('ini_unique', 0)}건(없음 {st.get('ini_missing', 0)}) · "
+                    f"이름 패턴 목록 {st.get('list_pattern', 0)}대 · NAS 요청 {r['ops']['ops']}건")
+                if status != "ok":
+                    break
+    finally:
+        if prev_handler is not None:
+            try:
+                signal.signal(signal.SIGINT, prev_handler)
+            except Exception:  # noqa: BLE001
+                pass
+    out["real_collect"] = {"run_dir": run_root, "days": args.collect_days, "runs": runs}
+
+
+def real_collect_summary(out) -> list:
+    lines = []
+    rc = out.get("real_collect") or {}
+    for r in rc.get("runs", []):
+        st = r.get("stats") or {}
+        lines.append(f"[{r['label']}] {r['status']} {r['wall_s']}초 = 장비확인 {st.get('devices_ms', 0) / 1000:.1f} + 목록 {st.get('list_ms', 0) / 1000:.1f}"
+                     f" + 읽기 {st.get('read_ms', 0) / 1000:.1f} + 캐시 {st.get('cache_ms', 0) / 1000:.1f} (HTML {((r.get('html_ms') or 0) / 1000):.1f}s)"
+                     f" · Report {st.get('reports_read', 0)}/{st.get('reports_found', 0)} · INI {st.get('ini_unique', 0)}(없음 {st.get('ini_missing', 0)})"
+                     f" · 패턴 목록 {st.get('list_pattern', 0)}대")
+        for g, v in (r.get("ops") or {}).get("per_group", {}).items():
+            k = v["by_kind"]
+            lines.append(f"    {g}: 요청 {v['ops']} · 평균 동시 {v['avg_concurrency']} · Report 읽기 p50 {k.get('read_report:ok', {}).get('p50')}ms"
+                         f" · INI p50 {k.get('read_ini:ok', {}).get('p50')}ms(없음 {k.get('read_ini:missing', {}).get('p50')}ms)"
+                         f" · 목록 {round(k.get('scandir:ok', {}).get('sum_s', 0) + k.get('find_pattern:ok', {}).get('sum_s', 0), 1)}s")
+    return lines
+
+
 # ----------------------------------------------------------------------------- 대화형 입력(옵션 없이 실행했을 때)
 def _ask(prompt: str, default: str = "") -> str:
     shown = f"{prompt} [{default}]: " if default != "" else f"{prompt}: "
@@ -1109,9 +1332,22 @@ def interactive(args) -> bool:
     print(" 1) 정밀 측정   — 반복 3회 · 순서 교차 · 시각 일치 검사, 약 25~35분(권장)")
     print(" 2) 빠른 측정   — 반복 1회 · 표본 적게, 약 8~12분")
     print(" 3) 직접 설정   — 반복 수·표본 수·동시성 단계를 하나씩 정함")
-    mode = _ask_int("측정 방식 번호", 1, 1, 3)
+    print(" 4) 실제 수집   — 최근 며칠을 앱과 똑같이 수집하며 단계·요청별 속도 기록(평소 캐시·결과는 그대로)")
+    mode = _ask_int("측정 방식 번호", 1, 1, 4)
     if mode == 2:
         args.quick = True
+    if mode == 4:
+        args.real_collect = True
+        args.collect_days = _ask_int("수집할 최근 일수", args.collect_days, 1, 30)
+        args.collect_workers = _ask_levels("NAS 마다 동시 읽기 수(쉼표로 여러 개면 차례로 비교, 예: 8 또는 8,16)", args.collect_workers)
+        args.collect_again = _ask_yes("처음 수집 뒤 곧바로 한 번 더(증분 · 이름 패턴 목록) 잴까요", True)
+        args.collect_full_relist = _ask_yes("전체 목록으로 한 번 더(하루 한 번 수집과 같은 모양) 잴까요", True)
+        args.max_minutes = _ask_int("최대 실행 시간(분)", int(args.max_minutes), 5, 600)
+        print("-" * 70)
+        print(f" 실제 수집 · 최근 {args.collect_days}일 · 동시 {args.collect_workers} · 곧바로 다시 {'함' if args.collect_again else '안 함'}"
+              f" · 전체 목록 다시 {'함' if args.collect_full_relist else '안 함'}")
+        print(" 캐시·HTML 은 측정용 폴더(%LOCALAPPDATA%\\AOI_Capacity\\bench\\real_…)에만 만들고 평소 결과는 건드리지 않습니다.")
+        return _ask_yes("이대로 시작할까요", True)
     args.devices = _ask("측정할 장비(쉼표로 구분, 예: AOI-1,AOI-9 · 비우면 수집 범위 전체)", "")
     if mode == 3:
         args.days = _ask_int("Report 를 고를 최근 일수(1~14)", args.days, 1, 14)
@@ -1170,6 +1406,11 @@ def main(argv=None) -> int:
     ap.add_argument("--max-minutes", type=float, default=50)
     ap.add_argument("--seed", type=int, default=20260930)
     ap.add_argument("--quick", action="store_true", help="반복 1회 · 표본 적게(약 10분)")
+    ap.add_argument("--real-collect", action="store_true", help="최근 며칠을 앱과 똑같이 실제 수집하며 속도 기록")
+    ap.add_argument("--collect-days", type=int, default=2)
+    ap.add_argument("--collect-workers", default="8", help="NAS 마다 동시 읽기 수, 쉼표로 여러 개면 차례로")
+    ap.add_argument("--no-collect-again", dest="collect_again", action="store_false")
+    ap.add_argument("--no-collect-full-relist", dest="collect_full_relist", action="store_false")
     ap.add_argument("--ask", action="store_true", help="옵션을 주더라도 실행할 때 값을 물어본다")
     args = ap.parse_args(argv)
     raw = sys.argv[1:] if argv is None else list(argv)
@@ -1207,8 +1448,11 @@ def _run(args) -> int:
     out_dir = args.out or str(paths.data_root() / "bench")
     nas_guard.assert_local(out_dir, nas_guard.expand_roots(nas_guard.roots_for_cfg(cfg)))   # 결과 파일은 NAS 밖에만
     os.makedirs(out_dir, exist_ok=True)
-    out_path = os.path.join(out_dir, "nas_bench_" + dt.datetime.now().strftime("%Y%m%d_%H%M%S") + ".json")
+    prefix = "nas_collect_" if args.real_collect else "nas_bench_"
+    out_path = os.path.join(out_dir, prefix + dt.datetime.now().strftime("%Y%m%d_%H%M%S") + ".json")
     out: dict = {"args": vars(args)}
+    if args.real_collect:
+        return _run_real(cfg, args, out_dir, out_path, out)
     deadline = Deadline(args.max_minutes)
     status, canary, stage_ms = "ok", None, {}
 
@@ -1252,6 +1496,39 @@ def _run(args) -> int:
     out["stage_ms"] = stage_ms
     try:
         analyze(out)
+    except Exception:  # noqa: BLE001
+        out["analysis_error"] = traceback.format_exc()
+    out["status"] = status
+    out["elapsed_s"] = round(time.perf_counter() - T0, 1)
+    out["log"] = LOG
+    with open(out_path, "w", encoding="utf-8") as f:
+        json.dump(out, f, ensure_ascii=False, default=str)
+    print()
+    for line in out.get("summary_lines", []):
+        print("  " + line)
+    print(f"\n결과 파일: {out_path}\n이 파일을 첨부해 주세요.")
+    return 0 if status == "ok" else 2
+
+
+def _run_real(cfg, args, out_dir, out_path, out) -> int:
+    status = "ok"
+    try:
+        log("── 환경")
+        stage_env(cfg, out)
+        real_collect_runs(cfg, args, out_dir, out)
+        runs = (out.get("real_collect") or {}).get("runs") or []
+        if any(r["status"] == "cancelled" for r in runs):
+            status = "interrupted"
+        elif any(r["status"] == "error" for r in runs):
+            status = "error"
+    except KeyboardInterrupt:
+        status = "interrupted"
+    except Exception as e:  # noqa: BLE001
+        status = "error"
+        out["error"] = traceback.format_exc()
+        log(f"오류: {e}")
+    try:
+        out["summary_lines"] = real_collect_summary(out)
     except Exception:  # noqa: BLE001
         out["analysis_error"] = traceback.format_exc()
     out["status"] = status
