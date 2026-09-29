@@ -146,14 +146,44 @@ def check_cfg(cfg: dict, roots: Optional[List[str]] = None) -> List[str]:
 
 
 # ── 읽기 헬퍼(쓰기 모드는 존재하지 않는다) ─────────────────────────────
-def read_text(path, encoding: str = "utf-8", errors: str = "replace") -> str:
-    with open(path, "r", encoding=encoding, errors=errors) as f:
-        return f.read()
+#: 읽기 전용 플래그 — O_WRONLY · O_RDWR · O_CREAT · O_TRUNC · O_APPEND 는 여기 없다(가드: test_nas_read.py).
+_READ_FLAGS = os.O_RDONLY | getattr(os, "O_BINARY", 0) | getattr(os, "O_NOINHERIT", 0)
+_MIN_READ = 1 << 16
+
+
+def _read_all(path) -> bytes:
+    """파일 전체 바이트 — `os.open` + 크기(fstat) + `os.read` 대개 **한 번**.
+
+    `open(path, "rb").read()` 는 크기만큼 읽은 뒤 EOF 를 확인하려고 한 번 더 읽는다. SMB 에서는 그게 왕복 하나라
+    작은 INI 에서 눈에 띈다(9/29 현장 실측, 방식마다 약 100개: 167 → 118ms, 중앙값 95% 구간이 겹치지 않음).
+    여기서는 크기+1 을 청해 그보다 적게 오면(= EOF) 멈춘다. 읽는 도중 파일이 자라도 짧게 올 때까지 계속 읽어 잘리지 않는다.
+    예외는 예전과 같은 종류다(없음 FileNotFoundError, 폴더는 IsADirectoryError/PermissionError)."""
+    fd = os.open(path, _READ_FLAGS)
+    try:
+        size = os.fstat(fd).st_size
+        chunks, total = [], 0
+        while True:
+            want = max(size - total + 1, _MIN_READ)
+            chunk = os.read(fd, want)
+            if not chunk:
+                break
+            chunks.append(chunk)
+            total += len(chunk)
+            if len(chunk) < want and total >= size:
+                break
+        return b"".join(chunks)
+    finally:
+        os.close(fd)
 
 
 def read_bytes(path) -> bytes:
-    with open(path, "rb") as f:
-        return f.read()
+    """파일 전체 바이트(읽기 전용, `_read_all`)."""
+    return _read_all(path)
+
+
+def read_text(path, encoding: str = "utf-8", errors: str = "replace") -> str:
+    """`open(path, "r", encoding=, errors=).read()` 와 같은 결과(보편 줄바꿈: \\r\\n · \\r → \\n) — 읽기는 `_read_all` 로 한 번(`read_bytes` 를 거치지 않아 호출 수를 세는 쪽이 두 번 세지 않는다)."""
+    return _read_all(path).decode(encoding, errors).replace("\r\n", "\n").replace("\r", "\n")
 
 
 def scandir(path):

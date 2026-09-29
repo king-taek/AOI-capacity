@@ -1071,6 +1071,7 @@ class OpRecorder:
         self.lock = threading.Lock()
         self.saved: list = []
         self._gidx: dict = {}
+        self.tls = threading.local()
 
     def is_nas(self, path) -> bool:
         try:
@@ -1096,15 +1097,17 @@ class OpRecorder:
         rec = self
 
         def w(path, *a, **k):
-            if not rec.is_nas(path):
+            if getattr(rec.tls, "depth", 0) or not rec.is_nas(path):   # 안쪽 호출(read_text → read_bytes)은 한 번만 센다
                 return orig(path, *a, **k)
+            rec.tls.depth = 1
+            kind_now = "find_all" if (kind == "find_pattern" and a and a[0] == "*") else kind
             t0 = time.perf_counter()
             try:
                 out = orig(path, *a, **k)
                 if materialize:
                     out = list(out)
                 res = "ok"
-                if kind in ("isfile", "isdir") and not out:
+                if kind_now in ("isfile", "isdir") and not out:
                     res = "false"
                 return iter(out) if materialize else out
             except MISSING_EXC:
@@ -1114,7 +1117,8 @@ class OpRecorder:
                 res = "error"
                 raise
             finally:
-                rec.add(kind, path, t0, res)
+                rec.tls.depth = 0
+                rec.add(kind_now, path, t0, res)
 
         self.saved.append((owner, name, orig))
         setattr(owner, name, w)
@@ -1128,6 +1132,9 @@ class OpRecorder:
             self.wrap(nas_guard, "find_pattern", "find_pattern")
             self.saved.append((collect, "PATTERN_LISTER", collect.PATTERN_LISTER))
             collect.PATTERN_LISTER = nas_guard.find_pattern
+        if getattr(collect, "FULL_LISTER", None) is not None:      # 9/30 부터 전체 나열도 대량 조회
+            self.saved.append((collect, "FULL_LISTER", collect.FULL_LISTER))
+            collect.FULL_LISTER = nas_guard.find_pattern
         self.wrap(os.path, "isfile", "isfile")
         self.wrap(os.path, "isdir", "isdir")
         self.wrap(os.path, "getmtime", "getmtime")
@@ -1276,7 +1283,7 @@ def real_collect_summary(out) -> list:
             k = v["by_kind"]
             lines.append(f"    {g}: 요청 {v['ops']} · 평균 동시 {v['avg_concurrency']} · Report 읽기 p50 {k.get('read_report:ok', {}).get('p50')}ms"
                          f" · INI p50 {k.get('read_ini:ok', {}).get('p50')}ms(없음 {k.get('read_ini:missing', {}).get('p50')}ms)"
-                         f" · 목록 {round(k.get('scandir:ok', {}).get('sum_s', 0) + k.get('find_pattern:ok', {}).get('sum_s', 0), 1)}s")
+                         f" · 목록 {round(sum(k.get(x, {}).get('sum_s', 0) for x in ('scandir:ok', 'find_pattern:ok', 'find_all:ok')), 1)}s")
     return lines
 
 

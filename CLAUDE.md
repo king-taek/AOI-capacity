@@ -219,6 +219,9 @@ Camtek AOI 장비의 BatchReport/WaferInfo.ini 를 읽어 장비별 가동률을
 `*_YY-Mon-DD_(*` 패턴을 커서 전날~내일만큼 만들어 **NAS 가 거르게** 한다(`report_name_patterns` · `PATTERN_LISTER` = `nas_guard.find_pattern`, Windows `FindFirstFileExW` · 다른 OS 는 None).
 고르는 규칙은 전체 나열과 같다(부분집합만 받는다). 처음 보는 장비 · backfill · refresh · recover · rebuild · 패턴 14일 초과 · 패턴 실패 · 마지막 전체 나열(캐시 `full_listed`)이 20시간(`FULL_LIST_EVERY_SEC`) 넘음이면 **전체 나열** —
 이름 규칙 밖 파일(`EXPORT.htm`)·나중에 다시 쓰인 옛 Report 는 그때 잡힌다(가드 `test_collect_listing.py`, 목록 단계 9/18 실측 5.5분).
+**전체 나열·파일 읽기(9/30)**: 전체 나열은 `FULL_LISTER`(Windows `find_pattern(폴더, "*")` = FindFirstFileExW LARGE_FETCH, 실패하면 scandir)로 — 같은 항목·순서를 적은 왕복으로 받는다(9/29 현장 p50 3.7배).
+`nas_guard.read_bytes/read_text` 는 `os.open`(읽기 전용 `_READ_FLAGS`) + fstat 크기 + `os.read` 대개 한 번 — `open().read()` 의 EOF 확인 읽기(SMB 왕복 하나)가 없다(INI 167 → 118ms).
+결과는 예전과 바이트·문자열까지 같다(보편 줄바꿈 포함). 가드 `test_nas_read.py`. 측정 도구는 저장소 맨 위 `test.py`(읽기 전용, 결과는 로컬 JSON — 메뉴 4 는 앱의 collect 그대로 최근 N일 실제 수집).
 GUI 체크 '최근 N일 다시 읽기(이력 보존)' 은 `refresh_window_days`(N 은 '처음 수집 기간' 스핀 값). 캐시 저장은 고유 tmp → fsync → strict 재읽기 검증 → `os.replace`, 손상 캐시는 덮어쓰지 않고 `aoi_cache.json.bad-<시각>` 으로 보존(C15).
 CSV 를 못 쓰는 OS 오류(Excel 잠금)는 실패가 아니라 **부분 성공**(`warnings`, CLI exit 3, 워커 `completed_with_warnings`) — HTML 이 주 산출물이다(C06). 회귀 가드: `test_collect_incremental.py` · `test_collector_worker.py`.
 캐시는 **바뀐 이유(`_Dirty`: created · corrupt · format · parser · cursor · identity · device_mapping · reports · reports_updated · failed · retention · rebuild · listing)가 있을 때만 저장**한다 — 아무것도 안 바뀐 실행은 파일을 건드리지 않는다(mtime·바이트 동일), rows 0 이어도 커서·재시도·보관 정리는 저장(C04, `stats["cache_dirty"]`·`cache_saved`).

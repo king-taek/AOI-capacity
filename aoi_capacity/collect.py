@@ -78,6 +78,10 @@ PATTERN_MAX_DAYS = 14          # 커서가 이보다 오래됐으면(며칠 수�
 _MONTHS = ("Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec")
 #: 패턴 나열 함수(폴더, 패턴) → 항목 목록. Windows 에서만 있다 — 다른 OS(개발·CI)는 None 이라 예전처럼 전체 나열만 한다(테스트는 가짜로 바꿔 끼운다).
 PATTERN_LISTER: Optional[Callable[[str, str], list]] = nas_guard.find_pattern if os.name == "nt" else None
+#: 전체 나열 함수(폴더, "*") — Windows 는 `FindFirstFileExW`(LARGE_FETCH)로 한 번에 크게 받는다. `os.scandir` 도 같은 API 지만
+#: 큰 버퍼를 쓰지 않아 왕복이 많다(9/29 현장 실측, 장비 8대 × 3회 · 순서 교차: scandir 0.4~8.8초 ↔ 0.1~1.3초, 배수 p50 3.7).
+#: 받는 항목·순서는 같고, 실패하면 scandir 로 되돌아간다. 다른 OS 는 None(예전처럼 scandir).
+FULL_LISTER: Optional[Callable[[str, str], list]] = nas_guard.find_pattern if os.name == "nt" else None
 
 DEFAULT_CONFIG: Dict[str, object] = {
     "devices_csv": "",
@@ -1557,6 +1561,16 @@ def report_name_patterns(since: float, now: float) -> Optional[List[str]]:
     return [f"*_{d.year % 100:02d}-{_MONTHS[d.month - 1]}-{d.day:02d}_(*" for d in (d0 + dt.timedelta(days=k) for k in range(days))]
 
 
+def _list_all(rep_dir: str, name: str) -> list:
+    """Report 폴더 전체 나열 — `FULL_LISTER`(Windows 대량 조회)가 있으면 그것, 실패하면 scandir(폴더가 없으면 거기서 OSError)."""
+    if FULL_LISTER is not None:
+        try:
+            return list(FULL_LISTER(rep_dir, "*"))
+        except Exception as ex:  # noqa: BLE001 — 대량 조회만 안 되는 경우(ctypes · 드문 SMB) — scandir 로 다시
+            _LOG.warning("[%s] 대량 조회 나열 실패(%s) — scandir 로 다시 나열합니다", name, ex)
+    return list(nas_guard.scandir(rep_dir))
+
+
 def _list_new_reports(devs, cache, cfg, backfill, log, progress, on_device, should_stop, recover=False,
                       refresh_days: int = 0, window_days=None):
     """1차 패스: 장비마다 Report 폴더를 한 번 나열(scandir+stat 만)해 읽을 파일을 고른다. NAS 읽기 전용.
@@ -1624,7 +1638,7 @@ def _list_new_reports(devs, cache, cfg, backfill, log, progress, on_device, shou
                         _LOG.warning("[%s] 이름 패턴 나열 실패(%s) — 전체 나열로 되돌아갑니다", d["name"], ex)
                         files = None
             if files is None:
-                files = list(nas_guard.scandir(rep_dir))
+                files = _list_all(rep_dir, d["name"])
                 dm["listing"] = "full"
             files = [e for e in files if e.is_file() and e.name.lower().endswith((".htm", ".html"))]
             files.sort(key=lambda e: e.stat().st_mtime, reverse=True)
