@@ -425,7 +425,7 @@ def test_unfold_rejects_out_of_range_pool_index_and_duplicate_columns():
     assert r2.returncode != 0 and "중복" in r2.stderr
 
 
-def test_header_has_six_tabs_and_each_popup_renders_an_accessible_dialog():
+def test_header_has_four_tabs_and_each_popup_renders_an_accessible_dialog():
     """D59 탭 이름 · 사본 저장 버튼 · 장비/Error/유형 팝업이 role=dialog + aria-labelledby 로 그려진다(포커스 이동은 browser 테스트)."""
     rows = [w("AOI-1", "W1", "08:00", "08:03", status="Alignment Error."), w("AOI-1", "W2", "09:00", "09:10", lot="LOT-B")]
     head, dev, err, closed, _, typ = screen(rows, meta("AOI-1"), [
@@ -433,11 +433,42 @@ def test_header_has_six_tabs_and_each_popup_renders_an_accessible_dialog():
         ["devPopupHtml"], ["errPopupHtml"], ["typePopupHtml"],
         ["errorsHtml"], ["typePopupHtml"]],
         state={"modalDev": "AOI-1", "modalDayI": 0, "errDev": "AOI-1", "errDayI": 0})
-    assert re.findall(r'data-fk="nav:([a-z]+)"', head) == ["home", "kla", "errors", "trend", "report", "recipe"]   # D70 레시피 탭 · D73 KLA 탭
-    for label in (">가동률<", ">KLA<", ">Error<", ">추이<", ">TB500 · Kendall<", ">레시피<", ">사본 저장<"):
+    assert re.findall(r'data-fk="nav:([a-z]+)"', head) == ["home", "errors", "report", "recipe"]   # 10/5: KLA 탭 · 추이 탭 없음
+    for label in (">가동률<", ">Error<", ">TB500 · Kendall<", ">레시피<", ">사본 저장<"):
         assert label in head, label
+    assert ">추이<" not in head and ">KLA<" not in head
     assert 'data-dlg="dev"' in dev and 'aria-labelledby="dlg-dev-title"' in dev and 'role="dialog"' in dev
     assert 'data-dlg="err"' in err and 'aria-labelledby="dlg-err-title"' in err
     assert closed == ""                                   # 유형 팝업은 state.modalType 이 없으면 그리지 않는다
     (typ2,) = screen(rows, meta("AOI-1"), [["errorsHtml"], ["typePopupHtml"]], state={"view": "errors", "modalType": "ALIGN_ERROR"})[1:]
     assert 'data-dlg="type"' in typ2 and 'aria-labelledby="dlg-type-title"' in typ2 and "ALIGN_ERROR" in typ2
+
+
+def test_multi_and_single_scans_are_different_jobs_but_the_same_material():
+    """D76(10/5): 같은 Job 이름이라도 멀티 · 단일은 다른 Job — `TB500_RDL4 - Multi` → `TB500_RDL4-Multi` · `-Single`(근거 없으면 `-미구분`).
+    원문에 Multi 가 없는 Job 의 단일은 이름 그대로. 자재 키는 원문 — 멀티로 PASS 한 Wafer 를 단일로 다시 보면 Rescan. 표기명도 따라 나뉜다."""
+    J = "TB500_RDL4 - Multi"
+    rows = [dict(w("AOI-1", "W1", "08:00", "08:20", lot="LOT-A", job=J), scan_mode="MULTI"),
+            dict(w("AOI-1", "W1", "09:00", "09:10", lot="LOT-A", job=J, report="r2.htm"), scan_mode="SINGLE"),
+            dict(w("AOI-1", "W9", "10:00", "10:10", lot="LOT-C", job=J), scan_mode=""),
+            dict(w("AOI-1", "P1", "11:00", "11:05", lot="LOT-P", job="R_TB500_LIVE_PI2"), scan_mode="SINGLE"),
+            dict(w("AOI-1", "P2", "12:00", "12:05", lot="LOT-Q", job="R_TB500_LIVE_PI2"), recipe="PI|PI_Bubble")]
+    D = run(rows, meta("AOI-1"))
+    assert set(D["pool"]["job"]) >= {"TB500_RDL4-Multi", "TB500_RDL4-Single", "TB500_RDL4-미구분", "R_TB500_LIVE_PI2", "R_TB500_LIVE_PI2-Multi"}
+    assert J not in D["pool"]["job"]
+    t = at(D, "AOI-1")
+    assert t["d"] == 10                                         # 멀티 PASS 뒤 같은 Wafer 단일 = Rescan(자재 키는 원문 Job)
+    rpt, = screen(rows, meta("AOI-1"), [["reportHtml"]])
+    assert "TB500 RDL4-Multi" in rpt and "TB500 RDL4-Single" in rpt and "TB500 PI2-Multi" in rpt
+
+
+def test_floor_and_maker_filters_combine():
+    """10/5: 층(전체 · 2층 · 4층)과 장비 종류(전체 · Camtek · KLA)는 따로 고르고 함께 걸린다 — 4층 + KLA 면 4F-K* 만."""
+    devs = ("AOI-1", "4F-AOI-01", "K1", "4F-K1")
+    rows = [w(d, "W1", "08:00", "08:10") for d in devs]
+    four_kla, two_cam, kla = screen(rows, meta(*devs), [["S.devList"], ["S.devList"], ["S.devList"]], state={"floor": "4", "maker": "kla"})[0:1] + \
+        screen(rows, meta(*devs), [["S.devList"]], state={"floor": "2", "maker": "cam"}) + \
+        screen(rows, meta(*devs), [["S.devList"]], state={"floor": "all", "maker": "kla"})
+    assert four_kla == ["4F-K1"] and two_cam == ["AOI-1"] and kla == ["K1", "4F-K1"]
+    home, = screen(rows, meta(*devs), [["homeHtml"]])
+    assert "전체 층" in home and "전체 장비" in home and ">KLA<" in home

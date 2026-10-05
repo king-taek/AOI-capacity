@@ -26,7 +26,7 @@ Camtek AOI 장비의 BatchReport/WaferInfo.ini 를 읽어 장비별 가동률을
    `AOI_capacity.html` 한 장을 사용자가 더블클릭해 브라우저에서 본다. QtWebEngine·로컬 서버·localhost 를 쓰지 않는다.
    그 HTML 은 데이터·CSS·JS 를 모두 품고 **바깥으로 요청을 한 건도 보내지 않는다**(가드: `test_template_contract.py`).
    브라우저가 NAS 를 직접 읽는 경로도 두지 않는다 — 수집은 Python 만 한다. 자동 주기 수집은 없다(수동 실행만, D50).
-   화면은 **재설계 구조**(D47, 9/20): 가동률 · Error · 추이 · TB500 · Kendall(D59) · 레시피(D70) 5탭 + 장비/Error/유형·Job · 레시피 묶음 팝업, 라이트 단일. 모델은 아래 '레이아웃' 의 화면 절.
+   화면은 **재설계 구조**(D47, 9/20): 가동률 · Error · TB500 · Kendall(D59) · 레시피(D70) 4탭(10/5 — 추이 · KLA 탭 없앰, KLA 는 장비 종류 필터) + 장비/Error/유형·Job · 레시피 묶음 팝업, 라이트 단일. 모델은 아래 '레이아웃' 의 화면 절.
 4. **Scanresult 를 재귀 검색하지 않는다.** INI 경로는 `{scan}/{job}/{setup}/{lot}/{wafer}/WaferInfo.ini` 로 계산해 존재만 확인한다.
    `job`·`setup` 의 출처는 **Report 안의 `Job/Setup` 값**이다(파일명이 아니다 — 실장비 516개 중 옛 파일명 규칙에 맞는 건 6개뿐이었다).
    `Job/Setup` 이 없는 옛 형식만 파일명 규칙(`{job}_{4자리}_{lot}_…`)으로 되돌아가고, 그것도 안 맞으면
@@ -123,7 +123,7 @@ Camtek AOI 장비의 BatchReport/WaferInfo.ini 를 읽어 장비별 가동률을
 - HTML 에 박는 JSON 은 `collect._embed_rows` 가 접는다 — `POOLED_COLS`(시각 두 열 빼고 전부)를 문자열 풀의
   번호로 바꾼다. 30대 × 90일이면 행이 십수만 개라 접지 않으면 HTML 이 수십 MB 가 된다. template 의 로더가 편다.
   CSV 는 사람이 읽는 파일이라 접지 않는다.
-- **결과 화면 모델은 template 의 `buildModel(rows, meta, rules)`** — 프로필이 둘이다(`RULES.profile`). **product(기본, `buildModelV3`, MODEL_VERSION 3)** 가 제품 규칙이고,
+- **결과 화면 모델은 template 의 `buildModel(rows, meta, rules)`** — 프로필이 둘이다(`RULES.profile`). **product(기본, `buildModelV3`, MODEL_VERSION 4 — 3 + D76 멀티/단일 Job 나눔)** 가 제품 규칙이고,
   **legacy(`buildModelLegacy`)** 는 `docs/design/dashboard-redesign/scripts/make_aoi_data.js` [원본] 이식으로 네 스위치를 끄면 스크립트와 같은 출력(가드 `test_legacy_profile_equals_the_design_script…`) — 디자인 동일성 근거일 뿐 제품 정답이 아니다.
   공통 도우미(`P`·`lotName`·`jobKey`·`matKey`)는 두 프로필이 같이 쓴다. 규칙을 바꾸면 `MODEL_VERSION` 을 올린다. 열 때마다 원천 행에서 다시 계산한다(저장하지 않는다).
   - **product 알고리즘(D56 · 9/20)**: 장비마다 로드 첫날 00:00 기준 1분 축(`kind` Int8Array)에 ① INI 시각 구간을 Error > Scan > Rescan > Test 순으로 배타 배정(같은 Report 같은 종류의 3분 이하 틈은 이어 칠함)
@@ -135,6 +135,9 @@ Camtek AOI 장비의 BatchReport/WaferInfo.ini 를 읽어 장비별 가동률을
   - 종류: 원인 코드(`CAUSE_RULES` 첫 매치)가 있으면 Error, **Lot 원문에 `TEST` 가 있으면 그 Report 의 행은 전부 Test(D64 — 원인 Error 도 Error 로 세지 않음)**,
     같은 자재의 **앞선 시도의 결과가 PASS 였을 때만** Rescan(D63, 장비 무관), 아니면 Scan. 자재 키 = `jobKey(Job)|Lot 토큰(RE·RESCAN·REWORK·SRD·R 제외)|Wafer ID(영숫자)`.
     **Job 병합(`jobKey`)** 은 구분자·공백·대소문자 · `_Copy` · `LIVE` · 장비별 복사본 · `Test_` 접두 · 끝 4자리 날짜 · `AO`→`A0` 를 묶고 R접두어(RE·R2·R3…)와 단계 번호(PI2/PI3, RDL1~4)는 나눈다(D48-④). 통계에서만 묶고 **표기는 원문**, 표기명 21개는 `JOB_ALIAS`.
+  - **멀티/단일은 다른 Job(D76, 10/5)**: `modeJob` 이 행의 `scan_mode` 로 Job 이름을 나눈다 — 멀티면 `<줄기>-Multi`, 원문에 낱말 Multi 가 있는 Job(RDL `… - Multi`)의 단일은 `<줄기>-Single`, 근거 없으면 `<줄기>-미구분`(멀티로 합치지 않음), 그 밖의 단일은 원문 그대로.
+    줄기 = 원문에서 낱말 Multi 를 뗀 것(`jobStem`). 표기명은 `jobAlias`(줄기가 같은 JOB_ALIAS + 접미). **자재 키(matKey · Rescan)는 원문 Job** — 멀티로 PASS 한 Wafer 를 단일로 다시 보면 Rescan. 수집기·CSV 의 job 은 원문 그대로(화면 규칙).
+    레시피 탭은 고른 Job 과 줄기가 같은 Job 들(-Multi · -Single · -미구분 · 원문)을 함께 놓고 멀티 vs 단일을 비교한다(상세는 고른 Job 만).
   - **Lot 이름은 Report 파일명에서**(`lotName`, D48-⑤): 4자리 설비번호 다음 칸(없으면 날짜 앞 칸), `Setup1_`·`6324_` 접두 제거, 3글자 코드 뒤 꼬리표는 `KEEP`(DIA·2D·3D·EDGE·CENTER·RE·SRD·RESCAN·PCM·DUMMY·SPT)만 남김, 모르는 낱말이 섞이면 원문 그대로.
     product 는 Setup 이 4자리가 아닌 옛 파일명(R2)에서 표의 Lot 이 파일명 줄기의 끝과 같으면 표의 Lot 을 그대로 쓴다(D12, AOI-10 `SETUP_AMD Venice_U-Pad Dummy`).
   - **분모(D57 · D17 개정)**: 지난 날 1440분. **수집한 날(`today` = `meta.generated_iso` 날짜)은 모든 장비의 마지막 기록(관측 종료)** 까지 — 장비마다 다르지 않다. 기록이 없는 장비는 그날 항목이 없어 평균에서 빠진다(0% 로 채우지 않음).
@@ -172,7 +175,7 @@ Camtek AOI 장비의 BatchReport/WaferInfo.ini 를 읽어 장비별 가동률을
   TB500 · Kendall 탭: **Kendall · TB500 두 묶음**(표기명이 Kendall 로 시작하면 Kendall) 안에서 열 머리를 눌러 정렬(`rptSort`, 기본 이름 오름차순, 같은 열 다시 누르면 반대, `aria-sort`).
   **수집 창 시작일**(`D.partialDays` — `meta.retention_days` 로 계산, 보관 기간의 첫날은 수집 창이 도중에 시작해 하루 전체가 아니다): 헤더에 '부분' 표, 홈 카드 안내, 추이의 평균·주/월 묶음에서 제외(막대는 회색으로 남긴다).
   가동률(카드 3 · 층 필터 · 정렬 · 24시간 막대 목록) → **장비 팝업**(통계 6 · 막대 · Lot 이름표 지시선 · 선택 Lot 원문 · **Report 열기**) ↔ **Error 상세 팝업**(언제 났나 · 유형별 · 최근 21일 · Lot 별, 유형/Job 팝업에서 오면 필터 칩, D51) ·
-  Error(기간 · 층 · 지표 → 날짜별 → 유형별·장비별·Job별 → 유형/Job 팝업) · 추이(일·주·월 + 히트맵, 전 기간 대비 없음) · **TB500 · Kendall**(D59, 옛 이름 '리포트' — 표기명 21개 Job 만 보는 탭이라 이름을 바꿨고
+  Error(기간 · 층 · 장비 종류 · 지표 → 날짜별 → 유형별·장비별·Job별 → 유형/Job 팝업) · **TB500 · Kendall**(D59, 옛 이름 '리포트' — 표기명 21개 Job 만 보는 탭이라 이름을 바꿨고
   '표기명 n개 Job 만(이 기간 Lot 의 p%)' 안내 한 줄을 둔다. D49: 배치시간 = Report 배치 시작~종료 회귀, 표본 5개 미만 생략, 제외 = 원인 Error 있는 Report · 5장 미만 · 배치 시각 없음. 평균 fault = `faults` 열이 있는 행의 장당 평균, `lots[13]`·`[14]`, D08).
   살펴볼 장비 = 가동률 40% 미만 또는 Error 3건 이상(`PROPS` — `meta.dashboard_settings` 의 같은 이름 숫자가 있으면 그것으로, D14). **기록 없음은 살펴볼 장비가 아니라 별도 대수**(`S.noRec`, D06·D57).
   Lot 선택 키는 `lotKey`(Job·Lot·시작·배치시작·**Report**, D16 — 같은 Lot 이 하루에 Report 두 장이면 갈린다). 팝업은 ESC 로 닫힌다(Error 팝업 → 장비 팝업 → 유형/Job 팝업 순).
@@ -195,7 +198,7 @@ Camtek AOI 장비의 BatchReport/WaferInfo.ini 를 읽어 장비별 가동률을
   ③ 캐시에 없는 Wafer 만 결과 파일 읽기(`FileVersion` 머리, 결과 파일 없으면 다음에 다시). **날짜 폴더만 센다 · Lot 안 Wafer 폴더 이름으로 한 번**(D71). 처음 보는 장비는 `backfill_days` 창(`since`).
   캐시 `cache["kla"][안정 키] = {name, since, seen_to, lots: {Lot: {Wafer 폴더: 기록}}}`(바뀌면 dirty `kla`). 행은 `kla.rows_from_store` 가 `_rows_from_cache` 끝에서 만든다(→ HTML 만 다시 만들기도 같다):
   같은 Lot·같은 ResultTimestamp = 한 실행(`report` = `KLA:<Lot>:<ResultTimestamp>`), 장 시작 = Wafer 폴더 시각, 끝 = 다음 장 시작(간격이 중앙의 3배 넘으면 · 마지막 장은 중앙 간격만큼), 배치 = 첫 장 시작 ~ 마지막 장 끝,
-  job = SetupID · setup/recipe = StepID · faults = 결함 레코드 수(D68) · scanned_dice = NDIE · 전부 PASS(Error 수집 없음, D68) · `ini_match` EXACT. 화면: KLA 탭(가동률 화면을 KLA 장비만) · 층 필터에 Camtek/KLA · KLA 는 Report 열기 없음 · 정렬은 Camtek 뒤 K1… 4F-K1….
+  job = SetupID · setup/recipe = StepID · faults = 결함 레코드 수(D68) · scanned_dice = NDIE · 전부 PASS(Error 수집 없음, D68) · `ini_match` EXACT. 화면: 따로 탭 없이 **층(전체 · 2층 · 4층)과 장비 종류(전체 · Camtek · KLA) 두 필터**(`state.floor` · `state.maker`, `S.devList` 가 둘 다 건다 — 10/5) · KLA 는 Report 열기 없음 · 정렬은 Camtek 뒤 K1… 4F-K1….
 - **Report 열기**는 장비 팝업의 선택 Lot 에서만(`reportUrl` · `openReport`). 경로는 `meta.devices[].note` + `report_dir` + `report` 로만 만들고 드라이브 문자와 UNC(`\\10.x`) 를 모두 다룬다.
   여는 주체는 사람이 연 그 탭이지 이 화면이 아니다 — 화면은 여전히 바깥으로 요청을 한 건도 보내지 않는다. 수집 상태 칩(`collectChip`: 수집 실패 · 일부 누락)과 '수집 범위 / 수집 안 함' 은 `meta` 에서 그린다. **사본 저장**(`saveHtml`)은 수집기가 준 열·풀 구조 그대로 다시 접는다.
 - 추이 화면에 **전 기간 대비(전주·전월·전일)는 두지 않는다**(사용자 확정, 가드: `test_no_period_over_period_comparison_anywhere`). 선택한 기간의 값만 보여 준다.

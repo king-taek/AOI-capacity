@@ -187,9 +187,7 @@ def test_error_popup_type_popup_trend_and_report_tab(page):
     assert "Error 대기" in err and "ALIGN_ERROR" in err and "Alignment Error." in err
     pg.keyboard.press("Escape")
     pg.wait_for_selector('.dlg[data-dlg="err"]', state="detached")
-    pg.locator('button[data-fk="nav:trend"]').click()
-    pg.wait_for_selector('main[data-key="view:trend"]')   # 새 화면은 표시자가 출발한 두 프레임 뒤에 그린다
-    assert "날짜별 평균 가동률" in pg.inner_text("main")
+    assert pg.locator('button[data-fk="nav:trend"]').count() == 0 and pg.locator('button[data-fk="nav:kla"]').count() == 0   # 10/5: 추이 · KLA 탭 없음
     pg.locator('button[data-fk="nav:report"]').click()
     pg.wait_for_selector('main[data-key="view:report"]')   # 새 화면은 표시자가 출발한 두 프레임 뒤에 그린다
     rpt = pg.inner_text("main")
@@ -322,7 +320,7 @@ def test_report_tab_groups_and_sorts_by_column(page):
     groups = pg.evaluate("[...document.querySelectorAll('.grp')].map(g => g.firstChild.textContent)")
     assert groups == ["Kendall", "TB500"]
     order = pg.evaluate("[...document.querySelectorAll('[data-row^=\"job:\"]')].map(e => e.dataset.row.slice(4))")
-    assert order == ["Kendall FS", "TB500 PI2"]                                          # 그룹 순서 · 이름순
+    assert order == ["Kendall FS", "TB500 PI2", "TB500 PI2-Multi"]                      # 그룹 순서 · 이름순 · 멀티는 다른 Job(D76)
     hdr = pg.locator('.thead button.th', has_text="배치")
     hdr.click()
     pg.wait_for_selector('.thead button.th[aria-sort="descending"]')
@@ -432,8 +430,8 @@ def test_tab_indicator_survives_in_tab_clicks_and_follows_the_tab(page):
     pg.wait_for_selector('button[data-fk="seg:가동률 낮은 순"].on')
     pg.wait_for_timeout(100)
     assert pg.evaluate(box) == b0                                                       # 같은 탭 안 — 그대로
-    pg.locator('button[data-fk="nav:trend"]').click()
-    pg.wait_for_selector('main[data-key="view:trend"]')
+    pg.locator('button[data-fk="nav:report"]').click()
+    pg.wait_for_selector('main[data-key="view:report"]')
     pg.wait_for_timeout(900)
     b1 = pg.evaluate(box)
     assert near(b1) and b1 != b0                                                         # 새 탭에 가서 선다
@@ -470,7 +468,7 @@ def test_recipe_groups_apply_at_once_persist_in_browser_and_export(page, tmp_pat
     pg.wait_for_selector('[data-dlg="recipe"]')
     pg.fill('[data-fk="rg:q"]', "R_")
     pg.wait_for_timeout(150)
-    assert sorted(pg.locator(".rgrow .mono").all_inner_texts()) == ["R_KENDALL_A0_FS", "R_TB500_LIVE_PI2"]
+    assert sorted(pg.locator(".rgrow .mono").all_inner_texts()) == ["R_KENDALL_A0_FS", "R_TB500_LIVE_PI2", "R_TB500_LIVE_PI2-Multi"]
     assert pg.evaluate("document.activeElement.dataset.fk") == "rg:q"           # 입력 중 다시 그려도 포커스는 그 칸
     pg.get_by_role("button", name="목록 전부 선택").click()
     pg.fill('[data-fk="rg:name"]', "MIX RECIPE")
@@ -482,7 +480,7 @@ def test_recipe_groups_apply_at_once_persist_in_browser_and_export(page, tmp_pat
     exp = json.loads(Path(dl.value.path()).read_text(encoding="utf-8"))
     assert dl.value.suggested_filename == "recipe_groups.json"
     assert exp["v"] == 1 and exp["saved"] and [g["name"] for g in exp["groups"]] == ["MIX RECIPE"]
-    assert sorted(exp["groups"][0]["jobs"]) == ["R_KENDALL_A0_FS", "R_TB500_LIVE_PI2"]
+    assert sorted(exp["groups"][0]["jobs"]) == ["R_KENDALL_A0_FS", "R_TB500_LIVE_PI2", "R_TB500_LIVE_PI2-Multi"]
     pg.keyboard.press("Escape")
     pg.locator('button[data-fk="nav:errors"]').click()
     pg.wait_for_selector('main[data-key="view:errors"]')
@@ -511,6 +509,8 @@ def test_recipe_tab_shows_per_device_stats_and_compares_two_periods(page):
     pg.fill('[data-fk="rcp:q"]', "PI2")
     pg.wait_for_timeout(150)
     assert pg.evaluate("document.activeElement.dataset.fk") == "rcp:q"
+    pg.wait_for_timeout(450)                                                    # 바뀐 글자는 0.24초 동안 한 글자씩 넘어간다
+    assert [x.split("\n")[0] for x in pg.locator(".rcprow").all_inner_texts()] == ["TB500 PI2-Multi", "TB500 PI2"]   # D76: 멀티는 다른 Job
     pg.locator(".rcprow").first.click()
     # 첫 화면(10/5): 장당 스캔 멀티 vs 단일 — 9/18 W 6장 멀티 4분, 9/17 Q 3장 단일 3분 → 단일 1분 빠름(같은 장비 AOI-1)
     tiles = pg.locator(".scanhero .mtile").all_inner_texts()
@@ -521,11 +521,14 @@ def test_recipe_tab_shows_per_device_stats_and_compares_two_periods(page):
     pg.locator('[data-fk="rcp:more"]').click()
     pg.wait_for_timeout(200)
     cards = pg.locator("main section.cards > div").all_inner_texts()
-    assert cards[0].split("\n")[0] == "생산량" and "9장" in cards[0]
+    assert cards[0].split("\n")[0] == "생산량" and "6장" in cards[0]           # 상세는 고른 Job(PI2-Multi)만
     assert [x.split("\n")[0] for x in pg.locator(".rcpdev").all_inner_texts()] == ["AOI-1"]
     assert pg.locator(".cmp").count() == 0
     pg.locator('[data-fk="rcp:cmp"]').click()
     pg.wait_for_selector(".cmp")
+    pg.locator(".rcprow").nth(1).click()                                     # 단일(PI2)도 A 쪽에 더한다
+    pg.locator(".cmpside").nth(0).get_by_role("button", name=re.compile("＋")).click()
+    pg.wait_for_timeout(300)
     pg.fill('[data-fk="cmp:cmpAf"]', "2026-09-17")
     pg.fill('[data-fk="cmp:cmpAt"]', "2026-09-17")
     pg.fill('[data-fk="cmp:cmpBf"]', "2026-09-18")
@@ -554,10 +557,26 @@ def test_header_period_limits_every_tab_to_the_chosen_days(page):
     pg.locator('[data-fk="range:vf"]').dispatch_event("change")
     pg.wait_for_timeout(300)
     assert days() == "1일" and pg.input_value('[data-fk="range:vt"]') == "2026-09-18"
-    pg.locator('button[data-fk="nav:trend"]').click()
-    pg.wait_for_selector('main[data-key="view:trend"]')
-    assert pg.locator("main .chart").first.locator(":scope > *").count() == 1
-    pg.get_by_role("button", name="전체").first.click()
+    pg.locator('button[data-fk="nav:errors"]').click()
+    pg.wait_for_selector('main[data-key="view:errors"]')
+    bars = lambda: pg.locator('main [data-key="chart:errors"] .chart').first.locator(":scope > *").count()
+    assert bars() == 1
+    pg.get_by_role("button", name="전체", exact=True).first.click()
     pg.wait_for_timeout(300)
-    assert days() == "2일" and pg.locator("main .chart").first.locator(":scope > *").count() == 2
+    assert days() == "2일" and bars() == 2
     assert requests == [] and errors == []
+
+
+def test_floor_and_maker_filters_are_picked_separately(page):
+    """10/5: 층과 장비 종류는 따로 — '2층' 을 고른 채 'Camtek' 을 눌러도 2층이 풀리지 않는다."""
+    pg, errors, _ = page
+    pg.locator('button[data-fk="seg:2층"]').click()
+    pg.locator('button[data-fk="seg:Camtek"]').click()
+    pg.wait_for_timeout(200)
+    assert pg.locator('button[data-fk="seg:2층"].on').count() == 1 and pg.locator('button[data-fk="seg:Camtek"].on').count() == 1
+    names = [x.split("\n")[0] for x in pg.locator(".homelist .rowbtn").all_inner_texts()]
+    assert names == ["AOI-1", "AOI-2", "AOI-3", "AOI-10"][:len(names)] and names
+    pg.locator('button[data-fk="seg:KLA"]').click()
+    pg.wait_for_timeout(200)
+    assert pg.locator(".homelist .rowbtn").count() == 0 and pg.locator('button[data-fk="seg:2층"].on').count() == 1
+    assert errors == []
