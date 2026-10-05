@@ -204,7 +204,8 @@ class MainWindow(QMainWindow):
             return
         self._collect_token += 1
         tok = self._collect_token
-        w = CollectorWorker(tok, cfg, full=full, backfill=backfill, recover=recover, refresh_range=self.collect_page.refresh_range())
+        w = CollectorWorker(tok, cfg, full=full, backfill=backfill, recover=recover, refresh_range=self.collect_page.refresh_range(),
+                            rdl_patch=self.collect_page.mode() == "rdl")
         s = w.signals
         s.progress.connect(self._on_collect_progress)
         s.device.connect(self._on_collect_device)

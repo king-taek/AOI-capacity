@@ -280,6 +280,8 @@ class RunPlan:
     total_reports: int = 0     # 캐시에 든 Report 수
     reread_reports: int = 0    # 캐시에 있는데도 다시 읽을 Report 수(refresh 창 안 · rebuild 면 전부)
     keep_reports: int = 0      # 손대지 않는 캐시 Report 수(refresh 창 밖)
+    rdl_reports: int = 0       # 'RDL 영역 INI 패치' 대상 Report 수(멀티/단일 판정이 빠진 RDL Report, 캐시만 보고 센다)
+    rdl_devices: int = 0       # 그 Report 가 있는 장비 수 — 패치는 이 장비들만 본다
     # 새로 생긴 Report 수는 NAS 를 봐야 알 수 있어 여기 없다(계획 조회는 NAS 에 접근하지 않는다).
 
 
@@ -581,6 +583,22 @@ def read_ini(path) -> dict:
     return out
 
 
+#: 멀티/단일 판정(RecipesInfo.ini)을 하는 Job — 지금은 RDL 만(10/5 사용자). 다른 Job 의 scan_mode 는 Report 표에 `|` 가 있을 때만 MULTI, 아니면 모름.
+RDL_JOB_RE = re.compile(r"RDL", re.I)
+
+
+def is_rdl_job(job) -> bool:
+    return bool(RDL_JOB_RE.search(str(job or "")))
+
+
+def _needs_rdl_patch(entry: dict) -> bool:
+    """'RDL 영역 INI 패치' 대상 — RDL Job 인데 INI 를 찾은(EXACT) 행에 멀티/단일 판정이 없는 Report(업데이트 전에 읽은 것). 밀려난 옛 판은 아니다."""
+    if entry.get("superseded_by"):
+        return False
+    return any(r.get("ini_match") == "EXACT" and not r.get("scan_mode") and is_rdl_job(r.get("job"))
+               for r in entry.get("rows") or ())
+
+
 def read_recipes_info(path) -> List[str]:
     """Wafer 폴더의 `RecipesInfo.ini`(10/5 사용자 확인) → `[Recipe-1]`·`[Recipe-2]`… 의 `Name` 을 번호 순으로.
     **멀티 스캔**에서만 생긴다(`Name=x20` · `Name=x5` · `[Recipes] Count=2`). 단일 스캔은 이 파일이 없고 WaferInfo.ini 의 `[Recipe] Name` 만 있다."""
@@ -784,7 +802,8 @@ def rows_for_report(dev_name: str, rep: dict, scan_root: str, memo: Optional[_In
                         iss.append((ISSUE_FOUND_IN_BACKUP, os.path.basename(found_in.rstrip(chr(92) + '/'))))
                     if found_job != rep["equipment"]:
                         iss.append((ISSUE_JOB_FOLDER_DIFFERS, found_job))
-                    if r["ini_match"] == "EXACT":
+                    if r["ini_match"] == "EXACT" and is_rdl_job(rep.get("job", "")):
+                        # 10/5: RecipesInfo.ini 는 RDL Job 만 본다(사용자 — 멀티/단일을 바꿔 돌리는 건 RDL 뿐, 다른 Job 은 파일 열기를 늘리지 않는다).
                         # 10/5: 멀티 스캔(x20+x5)은 Report 표의 Recipe 칸에 `x20` 만 찍힌다(실물 GVB·GVC·LGA·LHP 확인).
                         # 실제로 돈 레시피는 Wafer 폴더에 있다 — 멀티면 RecipesInfo.ini(이름 전부), 단일이면 WaferInfo.ini [Recipe] Name.
                         # 덮어써진 INI(STALE)는 다른 시도의 것이라 쓰지 않는다. 정확 경로 하나만 연다(규칙 4).
@@ -1467,7 +1486,7 @@ _PLAN_MEMO: Dict[str, tuple] = {}
 def _cache_summary(path: str) -> dict:
     """계획 조회에 필요한 것만 — Report 수 · 장비 커서 수 · 누락 복구 대상 수 · Report 수정시각 목록(refresh 창 계산용).
     행은 재분류하지 않는다(수집 워커가 한다)."""
-    empty = {"n_reports": 0, "known_devices": 0, "n_recover": 0, "mtimes": []}
+    empty = {"n_reports": 0, "known_devices": 0, "n_recover": 0, "n_rdl": 0, "rdl_devices": 0, "mtimes": []}
     if not path or not os.path.isfile(path):
         return empty
     try:
@@ -1481,6 +1500,8 @@ def _cache_summary(path: str) -> dict:
     cache = _load_cache({"cache_file": path}, rederive=False)
     summary = {"n_reports": len(cache.get("reports", {})), "known_devices": len(cache.get("last_mtime", {})),
                "n_recover": sum(1 for e in cache.get("reports", {}).values() if _needs_recovery(e)),
+               "n_rdl": sum(1 for e in cache.get("reports", {}).values() if _needs_rdl_patch(e)),
+               "rdl_devices": len({k.split("|", 1)[0] for k, e in cache.get("reports", {}).items() if _needs_rdl_patch(e)}),
                "mtimes": [float(e.get("mtime") or 0) for e in cache.get("reports", {}).values()]}
     _PLAN_MEMO[path] = (key, summary)
     return summary
@@ -1522,7 +1543,8 @@ def plan_run(cfg: dict, full: bool = False, backfill: bool = False, recover: boo
     return RunPlan(first_run=first, known_devices=s["known_devices"], backfill_days=int(cfg["backfill_days"]),
                    recover_reports=s["n_recover"] if recover and not rebuild else 0,
                    mode=mode, refresh_days=refresh_days, retention_days=int(cfg.get("retention_days") or 0),
-                   total_reports=n, reread_reports=reread, keep_reports=max(0, n - reread) if not rebuild else 0)
+                   total_reports=n, reread_reports=reread, keep_reports=max(0, n - reread) if not rebuild else 0,
+                   rdl_reports=s.get("n_rdl", 0), rdl_devices=s.get("rdl_devices", 0))
 
 
 # ----------------------------------------------------------------------------- collect
@@ -1641,7 +1663,7 @@ def _list_all(rep_dir: str, name: str) -> list:
 
 
 def _list_new_reports(devs, cache, cfg, backfill, log, progress, on_device, should_stop, recover=False,
-                      refresh_days: int = 0, window_days=None, refresh_since_ts=None, refresh_until_ts=None):
+                      refresh_days: int = 0, window_days=None, refresh_since_ts=None, refresh_until_ts=None, rdl_patch=False):
     """1차 패스: 장비마다 Report 폴더를 한 번 나열(scandir+stat 만)해 읽을 파일을 고른다. NAS 읽기 전용.
 
     장비 30대를 한 줄로 나열하면 SMB 왕복 지연이 30번 더해진다 — 동시에 나열한다(`read_workers`).
@@ -1650,6 +1672,7 @@ def _list_new_reports(devs, cache, cfg, backfill, log, progress, on_device, shou
       * `refresh_days>0`: 최근 그 일수 안의 파일은 캐시에 있어도 다시 읽는다(D60, `dm["refreshed"]`).
         `refresh_since_ts`·`refresh_until_ts`(10/5 '기간 다시 읽기')를 주면 수정시각이 [since, until) 인 파일만 — 기간 밖은 그대로 둔다.
       * `recover`: INI 를 못 찾았던 Report 만 다시 읽는다(`dm["recovered"]`).
+      * `rdl_patch`(10/5 'RDL 영역 INI 패치'): 멀티/단일 판정이 빠진 RDL Report(`_needs_rdl_patch`)만 다시 읽는다 — 날짜 창 없이 폴더 전체를 본다(`dm["refreshed"]`).
       * 지난번 다시 읽다 실패해 이전 행을 그대로 둔 Report(`failed` 에 재시도가 남은 것)는 다시 읽는다(`dm["retried"]`).
     `window_days` 는 backfill 창 길이(기본 `backfill_days`; rebuild 는 `retention_days`).
 
@@ -1690,13 +1713,15 @@ def _list_new_reports(devs, cache, cfg, backfill, log, progress, on_device, shou
         try:
             # 누락 복구는 커서와 무관하게 backfill 창 전체를 다시 훑되, 다시 읽는 건 복구 대상뿐이다(아래)
             since = backfill_since if (backfill or recover or dk not in last) else float(last[dk]) - CLOCK_SKEW_SEC
+            if rdl_patch:
+                since = 0.0                                # 패치 대상은 언제 것이든 — 캐시에 있는 RDL Report 전부가 후보
             if refresh_since is not None:
                 since = min(since, refresh_since)          # refresh 창은 커서보다 앞서도 훑는다
             if dk in pending_since:
                 since = min(since, pending_since[dk] - 1)  # 재시도할 Report 까지는 훑는다
             files = None
             lister = PATTERN_LISTER
-            incremental = not (backfill or recover or refresh_since is not None or dk not in last)
+            incremental = not (backfill or recover or rdl_patch or refresh_since is not None or dk not in last)
             if lister is not None and incremental and now - float(full_listed.get(dk) or 0) < full_every:
                 pats = report_name_patterns(since, now)
                 if pats:
@@ -1726,6 +1751,9 @@ def _list_new_reports(devs, cache, cfg, backfill, log, progress, on_device, shou
                 if cached and abs(float(cached.get("mtime", 0)) - m) < 1:
                     pending = failed.get(key) or {}
                     if refresh_since is not None and m >= refresh_since and (refresh_until_ts is None or m < float(refresh_until_ts)):
+                        dm["refreshed"] += 1
+                        pick.append((e, key))
+                    elif rdl_patch and _needs_rdl_patch(cached):
                         dm["refreshed"] += 1
                         pick.append((e, key))
                     elif recover and _needs_recovery(cached):
@@ -1815,7 +1843,7 @@ def _backup_roots(d: dict, scan_root: str) -> ScanRoots:
 
 
 def collect(cfg: dict, full: bool = False, backfill: bool = False, *, recover: bool = False,
-            refresh_window_days=None, rebuild_all=None, refresh_range=None,
+            refresh_window_days=None, rebuild_all=None, refresh_range=None, rdl_patch: bool = False,
             progress: Optional[ProgressFn] = None, log: Optional[LogFn] = None,
             should_stop: Optional[Callable[[], bool]] = None,
             on_device: Optional[DeviceFn] = None, stats: Optional[dict] = None) -> Tuple[List[dict], List[dict], List[dict]]:
@@ -1831,6 +1859,8 @@ def collect(cfg: dict, full: bool = False, backfill: bool = False, *, recover: b
         그 Report 의 이전 행을 그대로 두고 `failed` 에 재시도만 남긴다.
       * `refresh_range=("YYYY-MM-DD", "YYYY-MM-DD")`(10/5, 수집 창 '기간 다시 읽기'): 그 기간에 끝난 Report(수정시각 = 배치 종료 무렵)와
         그 기간에 시작한 KLA Wafer 만 캐시에 있어도 다시 읽는다. 기간 밖 이력은 손대지 않는다(refresh 와 같은 규칙, 끝이 있는 창).
+      * `rdl_patch`(10/5 수집 창 'RDL 영역 INI 패치'): 캐시에 멀티/단일 판정이 빠진 RDL Report 가 있는 장비만 보고, 그 Report 만 다시 읽는다
+        (Report · WaferInfo · RecipesInfo). KLA 와 RDL 없는 장비는 건드리지 않는다. 다른 Report 는 그대로.
       * `rebuild_all`(= `full`): 보관 기간 전부를 새 후보 캐시에 모아 `_validate_rebuild` 를 통과할 때만 교체한다.
         미접근 장비·지금 목록에 없는 장비·다시 읽다 실패한 Report 의 이전 이력은 후보로 옮긴다. 실패면 `RebuildRejected`(원 캐시 그대로)."""
     progress = progress or (lambda d, t, p: None)
@@ -1888,9 +1918,15 @@ def collect(cfg: dict, full: bool = False, backfill: bool = False, *, recover: b
         _say(log, f"누락 복구: 최근 {cfg['backfill_days']}일 안에서 INI 를 못 찾았던 Report 만 다시 읽습니다")
     kla_devs = [d for d in devs if d.get("kind") == "kla"]      # D73: KLA 는 Report 가 없다 — 아래에서 kla.collect_kla 로
     cam_devs = [d for d in devs if d.get("kind") != "kla"]
+    rdl_patch = bool(rdl_patch) and not rebuild
+    if rdl_patch:                                             # RDL 레시피가 있는 장비만(캐시가 안다) — 나머지는 나열도 하지 않는다
+        want = {k.split("|", 1)[0] for k, e in cache["reports"].items() if _needs_rdl_patch(e)}
+        cam_devs, kla_devs = [d for d in cam_devs if str(d["key"]) in want], []
+        _say(log, f"RDL 영역 INI 패치: 멀티/단일 판정이 빠진 RDL Report 가 있는 장비 {len(cam_devs)}대만 봅니다"
+                  f"({', '.join(d['name'] for d in cam_devs) or '없음'})")
     plan = _list_new_reports(cam_devs, cache, cfg, backfill, log, progress, on_device, should_stop, recover=recover,
                              refresh_days=0 if rebuild else refresh_days, window_days=window_days,
-                             refresh_since_ts=rng_ts[0], refresh_until_ts=rng_ts[1])
+                             refresh_since_ts=rng_ts[0], refresh_until_ts=rng_ts[1], rdl_patch=rdl_patch)
     stats["list_ms"] = int((clock() - t1) * 1000)
     stats["list_pattern"] = sum(1 for _d, dm, _p, _k in plan if dm.get("listing") == "pattern")
     if PATTERN_LISTER is not None:                            # 패턴 나열을 쓰는 PC 에서만 — 다음 전체 나열 시각을 정하는 근거
@@ -2025,6 +2061,14 @@ def collect(cfg: dict, full: bool = False, backfill: bool = False, *, recover: b
         errors.extend(k_err)
         stats.update(k_stats)
         _check(should_stop)
+    if rdl_patch:                                             # 패치가 보지 않은 장비도 결과에는 그대로 — 경로(Report 열기)·상태가 빠지지 않게
+        seen_keys = {str(dm.get("key")) for dm in dev_meta}
+        for d in devs:
+            if str(d["key"]) not in seen_keys:
+                dev_meta.append({"name": d["name"], "id": str(d["id"]), "key": str(d["key"]), "note": d["path"],
+                                 "report_dir": "" if d.get("kind") == "kla" else str(d.get("report_dir") or cfg["report_dir"]),
+                                 "kind": d.get("kind", ""), "reports": 0, "found": 0, "error": "", "read_errors": 0,
+                                 "recovered": 0, "refreshed": 0, "retried": 0, "kept": 0, "listing": "skipped"})
     t3 = clock()
 
     progress(total, total, i18n.KO.COLLECT_PHASE_RETENTION)
@@ -2073,7 +2117,7 @@ def collect(cfg: dict, full: bool = False, backfill: bool = False, *, recover: b
                   "reports_read": n_new, "reports_failed": len(errors), "devices": len(devs),
                   "reports_refreshed": sum(int(dm.get("refreshed") or 0) for dm in dev_meta),
                   "reports_kept": sum(int(dm.get("kept") or 0) for dm in dev_meta),
-                  "mode": "rebuild" if rebuild else "range" if rng else "refresh" if refresh_days > 0 else "recover" if recover
+                  "mode": "rebuild" if rebuild else "rdl_patch" if rdl_patch else "range" if rng else "refresh" if refresh_days > 0 else "recover" if recover
                           else "backfill" if backfill else "incremental",
                   "read_workers": _workers(cfg, max(1, len(jobs))), "nas_groups": len({nas_group(d["path"]) for d in devs}),
                   "total_ms": int((clock() - t0) * 1000)})

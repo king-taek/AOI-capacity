@@ -28,9 +28,10 @@ MAX_LOG_LINES = 1000
 K = i18n.KO
 
 #: 상황 카드의 열쇠 → 워커 인자(full, backfill, recover). refresh 는 prefs.refresh_window_days 로 간다(D60).
-MODES = ("normal", "backfill", "refresh", "recover", "rebuild", "range")
+MODES = ("normal", "rdl", "backfill", "refresh", "recover", "rebuild", "range")
 _ARGS = {"normal": (False, False, False), "backfill": (False, True, False), "refresh": (False, False, False),
-         "recover": (False, False, True), "rebuild": (True, False, False), "range": (False, False, False)}   # range 는 refresh_range() 로
+         "recover": (False, False, True), "rebuild": (True, False, False), "range": (False, False, False),
+         "rdl": (False, False, False)}   # rdl 은 MainWindow 가 mode() 로 rdl_patch 를 넘긴다   # range 는 refresh_range() 로
 
 
 def _repolish(w: QWidget) -> None:
@@ -249,6 +250,9 @@ class CollectPage(QWidget):
         self._cards: Dict[str, ModeCard] = {}
         self._cards["normal"] = ModeCard("normal", K.MODE_NORMAL_TITLE, K.MODE_NORMAL_WHEN, K.MODE_NORMAL_WHAT, pick)
         pl.addWidget(self._cards["normal"])
+        # 10/5: 평소 수집 옆의 두 번째 버튼 — 업데이트 전에 읽은 RDL Report 의 멀티/단일 판정을 채운다(RDL 이 있는 장비만)
+        self._cards["rdl"] = ModeCard("rdl", K.MODE_RDL_TITLE, K.MODE_RDL_WHEN, K.MODE_RDL_WHAT, pick)
+        pl.addWidget(self._cards["rdl"])
         pl.addSpacing(2)
         pl.addWidget(_label(K.COLLECT_TROUBLE_EYEBROW, "eyebrow", pick))
         grid = QGridLayout()
@@ -296,6 +300,7 @@ class CollectPage(QWidget):
         self._cards["recover"].set_badges([(K.MODE_BADGE_MEDIUM, "slow")])
         self._cards["rebuild"].set_badges([(K.MODE_BADGE_SLOW, "warn")])
         self._cards["range"].set_badges([(K.MODE_BADGE_MEDIUM, "slow")])
+        self._cards["rdl"].set_badges([(K.MODE_BADGE_MEDIUM, "slow")])
 
         rule = QFrame(pick)
         rule.setProperty("role", "rule")
@@ -571,6 +576,9 @@ class CollectPage(QWidget):
         self._update_cards(plan, n_recover)
         if self._mode == "rebuild":
             text = K.COLLECT_PLAN_FULL_FMT.format(days=_days_text(plan.retention_days))
+        elif self._mode == "rdl":
+            text = (K.COLLECT_PLAN_RDL_FMT.format(n=plan.rdl_reports, devs=plan.rdl_devices) if plan.rdl_reports
+                    else K.COLLECT_PLAN_RDL_NONE)
         elif self._mode == "range":
             a, b = self.refresh_range()
             text = K.COLLECT_PLAN_RANGE_FMT.format(a=a, b=b)
@@ -592,7 +600,7 @@ class CollectPage(QWidget):
         first = plan.total_reports == 0 and self._mode != "rebuild"
         if first != self._first_run:
             self._first_run = first
-            for k in ("backfill", "refresh", "recover", "rebuild", "range"):
+            for k in ("rdl", "backfill", "refresh", "recover", "rebuild", "range"):
                 self._cards[k].set_available(not first, K.MODE_DISABLED_FIRST)
         n = self._cards["normal"]
         if first:
@@ -609,6 +617,9 @@ class CollectPage(QWidget):
         if n_recover is not None and not first:
             self._cards["recover"].set_badges([(K.MODE_BADGE_TARGET_FMT.format(n=n_recover), "warn") if n_recover
                                                else (K.MODE_BADGE_NONE, "slow")])
+        if not first:
+            self._cards["rdl"].set_badges([(K.MODE_RDL_TARGET_FMT.format(n=plan.rdl_reports, devs=plan.rdl_devices), "warn")
+                                           if plan.rdl_reports else (K.MODE_BADGE_NONE, "slow")])
 
     def set_running(self, running: bool) -> None:
         self._running = running

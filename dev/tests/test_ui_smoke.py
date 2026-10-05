@@ -242,6 +242,10 @@ def test_mode_cards_pick_one_situation_and_map_to_worker_options(window, styled_
     assert prefs.load().refresh_window_days == 0
     page._pick("normal")
     assert page.refresh_range() is None
+    # 10/5 'RDL 영역 INI 패치' — 평소 수집 바로 밑, 고르면 MainWindow 가 rdl_patch 로 넘긴다
+    page._pick("rdl")
+    assert page.mode() == "rdl" and page.options() == (False, False, False) and page._cards["rdl"].available()
+    page._pick("normal")
     page._pick("recover")
     page.set_running(True)
     page.set_running(False)
