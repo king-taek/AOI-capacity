@@ -124,28 +124,36 @@ def _make_rdl(nas, dev="AOI-9", job="TB500_RDL3 - Multi", lot="GVB-RDL3", wafer=
     return name, d
 
 
-def test_rdl_patch_rereads_only_rdl_reports_missing_the_mode_on_rdl_devices(tmp_path, fake_nas, monkeypatch):
-    """수집 창 'RDL 영역 INI 패치'(10/5): 업데이트 전에 읽어 멀티/단일 판정이 없는 RDL Report 만, 그 Report 가 있는 장비만 다시 읽는다."""
+def test_rdl_patch_reads_only_the_wafer_inis_of_rdl_rows_missing_the_mode(tmp_path, fake_nas, monkeypatch):
+    """수집 창 'RDL 영역 INI 패치'(10/5): Report 폴더 나열도 Report 읽기도 없이, 판정이 빠진 RDL 행의 Wafer 폴더 INI 두 개만 정확 경로로 읽는다.
+    그 뒤 같은 Lot 이름으로 다시 검사해 폴더가 새로 쓰였으면(WaferInfo 시작 시각이 다르면) 판정하지 않는다."""
+    from aoi_capacity import nas_guard
     nas, csv_path = fake_nas
-    name, _d = _make_rdl(nas)
+    name, d = _make_rdl(nas)
+    name2, d2 = _make_rdl(nas, lot="LHP-RDL3", wafer="W02", multi=False)
     cfg = make_cfg(tmp_path, csv_path)
     collect.collect(cfg)
-    # 업데이트 전 캐시를 흉내 — RDL 행의 판정을 지운다
-    cache = json.loads(open(cfg["cache_file"], encoding="utf-8").read())
+    cache = json.loads(open(cfg["cache_file"], encoding="utf-8").read())    # 업데이트 전 캐시를 흉내 — 판정을 지운다
     for e in cache["reports"].values():
         for r in e["rows"]:
             r.pop("scan_mode", None)
     collect._save_cache(cfg, cache)
-    plan = collect.plan_run(cfg)
-    assert (plan.rdl_reports, plan.rdl_devices) == (1, 1)
-    listed = []
-    real = collect._list_all
-    monkeypatch.setattr(collect, "_list_all", lambda p, n: listed.append(n) or real(p, n))
+    assert (collect.plan_run(cfg).rdl_reports, collect.plan_run(cfg).rdl_devices) == (2, 1)
+    # W02 의 폴더는 그 뒤 다시 쓰였다(시작 시각이 다르다) — 판정하지 않는다
+    ini2 = d2 / "WaferInfo.ini"
+    ini2.write_text(ini2.read_text(encoding="utf-8").replace("13-Sep-26 05:31:04 PM", "14-Sep-26 05:31:04 PM"), encoding="utf-8")
+    opened, listed = [], []
+    real_text, real_bytes = nas_guard.read_text, nas_guard.read_bytes
+    monkeypatch.setattr(nas_guard, "read_text", lambda p, *a, **k: opened.append(str(p)) or real_text(p, *a, **k))
+    monkeypatch.setattr(nas_guard, "read_bytes", lambda p, *a, **k: opened.append(str(p)) or real_bytes(p, *a, **k))
+    monkeypatch.setattr(collect, "_list_all", lambda p, n: listed.append(n) or [])
     stats: dict = {}
     rows, meta, errors = collect.collect(cfg, rdl_patch=True, stats=stats)
-    assert not errors and listed == ["9호기"] and stats["mode"] == "rdl_patch"     # RDL 이 있는 장비만 나열
+    assert not errors and listed == [] and not any(p.lower().endswith((".htm", ".html")) for p in opened)   # 나열 0 · Report 0
+    on_nas = sorted({p for p in opened if p.startswith(str(nas))})
+    assert on_nas == sorted({str(d / "WaferInfo.ini"), str(d / "RecipesInfo.ini"), str(d2 / "WaferInfo.ini")})   # NAS 에서 연 것은 이 셋뿐
+    assert stats["mode"] == "rdl_patch" and (stats["rdl_rows"], stats["rdl_patched"]) == (2, 1)
     assert {m["name"] for m in meta} >= {"8호기", "9호기", "AOI-10"}                  # 보지 않은 장비도 결과에 남는다
-    assert sum(m.get("refreshed", 0) for m in meta) == 1
-    rdl = [r for r in rows if r["report"] == name and r["wafer_id"] == "W01"]
-    assert rdl and rdl[0]["scan_mode"] == "MULTI" and rdl[0]["recipe"] == "x20|x5"
-    assert collect.plan_run(cfg).rdl_reports == 0                                  # 다 채웠으면 대상 없음
+    by = {r["wafer_id"]: r for r in rows if r["report"] in (name, name2)}
+    assert (by["W01"]["scan_mode"], by["W01"]["recipe"]) == ("MULTI", "x20|x5") and not by["W02"].get("scan_mode")
+    assert collect.plan_run(cfg).rdl_reports == 0                                  # 판정 못 한 것도 다시 대상이 되지 않는다

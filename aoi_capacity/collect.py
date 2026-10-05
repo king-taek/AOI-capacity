@@ -593,10 +593,75 @@ def is_rdl_job(job) -> bool:
 
 def _needs_rdl_patch(entry: dict) -> bool:
     """'RDL 영역 INI 패치' 대상 — RDL Job 인데 INI 를 찾은(EXACT) 행에 멀티/단일 판정이 없는 Report(업데이트 전에 읽은 것). 밀려난 옛 판은 아니다."""
-    if entry.get("superseded_by"):
-        return False
+    if entry.get("superseded_by") or entry.get("rdl_checked"):
+        return False                                  # 이미 패치를 해 봤는데 INI 가 바뀌어 판정 못 한 Report 는 다시 대상이 아니다(다시 읽으면 플래그가 사라진다)
     return any(r.get("ini_match") == "EXACT" and not r.get("scan_mode") and is_rdl_job(r.get("job"))
                for r in entry.get("rows") or ())
+
+
+def _rdl_wafer_dir(r: dict, scan_root: str, backups) -> Optional[str]:
+    """캐시 행이 처음 INI 를 찾은 Wafer 폴더 — 행에 남은 코드로 되짚는다(백업 폴더 · 다른 Job 폴더 이름). 못 되짚으면 None."""
+    codes = dict((c, args) for c, args in parse_issue_codes(r.get("issue_codes")))
+    root = scan_root
+    if ISSUE_FOUND_IN_BACKUP in codes:
+        name = (codes[ISSUE_FOUND_IN_BACKUP] or [""])[0]
+        root = next((p for p, _cut in backups or () if os.path.basename(p.rstrip(chr(92) + "/")) == name), None)
+        if root is None:
+            return None
+    job = (codes.get(ISSUE_JOB_FOLDER_DIFFERS) or [r.get("job") or ""])[0]
+    parts = [job, r.get("setup") or "", r.get("lot") or "", r.get("wafer_id") or ""]
+    if not all(str(p).strip() for p in parts):
+        return None                                   # 빈 칸은 경로에서 사라져 남의 폴더를 가리킨다(규칙 4)
+    return os.path.join(root, *parts)
+
+
+def _patch_rdl_modes(cfg, cache, devs, should_stop, log, progress, stats, dirty) -> None:
+    """'RDL 영역 INI 패치'(10/5) — 판정이 빠진 RDL 행(`_needs_rdl_patch`)마다 처음 읽은 그 Wafer 폴더의 WaferInfo.ini 와 RecipesInfo.ini 만 연다.
+    Report 폴더 나열 · Report 읽기 · 다른 장비 · KLA 는 없다. WaferInfo 의 시작 시각이 행과 다르면(그 뒤 같은 Lot 이름으로 다시 검사해
+    폴더가 새로 쓰였다) 판정하지 않는다 — 다른 검사의 레시피를 붙이지 않는다. 스레드는 읽기만, 행 고치기는 메인 스레드가 입력 순서로."""
+    by_key = {str(d["key"]): d for d in devs if d.get("kind") != "kla"}
+    tasks = []
+    for key, e in cache["reports"].items():
+        if not _needs_rdl_patch(e):
+            continue
+        d = by_key.get(key.split("|", 1)[0])
+        if d is None:
+            continue                                  # 이번 장비 목록·범위 밖 — 손대지 않는다
+        scan_root = os.path.join(d["path"], str(d.get("scan_dir") or cfg["scan_dir"]))
+        backups = _backup_roots(d, scan_root)
+        for r in e.get("rows") or ():
+            if r.get("ini_match") == "EXACT" and not r.get("scan_mode") and is_rdl_job(r.get("job")):
+                w = _rdl_wafer_dir(r, scan_root, backups)
+                if w:
+                    tasks.append((e, r, w, d["name"]))
+    devs_hit = sorted({t[3] for t in tasks})
+    _say(log, f"RDL 영역 INI 패치: RDL 행 {len(tasks)}장 · 장비 {len(devs_hit)}대({', '.join(devs_hit) or '없음'}) — Report 는 다시 읽지 않습니다")
+    memo, done, total = _IniMemo(), _Counter(), len(tasks)
+
+    def one(t):
+        _check(should_stop)
+        _e, r, w, name = t
+        kind, got = memo.get(os.path.join(w, "WaferInfo.ini"))
+        out = None
+        if kind == "ok" and (got.get("AutoCycleInfo", {}).get("WaferStartTime", "") == r.get("wafer_start_time")):
+            rk, names = memo.recipes(os.path.join(w, "RecipesInfo.ini"))
+            if rk == "ok" and names:
+                out = ("|".join(names), "MULTI" if len(names) > 1 else "SINGLE")
+            elif rk == "missing":
+                out = (got.get("Recipe", {}).get("Name", "") or r.get("recipe", ""), "SINGLE")
+        progress(done.bump(), total, i18n.KO.COLLECT_PHASE_RDL_FMT.format(device=name))
+        return out
+    results = _run(cfg, tasks, one, should_stop, group=lambda t: nas_group(t[2]))
+    n_ok = 0
+    for (e, r, _w, _n), out in zip(tasks, results):   # 메인 스레드가 입력 순서로 고친다
+        e["rdl_checked"] = True
+        if out:
+            r["recipe"], r["scan_mode"] = out
+            n_ok += 1
+    if tasks:
+        dirty.add(DIRTY_UPDATED)
+    stats.update({"rdl_rows": len(tasks), "rdl_patched": n_ok, "rdl_devices": len(devs_hit)})
+    _say(log, f"RDL 영역 INI 패치: {n_ok}/{len(tasks)}장 판정 — 나머지는 폴더가 그 뒤 다시 쓰였거나 INI 를 읽지 못했습니다")
 
 
 def read_recipes_info(path) -> List[str]:
@@ -1663,7 +1728,7 @@ def _list_all(rep_dir: str, name: str) -> list:
 
 
 def _list_new_reports(devs, cache, cfg, backfill, log, progress, on_device, should_stop, recover=False,
-                      refresh_days: int = 0, window_days=None, refresh_since_ts=None, refresh_until_ts=None, rdl_patch=False):
+                      refresh_days: int = 0, window_days=None, refresh_since_ts=None, refresh_until_ts=None):
     """1차 패스: 장비마다 Report 폴더를 한 번 나열(scandir+stat 만)해 읽을 파일을 고른다. NAS 읽기 전용.
 
     장비 30대를 한 줄로 나열하면 SMB 왕복 지연이 30번 더해진다 — 동시에 나열한다(`read_workers`).
@@ -1672,7 +1737,6 @@ def _list_new_reports(devs, cache, cfg, backfill, log, progress, on_device, shou
       * `refresh_days>0`: 최근 그 일수 안의 파일은 캐시에 있어도 다시 읽는다(D60, `dm["refreshed"]`).
         `refresh_since_ts`·`refresh_until_ts`(10/5 '기간 다시 읽기')를 주면 수정시각이 [since, until) 인 파일만 — 기간 밖은 그대로 둔다.
       * `recover`: INI 를 못 찾았던 Report 만 다시 읽는다(`dm["recovered"]`).
-      * `rdl_patch`(10/5 'RDL 영역 INI 패치'): 멀티/단일 판정이 빠진 RDL Report(`_needs_rdl_patch`)만 다시 읽는다 — 날짜 창 없이 폴더 전체를 본다(`dm["refreshed"]`).
       * 지난번 다시 읽다 실패해 이전 행을 그대로 둔 Report(`failed` 에 재시도가 남은 것)는 다시 읽는다(`dm["retried"]`).
     `window_days` 는 backfill 창 길이(기본 `backfill_days`; rebuild 는 `retention_days`).
 
@@ -1713,15 +1777,13 @@ def _list_new_reports(devs, cache, cfg, backfill, log, progress, on_device, shou
         try:
             # 누락 복구는 커서와 무관하게 backfill 창 전체를 다시 훑되, 다시 읽는 건 복구 대상뿐이다(아래)
             since = backfill_since if (backfill or recover or dk not in last) else float(last[dk]) - CLOCK_SKEW_SEC
-            if rdl_patch:
-                since = 0.0                                # 패치 대상은 언제 것이든 — 캐시에 있는 RDL Report 전부가 후보
             if refresh_since is not None:
                 since = min(since, refresh_since)          # refresh 창은 커서보다 앞서도 훑는다
             if dk in pending_since:
                 since = min(since, pending_since[dk] - 1)  # 재시도할 Report 까지는 훑는다
             files = None
             lister = PATTERN_LISTER
-            incremental = not (backfill or recover or rdl_patch or refresh_since is not None or dk not in last)
+            incremental = not (backfill or recover or refresh_since is not None or dk not in last)
             if lister is not None and incremental and now - float(full_listed.get(dk) or 0) < full_every:
                 pats = report_name_patterns(since, now)
                 if pats:
@@ -1751,9 +1813,6 @@ def _list_new_reports(devs, cache, cfg, backfill, log, progress, on_device, shou
                 if cached and abs(float(cached.get("mtime", 0)) - m) < 1:
                     pending = failed.get(key) or {}
                     if refresh_since is not None and m >= refresh_since and (refresh_until_ts is None or m < float(refresh_until_ts)):
-                        dm["refreshed"] += 1
-                        pick.append((e, key))
-                    elif rdl_patch and _needs_rdl_patch(cached):
                         dm["refreshed"] += 1
                         pick.append((e, key))
                     elif recover and _needs_recovery(cached):
@@ -1919,14 +1978,13 @@ def collect(cfg: dict, full: bool = False, backfill: bool = False, *, recover: b
     kla_devs = [d for d in devs if d.get("kind") == "kla"]      # D73: KLA 는 Report 가 없다 — 아래에서 kla.collect_kla 로
     cam_devs = [d for d in devs if d.get("kind") != "kla"]
     rdl_patch = bool(rdl_patch) and not rebuild
-    if rdl_patch:                                             # RDL 레시피가 있는 장비만(캐시가 안다) — 나머지는 나열도 하지 않는다
-        want = {k.split("|", 1)[0] for k, e in cache["reports"].items() if _needs_rdl_patch(e)}
-        cam_devs, kla_devs = [d for d in cam_devs if str(d["key"]) in want], []
-        _say(log, f"RDL 영역 INI 패치: 멀티/단일 판정이 빠진 RDL Report 가 있는 장비 {len(cam_devs)}대만 봅니다"
-                  f"({', '.join(d['name'] for d in cam_devs) or '없음'})")
+    if rdl_patch:
+        # 10/5 'RDL 영역 INI 패치': Report 폴더 나열도 Report 읽기도 없이, 캐시에 있는 RDL 행의 Wafer 폴더 INI 만 정확 경로로 읽는다.
+        cam_devs, kla_devs = [], []
+        _patch_rdl_modes(cfg, cache, devs, should_stop, log, progress, stats, dirty)
     plan = _list_new_reports(cam_devs, cache, cfg, backfill, log, progress, on_device, should_stop, recover=recover,
                              refresh_days=0 if rebuild else refresh_days, window_days=window_days,
-                             refresh_since_ts=rng_ts[0], refresh_until_ts=rng_ts[1], rdl_patch=rdl_patch)
+                             refresh_since_ts=rng_ts[0], refresh_until_ts=rng_ts[1])
     stats["list_ms"] = int((clock() - t1) * 1000)
     stats["list_pattern"] = sum(1 for _d, dm, _p, _k in plan if dm.get("listing") == "pattern")
     if PATTERN_LISTER is not None:                            # 패턴 나열을 쓰는 PC 에서만 — 다음 전체 나열 시각을 정하는 근거
