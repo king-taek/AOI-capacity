@@ -90,7 +90,7 @@ DEFAULT_CONFIG: Dict[str, object] = {
     "report_dir": "Report",
     "scan_dir": "Scanresult",
     "backfill_days": 30,
-    "retention_days": 90,
+    "retention_days": 0,                          # 이력 보관 기간(일) — 0 = 기한 없이 보관(10/5 사용자 확정)
     "output_dir": "",
     "output_name": "AOI_capacity.html",
     "write_csv": False,
@@ -105,7 +105,7 @@ DEFAULT_CONFIG: Dict[str, object] = {
     devices_mod.PATH_ALIASES_CFG: {},
     "attention_util": 40,                         # D14: 살펴볼 장비 = 가동률 이 값(%) 미만 — 결과 HTML 의 meta.dashboard_settings 로 나간다
     "attention_err": 3,                           # D14: 또는 Error 건수 이 값 이상
-    "split_mb": 30,                               # 결과 HTML 이 이 MB 를 넘으면 기간별 여러 장으로 나눈다(0 = 안 나눔, 9/23)
+    "html_days": 60,                              # 수집 뒤 결과 HTML 에 담을 최근 일수(0 = 가진 데이터 전부). 분할은 없다(10/5 사용자 — 9/23 분할 롤백)
     "recipe_groups_file": "",                     # D67: 결과 HTML 에 담을 레시피 묶음(화면에서 내보낸 JSON). 비우면 데이터 폴더·다운로드에서 가장 최근 것
 }
 MAX_READ_RETRY = 3   # 읽기에 실패한 Report 를 몇 번까지 다시 시도하고 커서를 붙잡아 둘지
@@ -909,6 +909,8 @@ CACHE_FORMAT = 2
 DIRTY_CREATED, DIRTY_CORRUPT, DIRTY_FORMAT, DIRTY_PARSER = "created", "corrupt", "format", "parser"
 DIRTY_CURSOR, DIRTY_IDENTITY, DIRTY_MAPPING = "cursor", "identity", "device_mapping"
 DIRTY_REPORTS, DIRTY_UPDATED, DIRTY_FAILED, DIRTY_RETENTION, DIRTY_REBUILD = "reports", "reports_updated", "failed", "retention", "rebuild"
+DIRTY_DEVICE_INFO = "device_info"
+UNLIMITED_DAYS = 36500                                       # retention_days 0(기한 없음)일 때 rebuild 가 읽는 창
 DIRTY_LISTING = "listing"      # 장비의 마지막 전체 나열 시각(`full_listed`) — 패턴 나열을 쓸 수 있는 PC(Windows)에서만 적는다
 #: identity 기록의 충돌 목록 상한 — 요약이지 원장(ledger)이 아니다. 건수는 `n_conflicts` 에 전부 남는다.
 _MAX_CONFLICTS = 200
@@ -1611,6 +1613,7 @@ def _list_new_reports(devs, cache, cfg, backfill, log, progress, on_device, shou
 
     def one(d):
         _check(should_stop)
+        t_list = time.perf_counter()
         on_device(d["name"], "listing", "")
         dk = str(d["key"])                         # ★ 커서·Report 키는 안정 키(C03) — 경로 id 가 아니다
         dm = {"name": d["name"], "id": str(d["id"]), "key": dk, "note": d["path"], "reports": 0, "found": 0, "error": "",
@@ -1670,6 +1673,7 @@ def _list_new_reports(devs, cache, cfg, backfill, log, progress, on_device, shou
                 else:
                     pick.append((e, key))
             dm["found"], dm["reports"] = len(files), len(pick)
+            dm["list_dev_ms"] = int((time.perf_counter() - t_list) * 1000)   # 숨긴 수집 로그(10/5) — 장비마다 나열에 걸린 시간
             out = (d, dm, pick, known)
         except OSError as ex:
             dm["error"] = f"{type(ex).__name__}: {ex}"
@@ -1765,6 +1769,7 @@ def collect(cfg: dict, full: bool = False, backfill: bool = False, *, recover: b
     stats = stats if stats is not None else {}
     clock = time.perf_counter
     t0 = clock()
+    started_at = dt.datetime.now().isoformat(timespec="seconds")
     cfg = config_mod.check_or_raise(cfg)   # ★ C13: 형·범위를 맞추고, 범위·경로 설정이 잘못됐으면 ConfigError — NAS 접근 0
     nas_guard.check_cfg(cfg)  # 출력·캐시가 NAS 아래면 시작조차 하지 않는다
     refresh_days, rebuild = _mode_args(cfg, full, refresh_window_days, rebuild_all)
@@ -1795,7 +1800,7 @@ def collect(cfg: dict, full: bool = False, backfill: bool = False, *, recover: b
             cache["identity"] = json.loads(json.dumps(old_cache["identity"]))
     stats["devices_ms"] = int((clock() - t0) * 1000)
     t1 = clock()
-    window_days = float(cfg["retention_days"]) if rebuild else None
+    window_days = (float(cfg["retention_days"]) or float(UNLIMITED_DAYS)) if rebuild else None   # 0 = 기한 없음 → 전부
     if rebuild:
         _say(log, f"전체 재구축: 보관 기간 {cfg['retention_days']}일 안의 Report 를 전부 새 후보 캐시에 모읍니다"
                   f"(검증을 통과할 때만 기존 캐시 {len(old_cache['reports'])}개 항목을 바꿉니다)")
@@ -1868,12 +1873,15 @@ def collect(cfg: dict, full: bool = False, backfill: bool = False, *, recover: b
             on_device(d["name"], "partial" if failed_any else "done", "")
         return out
 
+    slow: List[Tuple[int, str, str]] = []
     by_dev: Dict[str, dict] = {str(d["key"]): {"ok": list(known), "blocked": []}
                                for d, dm, _pick, known in plan if not dm["error"]}
     for (d, _dm, e, key, _scan, _bk), mtime, rows_of, err, sec, sha in _run(cfg, jobs, read_one, should_stop,
                                                                           group=lambda j: nas_group(j[0]["path"])):
         dk, did = str(d["key"]), str(d["id"])
         _dm["read_sum_ms"] = _dm.get("read_sum_ms", 0) + int(sec * 1000)   # 병렬로 겹치는 시간의 **합**(경과시간 아님)
+        _dm["read_n"] = _dm.get("read_n", 0) + 1
+        slow.append((int(sec * 1000), d["name"], e.name))                # 숨긴 수집 로그 — 가장 오래 걸린 Report
         if err is None:
             prev = reports.get(key)
             revision = 1
@@ -1922,7 +1930,8 @@ def collect(cfg: dict, full: bool = False, backfill: bool = False, *, recover: b
     t3 = clock()
 
     progress(total, total, i18n.KO.COLLECT_PHASE_RETENTION)
-    cutoff = dt.datetime.now() - dt.timedelta(days=float(cfg["retention_days"]))
+    # 0 = 기한 없이 보관(10/5) — 아무것도 지우지 않는다
+    cutoff = (dt.datetime.now() - dt.timedelta(days=float(cfg["retention_days"]))) if cfg["retention_days"] else dt.datetime.min
 
     def newest_of(entry):
         ts = [parse_dt(r.get("wafer_end_time") or r.get("batch_start")) for r in entry["rows"]]
@@ -1942,6 +1951,11 @@ def collect(cfg: dict, full: bool = False, backfill: bool = False, *, recover: b
             raise RebuildRejected("전체 재구축 후보를 버리고 기존 캐시를 그대로 둡니다 — " + " / ".join(reasons))
         _say(log, f"전체 재구축: 새로 읽은 Report {n_new}개 · 이전 이력 이관 {carried['reports']}개"
                   f"(미접근 장비 {carried['unreachable']}대 · 목록 밖 {carried['foreign']}개) · 읽기 실패 {len(errors)}건(이전 행 유지)")
+    # 장비의 경로·Report 폴더를 캐시에 남긴다 — 'HTML 만 다시 만들기'(NAS 없이)가 Report 열기 경로를 그대로 쓰게. 바뀔 때만 저장 이유가 된다
+    devinfo = [{k: dm.get(k, "") for k in ("name", "key", "note", "report_dir")} for dm in dev_meta if not dm.get("error")]
+    if devinfo and devinfo != cache.get("last_devices"):
+        cache["last_devices"] = devinfo
+        dirty.add(DIRTY_DEVICE_INFO)
     stats["cache_dirty"] = dict(sorted(dirty.reasons.items()))
     if dirty:
         saved = _save_cache(cfg, cache)
@@ -1972,7 +1986,32 @@ def collect(cfg: dict, full: bool = False, backfill: bool = False, *, recover: b
               " · NAS {nas_groups}대 × 동시 {read_workers}개 · 이름 패턴 나열 {list_pattern}대".format(**stats))
     if hidden:
         _say(log, f"수집 범위({scope.describe(cfg)}) 밖 장비의 캐시 {hidden}행은 화면에서 제외했습니다(캐시는 그대로 둡니다)")
+    stats["log"] = _collect_log(stats, dev_meta, slow, errors, started_at)   # 결과 HTML 의 meta.collect_log(화면에는 숨김, 10/5)
     return render_issue_rows(rows), dev_meta, errors     # 출력용 행 — issue_codes 의 사람 문장은 여기서(캐시에는 코드만, C12)
+
+
+def _collect_log(stats: dict, dev_meta: List[dict], slow: List[Tuple[int, str, str]], errors: List[dict], started_at: str) -> dict:
+    """수집 상세 로그(10/5 사용자 요청 — '어느 장비 · 어느 단계 · 몇 개 · 몇 초'). 결과 HTML 의 `meta.collect_log` 로 들어가고
+    화면에는 그리지 않는다(숨김). 값은 결과에 영향을 주지 않는다 — 시간이 어디서 가는지 보려는 근거일 뿐이다."""
+    phases = {k: stats.get(k) for k in ("devices_ms", "list_ms", "read_ms", "cache_ms", "total_ms") if k in stats}
+    devs = []
+    for dm in dev_meta:
+        if dm.get("scope") == "out":
+            continue
+        devs.append({k: dm.get(k) for k in ("name", "listing", "pattern_days", "list_dev_ms", "found", "reports", "kept", "refreshed",
+                                             "recovered", "retried", "read_n", "read_sum_ms", "read_errors", "rows", "status", "error")
+                     if dm.get(k) not in (None, "")})
+    slow = sorted(slow, reverse=True)
+    return {"kind": "collect", "started": started_at, "finished": dt.datetime.now().isoformat(timespec="seconds"),
+            "mode": stats.get("mode"), "phases_ms": phases,
+            "settings": {k: stats.get(k) for k in ("read_workers", "nas_groups", "list_pattern") if k in stats},
+            "counts": {k: stats.get(k) for k in ("devices", "reports_found", "reports_read", "reports_failed", "reports_refreshed",
+                                                  "reports_kept", "ini_asked", "ini_unique", "ini_missing", "cache_saved",
+                                                  "cache_status") if k in stats},
+            "cache_dirty": stats.get("cache_dirty"),
+            "devices": devs,
+            "slowest_reports": [{"ms": ms, "device": n, "report": f} for ms, n, f in slow[:30]],
+            "errors": [{k: e.get(k) for k in ("device", "path", "tries", "error")} for e in errors[:50]]}
 
 
 def _carry_over(old: dict, cand: dict, index: _DeviceIndex, plan, cutoff: dt.datetime) -> Dict[str, int]:
@@ -2131,81 +2170,63 @@ def _wafer_key(r: dict) -> str:
     return re.sub(r"[^A-Z0-9]", "", str(r.get("wafer_id") or "").upper())
 
 
-def split_rows_by_day(rows: List[dict], budget: int) -> List[Tuple[str, str, List[dict]]]:
-    """결과 HTML 이 한도를 넘을 때(9/23) 행을 **날짜 구간**으로 나눈다 → [(첫날, 끝날, 그 파일에 넣을 행)] 새 구간부터.
+def _row_day(r: dict, memo: Dict[str, str]) -> str:
+    raw = str(r.get("batch_start") or r.get("wafer_start_time") or "")
+    if raw not in memo:
+        d = parse_dt(raw)
+        memo[raw] = d.date().isoformat() if d else ""
+    return memo[raw]
 
-    - 날짜는 행의 배치 시작일(없으면 Wafer 시작일) — 한 Report 의 행은 같은 파일에 들어간다. 날짜를 모르는 행은 가장 최근 파일에.
-    - 각 파일에는 구간 **앞뒤 하루치 행**(자정을 넘는 배치 · 에러 후 대기)과 **구간 안 Wafer 의 더 앞선 시도들**(Rescan 은 같은 자재의
-      앞선 시도가 PASS 였는지로 정한다 — D63, 기간 제한 없음)을 맥락으로 더 넣는다. 화면은 `meta.part.from~to` 밖의 날을 그리지 않으므로
-      맥락 행은 계산에만 쓰이고 두 번 보이지 않는다 → 각 날의 장비-일 값이 나누지 않은 파일과 같다(가드 `test_html_split.py`).
-    - 구간은 날마다 따로 접어 잰 크기로 새 날부터 넓히고, 맥락까지 넣어 실제로 접은 크기가 `budget` 을 넘으면 하루씩 줄인다.
-      하루치만으로 넘으면 그 하루가 한 파일이다(더 쪼개지 않는다)."""
+
+def rows_for_range(rows: List[dict], day_from: str = "", day_to: str = "") -> Tuple[List[dict], str, str]:
+    """결과 HTML 을 기간으로 만들 때(10/5) 넣을 행 → (행, 실제 첫날, 실제 끝날). 빈 값은 '처음부터' · '끝까지'.
+
+    날짜는 행의 배치 시작일(없으면 Wafer 시작일) — 한 Report 의 행은 함께 들어간다. 기간 안 행에 더해 **맥락**을 넣는다:
+    기간 앞뒤 하루치(자정을 넘는 배치 · 에러 후 대기), 같은 (장비, Report 이름) 행, 기간 안 Wafer 의 **앞선 시도 전부**
+    (Rescan 은 같은 자재의 앞선 시도가 PASS 였는지로 정한다 — D63, 기간 제한 없음). 화면은 `meta.range.from~to` 밖의 날을
+    그리지 않으므로 맥락 행은 계산에만 쓰인다 → 각 날의 장비-일 값이 전부 담은 파일과 같다(가드 `test_html_range.py`).
+    원래 행 순서를 지킨다 — 화면 모델의 동점 처리가 입력 순서를 따른다(9/23 실측). 날짜를 모르는 행은 끝을 정하지 않았을 때만 넣는다."""
     memo: Dict[str, str] = {}
-
-    def day_of(r: dict) -> str:
-        raw = str(r.get("batch_start") or r.get("wafer_start_time") or "")
-        if raw not in memo:
-            d = parse_dt(raw)
-            memo[raw] = d.date().isoformat() if d else ""
-        return memo[raw]
-
-    def size_of(rs: List[dict]) -> int:
-        return _utf8_len(json.dumps(_embed_rows(rs), ensure_ascii=False, separators=(",", ":")))
-
-    by: Dict[str, List[dict]] = {}
-    for r in rows:
-        by.setdefault(day_of(r), []).append(r)
-    undated = by.pop("", [])
-    days = sorted(by)
+    days = sorted({d for d in (_row_day(r, memo) for r in rows) if d})
     if not days:
-        return [("", "", list(rows))]
-    first_seen: Dict[str, int] = {}                     # Wafer 열쇠 → 처음 나온 날의 번호(그보다 앞선 시도는 없다)
-    for k, d in enumerate(days):
-        for r in by[d]:
-            first_seen.setdefault(_wafer_key(r), k)
-    order = {id(r): k for k, r in enumerate(rows)}
-    by_rep: Dict[tuple, List[dict]] = {}              # 맥락은 Report 통째로 — 일부 행만 넣으면 그 Report 의 배치 창 나누기가 달라진다
+        return list(rows), "", ""
+    lo = max(day_from or days[0], days[0])
+    hi = min(day_to or days[-1], days[-1])
+    if not day_from and not day_to:
+        return list(rows), days[0], days[-1]
+    if lo > hi:
+        return [], lo, hi
+    d0 = (dt.date.fromisoformat(lo) - dt.timedelta(days=1)).isoformat()
+    d1 = (dt.date.fromisoformat(hi) + dt.timedelta(days=1)).isoformat()
+    pick = [r for r in rows if d0 <= _row_day(r, memo) <= d1 or (not _row_day(r, memo) and not day_to)]
+    have = {id(r) for r in pick}
+    reps = {(r.get("device"), r.get("report")) for r in pick}
+    keys = {k for k in (_wafer_key(r) for r in pick) if k}
     for r in rows:
-        by_rep.setdefault((r.get("device"), r.get("report")), []).append(r)
-    size = [size_of(by[d]) for d in days]
-    acc = [0]
-    for v in size:
-        acc.append(acc[-1] + v)
+        if id(r) in have:
+            continue
+        d = _row_day(r, memo)
+        if (r.get("device"), r.get("report")) in reps or (d and d < d0 and _wafer_key(r) in keys):
+            pick.append(r)
+            have.add(id(r))
+    order = {id(r): k for k, r in enumerate(rows)}
+    pick.sort(key=lambda r: order[id(r)])
+    return pick, lo, hi
 
-    def build(lo: int, hi: int, newest: bool) -> List[dict]:
-        a, b = max(0, lo - 1), min(len(days) - 1, hi + 1)
-        part = [r for k in range(a, b + 1) for r in by[days[k]]]
-        keys = {_wafer_key(r) for r in part}            # 맥락 날의 행도 — 전날 23시에 시작한 배치의 Wafer 는 자정 뒤(구간 첫날)에 칠해진다
-        start = min((first_seen[kk] for kk in keys if kk), default=a)
-        same = {(r.get("device"), r.get("report")) for r in part}   # 화면은 (장비, Report 이름)으로 묶는다 — 이름이 같은 다른 날 행까지
-        have = {id(r) for r in part}
-        part += [r for rk in same for r in by_rep[rk] if id(r) not in have]
-        have = {id(r) for r in part}
-        part += [r for k in range(start, a) for r in by[days[k]] if id(r) not in have and _wafer_key(r) and _wafer_key(r) in keys]
-        if newest:
-            part.extend(undated)
-        part.sort(key=lambda r: order[id(r)])            # 원래 행 순서 그대로 — 화면 모델의 동점 처리가 입력 순서를 따른다(실측)
-        return part
 
-    out: List[Tuple[str, str, List[dict]]] = []
-    hi = len(days) - 1
-    while hi >= 0:
-        lo = hi
-        while lo - 1 >= 0 and acc[min(len(days) - 1, hi + 1) + 1] - acc[max(0, lo - 2)] <= budget * 0.85:   # 앞선 시도 맥락 몫을 남긴다
-            lo -= 1
-        part = build(lo, hi, not out)
-        while lo < hi and size_of(part) > budget:        # 맥락까지 넣으니 넘친다 — 하루씩 줄인다
-            lo += 1
-            part = build(lo, hi, not out)
-        out.append((days[lo], days[hi], part))
-        hi = lo - 1
-    return out
+def range_name(output_name: str, day_from: str, day_to: str) -> str:
+    """기간을 고른 HTML 의 파일 이름 — `AOI_capacity_2026-08-01~2026-09-30.html`. 수집 뒤 기본 HTML(최근 html_days 일)은 원래 이름."""
+    stem, ext = os.path.splitext(output_name)
+    return f"{stem}_{day_from}~{day_to}{ext or '.html'}"
 
 
 def write_html(cfg: dict, rows: List[dict], dev_meta: List[dict], errors: List[dict], started: float, *,
                mode: str = "auto", log: Optional[LogFn] = None, progress: Optional[ProgressFn] = None,
-               timing: Optional[dict] = None, warnings: Optional[List[dict]] = None) -> str:
-    """template.html 에 데이터를 넣어 출력 폴더에 HTML 한 장을 쓴다. 고유 임시 파일에 쓴 뒤 교체(원자적), 실패하면 자기 임시 파일만 지운다.
+               timing: Optional[dict] = None, warnings: Optional[List[dict]] = None,
+               day_from: str = "", day_to: str = "", collect_log: Optional[dict] = None) -> str:
+    """template.html 에 데이터를 넣어 출력 폴더에 HTML 한 장을 쓴다(분할 없음).
+
+    `day_from`·`day_to`(YYYY-MM-DD) 를 주면 그 기간만 담아 `range_name` 이름으로, 안 주면 cfg `html_days` 의 최근 N일을 원래 이름으로. 고유 임시 파일에 쓴 뒤 교체(원자적), 실패하면 자기 임시 파일만 지운다.
 
     HTML 이 **주 산출물**이고 CSV 는 부가 산출물이다(C06). CSV 를 못 쓰는 OS 오류(Excel 이 열어 둔 파일에 `os.replace` →
     PermissionError 등)는 수집을 실패로 만들지 않는다 — `warnings` 리스트를 주면 `{"kind": WARN_CSV, "path", "error", "html"}` 를
@@ -2229,68 +2250,54 @@ def write_html(cfg: dict, rows: List[dict], dev_meta: List[dict], errors: List[d
             "mode": mode, "devices": dev_meta, "reportErrors": errors,
             "scope": {"restricted": not scope.unrestricted(cfg), "devices": scope.scope_list(cfg)},
             "elapsed": int((time.time() - started) * 1000), "retention_days": cfg["retention_days"],
-            "timing": dict(timing) if timing else {},
+            "timing": {k: v for k, v in timing.items() if k != "log"} if timing else {},   # 상세 로그는 collect_log 에 따로
             "sha": ver.get("sha", ""), "branch": ver.get("branch", ""), "repo": ver.get("repo", ""),
             "version": (str(ver.get("sha", ""))[:7]) if ver.get("sha") else "",
             "dashboard_settings": config_mod.dashboard_settings(cfg)}      # D14: 살펴볼 장비 문턱(attentionUtil · attentionErr)
     rg, _rg_path = recipes_mod.load(cfg, log)
     if rg is not None:
         meta["recipe_groups"] = rg                 # D67: 화면의 레시피 묶음 — 통계·표시에만, Rescan 판정에는 쓰지 않는다
+    # 기간(10/5): 고른 기간이 있으면 그 기간, 없으면 cfg html_days(최근 N일, 0 = 전부). 분할은 없다 — 9/23 분할은 사용자 요청으로 롤백
+    all_rows = rows
+    memo: Dict[str, str] = {}
+    known_days = sorted({d for d in (_row_day(r, memo) for r in all_rows) if d})
+    explicit = bool(day_from or day_to)
+    if not explicit and int(cfg.get("html_days") or 0) > 0:
+        anchor = dt.date.fromisoformat(known_days[-1]) if known_days else now.date()   # 가진 데이터의 끝날부터 거꾸로
+        day_from = (anchor - dt.timedelta(days=int(cfg["html_days"]) - 1)).isoformat()
+    rows, r_from, r_to = rows_for_range(all_rows, day_from or "", day_to or "")
+    if r_from:
+        meta["range"] = {"from": r_from, "to": r_to, "explicit": explicit}
+    if known_days:
+        meta["data_from"], meta["data_to"] = known_days[0], known_days[-1]   # 가진 데이터 전체의 첫날 — 첫날은 수집 창이 도중에 시작해 '부분'
+    if collect_log:
+        meta["collect_log"] = collect_log                # 숨긴 수집 로그(10/5) — 화면에는 그리지 않는다
     emb = _embed_rows(rows)
     if meta["timing"]:
         meta["timing"]["html_ms"] = int((time.perf_counter() - t_html) * 1000)   # 템플릿 읽기 + 접기까지(쓰기 전)
     data = _payload(emb, meta)
     del emb                                        # 접힌 dict 는 문자열이 됐다 — 큰 참조를 놓는다(C07)
     os.makedirs(cfg["output_dir"], exist_ok=True)
-    target = os.path.join(cfg["output_dir"], cfg["output_name"])
-    fixed = _utf8_len(prefix) + _utf8_len(suffix)
-    limit = int(cfg.get("split_mb") or 0) * MB
-    total = fixed + _utf8_len(data)
-    # ★ 9/23: 한도(split_mb)를 넘으면 기간별 여러 장으로 — 가장 최근 구간이 원래 이름, 옛 구간은 이름에 기간. 각 파일은 따로 열린다.
-    jobs: List[Tuple[str, str]] = [(target, data)]
-    if limit and total > limit and rows:
-        del data, jobs
-        budget = max(MB, limit - fixed - _utf8_len(json.dumps(meta, ensure_ascii=False)) - MB // 2)   # meta·여유 몫을 뺀 데이터 몫
-        pieces = split_rows_by_day(rows, budget)
-        names = [cfg["output_name"] if k == 0 else paths.part_name(cfg["output_name"], a, b) for k, (a, b, _r) in enumerate(pieces)]
-        files = [{"name": n, "from": a, "to": b} for n, (a, b, _r) in zip(names, pieces)]
-        jobs = []
-        for k, ((a, b, part_rows), name) in enumerate(zip(pieces, names)):
-            pm = dict(meta)
-            pm["part"] = {"index": k + 1, "count": len(pieces), "from": a, "to": b, "files": files}
-            jobs.append((os.path.join(cfg["output_dir"], name), _payload(_embed_rows(part_rows), pm)))
-        _say(log, f"결과 HTML 이 {total / MB:.1f}MB 로 한도 {limit // MB}MB 를 넘어 기간별 {len(jobs)}장으로 나눕니다"
-                  f"(가장 최근 구간이 {cfg['output_name']})")
-    keep = {os.path.basename(t) for t, _d in jobs}
-    for path_k, data_k in jobs:
-        tmp = _unique_tmp(path_k)
-        size = fixed + _utf8_len(data_k)
-        try:
-            with open(tmp, "w", encoding="utf-8", errors="strict") as f:
-                f.write(prefix)
-                f.write(data_k)
-                f.write(suffix)
-                f.flush()
-                os.fsync(f.fileno())
-            os.replace(tmp, path_k)
-        finally:
-            if os.path.isfile(tmp):                     # 자기가 만든 임시 파일만 지운다(원본에는 손대지 않는다)
-                try:
-                    os.remove(tmp)
-                except OSError:
-                    pass
-        _say(log, f"HTML 저장: {path_k} ({size // 1024} KB)" + (" — 한도보다 큽니다(하루치가 한도를 넘음)" if limit and size > limit else ""))
-    del jobs
-    # 지난 수집이 남긴 옛 구간 파일 중 이번에 만들지 않은 것 — `paths.part_re` 모양의 이름만, 출력 폴더(로컬) 안에서만 지운다
-    rx = paths.part_re(cfg["output_name"])
-    for stale in sorted(os.listdir(cfg["output_dir"])):
-        if rx.match(stale) and stale not in keep:
-            nas_guard.assert_local(os.path.join(cfg["output_dir"], stale), nas_guard.roots_for_cfg(cfg))
+    name = range_name(cfg["output_name"], r_from, r_to) if explicit and r_from else cfg["output_name"]
+    target = os.path.join(cfg["output_dir"], name)
+    tmp = _unique_tmp(target)
+    size = _utf8_len(prefix) + _utf8_len(data) + _utf8_len(suffix)
+    try:
+        with open(tmp, "w", encoding="utf-8", errors="strict") as f:
+            f.write(prefix)
+            f.write(data)
+            f.write(suffix)
+            f.flush()
+            os.fsync(f.fileno())
+        os.replace(tmp, target)
+    finally:
+        if os.path.isfile(tmp):                     # 자기가 만든 임시 파일만 지운다(원본에는 손대지 않는다)
             try:
-                os.remove(os.path.join(cfg["output_dir"], stale))
-                _say(log, f"지난 분할 파일 정리: {stale}")
-            except OSError as ex:
-                _say(log, f"지난 분할 파일을 지우지 못했습니다(열려 있을 수 있음): {stale} — {ex}")
+                os.remove(tmp)
+            except OSError:
+                pass
+    del data
+    _say(log, f"HTML 저장: {target} ({size // 1024} KB · 기간 {r_from or '-'} ~ {r_to or '-'} · 행 {len(rows)}/{len(all_rows)})")
     if cfg.get("write_csv"):
         csv_path = os.path.splitext(target)[0] + ".csv"
         try:
@@ -2304,6 +2311,54 @@ def write_html(cfg: dict, rows: List[dict], dev_meta: List[dict], errors: List[d
     if progress:
         progress(1, 1, i18n.KO.COLLECT_PHASE_DONE)
     return target
+
+
+def cached_days(cfg: dict) -> Tuple[str, str, int]:
+    """캐시(로컬)에 있는 데이터의 (첫날, 끝날, 행 수) — 'HTML 만 다시 만들기' 의 기간 기본값. NAS 는 건드리지 않는다."""
+    cfg = config_mod.check_or_raise(cfg)
+    cache = _load_cache(cfg, rederive=False)
+    memo: Dict[str, str] = {}
+    days, n = set(), 0
+    for entry in cache["reports"].values():
+        if entry.get("superseded_by"):
+            continue
+        for r in entry.get("rows") or ():
+            n += 1
+            d = _row_day(r, memo)
+            if d:
+                days.add(d)
+    return (min(days), max(days), n) if days else ("", "", n)
+
+
+def html_from_cache(cfg: dict, day_from: str = "", day_to: str = "", *, log: Optional[LogFn] = None,
+                    progress: Optional[ProgressFn] = None, warnings: Optional[List[dict]] = None) -> str:
+    """**수집 없이** 가진 데이터(캐시)만으로 결과 HTML 을 다시 만든다(10/5 사용자 요청 — 기능이 늘 때마다 재수집하지 않게).
+
+    NAS 는 한 번도 건드리지 않는다: 캐시 파일을 읽고(분류 규칙이 바뀌었으면 메모리에서만 재분류 — 캐시 파일은 그대로),
+    장비 경로·Report 폴더는 마지막 수집이 남긴 `last_devices` 를 쓴다(Report 열기용). 기간을 주면 그 기간 파일, 안 주면 html_days."""
+    started = time.time()
+    cfg = config_mod.check_or_raise(cfg)
+    nas_guard.check_cfg(cfg)
+    if progress:
+        progress(0, 0, i18n.KO.COLLECT_PHASE_WRITE)
+    cache = _load_cache(cfg, log=log, dirty=_Dirty())   # 이유가 쌓여도 저장하지 않는다(저장은 수집만)
+    if not cache["reports"]:
+        raise RuntimeError(i18n.KO.HTML_ONLY_NO_CACHE)
+    rows, hidden = _rows_from_cache(cache, _DeviceIndex([]), cfg)
+    dev_meta = [dict(d) for d in (cache.get("last_devices") or [])]
+    names = {str(d.get("name")) for d in dev_meta}
+    for n in sorted({str(r.get("device")) for r in rows} - names):
+        dev_meta.append({"name": n, "note": "", "report_dir": cfg["report_dir"]})   # 옛 캐시 — 장비 경로를 모르면 Report 열기만 빠진다
+    for dm in dev_meta:
+        dm.setdefault("reports", 0)
+        dm.setdefault("found", 0)
+        dm.setdefault("error", "")
+    _mark_device_status(dev_meta, rows)
+    _say(log, f"가진 데이터로 HTML 만들기: 캐시 행 {len(rows)}개(범위 밖 {hidden}개 제외) · 기간 {day_from or '처음'} ~ {day_to or '끝'}")
+    return write_html(cfg, render_issue_rows(rows), dev_meta, [], started, mode="html_only", log=log, progress=progress,
+                      warnings=warnings, day_from=day_from, day_to=day_to,
+                      collect_log={"kind": "html_only", "at": dt.datetime.now().isoformat(timespec="seconds"),
+                                   "cache_rows": len(rows), "elapsed_ms": int((time.time() - started) * 1000)})
 
 
 def _write_csv(cfg: dict, path: str, rows: List[dict], log: Optional[LogFn] = None) -> None:

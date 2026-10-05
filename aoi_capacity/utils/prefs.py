@@ -18,14 +18,14 @@ from .. import scope as _scope
 from . import config as _config
 from . import paths
 
-PREFS_VERSION = 4
+PREFS_VERSION = 5
 
 
 @dataclass
 class Prefs:
     backfill_days: int = 30
     read_workers: int = 8
-    retention_days: int = 90
+    retention_days: int = 0           # 이력 보관 기간(일) — 0 = 기한 없이(10/5 사용자 확정)
     output_dir: str = ""              # 비우면 data_root()
     write_csv: bool = False
     report_dir: str = "Report"
@@ -39,7 +39,7 @@ class Prefs:
     last_view: str = "collect"
     scope_devices: List[str] = field(default_factory=lambda: list(_scope.DEFAULT_SCOPE))  # ★ 수집 허용 장비
     refresh_pick_days: int = 3        # 수집 페이지 '최근 N일 다시 읽기' 카드의 N(고를 때만 refresh_window_days 로 들어간다)
-    split_mb: int = 30                # 결과 HTML 이 이 MB 를 넘으면 기간별로 나눈다(0 = 안 나눔)
+    html_days: int = 60               # 수집 뒤 결과 HTML 에 담을 최근 일수(0 = 전부). 분할은 없다(10/5 롤백)
     refresh_window_days: int = 0      # D60: 최근 N일 안의 Report 는 캐시에 있어도 다시 읽기(0 = 끔). 수집 페이지 체크박스가 켜고 끈다
     prefs_version: int = PREFS_VERSION
     extra: Dict[str, Any] = field(default_factory=dict)
@@ -88,11 +88,14 @@ def migrate(p: Prefs) -> Prefs:
     v3: 4대 현장 테스트를 마치고 30대 전부로 늘었다(사용자 확정).
         어느 쪽이든 **옛 기본값 그대로인 설정만** 새 목록으로 바꾼다 — `_scope.PAST_DEFAULTS` 참조.
     v4(9/23): 화면 기본이 어두운 화면 → 밝은 화면(결과 HTML 과 같은 모양, 사용자 요청). 옛 기본값("dark")인 설정만 옮긴다 —
-        v4 뒤에 사용자가 어두운 화면을 고르면 그대로 남는다."""
+        v4 뒤에 사용자가 어두운 화면을 고르면 그대로 남는다.
+    v5(10/5): 이력은 **기한 없이 보관**(사용자 확정 — '데이터는 계속 쌓아 놓고'). 고른 값과 상관없이 0(기한 없음)으로 옮긴다."""
     if p.prefs_version < PREFS_VERSION and list(p.scope_devices or []) in _scope.PAST_DEFAULTS:
         p.scope_devices = list(_scope.DEFAULT_SCOPE)
     if p.prefs_version < 4 and p.color_mode == "dark":
         p.color_mode = "light"
+    if p.prefs_version < 5:
+        p.retention_days = 0
     if p.prefs_version < PREFS_VERSION:
         p.prefs_version = PREFS_VERSION
     return p
@@ -161,7 +164,7 @@ def to_collect_cfg(p: Prefs) -> Dict[str, Any]:
         "rebuild_all": False,          # GUI 의 '전체 다시 만들기' 는 워커 인자(full)로 넘긴다 — 설정에 남기지 않는다
         "attention_util": p.threshold_util,   # D14: 결과 HTML 의 meta.dashboard_settings 로 나간다(prefs 의 이름은 옛 그대로 threshold_*)
         "attention_err": p.threshold_err,
-        "split_mb": p.split_mb,
+        "html_days": p.html_days,
     })
     # ★ CLI(config.json)와 같은 규칙으로 정규화한다 — 성능·기간 값은 고치고, 범위·경로 문제는 그대로 두어 수집 진입점이 막는다(C13)
     cfg, _problems = _config.normalize_config(cfg)

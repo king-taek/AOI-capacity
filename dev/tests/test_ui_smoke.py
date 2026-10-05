@@ -169,13 +169,36 @@ def test_read_concurrency_is_editable_and_saved(window, styled_qapp):
     assert prefs.to_collect_cfg(prefs.load())["read_workers"] == 4
 
 
-def test_split_size_is_editable_and_reaches_the_collect_cfg(window, styled_qapp):
-    """결과 HTML 분할 기준(MB) — 설정에서 바꾸면 수집 cfg 의 split_mb 로 간다(0 = 나누지 않음)."""
+def test_html_days_is_editable_and_reaches_the_collect_cfg(window, styled_qapp):
+    """결과 HTML 기본 기간(일) — 설정에서 바꾸면 수집 cfg 의 html_days 로 간다(0 = 전부). 분할 설정(split_mb)은 롤백했다(10/5)."""
     from aoi_capacity.utils import prefs
 
-    window.settings_page._split.setValue(12)
+    window.settings_page._html_days.setValue(12)
     _pump(styled_qapp)
-    assert prefs.load().split_mb == 12 and prefs.to_collect_cfg(prefs.load())["split_mb"] == 12
+    assert prefs.load().html_days == 12 and prefs.to_collect_cfg(prefs.load())["html_days"] == 12
+    assert "split_mb" not in prefs.to_collect_cfg(prefs.load())
+    assert window.settings_page._retention.specialValueText() and window.settings_page._retention.minimum() == 0   # 0 = 기한 없음
+
+
+def test_prefs_v5_moves_retention_to_forever():
+    """v5(10/5): 사용자 확정 — 이력은 기한 없이 보관. 옛 설정의 보관 기간은 고른 값과 상관없이 0 으로."""
+    from aoi_capacity.utils import prefs
+
+    p = prefs.migrate(prefs.Prefs.from_dict({"retention_days": 45, "prefs_version": 4}))
+    assert p.retention_days == 0 and p.prefs_version == prefs.PREFS_VERSION
+
+
+def test_html_only_card_builds_from_cache_without_collecting(window, styled_qapp, tmp_path):
+    """'HTML 만 다시 만들기' 카드 — 가진 데이터가 없으면 버튼이 꺼져 있고, 기간 칸 둘과 실행 버튼이 있다."""
+    page = window.collect_page
+    for _ in range(50):
+        _pump(styled_qapp)
+        if page._days_worker is None:
+            break
+        page._days_worker.wait(200)
+    _pump(styled_qapp)
+    assert page._d_from.displayFormat() == "yyyy-MM-dd" and page._d_to.calendarPopup()
+    assert not page._b_html.isEnabled()                     # 테스트 데이터 폴더에는 캐시가 없다
 
 
 def test_mode_cards_pick_one_situation_and_map_to_worker_options(window, styled_qapp):

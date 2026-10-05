@@ -9,7 +9,7 @@ from aoi_capacity.utils import paths, prefs
 
 def test_defaults_when_missing():
     p = prefs.load()
-    assert p.backfill_days == 30 and p.retention_days == 90 and p.color_mode == "light"   # 9/23: 결과 HTML 과 같은 라이트가 기본
+    assert p.backfill_days == 30 and p.retention_days == 0 and p.color_mode == "light"   # 9/23: 결과 HTML 과 같은 라이트가 기본
     assert p.output_dir == "" and p.last_view == "collect"      # 수집 전용 — 자동 주기 수집 설정은 없다
     assert not hasattr(p, "auto_collect_minutes")
 
@@ -37,7 +37,7 @@ def test_patch_persists_and_rejects_unknown():
 
 def test_corrupt_file_falls_back_to_defaults():
     paths.prefs_file().write_text("{not json", encoding="utf-8")
-    assert prefs.load().retention_days == 90
+    assert prefs.load().retention_days == 0
 
 
 def test_to_collect_cfg_fills_every_default_key(tmp_path):

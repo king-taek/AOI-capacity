@@ -26,13 +26,13 @@ MAX_WORKERS = 32
 #: 키 → (종류, 기본값, 하한, 상한). 하한·상한은 int 만 쓴다.
 RULES: Dict[str, Tuple[str, Any, Optional[int], Optional[int]]] = {
     "backfill_days": (INT, 30, 1, MAX_DAYS),
-    "retention_days": (INT, 90, 1, MAX_DAYS),
+    "retention_days": (INT, 0, 0, 36500),           # 이력 보관 기간(일) — 0 = 기한 없이 보관(10/5 사용자 확정)
     "read_workers": (INT, 8, 1, MAX_WORKERS),
     "refresh_window_days": (INT, 0, 0, MAX_DAYS),
     "full_list_every_hours": (INT, 168, 0, 8760), # Report 폴더 전체 나열 주기(시간, 0 = 매번, 기본 7일)
     "attention_util": (INT, 40, 0, 100),          # D14: 살펴볼 장비 — 가동률 미만(%)
     "attention_err": (INT, 3, 0, 999),            # D14: 살펴볼 장비 — Error 건수 이상
-    "split_mb": (INT, 30, 0, 2000),               # 결과 HTML 이 이 크기(MB)를 넘으면 기간별로 나눈다(0 = 나누지 않음, 9/23)
+    "html_days": (INT, 60, 0, 36500),             # 수집 뒤 만드는 결과 HTML 에 담을 최근 일수(0 = 가진 데이터 전부, 10/5)
     "write_csv": (BOOL, False, None, None),
     "rebuild_all": (BOOL, False, None, None),
     "report_dir": (NAME, "Report", None, None),
@@ -209,7 +209,7 @@ def normalize_config(cfg: Mapping[str, Any]) -> Tuple[Dict[str, Any], List[Probl
             out["scope_devices"] = [x.strip() for x in sd if x.strip()]
     if "backfill_days" in out and "retention_days" in out:
         b, r = out["backfill_days"], out["retention_days"]
-        if isinstance(b, int) and isinstance(r, int) and r < b:
+        if isinstance(b, int) and isinstance(r, int) and 0 < r < b:   # 0 = 기한 없음
             problems.append(Problem("retention_days", RETENTION_LT_BACKFILL, r, False, b))
             out["retention_days"] = b                    # 보관이 수집 창보다 짧으면 방금 읽은 것을 바로 지운다 — 창 길이만큼 늘린다
     return out, problems

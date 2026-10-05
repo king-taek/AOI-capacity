@@ -50,7 +50,8 @@ def test_parse_bool_never_uses_truthiness(raw, expected):
     ("backfill_days", -7, 30, config.OUT_OF_RANGE),
     ("backfill_days", 10 ** 9, 3650, config.OUT_OF_RANGE),
     ("backfill_days", "45", 45, None),
-    ("retention_days", 0, 90, config.OUT_OF_RANGE),
+    ("retention_days", 0, 0, None),                       # 10/5: 0 = 기한 없이 보관
+    ("retention_days", -1, 0, config.OUT_OF_RANGE),
     ("read_workers", "abc", 8, config.BAD_INT),
     ("read_workers", 0, 8, config.OUT_OF_RANGE),
     ("read_workers", -1, 8, config.OUT_OF_RANGE),
@@ -113,6 +114,8 @@ def test_retention_shorter_than_backfill_is_raised_to_backfill():
     assert out["retention_days"] == 60 and [p.code for p in problems] == [config.RETENTION_LT_BACKFILL]
     out, problems = config.normalize_config({"backfill_days": 30, "retention_days": 90})
     assert out["retention_days"] == 90 and not problems
+    out, problems = config.normalize_config({"backfill_days": 60, "retention_days": 0})   # 0 = 기한 없음 — 늘리지 않는다
+    assert out["retention_days"] == 0 and not problems
 
 
 def test_partial_cfg_is_left_alone_and_unknown_keys_pass_through():
@@ -224,7 +227,7 @@ def test_gui_prefs_and_cli_config_normalize_the_same_way(tmp_path):
     keys = ("backfill_days", "read_workers", "retention_days", "refresh_window_days", "write_csv", "report_dir", "scan_dir",
             "attention_util", "attention_err", "rebuild_all", "output_name")
     assert {k: gui[k] for k in keys} == {k: cli_cfg[k] for k in keys}
-    assert gui["backfill_days"] == 30 and gui["read_workers"] == 32 and gui["retention_days"] == 90
+    assert gui["backfill_days"] == 30 and gui["read_workers"] == 32 and gui["retention_days"] == 0
     assert gui["refresh_window_days"] == 0 and gui["write_csv"] is True and gui["scan_dir"] == "ScanResult"
     assert gui["attention_util"] == 100 and gui["attention_err"] == 3
     assert set(collect.DEFAULT_CONFIG) <= set(gui)

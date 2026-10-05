@@ -22,6 +22,7 @@ import argparse
 import copy
 import json
 import os
+import re
 import sys
 import time
 from typing import Dict, List, Optional
@@ -111,7 +112,14 @@ def main(argv=None) -> int:
     ap.add_argument("--backfill", action="store_true", help=K.CLI_HELP_BACKFILL)
     ap.add_argument("--recover", action="store_true", help=K.CLI_HELP_RECOVER)
     ap.add_argument("--update", action="store_true", help=K.CLI_HELP_UPDATE)
+    ap.add_argument("--html-only", action="store_true", help=K.CLI_HELP_HTML_ONLY)
+    ap.add_argument("--from", dest="day_from", default="", metavar="YYYY-MM-DD", help=K.CLI_HELP_FROM)
+    ap.add_argument("--to", dest="day_to", default="", metavar="YYYY-MM-DD", help=K.CLI_HELP_TO)
     args = ap.parse_args(argv)
+    for v in (args.day_from, args.day_to):
+        if v and not re.match(r"^\d{4}-\d{2}-\d{2}$", v):
+            _print(K.CLI_HTML_ONLY_BAD_DATE_FMT.format(value=v))
+            return EXIT_FAILED
 
     if args.update:
         try:
@@ -146,6 +154,15 @@ def main(argv=None) -> int:
             _print(i18n.KO.CLI_CFG_FATAL_FMT.format(message=pr.message()))
         return EXIT_FAILED
     paths.ensure_user_files()
+    if args.html_only:                                                 # 10/5: 수집 없이 가진 데이터로 HTML 만(NAS 를 읽지 않음)
+        warnings_h: list = []
+        try:
+            path = collect.html_from_cache(cfg, args.day_from, args.day_to, log=_print, warnings=warnings_h)
+        except Exception as ex:  # noqa: BLE001
+            _print(K.HTML_ONLY_FAIL_FMT.format(error=ex))
+            return EXIT_FAILED
+        _print(K.HTML_ONLY_DONE_FMT.format(path=path))
+        return EXIT_PARTIAL if warnings_h else EXIT_OK
     rebuild = bool(args.rebuild_all or args.full) or None            # None 이면 cfg 의 rebuild_all 을 따른다
     refresh = args.refresh_window                                      # None 이면 cfg 의 refresh_window_days 를 따른다
     plan = collect.plan_run(cfg, backfill=args.backfill, recover=args.recover,
@@ -161,7 +178,8 @@ def main(argv=None) -> int:
         _print(K.CLI_REBUILD_REJECTED_FMT.format(error=ex))
         return EXIT_FAILED
     warnings: list = []
-    collect.write_html(cfg, rows, dev_meta, errors, started, mode="auto", log=_print, timing=stats, warnings=warnings)
+    collect.write_html(cfg, rows, dev_meta, errors, started, mode="auto", log=_print, timing=stats, warnings=warnings,
+                      collect_log=stats.get("log"))
     if stats.get("cache_status") == collect.CACHE_CORRUPT:
         _print(K.CLI_CACHE_CORRUPT_FMT.format(path=stats.get("cache_preserved", "")))
     bad = [d for d in dev_meta if d.get("error")]

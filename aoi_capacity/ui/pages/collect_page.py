@@ -14,9 +14,9 @@ from __future__ import annotations
 import time
 from typing import Dict, Optional
 
-from PyQt6.QtCore import QThread, Qt, QUrl, pyqtSignal
+from PyQt6.QtCore import QDate, QThread, Qt, QUrl, pyqtSignal
 from PyQt6.QtGui import QDesktopServices
-from PyQt6.QtWidgets import (QCheckBox, QFileDialog, QFrame, QGridLayout, QHBoxLayout, QLabel, QLineEdit,
+from PyQt6.QtWidgets import (QCheckBox, QDateEdit, QFileDialog, QFrame, QGridLayout, QHBoxLayout, QLabel, QLineEdit,
                              QPlainTextEdit, QScrollArea, QSizePolicy, QSpinBox, QVBoxLayout, QWidget)
 
 from ... import collect, i18n, nas_guard
@@ -56,6 +56,11 @@ def _card(parent: QWidget, title: str = "") -> tuple:
     return f, lay
 
 
+def _days_text(days) -> str:
+    """보관 기간 문구 — 0 은 기한 없음(10/5)."""
+    return K.RETENTION_DAYS_FMT.format(days=int(days)) if int(days or 0) > 0 else K.RETENTION_FOREVER_TEXT
+
+
 class _PlanWorker(QThread):
     """계획 조회를 UI 스레드 밖에서 — 캐시 파일(수십 MB)을 읽는 동안 창이 멈추지 않게. 결과는 토큰으로 가려 늦게 온 옛 조회는 버린다.
     고른 모드의 계획과, 복구 카드에 적을 '시간 미확인 Report 수'(캐시만 보고 센다)를 함께 가져온다."""
@@ -73,6 +78,39 @@ class _PlanWorker(QThread):
         except Exception:  # noqa: BLE001
             plan, n_rec = None, None
         self.result.emit(token, plan, n_rec)
+
+
+class _DaysWorker(QThread):
+    """캐시에 있는 데이터의 기간(첫날 · 끝날 · 행 수)을 UI 스레드 밖에서 센다 — 'HTML 만 다시 만들기' 의 기본 기간."""
+    result = pyqtSignal(object)
+
+    def __init__(self, cfg: dict, parent=None):
+        super().__init__(parent)
+        self._cfg = cfg
+
+    def run(self) -> None:  # noqa: D401
+        try:
+            self.result.emit(collect.cached_days(self._cfg))
+        except Exception:  # noqa: BLE001
+            self.result.emit(None)
+
+
+class _HtmlOnlyWorker(QThread):
+    """수집 없이 가진 데이터로 HTML 을 만든다(NAS 를 읽지 않음, 10/5) — 끝나면 (경로 | None, 오류 문구)."""
+    log = pyqtSignal(str)
+    done = pyqtSignal(object, str)
+
+    def __init__(self, cfg: dict, day_from: str, day_to: str, parent=None):
+        super().__init__(parent)
+        self._args = (cfg, day_from, day_to)
+
+    def run(self) -> None:  # noqa: D401
+        cfg, a, b = self._args
+        try:
+            path = collect.html_from_cache(cfg, a, b, log=self.log.emit)
+            self.done.emit(path, "")
+        except Exception as ex:  # noqa: BLE001
+            self.done.emit(None, f"{type(ex).__name__}: {ex}")
 
 
 class ModeCard(QFrame):
@@ -264,8 +302,6 @@ class CollectPage(QWidget):
         rcard, rl = _card(body, K.COLLECT_RESULT_TITLE)
         self._result = _label("", "mono", rcard, wrap=True)
         self._result.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
-        self._parts = _label("", "muted", rcard, wrap=True)
-        self._parts.hide()
         hint = _label(K.COLLECT_RESULT_HINT, "help", rcard, wrap=True)
         rrow = QHBoxLayout()
         self._b_open = make_button(K.BTN_OPEN_RESULT, "primary", rcard)
@@ -274,10 +310,34 @@ class CollectPage(QWidget):
         rrow.addWidget(self._b_folder)
         rrow.addStretch(1)
         rl.addWidget(self._result)
-        rl.addWidget(self._parts)
         rl.addWidget(hint)
         rl.addLayout(rrow)
         lay.addWidget(rcard)
+
+        # HTML 만 다시 만들기(10/5) — 수집 없이 가진 데이터로, 기간을 골라서
+        hcard, hl = _card(body, K.HTML_ONLY_TITLE)
+        hl.addWidget(_label(K.HTML_ONLY_WHEN, "help", hcard, wrap=True))
+        self._have = _label(K.COLLECT_PLAN_LOADING, "muted", hcard, wrap=True)
+        hl.addWidget(self._have)
+        hrow = QHBoxLayout()
+        self._d_from = QDateEdit(hcard)
+        self._d_to = QDateEdit(hcard)
+        for w in (self._d_from, self._d_to):
+            w.setCalendarPopup(True)
+            w.setDisplayFormat("yyyy-MM-dd")
+            w.setDate(QDate.currentDate())
+        self._b_html = make_button(K.HTML_ONLY_RUN, "default", hcard)
+        self._b_html.setEnabled(False)
+        hrow.addWidget(QLabel(K.HTML_ONLY_FROM, hcard))
+        hrow.addWidget(self._d_from)
+        hrow.addWidget(QLabel(K.HTML_ONLY_TO, hcard))
+        hrow.addWidget(self._d_to)
+        hrow.addWidget(self._b_html)
+        hrow.addStretch(1)
+        hl.addLayout(hrow)
+        lay.addWidget(hcard)
+        self._days_worker: Optional[_DaysWorker] = None
+        self._html_worker: Optional[_HtmlOnlyWorker] = None
 
         # 저장 위치
         scard, sl = _card(body, K.COLLECT_SAVE_TITLE)
@@ -314,6 +374,7 @@ class CollectPage(QWidget):
         self._b_folder.clicked.connect(lambda: QDesktopServices.openUrl(
             QUrl.fromLocalFile(str(paths.output_dir(prefs.load().output_dir)))))
         self._b_run.clicked.connect(self._on_run)
+        self._b_html.clicked.connect(self._on_html_only)
         self._b_stop.clicked.connect(self.stop_requested.emit)
         self._b_out.clicked.connect(self._browse_out)
         self._refresh_days.valueChanged.connect(self._on_refresh_days)
@@ -356,17 +417,63 @@ class CollectPage(QWidget):
 
     # ── 공개 API ──
     def refresh_result(self) -> None:
-        """결과 파일 경로·분할 파일·버튼 상태를 갱신한다(수집 직후·설정 변경 후)."""
-        p = prefs.load()
+        """결과 파일 경로·버튼 상태·가진 데이터 기간을 갱신한다(수집 직후·설정 변경 후)."""
         path = results.html_path()
         have = path.is_file()
         self._result.setText(str(path) if have else K.COLLECT_RESULT_NONE)
         self._b_open.setEnabled(have)
         self._b_folder.setEnabled(True)
-        parts = paths.output_parts(p.output_dir) if have else []
-        if parts:
-            self._parts.setText(K.COLLECT_RESULT_PARTS_FMT.format(n=len(parts) + 1, names=", ".join(x.name for x in parts)))
-        self._parts.setVisible(bool(parts))
+        if self._days_worker is None:
+            w = _DaysWorker(prefs.to_collect_cfg(prefs.load()), self)
+            w.result.connect(self._on_days)
+            w.finished.connect(lambda w=w: self._worker_done("_days_worker", w))
+            self._days_worker = w
+            w.start()
+
+    def _worker_done(self, attr: str, w: QThread) -> None:
+        if getattr(self, attr, None) is w:
+            setattr(self, attr, None)
+        w.deleteLater()
+
+    def _on_days(self, got) -> None:
+        if not got or not got[0]:
+            self._have.setText(K.HTML_ONLY_NONE)
+            self._b_html.setEnabled(False)
+            return
+        first, last, n = got
+        self._have.setText(K.HTML_ONLY_HAVE_FMT.format(first=first, last=last, rows=n))
+        lo, hi = QDate.fromString(first, "yyyy-MM-dd"), QDate.fromString(last, "yyyy-MM-dd")
+        for w in (self._d_from, self._d_to):
+            w.setDateRange(lo, hi)
+        days = int(prefs.to_collect_cfg(prefs.load()).get("html_days") or 0)
+        self._d_from.setDate(max(lo, hi.addDays(-(days - 1))) if days > 0 else lo)
+        self._d_to.setDate(hi)
+        self._b_html.setEnabled(not self._running)
+
+    def _on_html_only(self) -> None:
+        if self._html_worker is not None:
+            return
+        a = self._d_from.date().toString("yyyy-MM-dd")
+        b = self._d_to.date().toString("yyyy-MM-dd")
+        if a > b:
+            a, b = b, a
+        self._b_html.setEnabled(False)
+        w = _HtmlOnlyWorker(prefs.to_collect_cfg(prefs.load()), a, b, self)
+        w.log.connect(self.append_log)
+        w.done.connect(self._on_html_done)
+        w.finished.connect(lambda w=w: self._worker_done("_html_worker", w))
+        self._html_worker = w
+        w.start()
+
+    def _on_html_done(self, path, err: str) -> None:
+        self._b_html.setEnabled(not self._running)
+        if path:
+            self.append_log(K.HTML_ONLY_DONE_FMT.format(path=path))
+            self._status.setText(K.HTML_ONLY_DONE_FMT.format(path=path))
+            QDesktopServices.openUrl(QUrl.fromLocalFile(str(path)))
+        else:
+            self.append_log(K.HTML_ONLY_FAIL_FMT.format(error=err))
+            self.error.emit(K.HTML_ONLY_TITLE, K.HTML_ONLY_FAIL_FMT.format(error=err))
 
     def _open_result(self) -> None:
         QDesktopServices.openUrl(QUrl.fromLocalFile(str(results.ensure_html())))
@@ -376,7 +483,7 @@ class CollectPage(QWidget):
         p = prefs.load()
         cfg = prefs.to_collect_cfg(p)
         self._cards["backfill"].set_texts(what=K.MODE_BACKFILL_WHAT_FMT.format(days=int(p.backfill_days)))
-        self._cards["rebuild"].set_texts(what=K.MODE_REBUILD_WHAT_FMT.format(days=int(p.retention_days)))
+        self._cards["rebuild"].set_texts(what=K.MODE_REBUILD_WHAT_FMT.format(days=_days_text(p.retention_days)))
         self._plan_token += 1
         token = self._plan_token
         self._plan.setText(K.COLLECT_PLAN_LOADING)
@@ -415,7 +522,7 @@ class CollectPage(QWidget):
             return
         self._update_cards(plan, n_recover)
         if self._mode == "rebuild":
-            text = K.COLLECT_PLAN_FULL_FMT.format(days=plan.retention_days)
+            text = K.COLLECT_PLAN_FULL_FMT.format(days=_days_text(plan.retention_days))
         elif plan.mode == "first":
             text = K.COLLECT_PLAN_FIRST_FMT.format(days=plan.backfill_days)
         elif plan.refresh_days > 0:
@@ -457,7 +564,7 @@ class CollectPage(QWidget):
         self._b_run.setEnabled(not running)
         self._b_stop.setVisible(running)
         self._b_stop.setEnabled(running)
-        for w in (*self._cards.values(), self._refresh_days, self._out, self._b_out, self._csv):
+        for w in (*self._cards.values(), self._refresh_days, self._out, self._b_out, self._csv, self._b_html):
             w.setEnabled(not running)
         self._status.setText(K.COLLECT_RUNNING if running else K.COLLECT_IDLE)
         if not running:

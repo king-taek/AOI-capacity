@@ -110,6 +110,7 @@ class CollectorWorker(QThread):
             if self._stop.is_set():
                 raise collect.CollectCancelled()
             path = collect.write_html(self.cfg, rows, dev_meta, errors, started, mode="gui", timing=stats, warnings=warnings,
+                                      collect_log=stats.get("log"),
                                       log=lambda m: self.signals.log.emit(tok, str(m)),
                                       progress=lambda d, t, p: self.signals.progress.emit(tok, int(d), int(t), str(p)))
         except collect.CollectCancelled:
