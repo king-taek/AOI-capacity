@@ -426,7 +426,8 @@ def test_tab_indicator_survives_in_tab_clicks_and_follows_the_tab(page):
     pg, errors, _ = page
     box = "(() => { const p = [...document.querySelectorAll('.nav .ind b')].map(e => e.getBoundingClientRect()), on = document.querySelector('.nav button.on').getBoundingClientRect(); return [Math.round(p[0].left), Math.round(p[2].right), Math.round(on.left), Math.round(on.right)]; })()"
     b0 = pg.evaluate(box)
-    assert b0[0] == b0[2] and b0[1] == b0[3]
+    near = lambda b: abs(b[0] - b[2]) <= 1 and abs(b[1] - b[3]) <= 1          # 10/5: 자리를 소수까지 맞추므로 반올림 차 1px 까지
+    assert near(b0)
     pg.locator('button[data-fk="seg:가동률 낮은 순"]').click()
     pg.wait_for_selector('button[data-fk="seg:가동률 낮은 순"].on')
     pg.wait_for_timeout(100)
@@ -435,7 +436,7 @@ def test_tab_indicator_survives_in_tab_clicks_and_follows_the_tab(page):
     pg.wait_for_selector('main[data-key="view:trend"]')
     pg.wait_for_timeout(900)
     b1 = pg.evaluate(box)
-    assert b1[0] == b1[2] and b1[1] == b1[3] and b1 != b0                              # 새 탭에 가서 선다
+    assert near(b1) and b1 != b0                                                         # 새 탭에 가서 선다
     assert errors == []
 
 

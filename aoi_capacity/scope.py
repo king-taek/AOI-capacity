@@ -21,11 +21,18 @@ from typing import Dict, Iterable, List, Sequence
 #: 현재 수집 대상 — 30대 전부(사용자 확정). 4대(AOI-1·8·9·25) 현장 테스트를 마치고 넓혔다.
 #: 바꿀 때는 README·CLAUDE.md 와 dev/tests/test_scope_isolation.py, 그리고
 #: prefs.migrate(이미 저장된 설정을 새 기본값으로 옮긴다)를 함께 본다.
-DEFAULT_SCOPE: List[str] = (
-    [f"AOI-{i}" for i in range(1, 26)] + [f"4F-AOI-{i:02d}" for i in range(1, 6)]
-)
+#: 10/5: KLA 8대(K1~K6 · 4F-K1 · 4F-K2)를 같은 수집기로 모은다(사용자 확정 D68 · D73) — 이름이 KLA 규칙(`is_kla`)이면 KLA 수집 경로.
+KLA_SCOPE: List[str] = [f"K{i}" for i in range(1, 7)] + ["4F-K1", "4F-K2"]
+CAMTEK_SCOPE: List[str] = [f"AOI-{i}" for i in range(1, 26)] + [f"4F-AOI-{i:02d}" for i in range(1, 6)]
+DEFAULT_SCOPE: List[str] = CAMTEK_SCOPE + KLA_SCOPE
 #: 지금까지 기본값이었던 목록들 — 사용자가 직접 고르지 않고 그대로 둔 설정만 새 기본값으로 옮긴다.
-PAST_DEFAULTS: List[List[str]] = [["AOI-25"], ["AOI-1", "AOI-8", "AOI-9", "AOI-25"]]
+PAST_DEFAULTS: List[List[str]] = [["AOI-25"], ["AOI-1", "AOI-8", "AOI-9", "AOI-25"], list(CAMTEK_SCOPE)]
+_KLA_RE = re.compile(r"^(4f)?k\d+$")
+
+
+def is_kla(name) -> bool:
+    """KLA 장비 이름인가 — `K1` · `k 2` · `4F-K1` · `4f_k2`(비교 키로 본다). Camtek `AOI-…` 는 아니다."""
+    return bool(_KLA_RE.match(key(name)))
 ANY = "*"
 CFG_KEY = "scope_devices"
 

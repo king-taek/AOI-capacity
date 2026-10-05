@@ -425,7 +425,7 @@ def test_unfold_rejects_out_of_range_pool_index_and_duplicate_columns():
     assert r2.returncode != 0 and "중복" in r2.stderr
 
 
-def test_header_has_five_tabs_and_each_popup_renders_an_accessible_dialog():
+def test_header_has_six_tabs_and_each_popup_renders_an_accessible_dialog():
     """D59 탭 이름 · 사본 저장 버튼 · 장비/Error/유형 팝업이 role=dialog + aria-labelledby 로 그려진다(포커스 이동은 browser 테스트)."""
     rows = [w("AOI-1", "W1", "08:00", "08:03", status="Alignment Error."), w("AOI-1", "W2", "09:00", "09:10", lot="LOT-B")]
     head, dev, err, closed, _, typ = screen(rows, meta("AOI-1"), [
@@ -433,8 +433,8 @@ def test_header_has_five_tabs_and_each_popup_renders_an_accessible_dialog():
         ["devPopupHtml"], ["errPopupHtml"], ["typePopupHtml"],
         ["errorsHtml"], ["typePopupHtml"]],
         state={"modalDev": "AOI-1", "modalDayI": 0, "errDev": "AOI-1", "errDayI": 0})
-    assert re.findall(r'data-fk="nav:([a-z]+)"', head) == ["home", "errors", "trend", "report", "recipe"]   # D70: 레시피 탭은 따로
-    for label in (">가동률<", ">Error<", ">추이<", ">TB500 · Kendall<", ">레시피<", ">사본 저장<"):
+    assert re.findall(r'data-fk="nav:([a-z]+)"', head) == ["home", "kla", "errors", "trend", "report", "recipe"]   # D70 레시피 탭 · D73 KLA 탭
+    for label in (">가동률<", ">KLA<", ">Error<", ">추이<", ">TB500 · Kendall<", ">레시피<", ">사본 저장<"):
         assert label in head, label
     assert 'data-dlg="dev"' in dev and 'aria-labelledby="dlg-dev-title"' in dev and 'role="dialog"' in dev
     assert 'data-dlg="err"' in err and 'aria-labelledby="dlg-err-title"' in err

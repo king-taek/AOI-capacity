@@ -13,7 +13,7 @@ Camtek AOI 장비의 BatchReport/WaferInfo.ini 를 읽어 장비별 가동률을
    `_save_cache` · `write_html` · `_write_csv` 안에만 두고, 각 함수 첫 줄에서 `nas_guard.assert_local` 을 호출한다.
    회귀 가드: `dev/tests/test_nas_guard.py`(정적 AST 검사 + 동적 트립와이어).
 2. **수집 허용 장비 밖은 건드리지 않는다.** 허용 목록은 `aoi_capacity/scope.py`
-   (현재 30대 전부: `AOI-1`~`AOI-25` + `4F-AOI-01`~`05`. 4대 현장 테스트를 마치고 넓혔다 — 사용자 확정).
+   (현재 38대 전부: Camtek `AOI-1`~`AOI-25` + `4F-AOI-01`~`05`(4대 현장 테스트 뒤 넓힘) + KLA `K1`~`K6` · `4F-K1` · `4F-K2`(10/5, D73) — 사용자 확정).
    목록에 없는 이름은 여전히 막는다(`AOI-26` 같은 오타·신규 장비). 장비를 새로 추가하려면 이 목록부터 고친다.
    목록을 바꿀 때는 `prefs.migrate` 도 함께 본다 — 이미 저장된 설정 중 **옛 기본값 그대로인 것만** 새 목록으로 옮긴다.
    범위 밖 장비에는 `scandir/stat/isdir/isfile/open` 을 한 번도 부르지 않는다 — 게이트는 "파일을 만지기 전" 단계인
@@ -189,6 +189,13 @@ Camtek AOI 장비의 BatchReport/WaferInfo.ini 를 읽어 장비별 가동률을
 - **화면 기간(10/5)**: 헤더 `rangeHtml` — 프리셋 **최근 7일 · 1달 · 전체**(가진 데이터의 끝날 기준, 열람 시계 아님) + 날짜 두 칸(change 때 `setRange`). 모델은 가진 날 전부로 한 번(`D.allDays`), 보이는 날 `D.days` 만 좁힌다 —
   모든 탭이 그 기간만 그리고 날마다의 값은 그대로. 탭마다 있던 7일·21일 버튼은 없앴다(Error 탭은 '일자별' · '기간 전체' 둘). 레시피 묶음·레시피 색인·전후 비교는 `D.allDays` 를 쓴다(비교 기간은 보이는 기간 밖도 가능).
   입력 칸은 렌더가 쓴 `value` 속성을 따른다(입력 중인 날짜 칸만 예외).
+- **KLA 수집(D73, `aoi_capacity/kla.py`)**: devices.csv 에서 이름이 KLA 규칙(`scope.is_kla` — K1~K6 · 4F-K1 · 4F-K2)인 행은 KLA 장비(`kind="kla"`, 폴더 칸은 비움 · 경로 = 드라이브 루트).
+  게이트는 Camtek 과 같은 `devices_from_rows`(범위 밖은 접근 0) — KLA 는 Report·Scanresult 대신 **맨 위에 날짜 폴더가 있는지만** 본다(`_is_kla_root`). 기존 devices.csv 에 KLA 행이 하나도 없으면 `ensure_kla_rows` 가 기본 8대를 한 번 덧붙인다.
+  `collect()` 는 Camtek 장비만 Report 경로로, KLA 장비는 `kla.collect_kla` 로(같은 `_run` · 같은 동시성 예산 · 스레드는 읽기만): ① 날짜 폴더 나열 ② 날짜 폴더마다 Lot·Wafer 폴더 이름(증분이면 지난번 마지막 날짜 폴더 −2일부터, backfill·refresh·rebuild·처음은 전부)
+  ③ 캐시에 없는 Wafer 만 결과 파일 읽기(`FileVersion` 머리, 결과 파일 없으면 다음에 다시). **날짜 폴더만 센다 · Lot 안 Wafer 폴더 이름으로 한 번**(D71). 처음 보는 장비는 `backfill_days` 창(`since`).
+  캐시 `cache["kla"][안정 키] = {name, since, seen_to, lots: {Lot: {Wafer 폴더: 기록}}}`(바뀌면 dirty `kla`). 행은 `kla.rows_from_store` 가 `_rows_from_cache` 끝에서 만든다(→ HTML 만 다시 만들기도 같다):
+  같은 Lot·같은 ResultTimestamp = 한 실행(`report` = `KLA:<Lot>:<ResultTimestamp>`), 장 시작 = Wafer 폴더 시각, 끝 = 다음 장 시작(간격이 중앙의 3배 넘으면 · 마지막 장은 중앙 간격만큼), 배치 = 첫 장 시작 ~ 마지막 장 끝,
+  job = SetupID · setup/recipe = StepID · faults = 결함 레코드 수(D68) · scanned_dice = NDIE · 전부 PASS(Error 수집 없음, D68) · `ini_match` EXACT. 화면: KLA 탭(가동률 화면을 KLA 장비만) · 층 필터에 Camtek/KLA · KLA 는 Report 열기 없음 · 정렬은 Camtek 뒤 K1… 4F-K1….
 - **Report 열기**는 장비 팝업의 선택 Lot 에서만(`reportUrl` · `openReport`). 경로는 `meta.devices[].note` + `report_dir` + `report` 로만 만들고 드라이브 문자와 UNC(`\\10.x`) 를 모두 다룬다.
   여는 주체는 사람이 연 그 탭이지 이 화면이 아니다 — 화면은 여전히 바깥으로 요청을 한 건도 보내지 않는다. 수집 상태 칩(`collectChip`: 수집 실패 · 일부 누락)과 '수집 범위 / 수집 안 함' 은 `meta` 에서 그린다. **사본 저장**(`saveHtml`)은 수집기가 준 열·풀 구조 그대로 다시 접는다.
 - 추이 화면에 **전 기간 대비(전주·전월·전일)는 두지 않는다**(사용자 확정, 가드: `test_no_period_over_period_comparison_anywhere`). 선택한 기간의 값만 보여 준다.

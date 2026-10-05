@@ -18,7 +18,7 @@ from .. import scope as _scope
 from . import config as _config
 from . import paths
 
-PREFS_VERSION = 5
+PREFS_VERSION = 6
 
 
 @dataclass
@@ -89,7 +89,8 @@ def migrate(p: Prefs) -> Prefs:
         어느 쪽이든 **옛 기본값 그대로인 설정만** 새 목록으로 바꾼다 — `_scope.PAST_DEFAULTS` 참조.
     v4(9/23): 화면 기본이 어두운 화면 → 밝은 화면(결과 HTML 과 같은 모양, 사용자 요청). 옛 기본값("dark")인 설정만 옮긴다 —
         v4 뒤에 사용자가 어두운 화면을 고르면 그대로 남는다.
-    v5(10/5): 이력은 **기한 없이 보관**(사용자 확정 — '데이터는 계속 쌓아 놓고'). 고른 값과 상관없이 0(기한 없음)으로 옮긴다."""
+    v5(10/5): 이력은 **기한 없이 보관**(사용자 확정 — '데이터는 계속 쌓아 놓고'). 고른 값과 상관없이 0(기한 없음)으로 옮긴다.
+    v6(10/5): 수집 범위에 KLA 8대 추가 — 옛 기본 30대 그대로인 설정만 38대로(`_scope.PAST_DEFAULTS`)."""
     if p.prefs_version < PREFS_VERSION and list(p.scope_devices or []) in _scope.PAST_DEFAULTS:
         p.scope_devices = list(_scope.DEFAULT_SCOPE)
     if p.prefs_version < 4 and p.color_mode == "dark":

@@ -117,7 +117,9 @@ def _natural(text: str) -> list:
 
 
 def sort_key(name: str) -> tuple:
-    """홈 기본 순서 — AOI-1 … AOI-25 다음에 4F-AOI-01 … 4F-AOI-05. 사전식(AOI-1, AOI-10, AOI-2)이 아니다."""
+    """홈 기본 순서 — AOI-1 … AOI-25 다음에 4F-AOI-01 … 4F-AOI-05, 그 뒤 KLA K1 … K6 · 4F-K1 · 4F-K2(D73). 사전식(AOI-1, AOI-10, AOI-2)이 아니다."""
+    if scope.is_kla(name):
+        return (3 if str(name).upper().startswith("4F") else 2, _natural(name))
     return (1 if str(name).upper().startswith(FLOOR4_PREFIX) else 0, _natural(name))
 
 
@@ -292,6 +294,43 @@ def scan_dirs_of(path: str, primary: str) -> List[Dict[str, str]]:
     return out
 
 
+# ----------------------------------------------------------------------------- KLA(10/5, D73)
+#: KLA 는 Report·Scanresult 가 없다 — 드라이브 맨 위가 날짜 폴더(`2026-10-05`) → Lot → Wafer 폴더다(`aoi_capacity/kla.py`).
+#: 장비 이름이 KLA 규칙(`scope.is_kla`: K1~K6 · 4F-K1 · 4F-K2)인 행은 KLA 로 다룬다. 기본 경로는 사용자가 알려 준 드라이브(10/5).
+KLA_DEFAULT_ROWS = [("K1", "Z:\\"), ("K2", "G:\\"), ("K3", "W:\\"), ("K4", "N:\\"), ("K5", "U:\\"), ("K6", "T:\\"),
+                    ("4F-K1", "L:\\"), ("4F-K2", "K:\\")]
+_DATE_DIR_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+
+
+def kla_name(name: str) -> str:
+    """KLA 표시명 — `k1` → `K1`, `4f_k2` → `4F-K2`."""
+    k = scope.key(name).upper()
+    return ("4F-" + k[2:]) if k.startswith("4F") else k
+
+
+def _is_kla_root(path: str) -> bool:
+    """KLA 드라이브인가 — 맨 위에 날짜 폴더가 하나라도 있으면(나열 1번, 읽기만)."""
+    try:
+        with os.scandir(path) as it:
+            return any(e.is_dir() and _DATE_DIR_RE.match(e.name) for e in it)
+    except OSError:
+        return False
+
+
+def ensure_kla_rows(path) -> bool:
+    """이미 있는 devices.csv 에 KLA 행이 하나도 없으면 기본 8대를 덧붙인다(10/5 — KLA 를 같은 수집기로). 덧붙였으면 True.
+    데이터 폴더(로컬)의 CSV 만 고친다. KLA 행이 하나라도 있으면 사용자가 고른 것이라 건드리지 않는다."""
+    try:
+        rows = read_devices_csv(path)
+    except OSError:
+        return False
+    if not rows or any(scope.is_kla(r.get("name") or r.get("sub") or "") for r in rows):
+        return False                                   # 장비 행이 없는(읽을 수 없는) 파일은 사용자 것 — 건드리지 않는다
+    rows += [{"name": n, "root": r, "sub": "", "on": True, "memo": "KLA"} for n, r in KLA_DEFAULT_ROWS]
+    write_devices_csv(path, rows, roots=[])
+    return True
+
+
 def _has_report(path: str, cfg: dict) -> bool:
     return bool(find_subdir(path, cfg.get("report_dir", ""), REPORT_DIR_NAMES))
 
@@ -438,8 +477,12 @@ def _attach_dirs(devs: List[Dict[str, object]], cfg: dict, log: Optional[LogFn] 
     """장비마다 Report·Scanresult 폴더 이름과 백업 목록을 붙인다 — 확인은 `read_workers` 개씩 동시에(C08), 붙이기·로그는 순서대로.
 
     여기 오는 장비는 전부 범위 게이트를 지난 것들이다. 취소로 확인하지 못한 장비는 설정 기본 이름을 붙여 둔다(부르는 쪽이 곧 취소를 확인한다)."""
-    results = _pmap(cfg, devs, lambda d: _dirs_of(str(d["path"]), cfg), should_stop)
-    for d, r in zip(devs, results):
+    kla = [d for d in devs if d.get("kind") == "kla"]
+    for d in kla:                                              # KLA 는 Report·Scanresult 가 없다
+        d.update({"report_dir": "", "scan_dir": "", "scan_dirs": []})
+    devs_c = [d for d in devs if d.get("kind") != "kla"]
+    results = _pmap(cfg, devs_c, lambda d: _dirs_of(str(d["path"]), cfg), should_stop)
+    for d, r in zip(devs_c, results):
         if r is SKIPPED:
             scan = str(cfg.get("scan_dir") or "Scanresult")
             d.update({"report_dir": str(cfg.get("report_dir") or "Report"), "scan_dir": scan, "scan_dirs": [{"name": scan, "cutoff": ""}]})
@@ -475,6 +518,8 @@ def devices_from_rows(rows: List[Dict[str, object]], cfg: dict, log: Optional[Lo
             tasks.append(("auto", root, hint, label, row))         # 제한 중이면 허용 이름만 정확 경로로 확인
         elif not scope.allows_row(cfg, row):
             tasks.append(("out", root, hint, label, row))          # 파일 접근 없음
+        elif scope.is_kla(row.get("name") or sub):
+            tasks.append(("kla", os.path.join(root, sub) if sub else root, hint, label, row))   # KLA — 날짜 폴더가 있는지만
         else:
             tasks.append(("explicit", os.path.join(root, sub) if sub else root, hint, label, row))
 
@@ -484,6 +529,8 @@ def devices_from_rows(rows: List[Dict[str, object]], cfg: dict, log: Optional[Lo
             return _probe_auto(path, cfg, hint)
         if kind == "explicit":
             return _has_report(path, cfg), []
+        if kind == "kla":
+            return _is_kla_root(path), []
         return None, []
 
     results = _pmap(cfg, tasks, probe, should_stop)
@@ -501,6 +548,14 @@ def devices_from_rows(rows: List[Dict[str, object]], cfg: dict, log: Optional[Lo
             if not found:
                 _log(log, f"[건너뜀] {label}: NAS 접근 불가 또는 장비 폴더 없음 ({path})")
             devs.extend(found)
+            continue
+        if kind == "kla":
+            if not found:
+                _log(log, f"[건너뜀] {label}: KLA 날짜 폴더 없음/접근 불가 ({path})")
+                continue
+            name = kla_name(str(row.get("name") or row.get("sub") or ""))
+            devs.append({"name": name, "path": path, "id": device_id(path), "kind": "kla",
+                         "aliases": [a for a in (str(row.get("name") or ""), name) if a]})
             continue
         if not found:
             _log(log, f"[건너뜀] {label}: Report 폴더 없음/접근 불가 ({path})")
@@ -591,6 +646,8 @@ def check_rows(rows: List[Dict[str, object]], cfg: dict) -> List[Dict[str, objec
         root = _norm_root(str(row.get("root", "")))
         if not os.path.isdir(root):
             return "unreachable"
+        if not auto and scope.is_kla(row.get("name") or sub):
+            return "ok" if _is_kla_root(os.path.join(root, sub) if sub else root) else "no_report"
         if auto:
             n = len(_probe_auto(root, cfg)[0])
             return f"auto:{n}" if n else "no_report"

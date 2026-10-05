@@ -7,7 +7,7 @@ from typing import Optional
 
 from PyQt6.QtCore import QUrl, pyqtSignal
 from PyQt6.QtGui import QDesktopServices
-from PyQt6.QtWidgets import QCheckBox, QFrame, QGridLayout, QHBoxLayout, QLabel, QSpinBox, QVBoxLayout, QWidget
+from PyQt6.QtWidgets import QCheckBox, QFrame, QGridLayout, QHBoxLayout, QLabel, QScrollArea, QSpinBox, QVBoxLayout, QWidget
 
 from ... import i18n
 from ...utils import paths, prefs
@@ -34,8 +34,17 @@ class SettingsPage(QWidget):
     def __init__(self, parent: Optional[QWidget] = None):
         super().__init__(parent)
         p = prefs.load()
-        lay = QVBoxLayout(self)
-        lay.setContentsMargins(0, 0, 0, 0)
+        # 10/5: 창이 낮으면 카드가 세로로 눌려 '수집 기간' 칸이 잘렸다(사용자 보고) — 수집 페이지처럼 스크롤 안에 둔다
+        outer = QVBoxLayout(self)
+        outer.setContentsMargins(0, 0, 0, 0)
+        scroll = QScrollArea(self)
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QFrame.Shape.NoFrame)
+        body = QWidget(scroll)
+        scroll.setWidget(body)
+        outer.addWidget(scroll)
+        lay = QVBoxLayout(body)
+        lay.setContentsMargins(0, 0, 6, 0)
         lay.setSpacing(12)
         h = QLabel(i18n.KO.SET_PAGE_TITLE, self)
         h.setProperty("role", "h1")
@@ -80,16 +89,16 @@ class SettingsPage(QWidget):
         self._retention.setSpecialValueText(i18n.KO.SET_RETENTION_FOREVER)   # 0 = 기한 없이 보관(10/5)
         self._retention.setSuffix(i18n.KO.SET_RETENTION_SUFFIX)
         self._retention.setValue(int(p.retention_days))
-        g.addWidget(QLabel(i18n.KO.SET_BACKFILL_DAYS, card), 0, 0)
-        g.addWidget(self._backfill, 0, 1)
         self._workers = QSpinBox(card)
         self._workers.setRange(1, 32)
         self._workers.setSuffix(i18n.KO.SET_READ_WORKERS_SUFFIX)
         self._workers.setValue(int(p.read_workers))
-        g.addWidget(QLabel(i18n.KO.SET_RETENTION_DAYS, card), 0, 2)
-        g.addWidget(self._retention, 0, 3)
-        g.addWidget(QLabel(i18n.KO.SET_READ_WORKERS, card), 0, 4)
-        g.addWidget(self._workers, 0, 5)
+        g.setVerticalSpacing(8)                          # 10/5: 한 줄에 셋씩 붙이면 좁은 창에서 잘렸다 — 이름 · 칸을 한 줄씩
+        for r, (label, box) in enumerate(((i18n.KO.SET_BACKFILL_DAYS, self._backfill), (i18n.KO.SET_RETENTION_DAYS, self._retention),
+                                          (i18n.KO.SET_READ_WORKERS, self._workers))):
+            g.addWidget(QLabel(label, card), r, 0)
+            g.addWidget(box, r, 1)
+            box.setMinimumWidth(140)
         # 10/5: 수집 뒤 결과 HTML 에 담을 최근 일수(0 = 전부) — 분할 설정(9/23)을 대신한다. 다른 기간은 수집 화면의 'HTML 만 다시 만들기'
         self._html_days = QSpinBox(card)
         self._html_days.setRange(0, 36500)
@@ -97,9 +106,10 @@ class SettingsPage(QWidget):
         self._html_days.setSuffix(i18n.KO.SET_HTML_DAYS_SUFFIX)
         self._html_days.setValue(int(p.html_days))
         self._html_days.setToolTip(i18n.KO.SET_HTML_DAYS_HELP)
-        g.addWidget(QLabel(i18n.KO.SET_HTML_DAYS, card), 1, 0)
-        g.addWidget(self._html_days, 1, 1)
-        g.setColumnStretch(6, 1)
+        self._html_days.setMinimumWidth(140)
+        g.addWidget(QLabel(i18n.KO.SET_HTML_DAYS, card), 3, 0)
+        g.addWidget(self._html_days, 3, 1)
+        g.setColumnStretch(2, 1)
         cl.addLayout(g)
         shl = QLabel(i18n.KO.SET_HTML_DAYS_HELP, card)
         shl.setProperty("role", "muted")

@@ -56,6 +56,7 @@ from typing import Callable, Dict, List, Optional, Tuple
 
 from . import devices as devices_mod
 from . import i18n, nas_guard, scope
+from . import kla as kla_mod
 from . import recipes as recipes_mod
 from .utils import config as config_mod
 
@@ -910,6 +911,7 @@ DIRTY_CREATED, DIRTY_CORRUPT, DIRTY_FORMAT, DIRTY_PARSER = "created", "corrupt",
 DIRTY_CURSOR, DIRTY_IDENTITY, DIRTY_MAPPING = "cursor", "identity", "device_mapping"
 DIRTY_REPORTS, DIRTY_UPDATED, DIRTY_FAILED, DIRTY_RETENTION, DIRTY_REBUILD = "reports", "reports_updated", "failed", "retention", "rebuild"
 DIRTY_DEVICE_INFO = "device_info"
+DIRTY_KLA = "kla"                                            # D73: KLA 기록(cache["kla"])이 바뀜
 UNLIMITED_DAYS = 36500                                       # retention_days 0(기한 없음)일 때 rebuild 가 읽는 창
 DIRTY_LISTING = "listing"      # 장비의 마지막 전체 나열 시각(`full_listed`) — 패턴 나열을 쓸 수 있는 PC(Windows)에서만 적는다
 #: identity 기록의 충돌 목록 상한 — 요약이지 원장(ledger)이 아니다. 건수는 `n_conflicts` 에 전부 남는다.
@@ -1344,6 +1346,7 @@ def _rows_from_cache(cache: dict, index: _DeviceIndex, cfg: dict, stats: Optiona
             rows.append({**r, "device": name} if name and r.get("device") != name else r)
     if stats is not None:
         stats["cache_superseded_rows"] = superseded
+    rows.extend(kla_mod.rows_from_store(cache.get("kla") or {}, cfg, scan_type))   # D73: KLA 행 — 같은 행 계약, 범위 밖은 빼기만
     return rows, hidden
 
 
@@ -1810,7 +1813,9 @@ def collect(cfg: dict, full: bool = False, backfill: bool = False, *, recover: b
         _say(log, f"다시 읽기: 최근 {refresh_days}일 안의 Report 는 캐시에 있어도 다시 읽습니다(창 밖 이력은 그대로)")
     if recover and not rebuild:
         _say(log, f"누락 복구: 최근 {cfg['backfill_days']}일 안에서 INI 를 못 찾았던 Report 만 다시 읽습니다")
-    plan = _list_new_reports(devs, cache, cfg, backfill, log, progress, on_device, should_stop, recover=recover,
+    kla_devs = [d for d in devs if d.get("kind") == "kla"]      # D73: KLA 는 Report 가 없다 — 아래에서 kla.collect_kla 로
+    cam_devs = [d for d in devs if d.get("kind") != "kla"]
+    plan = _list_new_reports(cam_devs, cache, cfg, backfill, log, progress, on_device, should_stop, recover=recover,
                              refresh_days=0 if rebuild else refresh_days, window_days=window_days)
     stats["list_ms"] = int((clock() - t1) * 1000)
     stats["list_pattern"] = sum(1 for _d, dm, _p, _k in plan if dm.get("listing") == "pattern")
@@ -1927,6 +1932,23 @@ def collect(cfg: dict, full: bool = False, backfill: bool = False, *, recover: b
         dev_meta.append(dm)
     _check(should_stop)
     stats["read_ms"] = int((clock() - t2) * 1000)
+    if old_cache is not None and "kla" not in cache:          # rebuild 후보 캐시에도 KLA 이력은 그대로 옮긴다(아래에서 창 안만 다시 읽는다)
+        cache["kla"] = json.loads(json.dumps(old_cache.get("kla") or {}))
+    if kla_devs:
+        for d in kla_devs:
+            on_device(d["name"], "listing", "")
+        k_meta, k_err, k_changed, k_stats = kla_mod.collect_kla(
+            cfg, kla_devs, cache, run=lambda items, fn, path_of: _run(cfg, items, fn, should_stop, group=lambda x: nas_group(path_of(x))),
+            now=dt.datetime.now(), backfill=backfill, refresh_days=0 if rebuild else refresh_days, rebuild=rebuild,
+            log=lambda m: _say(log, m), progress=progress, phase=i18n.KO.COLLECT_PHASE_KLA)
+        if k_changed:
+            dirty.add(DIRTY_KLA)
+        for dm in k_meta:
+            on_device(dm["name"], "error" if dm["error"] else "partial" if dm["read_errors"] else "done", dm["error"])
+        dev_meta.extend(k_meta)
+        errors.extend(k_err)
+        stats.update(k_stats)
+        _check(should_stop)
     t3 = clock()
 
     progress(total, total, i18n.KO.COLLECT_PHASE_RETENTION)

@@ -378,3 +378,4 @@ CLI_HELP_TO = "결과 HTML 에 담을 끝날 YYYY-MM-DD(--html-only 와 함께, 
 CLI_HTML_ONLY_BAD_DATE_FMT = "날짜 형식이 틀립니다(YYYY-MM-DD): {value}"
 RETENTION_FOREVER_TEXT = "기한 없음 — 전부"
 RETENTION_DAYS_FMT = "{days}일"
+COLLECT_PHASE_KLA = "KLA 결과 파일 읽는 중"

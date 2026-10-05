@@ -337,7 +337,8 @@ const md=s=>s.slice(5).replace("-","/");
 const cut=(s,n)=>s.length>n?s.slice(0,n-1)+"…":s;
 const dayName=s=>{const x=new Date(s+"T00:00:00");return (x.getMonth()+1)+"월 "+x.getDate()+"일 ("+"일월화수목금토"[x.getDay()]+")";};
 /* 홈 정렬 = devices.sort_key: AOI-1…AOI-25 뒤에 4F-AOI-01… (사전식이면 4F 가 앞으로 온다) */
-function devSortKey(n){const s=String(n||"");const m=/(?:^|[^0-9A-Za-z])(4F)[-_ ]*AOI[-_ ]*0*(\d+)$/i.exec(s)||/^(4F)[-_ ]*AOI[-_ ]*0*(\d+)$/i.exec(s);
+const isKla=n=>/^(4F[-_ ]?)?K\d+$/i.test(String(n||"").trim());   /* D73: KLA 장비(K1~K6 · 4F-K1 · 4F-K2) */
+function devSortKey(n){const s=String(n||"");const kk=/^(4F[-_ ]?)?K0*(\d+)$/i.exec(s.trim());if(kk)return[kk[1]?3:2,+kk[2],s];   /* KLA 는 Camtek 뒤 — K1… 다음 4F-K1… */const m=/(?:^|[^0-9A-Za-z])(4F)[-_ ]*AOI[-_ ]*0*(\d+)$/i.exec(s)||/^(4F)[-_ ]*AOI[-_ ]*0*(\d+)$/i.exec(s);
   if(m)return[1,+m[2],s];const k=/AOI[-_ ]*0*(\d+)\s*$/i.exec(s);return k?[0,+k[1],s]:[2,0,s];}
 function cmpDev(a,b){const x=devSortKey(a),y=devSortKey(b);return x[0]-y[0]||x[1]-y[1]||(x[2]<y[2]?-1:x[2]>y[2]?1:0);}
 window._log=[];function log(m){window._log.push(`[${new Date().toLocaleTimeString("ko-KR",{hour12:false})}] ${m}`);}
@@ -752,7 +753,7 @@ function jobNm(G){if(!G)return{nm:"",al:false,raw:""};const raw=D.pool.job[G.l]|
 const PROPS={attentionUtil:40,attentionErr:3};   /* 살펴볼 장비 문턱 — meta.dashboard_settings 의 같은 이름 숫자가 있으면 그것으로(D14) */
 function applySettings(m){const o=(m&&m.dashboard_settings)||{};for(const k of Object.keys(PROPS)){const v=Number(o[k]);if(o[k]!==undefined&&Number.isFinite(v)&&v>=0)PROPS[k]=v;}}
 let D=null;
-const VIEWS=["home","errors","trend","report","recipe"];
+const VIEWS=["home","kla","errors","trend","report","recipe"];
 const state={view:"home",dayI:null,sort:"name",floor:"all",span:0,vp:"all",unit:"day",metric:"min",pickDay:undefined,
   modalDev:null,modalDayI:null,modalType:null,modalJob:null,selLot:null,lotFilter:"all",showMembers:false,
   stack:[],                                  /* 열린 팝업의 순서(type · dev · err) — 마지막이 맨 위, 나머지는 뒤로 물러난다 */
@@ -803,7 +804,8 @@ const S={
   noRec(t){return S.util(t)===null;},   /* 기록 없음 — '살펴볼 장비' 와 다른 축(D06·D57) */
   alert(t){const u=S.util(t);return u!==null&&(u<S.thU()||(t&&t.e||0)>=S.thE());},
   floorOf(n){return n.indexOf("4F")===0?"4":"2";},
-  devList(){const f=state.floor;return D.devices.filter(n=>f==="all"||S.floorOf(n)===f);},
+  devList(){const f=state.view==="kla"?"kla":state.floor;   /* KLA 탭(D73)은 KLA 장비만 */
+    return D.devices.filter(n=>f==="all"||(f==="kla"?isKla(n):f==="cam"?!isKla(n):S.floorOf(n)===f));},
   fleetUtil(day,devs){const v=devs.map(n=>S.util(S.at(day,n))).filter(x=>x!==null);return v.length?v.reduce((a,b)=>a+b,0)/v.length:0;},
   segGroup(items,cur,on){return items.map(it=>({label:it.label,on:cur===it.k,pick:()=>on(it.k)}));},
   go(view){return()=>{const apply=()=>{const o=VIEWS.indexOf(state.view),n=VIEWS.indexOf(view);state.viewDir=o<0||n<0||o===n?0:(n>o?1:-1);setState({view,modalType:null,modalJob:null,errDev:null,modalDev:null,selLot:null,stack:[]});window.scrollTo(0,0);};
@@ -822,7 +824,7 @@ const S={
 /* ── 제품 기능: BatchReport 열기(meta.devices[].note + report_dir + report) · 수집 상태 칩 · 사본 저장 ── */
 function devPath(name){const d=(meta.devices||[]).find(x=>x.name===name);return d?{path:d.note||"",dir:d.report_dir||"Report"}:null;}
 function reportUrl(r){
-  if(!r||!r.report)return"";const d=devPath(r.device);if(!d||!d.path)return"";
+  if(!r||!r.report||/^KLA:/.test(r.report))return"";const d=devPath(r.device);if(!d||!d.path)return"";   /* KLA 는 Report 파일이 없다(D73) */
   const base=String(d.path).replace(/[\\/]+$/,"");const unc=/^\\\\/.test(base);
   const parts=(base.replace(/^\\\\/,"")+"/"+d.dir+"/"+r.report).split(/[\\/]+/).filter(Boolean);
   const enc=parts.map((p,i)=>i===0&&/^[A-Za-z]:$/.test(p)?p:encodeURIComponent(p));
@@ -1232,7 +1234,7 @@ function render(){
   let html;
   if(!D||!D.days.length)html=headerHtml(null)+`<div class="stage" data-key="stage"><main data-key="view:none"><div class="panel" style="padding:28px 24px"><h2>아직 수집한 데이터가 없습니다</h2><p class="muted" style="margin-top:6px">수집 프로그램에서 '수집' 을 실행한 뒤 이 파일을 다시 여세요.</p></div></main></div>`+footHtml();
   else{const V=state.view;let body="";
-    if(V==="home")body=homeHtml();else if(V==="errors")body=errorsHtml();else if(V==="trend")body=trendHtml();else if(V==="recipe")body=rcpHtml();else body=reportHtml();
+    if(V==="home"||V==="kla")body=homeHtml();else if(V==="errors")body=errorsHtml();else if(V==="trend")body=trendHtml();else if(V==="recipe")body=rcpHtml();else body=reportHtml();
     html=headerHtml(V)+`<div class="stage" data-key="stage" data-anim="el"><main data-key="view:${V}">${body}</main></div>`+footHtml()+popupsHtml();}
   const tpl=document.createElement("template");tpl.innerHTML=html;
   if(app.getAttribute("data-anim")!=="el")app.setAttribute("data-anim","el");
@@ -1277,7 +1279,7 @@ function headerHtml(V){
   let stampTxt=gen?gen+" 수집 기준":"";
   if(meta.mode==="saved")stampTxt+=" · 사본";
   if(!fixed&&gen)stampTxt+=" · 수집 시각 정보 없음";
-  const nav=[["home","가동률"],["errors","Error"],["trend","추이"],["report","TB500 · Kendall"],["recipe","레시피"]];
+  const nav=[["home","가동률"],["kla","KLA"],["errors","Error"],["trend","추이"],["report","TB500 · Kendall"],["recipe","레시피"]];
   return `<header class="hdr" data-key="hdr"><div class="brand"><span class="lt" data-lottie="scan" data-loop="1" data-static aria-hidden="true"></span>AOI 가동 현황</div>
     <nav class="nav"><i class="ind" data-key="ind" data-static aria-hidden="true"><b class="l"></b><b class="m"></b><b class="r"></b></i>${nav.map(([k,l])=>`<button class="${V===k?"on":""}" data-h="${h(S.go(k))}" data-fk="nav:${k}">${l}</button>`).join("")}</nav>
     ${hasD?rangeHtml():""}
@@ -1308,7 +1310,8 @@ const lotKey=L=>L[0]+"|"+L[1]+"|"+L[2]+"|"+(L[11]||0)+"|"+(L[8]||0);
 /* ---------- 가동률 ---------- */
 function homeHtml(){
   const day=S.dayStr(), devs=S.devList();
-  const floors=S.segGroup([{k:"all",label:"전체"},{k:"2",label:"2층"},{k:"4",label:"4층"}],state.floor,k=>setState({floor:k}));
+  const floors=S.segGroup([{k:"all",label:"전체"},{k:"2",label:"2층"},{k:"4",label:"4층"},{k:"cam",label:"Camtek"},{k:"kla",label:"KLA"}],state.floor,k=>setState({floor:k}));
+  const KV=state.view==="kla";
   const sorts=S.segGroup([{k:"name",label:"번호순"},{k:"low",label:"가동률 낮은 순"}],state.sort,k=>setState({sort:k}));
   const items=devs.map(n=>({n,t:S.at(day,n)}));
   const sorted=[...items];
@@ -1328,8 +1331,8 @@ function homeHtml(){
       <div><p class="k">살펴볼 장비</p><p class="v num" style="color:#B4402F">${cnt(items.filter(x=>S.alert(x.t)).length)}<small>대</small></p><p class="s">가동률 ${S.thU()}% 미만 또는 Error ${S.thE()}건 이상${q.no?` · 기록 없음 ${q.no}대는 따로`:""}</p></div>
       <div><p class="k" title="같은 Lot 에서 같은 유형이 여러 번 나도 1건으로 셉니다">Error</p><p class="v num">${cnt(items.reduce((a,b)=>a+(b.t?b.t.e:0),0))}<small>건</small></p><p class="s">Error ${hm(items.reduce((a,b)=>a+(b.t?b.t.x:0),0))} · 에러 후 대기 ${hm(items.reduce((a,b)=>a+(b.t?b.t.s:0),0))}</p></div>
     </section>
-    <div class="bar-h"><h2>${isToday?"오늘의 가동률":dayName(day)+" 가동률"}</h2><div class="spacer"></div>${segHtml(floors)}${segHtml(sorts)}</div>
-    <div class="panel homelist" data-listsig="${state.floor}|${state.sort}|${day}">
+    <div class="bar-h"><h2>${KV?"KLA ":""}${isToday?"오늘의 가동률":dayName(day)+" 가동률"}</h2><div class="spacer"></div>${KV?"":segHtml(floors)}${segHtml(sorts)}</div>
+    <div class="panel homelist" data-listsig="${state.view}|${state.floor}|${state.sort}|${day}">
       <div class="legend"><span><i class="gloss" style="background-color:${RUN}"></i>Scan</span><span><i class="gloss" style="background-color:${DUP}"></i>Rescan</span><span><i class="gloss" style="background-color:${TEST}"></i>Test</span><span><i class="gloss" style="background-color:${ERR}"></i>Error</span><span><i class="gloss" style="background-color:${STOP}"></i>에러 후 대기</span><span><i class="gloss" style="background-color:${IDLE}"></i>대기</span>${isToday?`<span><i style="background:${FUTURE};box-shadow:inset 0 0 0 1px #DCE2E9"></i>아직 오지 않은 시간</span>`:""}</div>
       <div class="thead" style="grid-template-columns:96px 58px 1fr 76px 30px;gap:13px"><span>장비</span><span style="text-align:right">가동률</span>${ticksHtml()}<span style="text-align:right">Error</span><span></span></div>
       ${rowsH||`<p class="empty">이 날 기록이 있는 장비가 없습니다.</p>`}
@@ -1340,7 +1343,7 @@ function homeHtml(){
 let errCtx=null;   /* 유형·Job 팝업이 같은 집계를 쓴다 */
 function errorsHtml(){
   const day=S.dayStr(),devs=S.devList(),P=D.pool;
-  const floors=S.segGroup([{k:"all",label:"전체"},{k:"2",label:"2층"},{k:"4",label:"4층"}],state.floor,k=>setState({floor:k}));
+  const floors=S.segGroup([{k:"all",label:"전체"},{k:"2",label:"2층"},{k:"4",label:"4층"},{k:"cam",label:"Camtek"},{k:"kla",label:"KLA"}],state.floor,k=>setState({floor:k}));
   const spanDays=D.days;   /* 기간은 헤더에서(10/5) */
   const pickDay=state.pickDay===undefined?day:state.pickDay;
   const eDayI=pickDay?D.days.indexOf(pickDay):D.days.indexOf(spanDays[spanDays.length-1]);
@@ -1590,7 +1593,7 @@ function errPopupHtml(){
 /* ---------- 추이 ---------- */
 function trendHtml(){
   const devs=S.devList(),U=state.unit;
-  const floors=S.segGroup([{k:"all",label:"전체"},{k:"2",label:"2층"},{k:"4",label:"4층"}],state.floor,k=>setState({floor:k}));
+  const floors=S.segGroup([{k:"all",label:"전체"},{k:"2",label:"2층"},{k:"4",label:"4층"},{k:"cam",label:"Camtek"},{k:"kla",label:"KLA"}],state.floor,k=>setState({floor:k}));
   const units=S.segGroup([{k:"day",label:"일"},{k:"week",label:"주"},{k:"month",label:"월"}],U,k=>setState({unit:k}));
   const PD=new Set(D.partialDays||[]);const full=D.days.filter(d=>!PD.has(d)),useD=full.length?full:D.days;   /* 수집 창 시작일(부분)은 평균에서 뺀다 */
   let buckets=[];

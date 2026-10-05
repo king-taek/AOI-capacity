@@ -116,15 +116,16 @@ def _cfg(tmp_path, csv_path, **over):
 
 # ── 1. 기본값 ────────────────────────────────────────────────────────────
 def test_default_scope_is_every_real_machine():
-    """사용자 확정: 4대 현장 테스트를 마치고 30대 전부를 본다. `*`(제한 없음)와는 여전히 다르다."""
-    all30 = [f"AOI-{i}" for i in range(1, 26)] + [f"4F-AOI-{i:02d}" for i in range(1, 6)]
+    """사용자 확정: 4대 현장 테스트를 마치고 30대 전부, 10/5 KLA 8대까지 38대(D73). `*`(제한 없음)와는 여전히 다르다."""
+    all30 = [f"AOI-{i}" for i in range(1, 26)] + [f"4F-AOI-{i:02d}" for i in range(1, 6)] + \
+        [f"K{i}" for i in range(1, 7)] + ["4F-K1", "4F-K2"]
     assert scope.DEFAULT_SCOPE == all30
     assert collect.DEFAULT_CONFIG["scope_devices"] == all30
     assert scope.scope_list({}) == all30 and not scope.unrestricted({})
     assert scope.scope_list({"scope_devices": []}) == all30      # 빈 목록은 '전부 금지' 가 아니다
     from aoi_capacity.utils import prefs
     assert prefs.to_collect_cfg(prefs.Prefs())["scope_devices"] == all30
-    assert not scope.is_allowed({}, "AOI-26") and not scope.is_allowed({}, "4F-AOI-06")
+    assert not scope.is_allowed({}, "AOI-26") and not scope.is_allowed({}, "4F-AOI-06") and not scope.is_allowed({}, "K7")
 
 
 @pytest.mark.parametrize("old", [["AOI-25"], ["AOI-1", "AOI-8", "AOI-9", "AOI-25"]])

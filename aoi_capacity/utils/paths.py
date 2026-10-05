@@ -103,9 +103,16 @@ def output_html(configured: str = "") -> Path:
 
 
 def ensure_user_files() -> bool:
-    """첫 실행: 데이터 폴더에 devices.csv 가 없으면 동봉 예시를 복사한다. 복사했으면 True."""
+    """첫 실행: 데이터 폴더에 devices.csv 가 없으면 동봉 예시를 복사한다. 복사했으면 True.
+    이미 있으면 KLA 행이 하나도 없을 때만 기본 8대를 덧붙인다(10/5 — KLA 를 같은 수집기로, D73)."""
     dst = devices_csv_path()
     if dst.exists():
+        try:
+            from .. import devices
+
+            devices.ensure_kla_rows(dst)
+        except Exception:  # noqa: BLE001 — 덧붙이기는 편의 기능이라 실패해도 시작을 막지 않는다
+            pass
         return False
     src = default_devices_csv()
     if src.is_file():
