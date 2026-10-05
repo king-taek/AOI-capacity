@@ -28,7 +28,7 @@
   "output_name": "AOI_capacity.html",
   "write_csv": false,
   "_HTML기간": "html_days: 수집 뒤 만드는 결과 HTML(output_name)에 담을 최근 일수(0 = 가진 데이터 전부). 파일은 나누지 않습니다. 다른 기간은 수집 없이 `python -m aoi_capacity.cli --html-only --from 2026-08-01 --to 2026-09-30` — 가진 데이터(캐시)만으로 output_name_시작일~끝일.html 을 만듭니다(NAS 를 읽지 않음).",
-  "html_days": 60,
+  "html_days": 30,
   "_레시피묶음": "recipe_groups_file: 결과 HTML 의 '레시피 묶음' 편집기에서 내보낸 recipe_groups.json 의 경로. 비우면 데이터 폴더(%LOCALAPPDATA%\\AOI_Capacity)의 recipe_groups.json 과 다운로드 폴더의 recipe_groups*.json 중 안에 적힌 저장 시각이 가장 늦은 것을 다음 HTML 에 담습니다.",
   "recipe_groups_file": "",
   "cache_file": "C:\\AOI_capacity\\aoi_cache.json"

@@ -106,7 +106,7 @@ DEFAULT_CONFIG: Dict[str, object] = {
     devices_mod.PATH_ALIASES_CFG: {},
     "attention_util": 40,                         # D14: 살펴볼 장비 = 가동률 이 값(%) 미만 — 결과 HTML 의 meta.dashboard_settings 로 나간다
     "attention_err": 3,                           # D14: 또는 Error 건수 이 값 이상
-    "html_days": 60,                              # 수집 뒤 결과 HTML 에 담을 최근 일수(0 = 가진 데이터 전부). 분할은 없다(10/5 사용자 — 9/23 분할 롤백)
+    "html_days": 30,                              # 수집 뒤 결과 HTML 에 담을 최근 일수(0 = 가진 데이터 전부, 기본 1달 — 10/5 사용자). 분할은 없다(9/23 분할 롤백)
     "recipe_groups_file": "",                     # D67: 결과 HTML 에 담을 레시피 묶음(화면에서 내보낸 JSON). 비우면 데이터 폴더·다운로드에서 가장 최근 것
 }
 MAX_READ_RETRY = 3   # 읽기에 실패한 Report 를 몇 번까지 다시 시도하고 커서를 붙잡아 둘지
@@ -138,8 +138,12 @@ DEV_OK, DEV_NO_DATA, DEV_PARTIAL, DEV_UNREACHABLE = "ok", "no_data", "partial", 
 #: `issue_codes`(ROW_SCHEMA_VERSION 6, C12) — `data_issue` 의 구조화 표현: `CODE` 또는 `CODE=인자,인자` 를 세미콜론으로 이은 목록(`ISSUE_*`).
 #: 새 행은 캐시에 **코드만** 남기고(`data_issue` 는 빈 값), 사람 문장은 출력 때(`collect()` 의 끝 `render_issue_rows`) ko.py 에서 만든다 —
 #: 문구를 바꿔도 NAS 재수집이 필요 없다. 옛 캐시 행은 `data_issue` 원문 그대로 두고 손실 파싱하지 않는다(옛·새 행이 섞여도 된다).
-ROW_SCHEMA_VERSION = 6
-OUT_COLS = ["device", "kind", "job", "setup", "lot", "wafer_id", "status", "norm_status", "cause", "outcome", "scan_type", "recipe",
+#: `scan_mode`(ROW_SCHEMA_VERSION 7, D74) — 그 Wafer 가 멀티 스캔(`MULTI`)인지 단일(`SINGLE`)인지, 모르면 빈 값. 근거는 Wafer 폴더:
+#: `RecipesInfo.ini` 에 레시피가 둘 이상이면 MULTI, INI 를 찾았는데(EXACT) 그 파일이 없으면 SINGLE(같은 Lot 이름으로 다시 단일 검사하면
+#: Scanresult 폴더가 통째로 새로 쓰인다 — 사용자 확인 10/5). Report 표·요약만 있는 행은 `x20|x5` 처럼 둘 이상일 때만 MULTI, 아니면 모름.
+#: 캐시에 든 옛 행에는 없다(모름) — 채우려면 그 기간을 다시 읽는다(`--refresh-window N` · 전체 다시 만들기).
+ROW_SCHEMA_VERSION = 7
+OUT_COLS = ["device", "kind", "job", "setup", "lot", "wafer_id", "status", "norm_status", "cause", "outcome", "scan_type", "recipe", "scan_mode",
             "faults", "scanned_dice", "yield",
             "wafer_start_time", "wafer_end_time", "batch_start", "batch_end", "report", "ini_match", "time_basis", "slots", "data_issue",
             "issue_codes"]
@@ -725,7 +729,7 @@ def rows_for_report(dev_name: str, rep: dict, scan_root: str, memo: Optional[_In
              "report": rep.get("name", ""), "lot": w["lot"], "wafer_id": w["wafer_id"], "status": w["status"],
              "norm_status": norm_status(w["status"]), "cause": cause_field(causes), "outcome": norm_outcome(w["status"]),
              "scan_type": scan_type(w["lot"]),
-             "recipe": w["recipe"] or s.get("Recipe", ""),
+             "recipe": w["recipe"] or s.get("Recipe", ""), "scan_mode": "",
              "faults": w.get("faults", ""), "scanned_dice": w.get("scanned_dice", ""), "yield": w.get("yield", ""),
              "wafer_start_time": "", "wafer_end_time": "", "batch_start": s.get("Batch Start", ""),
              "batch_end": s.get("Batch End", ""), "ini_match": "", "time_basis": "MISSING", "slots": "", "data_issue": "",
@@ -786,13 +790,19 @@ def rows_for_report(dev_name: str, rep: dict, scan_root: str, memo: Optional[_In
                         # 덮어써진 INI(STALE)는 다른 시도의 것이라 쓰지 않는다. 정확 경로 하나만 연다(규칙 4).
                         rk, names = memo.recipes(os.path.join(found_in, rel_found, "RecipesInfo.ini"))
                         one = got.get("Recipe", {}).get("Name", "")
+                        # 멀티면 WaferInfo 의 [Recipe] Name 은 스캔 진행 창에 떠 있던 이름일 뿐이다(사용자 10/5) — 쓰지 않는다.
                         if rk == "ok" and names:
                             r["recipe"] = "|".join(names)
-                        elif one:
-                            r["recipe"] = one
+                            r["scan_mode"] = "MULTI" if len(names) > 1 else "SINGLE"
+                        else:
+                            if one:
+                                r["recipe"] = one
+                            r["scan_mode"] = "SINGLE"
                     r["issue_codes"] = issue_field(iss)
                 except Exception as e:  # noqa: BLE001
                     r["ini_match"], r["issue_codes"] = "READ_ERROR", issue_field([(ISSUE_INI_READ_ERROR, f"{type(e).__name__}: {e}")])
+        if not r["scan_mode"] and "|" in r["recipe"]:
+            r["scan_mode"] = "MULTI"                   # INI 근거가 없어도 표에 레시피가 둘 이상 찍혔으면 멀티
         rows.append(r)
     return synthesize_rows(rows)
 

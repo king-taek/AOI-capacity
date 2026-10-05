@@ -38,12 +38,12 @@ def _ts(hhmm: str, day: str = DAY) -> str:
     return f"{int(d)}-{mon}-{y[2:]} {(h % 12 or 12):02d}:{mi:02d}:00 {'AM' if h < 12 else 'PM'}"
 
 
-def _row(dev, wafer, s=None, e=None, *, lot="LOT-A", status="Pass", job="J1", report=None, bs=None, be=None, day=DAY):
+def _row(dev, wafer, s=None, e=None, *, lot="LOT-A", status="Pass", job="J1", report=None, bs=None, be=None, day=DAY, mode=""):
     rep = report or f"{job}_6321_{lot}_{int(day[8:])}-Sep-26_(00.00.00)_BatchReport.htm"
     return {"device": dev, "kind": "", "job": job, "setup": "6321", "lot": lot, "wafer_id": wafer, "status": status,
             "wafer_start_time": _ts(s, day) if s else "", "wafer_end_time": _ts(e, day) if e else "",
             "batch_start": _ts(bs, day) if bs else (_ts(s, day) if s else ""), "batch_end": _ts(be, day) if be else (_ts(e, day) if e else ""),
-            "report": rep, "ini_match": "EXACT" if s else "NOT_FOUND", "scan_type": "", "recipe": "", "data_issue": "",
+            "report": rep, "ini_match": "EXACT" if s else "NOT_FOUND", "scan_type": "", "recipe": "", "scan_mode": mode, "data_issue": "",
             "faults": "3" if status == "Pass" else ""}
 
 
@@ -51,7 +51,7 @@ def _fixture_rows():
     rows = []
     # AOI-1: 정상 스캔 두 Lot + Error 하나(원인 ALIGN) + INI 없는 Pass 행(배치 창 추정)
     for i in range(6):
-        rows.append(_row("AOI-1", f"W{i}", f"08:{i*5:02d}", f"08:{i*5+4:02d}", lot="LOT-A", job="R_TB500_LIVE_PI2"))
+        rows.append(_row("AOI-1", f"W{i}", f"08:{i*5:02d}", f"08:{i*5+4:02d}", lot="LOT-A", job="R_TB500_LIVE_PI2", mode="MULTI"))
     rows.append(_row("AOI-1", "E1", "09:00", "09:03", lot="LOT-B", status="Alignment Error.", job="R_TB500_LIVE_PI2"))
     for i in range(4):
         rows.append(_row("AOI-1", f"X{i}", f"10:{i*6:02d}", f"10:{i*6+5:02d}", lot="LOT-C", job="R_KENDALL_A0_FS"))
@@ -67,7 +67,7 @@ def _fixture_rows():
     # 전날(9/17): AOI-1 에 Error 하나 — Error 탭의 '최근 7일' 이 이틀이 되어 기간 팝업(여러 날)을 검사할 수 있다
     rows.append(_row("AOI-1", "P1", "14:00", "14:03", lot="LOT-P", status="Scan Error.", job="R_TB500_LIVE_PI2", day="2026-09-17"))
     for i in range(3):
-        rows.append(_row("AOI-1", f"Q{i}", f"15:{i*5:02d}", f"15:{i*5+4:02d}", lot="LOT-Q", job="R_TB500_LIVE_PI2", day="2026-09-17"))
+        rows.append(_row("AOI-1", f"Q{i}", f"15:{i*5:02d}", f"15:{i*5+3:02d}", lot="LOT-Q", job="R_TB500_LIVE_PI2", day="2026-09-17", mode="SINGLE"))
     return rows
 
 
@@ -512,9 +512,20 @@ def test_recipe_tab_shows_per_device_stats_and_compares_two_periods(page):
     pg.wait_for_timeout(150)
     assert pg.evaluate("document.activeElement.dataset.fk") == "rcp:q"
     pg.locator(".rcprow").first.click()
+    # 첫 화면(10/5): 장당 스캔 멀티 vs 단일 — 9/18 W 6장 멀티 4분, 9/17 Q 3장 단일 3분 → 단일 1분 빠름(같은 장비 AOI-1)
+    tiles = pg.locator(".scanhero .mtile").all_inner_texts()
+    assert "4.0" in tiles[0] and "6장" in tiles[0] and "3.0" in tiles[1] and "3장" in tiles[1]
+    assert "단일 1.0" in tiles[2] and "같은 장비끼리(1대)" in tiles[2]
+    assert [x.split("\n")[0] for x in pg.locator(".mdev:not(.head)").all_inner_texts()] == ["AOI-1"]
+    assert pg.locator("main section.cards").count() == 0              # 생산량 등은 상세 보기 안
+    pg.locator('[data-fk="rcp:more"]').click()
+    pg.wait_for_timeout(200)
     cards = pg.locator("main section.cards > div").all_inner_texts()
     assert cards[0].split("\n")[0] == "생산량" and "9장" in cards[0]
     assert [x.split("\n")[0] for x in pg.locator(".rcpdev").all_inner_texts()] == ["AOI-1"]
+    assert pg.locator(".cmp").count() == 0
+    pg.locator('[data-fk="rcp:cmp"]').click()
+    pg.wait_for_selector(".cmp")
     pg.fill('[data-fk="cmp:cmpAf"]', "2026-09-17")
     pg.fill('[data-fk="cmp:cmpAt"]', "2026-09-17")
     pg.fill('[data-fk="cmp:cmpBf"]', "2026-09-18")
@@ -522,6 +533,7 @@ def test_recipe_tab_shows_per_device_stats_and_compares_two_periods(page):
     pg.wait_for_timeout(500)                                    # 바뀐 숫자는 제자리에서 0.24초 동안 한 글자씩 넘어간다(9/24)
     rows = {r.split("\n")[0]: r.split("\n")[1:] for r in pg.locator(".cmp .cmprow:not(.dev):not(.head)").all_inner_texts()}
     assert rows["생산량(Wafer)"][:2] == ["3", "6"] and "+100.0%" in rows["생산량(Wafer)"][2]
+    assert rows["멀티 스캔 장 비율(%)"][:2] == ["0.0", "100.0"]
     # 다른 레시피를 B 에 더하면 B 쪽 생산량이 늘어난다(전 = PI2, 후 = PI2 + Kendall FS)
     pg.fill('[data-fk="rcp:q"]', "KENDALL")
     pg.wait_for_timeout(150)

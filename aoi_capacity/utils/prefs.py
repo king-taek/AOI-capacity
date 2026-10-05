@@ -18,7 +18,7 @@ from .. import scope as _scope
 from . import config as _config
 from . import paths
 
-PREFS_VERSION = 6
+PREFS_VERSION = 7
 
 
 @dataclass
@@ -39,7 +39,7 @@ class Prefs:
     last_view: str = "collect"
     scope_devices: List[str] = field(default_factory=lambda: list(_scope.DEFAULT_SCOPE))  # ★ 수집 허용 장비
     refresh_pick_days: int = 3        # 수집 페이지 '최근 N일 다시 읽기' 카드의 N(고를 때만 refresh_window_days 로 들어간다)
-    html_days: int = 60               # 수집 뒤 결과 HTML 에 담을 최근 일수(0 = 전부). 분할은 없다(10/5 롤백)
+    html_days: int = 30               # 수집 뒤 결과 HTML 에 담을 최근 일수(0 = 전부, 기본 1달 — 10/5 사용자). 전체 기간은 수집 창 버튼
     refresh_window_days: int = 0      # D60: 최근 N일 안의 Report 는 캐시에 있어도 다시 읽기(0 = 끔). 수집 페이지 체크박스가 켜고 끈다
     prefs_version: int = PREFS_VERSION
     extra: Dict[str, Any] = field(default_factory=dict)
@@ -90,13 +90,16 @@ def migrate(p: Prefs) -> Prefs:
     v4(9/23): 화면 기본이 어두운 화면 → 밝은 화면(결과 HTML 과 같은 모양, 사용자 요청). 옛 기본값("dark")인 설정만 옮긴다 —
         v4 뒤에 사용자가 어두운 화면을 고르면 그대로 남는다.
     v5(10/5): 이력은 **기한 없이 보관**(사용자 확정 — '데이터는 계속 쌓아 놓고'). 고른 값과 상관없이 0(기한 없음)으로 옮긴다.
-    v6(10/5): 수집 범위에 KLA 8대 추가 — 옛 기본 30대 그대로인 설정만 38대로(`_scope.PAST_DEFAULTS`)."""
+    v6(10/5): 수집 범위에 KLA 8대 추가 — 옛 기본 30대 그대로인 설정만 38대로(`_scope.PAST_DEFAULTS`).
+    v7(10/5): 결과 HTML 기본 기간 60일 → 1달(30일, 사용자 요청) — 옛 기본값 60 그대로인 설정만."""
     if p.prefs_version < PREFS_VERSION and list(p.scope_devices or []) in _scope.PAST_DEFAULTS:
         p.scope_devices = list(_scope.DEFAULT_SCOPE)
     if p.prefs_version < 4 and p.color_mode == "dark":
         p.color_mode = "light"
     if p.prefs_version < 5:
         p.retention_days = 0
+    if p.prefs_version < 7 and int(p.html_days) == 60:
+        p.html_days = 30
     if p.prefs_version < PREFS_VERSION:
         p.prefs_version = PREFS_VERSION
     return p

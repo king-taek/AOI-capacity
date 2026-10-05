@@ -99,11 +99,11 @@ Camtek AOI 장비의 BatchReport/WaferInfo.ini 를 읽어 장비별 가동률을
   **`TEST` 는 분모(24시간)에는 들어가되 분자(실가동)에서만 뺀다**(사용자 확정 — 양산을 위해 돈 게 아니다).
   오류 건수에도 넣지 않는다. 화면에서 사라지지는 않는다: 타임라인에 분홍 점무늬 띠, 제목에 'Test n건 제외',
   Lot 목록에 '시험 · 제외' 표. 빼는 것과 없었던 것은 다르다.
-- 행 데이터 계약(`collect.OUT_COLS`, **25열 · `ROW_SCHEMA_VERSION` 6**): `kind`("" = Wafer 한 장 · "batch" = 통째로 실패한 시도 · "slot" = 일부 성공한
+- 행 데이터 계약(`collect.OUT_COLS`, **26열 · `ROW_SCHEMA_VERSION` 7**): `kind`("" = Wafer 한 장 · "batch" = 통째로 실패한 시도 · "slot" = 일부 성공한
   배치의 자리표시 행 Error 를 Report 당 1건으로 합성한 사건, D38), `batch_end`,
   `job`·`setup`(Report 안의 `Job/Setup`, 없으면 파일명 규칙), `report`(BatchReport 파일 이름 — 화면에서 그 파일을 다시 여는 근거),
   `cause`(원인 코드들, 규칙 순 세미콜론) · `outcome`(종료 결과) · `norm_status`(호환: 원인이 있으면 첫 원인, 없으면 결과) — **원인과 결과는 다른 축**(D43),
-  `scan_type`("" · RESCAN · REWORK · TEST — 겹치면 TEST → RESCAN → REWORK 순), `ini_match`(EXACT · NOT_FOUND · MOVED_ONLY · NO_WAFER_ID · READ_ERROR · STALE · BATCH_FAILED · BATCH · BATCH_SLOT),
+  `scan_type`("" · RESCAN · REWORK · TEST — 겹치면 TEST → RESCAN → REWORK 순), `scan_mode`(MULTI · SINGLE · "" — Wafer 폴더 `RecipesInfo.ini` 에 레시피 둘 이상이면 MULTI, INI 만 있으면 SINGLE, 표·요약만이면 `|` 가 있을 때만 MULTI, D74·D75), `ini_match`(EXACT · NOT_FOUND · MOVED_ONLY · NO_WAFER_ID · READ_ERROR · STALE · BATCH_FAILED · BATCH · BATCH_SLOT),
   `faults` · `scanned_dice` · `yield`(Report 표의 Faults · Scanned Dice · Yield **원문 그대로**, 합성 행은 빈 값 — 옛 캐시 행에는 없어 `--rebuild-all`(또는 `--refresh-window N`) 재수집으로만 채워진다),
   `time_basis`(STRICT_IN_BATCH · TOLERANCE_ONLY · OUTSIDE_BATCH · BATCH_ONLY · MISSING · INVALID · UNKNOWN_BATCH), `slots`(slot 행의 영향 Slot 수),
   `issue_codes`(C12: `CODE` 또는 `CODE=인자,인자` 를 `;` 로 이은 목록, `collect.ISSUE_CODES` 16개 — 인자 안의 `% ; = ,` 만 퍼센트 이스케이프, 경로·한글은 그대로).
@@ -181,7 +181,7 @@ Camtek AOI 장비의 BatchReport/WaferInfo.ini 를 읽어 장비별 가동률을
 - **레시피 묶음(D67)**: 헤더 '레시피 묶음' 팝업(`recipePopupHtml`)에서 Job 원문을 묶는다. 모델의 Job 묶음은 `groupJobs`(사용자 묶음 → 그 이름, 나머지 `jobKey`), 표시 이름은 `jobNm` 한 곳(묶음 이름 → `JOB_ALIAS` → 원문).
   **통계·표시에만** — `matKey`(Rescan)에는 넣지 않는다. 고치면 `rgApply` 로 그 자리에서 다시 묶고 localStorage `aoi.recipeGroups.v1` 에 보관(HTML 에 담긴 것과 `saved` 가 늦은 쪽), '내보내기' 는 `recipe_groups.json`.
   수집기는 `aoi_capacity/recipes.py`(읽기만 — cfg `recipe_groups_file`, 비우면 데이터 폴더·다운로드에서 `saved` 가 가장 늦은 것)로 찾아 `write_html` 이 `meta.recipe_groups` 로 넣는다. '사본 저장' 도 담는다.
-- **레시피 탭(D70, `rcpHtml`)**: 레시피 = Job 묶음(`D.jobGroups`). 값은 모델이 아니라 원천 행에서 `rcpIndex`(D·jobGroups 가 바뀔 때만 다시)로 모은다 —
+- **레시피 탭(D70 · D75, `rcpHtml`)**: 첫 화면 = 레시피 목록(Wafer · 멀티 비율) + **장당 스캔 멀티 vs 단일**(`scanMode` — 행의 `scan_mode`, 모름은 단일로 치지 않고 따로 셈: 중앙 분/장 · 장 수 · 차이 · 같은 장비끼리 가중 차이 `paired` · 10~90% 범위 띠) + 장비별 멀티/단일 표. 나머지(생산량·배치 기준·fault·가동률·장비별 상세·날짜별)는 `state.rcpMore` '상세 보기', 전후 비교는 `state.cmpOpen`. 레시피 = Job 묶음(`D.jobGroups`). 값은 모델이 아니라 원천 행에서 `rcpIndex`(D·jobGroups 가 바뀔 때만 다시)로 모은다 —
   생산량 = PASS·Test 아님 Wafer 행(장비·Wafer·시작 시각 한 번) · 장당 스캔 = INI 시작~끝(`ini_match` EXACT, 0~180분) · 배치 기준 장당 = Report 배치 시간 ÷ PASS 장수(Error 없고 한 레시피만 돈 Report) ·
   가동률 = 그 장비들의 장비-일 `S.util` 평균 · 하위 레시피 = 행의 `recipe` 열(`x20`·`x5`·`x20|x5` — 'x5 를 쓴 장 비율'). 수집기가 채우는 순서(D74): Wafer 폴더 `RecipesInfo.ini` 의 `[Recipe-n] Name` 전부(멀티 스캔에만 있는 파일, `|` 로 이음) → `WaferInfo.ini` `[Recipe] Name`(단일) → Report 표 Recipe 칸 → 요약 Recipe. 표 칸은 멀티여도 `x20` 만 찍혀 믿지 않는다(실물 10/5). 덮어써진(STALE) INI 의 것은 쓰지 않는다. 날짜는 Wafer 시작일, 파일의 기간(`D.days`) 안만.
   **전후 비교**(`cmpHtml`): 사용자가 고른 두 기간 × 두 레시피 묶음(`state.cmpA/cmpB` = Job 원문 목록 — 처음 고른 레시피가 양쪽의 시작, 그 뒤 ＋·✕ 로만 바뀜). 자동 '전 기간 대비'(D23)와는 별개다.
@@ -201,10 +201,10 @@ Camtek AOI 장비의 BatchReport/WaferInfo.ini 를 읽어 장비별 가동률을
 - 추이 화면에 **전 기간 대비(전주·전월·전일)는 두지 않는다**(사용자 확정, 가드: `test_no_period_over_period_comparison_anywhere`). 선택한 기간의 값만 보여 준다.
 - 결과 HTML 의 위치·생성은 `utils/results.py` 한 곳에서만 묻는다(`html_path` · `ensure_html` · `last_collect_time`).
 - **결과 HTML 기간(10/5, 사용자 요청 — 9/23 크기별 분할은 롤백, 분할 없음)**: 이력은 **기한 없이 보관**(`retention_days` 0 = 기한 없음, 기본 · prefs v5 가 옮김).
-  수집 뒤 HTML 은 가진 데이터의 끝날부터 `html_days`(기본 60, 0 = 전부) 일을 원래 이름 한 장으로, 기간을 고르면(`write_html(day_from, day_to)`) `collect.range_name` = `AOI_capacity_<첫날>~<끝날>.html`.
+  수집 뒤 HTML 은 가진 데이터의 끝날부터 `html_days`(기본 30 = 1달, 0 = 전부, D75 · prefs v7) 일을 원래 이름 한 장으로, 기간을 고르면(`write_html(day_from, day_to)`) `collect.range_name` = `AOI_capacity_<첫날>~<끝날>.html`.
   `rows_for_range` 가 기간 앞뒤 하루치 · 같은 (장비, Report 이름) 행 · 기간 안 Wafer 의 **앞선 시도 전부**를 **맥락**으로 더 넣고(원래 행 순서 유지),
   화면(`buildModelV3`)은 `meta.range.from~to` 밖 날을 그리지 않는다 → **기간 안 각 날의 장비-일 값이 전부 담은 파일과 같다**(가드 `test_html_range.py`). 헤더 칩(`partChip`)이 기간을 보여 준다.
-  `meta.data_from/data_to` = 가진 데이터 전체의 첫날·끝날(첫날은 '부분'). **HTML 만 다시 만들기**(`collect.html_from_cache` · CLI `--html-only --from --to` · 수집 창 카드):
+  `meta.data_from/data_to` = 가진 데이터 전체의 첫날·끝날(첫날은 '부분'). **HTML 만 다시 만들기**(`collect.html_from_cache` · CLI `--html-only --from --to` · 수집 창 카드 — 기간 두 칸 + '전체 기간 HTML 만들기' 버튼):
   NAS 를 건드리지 않고 캐시만 읽어(규칙이 바뀌었으면 메모리에서만 재분류, 캐시 파일 불변) HTML 을 만든다 — 장비 경로는 마지막 수집이 캐시에 남긴 `last_devices`(Report 열기용, 바뀔 때만 저장 이유 `device_info`).
   **숨긴 수집 로그**: `collect()` 가 `stats["log"]`(`_collect_log` — 단계별 ms · 장비별 나열 방식·`list_dev_ms`·찾은/읽은/유지 수·읽기 합·오류 · 가장 오래 걸린 Report 30개)를 만들고
   `write_html(collect_log=)` 이 `meta.collect_log` 로 넣는다. 화면 코드는 이 키를 읽지 않는다(가드 `test_collect_log.py`).

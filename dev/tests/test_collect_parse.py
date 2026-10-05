@@ -541,7 +541,7 @@ def test_rows_without_backups_behave_exactly_as_before(tmp_path):
 # ── faults · scanned_dice · yield (ROW_SCHEMA_VERSION 5) ──────────────────────────────
 def test_wafer_rows_carry_faults_scanned_dice_and_yield_verbatim(tmp_path):
     """리포트 화면의 '평균 fault' 근거 — Report 표의 값을 원문 그대로 싣는다(`77.5%` 도 그대로). 합성 행은 빈 값."""
-    assert collect.ROW_SCHEMA_VERSION == 6 and len(collect.OUT_COLS) == 25
+    assert collect.ROW_SCHEMA_VERSION == 7 and len(collect.OUT_COLS) == 26
     for c in ("faults", "scanned_dice", "yield"):
         assert c in collect.OUT_COLS and c in collect.POOLED_COLS
     rep = collect.parse_report(LIVE_NAME, LIVE_HTML)

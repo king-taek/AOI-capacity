@@ -328,6 +328,10 @@ class CollectPage(QWidget):
             w.setDate(QDate.currentDate())
         self._b_html = make_button(K.HTML_ONLY_RUN, "default", hcard)
         self._b_html.setEnabled(False)
+        # 10/5: 수집 뒤 HTML 은 기본 1달 — 가진 데이터 전부는 이 버튼 한 번으로(사용자 요청)
+        self._b_all = make_button(K.HTML_ONLY_ALL, "primary", hcard)
+        self._b_all.setEnabled(False)
+        self._span: Optional[tuple] = None
         hrow.addWidget(QLabel(K.HTML_ONLY_FROM, hcard))
         hrow.addWidget(self._d_from)
         hrow.addWidget(QLabel(K.HTML_ONLY_TO, hcard))
@@ -335,6 +339,10 @@ class CollectPage(QWidget):
         hrow.addWidget(self._b_html)
         hrow.addStretch(1)
         hl.addLayout(hrow)
+        arow = QHBoxLayout()
+        arow.addWidget(self._b_all)
+        arow.addWidget(_label(K.HTML_ONLY_ALL_HELP, "muted", hcard, wrap=True), 1)
+        hl.addLayout(arow)
         lay.addWidget(hcard)
         self._days_worker: Optional[_DaysWorker] = None
         self._html_worker: Optional[_HtmlOnlyWorker] = None
@@ -375,6 +383,7 @@ class CollectPage(QWidget):
             QUrl.fromLocalFile(str(paths.output_dir(prefs.load().output_dir)))))
         self._b_run.clicked.connect(self._on_run)
         self._b_html.clicked.connect(self._on_html_only)
+        self._b_all.clicked.connect(self._on_html_all)
         self._b_stop.clicked.connect(self.stop_requested.emit)
         self._b_out.clicked.connect(self._browse_out)
         self._refresh_days.valueChanged.connect(self._on_refresh_days)
@@ -439,8 +448,11 @@ class CollectPage(QWidget):
         if not got or not got[0]:
             self._have.setText(K.HTML_ONLY_NONE)
             self._b_html.setEnabled(False)
+            self._b_all.setEnabled(False)
+            self._span = None
             return
         first, last, n = got
+        self._span = (first, last)
         self._have.setText(K.HTML_ONLY_HAVE_FMT.format(first=first, last=last, rows=n))
         lo, hi = QDate.fromString(first, "yyyy-MM-dd"), QDate.fromString(last, "yyyy-MM-dd")
         for w in (self._d_from, self._d_to):
@@ -449,15 +461,22 @@ class CollectPage(QWidget):
         self._d_from.setDate(max(lo, hi.addDays(-(days - 1))) if days > 0 else lo)
         self._d_to.setDate(hi)
         self._b_html.setEnabled(not self._running)
+        self._b_all.setEnabled(not self._running)
+
+    def _on_html_all(self) -> None:
+        if self._span:
+            self._make_html(*self._span)
 
     def _on_html_only(self) -> None:
-        if self._html_worker is not None:
-            return
         a = self._d_from.date().toString("yyyy-MM-dd")
         b = self._d_to.date().toString("yyyy-MM-dd")
-        if a > b:
-            a, b = b, a
+        self._make_html(*sorted((a, b)))
+
+    def _make_html(self, a: str, b: str) -> None:
+        if self._html_worker is not None:
+            return
         self._b_html.setEnabled(False)
+        self._b_all.setEnabled(False)
         w = _HtmlOnlyWorker(prefs.to_collect_cfg(prefs.load()), a, b, self)
         w.log.connect(self.append_log)
         w.done.connect(self._on_html_done)
@@ -467,6 +486,7 @@ class CollectPage(QWidget):
 
     def _on_html_done(self, path, err: str) -> None:
         self._b_html.setEnabled(not self._running)
+        self._b_all.setEnabled(not self._running and bool(self._span))
         if path:
             self.append_log(K.HTML_ONLY_DONE_FMT.format(path=path))
             self._status.setText(K.HTML_ONLY_DONE_FMT.format(path=path))
@@ -564,8 +584,9 @@ class CollectPage(QWidget):
         self._b_run.setEnabled(not running)
         self._b_stop.setVisible(running)
         self._b_stop.setEnabled(running)
-        for w in (*self._cards.values(), self._refresh_days, self._out, self._b_out, self._csv, self._b_html):
+        for w in (*self._cards.values(), self._refresh_days, self._out, self._b_out, self._csv, self._b_html, self._b_all):
             w.setEnabled(not running)
+        self._b_all.setEnabled(not running and bool(self._span))
         self._status.setText(K.COLLECT_RUNNING if running else K.COLLECT_IDLE)
         if not running:
             self._pick("normal")                         # 문제 해결용 수집은 한 번만 — 다음엔 평소 수집으로 돌아간다

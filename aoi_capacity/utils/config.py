@@ -32,7 +32,7 @@ RULES: Dict[str, Tuple[str, Any, Optional[int], Optional[int]]] = {
     "full_list_every_hours": (INT, 168, 0, 8760), # Report 폴더 전체 나열 주기(시간, 0 = 매번, 기본 7일)
     "attention_util": (INT, 40, 0, 100),          # D14: 살펴볼 장비 — 가동률 미만(%)
     "attention_err": (INT, 3, 0, 999),            # D14: 살펴볼 장비 — Error 건수 이상
-    "html_days": (INT, 60, 0, 36500),             # 수집 뒤 만드는 결과 HTML 에 담을 최근 일수(0 = 가진 데이터 전부, 10/5)
+    "html_days": (INT, 30, 0, 36500),             # 수집 뒤 만드는 결과 HTML 에 담을 최근 일수(0 = 가진 데이터 전부, 10/5)
     "write_csv": (BOOL, False, None, None),
     "rebuild_all": (BOOL, False, None, None),
     "report_dir": (NAME, "Report", None, None),

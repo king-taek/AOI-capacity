@@ -198,7 +198,7 @@ def test_html_only_card_builds_from_cache_without_collecting(window, styled_qapp
         page._days_worker.wait(200)
     _pump(styled_qapp)
     assert page._d_from.displayFormat() == "yyyy-MM-dd" and page._d_to.calendarPopup()
-    assert not page._b_html.isEnabled()                     # 테스트 데이터 폴더에는 캐시가 없다
+    assert not page._b_html.isEnabled() and not page._b_all.isEnabled()   # 테스트 데이터 폴더에는 캐시가 없다
 
 
 def test_mode_cards_pick_one_situation_and_map_to_worker_options(window, styled_qapp):
