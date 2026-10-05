@@ -21,6 +21,7 @@ from __future__ import annotations
 import argparse
 import copy
 import json
+import logging
 import os
 import re
 import sys
@@ -105,6 +106,7 @@ def main(argv=None) -> int:
             pass
     from .utils import logs
     logs.setup_logging(console=False)                    # 10/5: 수집 상세 로그는 app.log 에(GUI 와 같은 파일)
+    logging.getLogger("aoi.cli").info("cli start version=%s args=%s", collect.version_text() or "unknown", " ".join(argv or sys.argv[1:]))
     K = i18n.KO
     ap = argparse.ArgumentParser(description=K.CLI_DESC)
     ap.add_argument("--config", default=os.path.join(os.getcwd(), "config.json"))

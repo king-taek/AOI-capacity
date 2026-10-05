@@ -2203,7 +2203,8 @@ def _collect_log(stats: dict, dev_meta: List[dict], slow: List[Tuple[int, str, s
                                              "recovered", "retried", "read_n", "read_sum_ms", "read_errors", "rows", "status", "error")
                      if dm.get(k) not in (None, "")})
     slow = sorted(slow, reverse=True)
-    return {"kind": "collect", "started": started_at, "finished": dt.datetime.now().isoformat(timespec="seconds"),
+    ver = _version_info()
+    return {"kind": "collect", "version": version_text(ver), "started": started_at, "finished": dt.datetime.now().isoformat(timespec="seconds"),
             "mode": stats.get("mode"), "phases_ms": phases,
             "settings": {k: stats.get(k) for k in ("read_workers", "nas_groups", "list_pattern") if k in stats},
             "counts": {k: stats.get(k) for k in ("devices", "reports_found", "reports_read", "reports_failed", "reports_refreshed",
@@ -2218,7 +2219,7 @@ def _collect_log(stats: dict, dev_meta: List[dict], slow: List[Tuple[int, str, s
 def _write_detail_log(d: dict) -> None:
     """수집 상세 로그를 app.log(로거 `aoi.collect`)에 사람이 읽는 줄로 남긴다 — 장비마다 한 줄, 느린 Report, 오류까지."""
     kv = lambda o: " · ".join(f"{k}={v}" for k, v in (o or {}).items() if v not in (None, ""))
-    lines = [f"[수집 상세] {d.get('kind')} · 모드 {d.get('mode')} · {d.get('started')} ~ {d.get('finished')}",
+    lines = [f"[수집 상세] {d.get('kind')} · 수집기 {d.get('version') or '버전 모름'} · 모드 {d.get('mode')} · {d.get('started')} ~ {d.get('finished')}",
              f"  단계(ms): {kv(d.get('phases_ms'))}",
              f"  설정: {kv(d.get('settings'))}",
              f"  수: {kv(d.get('counts'))}",
@@ -2331,6 +2332,13 @@ def _out_of_scope_meta(cfg: dict, devs: List[dict]) -> List[dict]:
 
 
 # ----------------------------------------------------------------------------- output
+def version_text(ver: Optional[dict] = None) -> str:
+    """로그용 수집기 버전 — `9be6d0d (main)`. 모르면 빈 값(10/5: 로그에 수집기 버전도 남긴다)."""
+    ver = _version_info() if ver is None else ver
+    sha = str(ver.get("sha") or "")[:7]
+    return f"{sha} ({ver.get('branch')})" if sha and ver.get("branch") else sha
+
+
 def _version_info() -> dict:
     try:
         from .utils import updater  # 지연 import: 업데이터가 없어도 수집은 돌아야 한다

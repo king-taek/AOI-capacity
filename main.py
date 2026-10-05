@@ -114,7 +114,12 @@ def _run_gui(logger: logging.Logger) -> int:
 
 def main() -> int:
     logger = _setup_logging()
-    logger.info("start %s python=%s data=%s", APP_ID, sys.version.split()[0], paths.data_root())
+    try:                                                               # 수집기 버전(10/5) — 못 읽어도 시작은 막지 않는다
+        from aoi_capacity import collect as _collect                   # 표준 라이브러리만 쓰는 모듈(PyQt6 없이도 import 된다)
+        ver = _collect.version_text() or "unknown"
+    except Exception:  # noqa: BLE001
+        ver = "unknown"
+    logger.info("start %s version=%s python=%s data=%s", APP_ID, ver, sys.version.split()[0], paths.data_root())
     if not _ensure_deps_installed(logger):
         return 2
     _apply_env(prefs.load())

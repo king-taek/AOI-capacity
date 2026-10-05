@@ -22,6 +22,7 @@ def test_collect_writes_a_detailed_log_to_app_log_and_not_into_the_html(tmp_path
     assert {"name", "listing", "list_dev_ms", "found", "reports", "read_n", "read_sum_ms", "rows", "status"} <= set(d)
     detail = next(r.getMessage() for r in caplog.records if r.getMessage().startswith("[수집 상세]"))
     assert "단계(ms):" in detail and f"name={d['name']}" in detail and "느린 Report" in detail
+    assert f"수집기 {collect.version_text() or '버전 모름'}" in detail                 # 10/5: 수집기 버전도 남긴다
     path = collect.write_html(cfg, rows, dev_meta, errors, 0.0, timing=stats)
     meta = sample_rows.unfold(sample_rows.embedded(open(path, encoding="utf-8").read()))[1]
     assert "collect_log" not in meta and "log" not in meta["timing"]          # HTML 에는 싣지 않는다
@@ -48,3 +49,9 @@ def test_cli_and_gui_share_the_app_log_file():
 def test_screen_never_reads_a_collect_log():
     tpl = open(collect.__file__.replace("collect.py", "ui/assets/template.html"), encoding="utf-8").read()
     assert "collect_log" not in tpl
+
+
+def test_version_text_reads_sha_and_branch(monkeypatch):
+    monkeypatch.setattr(collect, "_version_info", lambda: {"sha": "9be6d0d0123456789", "branch": "main"})
+    assert collect.version_text() == "9be6d0d (main)"
+    assert collect.version_text({"sha": "abcdef0123"}) == "abcdef0" and collect.version_text({}) == ""
