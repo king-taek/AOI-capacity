@@ -245,13 +245,13 @@ def test_render_morphs_in_place_instead_of_rebuilding(page):
 
 
 def test_error_tab_period_popup_filters_and_no_total_link(page):
-    """Error 탭: 7일을 고른 채 장비를 누르면 그 기간 그대로(여러 날) · 유형 필터 · '전체 기간 합계로' 없음."""
+    """Error 탭: 기간 전체를 고른 채 장비를 누르면 그 기간 그대로(여러 날) · 유형 필터 · '전체 기간 합계로' 없음."""
     pg, errors, _ = page
     pg.locator('button[data-fk="nav:errors"]').click()
     pg.wait_for_selector('main[data-key="view:errors"]')
     assert "전체 기간 합계로" not in pg.inner_text("main")
-    pg.locator('button[data-fk="seg:최근 7일"]').click()
-    pg.wait_for_selector('button[data-fk="seg:최근 7일"].on')
+    pg.locator('main button[data-fk="seg:기간 전체 2일"]').click()        # 10/5: 기간은 헤더에서 — Error 탭은 '일자별' · '기간 전체' 둘
+    pg.wait_for_selector('main button[data-fk="seg:기간 전체 2일"].on')
     pg.locator('main button.rowbtn[data-row="dev:AOI-1"]').click()
     pg.wait_for_selector('.dlg[data-dlg="err"]')
     txt = pg.locator('.dlg[data-dlg="err"]').inner_text()
@@ -529,4 +529,22 @@ def test_recipe_tab_shows_per_device_stats_and_compares_two_periods(page):
     pg.wait_for_timeout(500)
     rows = {r.split("\n")[0]: r.split("\n")[1:] for r in pg.locator(".cmp .cmprow:not(.dev):not(.head)").all_inner_texts()}
     assert rows["생산량(Wafer)"][:2] == ["3", "10"]               # 첫 레시피가 양쪽 묶음의 시작, 다른 레시피를 골라도 A 는 그대로
+    assert requests == [] and errors == []
+
+
+def test_header_period_limits_every_tab_to_the_chosen_days(page):
+    """10/5: 헤더에서 기간을 고르면 모든 탭이 그 날만 그린다 — 프리셋 최근 7일 · 1달 · 전체, 날짜 두 칸. '최근' 은 데이터의 끝날 기준."""
+    pg, errors, requests = page
+    days = lambda: pg.locator(".rangebar .rdays").inner_text()
+    assert days() == "2일" and pg.input_value('[data-fk="range:vf"]') == "2026-09-17"
+    pg.locator('[data-fk="range:vf"]').fill("2026-09-18")
+    pg.locator('[data-fk="range:vf"]').dispatch_event("change")
+    pg.wait_for_timeout(300)
+    assert days() == "1일" and pg.input_value('[data-fk="range:vt"]') == "2026-09-18"
+    pg.locator('button[data-fk="nav:trend"]').click()
+    pg.wait_for_selector('main[data-key="view:trend"]')
+    assert pg.locator("main .chart").first.locator(":scope > *").count() == 1
+    pg.get_by_role("button", name="전체").first.click()
+    pg.wait_for_timeout(300)
+    assert days() == "2일" and pg.locator("main .chart").first.locator(":scope > *").count() == 2
     assert requests == [] and errors == []

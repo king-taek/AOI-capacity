@@ -259,6 +259,8 @@ main{max-width:1420px;margin:0 auto;padding:22px 24px 90px}
 .rgm{display:flex;gap:8px;align-items:center;font-size:12px;padding:2px 0}.rgm .mono{flex:1;min-width:0;word-break:break-all}.rgm .num{color:#5A6673}
 .x.sm{width:22px;height:22px;font-size:11px;border-radius:6px}
 .rgsug{display:flex;gap:6px;align-items:center;padding:6px 0;border-top:1px solid #F1F4F7}
+.rangebar{display:flex;align-items:center;gap:6px;flex-wrap:wrap}.rangebar .inp{width:136px;padding:5px 8px}.rangebar .rdays{font-size:12px;color:var(--ink-3)}
+@media (max-width:820px){.rangebar{width:100%}.rangebar .inp{flex:1 1 110px;width:auto;min-width:0}}
 .ph{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;padding:14px 18px 10px}
 .rcpgrid{display:grid;grid-template-columns:300px minmax(0,1fr);gap:16px;align-items:start}
 @media (max-width:980px){.rcpgrid{grid-template-columns:1fr}}
@@ -751,14 +753,14 @@ const PROPS={attentionUtil:40,attentionErr:3};   /* 살펴볼 장비 문턱 — 
 function applySettings(m){const o=(m&&m.dashboard_settings)||{};for(const k of Object.keys(PROPS)){const v=Number(o[k]);if(o[k]!==undefined&&Number.isFinite(v)&&v>=0)PROPS[k]=v;}}
 let D=null;
 const VIEWS=["home","errors","trend","report","recipe"];
-const state={view:"home",dayI:null,sort:"name",floor:"all",span:21,unit:"day",metric:"min",pickDay:undefined,
+const state={view:"home",dayI:null,sort:"name",floor:"all",span:0,vp:"all",unit:"day",metric:"min",pickDay:undefined,
   modalDev:null,modalDayI:null,modalType:null,modalJob:null,selLot:null,lotFilter:"all",showMembers:false,
   stack:[],                                  /* 열린 팝업의 순서(type · dev · err) — 마지막이 맨 위, 나머지는 뒤로 물러난다 */
   errDays:null,errFType:null,errFJob:null,   /* Error 팝업의 기간(여러 날) · Error 탭의 유형/Job 필터 */
   rptSort:{k:"name",d:1},
-  errDev:null,errDayI:null,errJob:null,errType:null,rptSpan:0,rptOpen:null,
+  errDev:null,errDayI:null,errJob:null,errType:null,rptOpen:null,
   rgQ:"",rgName:"",rgSel:[],rgFilter:"all",   /* 레시피 묶음 편집기(D67): 검색 · 새 이름 · 고른 Job 원문 · 목록 필터 */
-  rcpSel:null,rcpQ:"",rcpSpan:0,                /* 레시피 탭(D70): 고른 레시피(그 묶음의 Job 원문 하나 — 다시 묶어도 따라간다) · 검색 · 기간 */
+  rcpSel:null,rcpQ:"",                /* 레시피 탭(D70): 고른 레시피(그 묶음의 Job 원문 하나 — 다시 묶어도 따라간다) · 검색 · 기간 */
   cmpA:null,cmpB:null,cmpAf:"",cmpAt:"",cmpBf:"",cmpBt:""};   /* 전후 비교: 두 레시피 묶음(원문 목록) · 두 기간 */   /* 레시피 묶음 편집기(D67): 검색 · 새 이름 · 고른 Job 원문 · 목록 필터 */
 const INPUT_KEYS=new Set(["rgQ","rgName","rcpQ","cmpAf","cmpAt","cmpBf","cmpBt"]);   /* data-in 칸 → 같은 이름의 state */
 let H=[];const h=fn=>{H.push(fn);return H.length-1;};
@@ -766,13 +768,14 @@ function setState(p){Object.assign(state,p);render();}
 function init(){
   for(const d of (meta.devices||[]))if(d.status)devStatus[d.name]={status:d.status,error:d.error||"",readErrors:d.read_errors||0};
   applySettings(meta);
-  D=buildModel(rows,meta);
+  D=buildModel(rows,meta);D.allDays=D.days.slice();   /* 화면 기간(10/5): 모델은 가진 날 전부, 보이는 날(D.days)만 헤더의 기간으로 좁힌다 */
   rgLoad();if(!rgSame(RG,rgNorm(meta.recipe_groups)))rgApply();   /* 이 브라우저에서 더 늦게 고친 묶음이 있으면 그것으로(D67) */
   state.dayI=D.day?D.days.indexOf(D.day):-1;
   document.addEventListener("click",e=>{const el=e.target.closest("[data-h]");if(!el)return;const fn=H[+el.dataset.h];if(fn){e.preventDefault();fn(e);}});
   document.addEventListener("keydown",e=>{if(e.key==="Tab"){trapTab(e);return;}if(e.key!=="Escape")return;closeTop();});
   document.addEventListener("input",e=>{const el=e.target;const k=el&&el.dataset?el.dataset.in:null;if(k&&INPUT_KEYS.has(k))setState({[k]:el.value});});
-  document.addEventListener("change",e=>{const el=e.target;if(el&&el.id==="rgFile"&&el.files&&el.files[0])rgImportFile(el.files[0]);});
+  document.addEventListener("change",e=>{const el=e.target;if(el&&el.id==="rgFile"&&el.files&&el.files[0])rgImportFile(el.files[0]);
+    const k=el&&el.dataset?el.dataset.in:null;if((k==="vf"||k==="vt")&&/^\d{4}-\d{2}-\d{2}$/.test(el.value)){const o=document.querySelector(`[data-in="${k==="vf"?"vt":"vf"}"]`);setRange(k==="vf"?el.value:o&&o.value,k==="vt"?el.value:o&&o.value,"custom");}});
   log(meta.mode==="demo"?"데모 데이터":"수집 결과를 불러왔습니다. 장비 "+D.devices.length+"대 · "+D.days.length+"일");
   render();}
 
@@ -1097,7 +1100,7 @@ function rgNorm(d){if(!d||!Array.isArray(d.groups))return null;const out=[],name
 function rgLoad(){RG_EMB=rgNorm(meta.recipe_groups);let ls=null;try{ls=rgNorm(JSON.parse(localStorage.getItem(RG_LS)||"null"));}catch(e){ls=null;}
   RG=(ls&&(!RG_EMB||ls.saved>RG_EMB.saved))?ls:(RG_EMB||{v:1,saved:"",groups:[]});}
 const rgSame=(a,b)=>JSON.stringify((a&&a.groups)||[])===JSON.stringify((b&&b.groups)||[]);
-function rgApply(){Object.assign(D,groupJobs(D.pool.job,D.detail,D.days,D.devices,recipeMap(RG)));}
+function rgApply(){Object.assign(D,groupJobs(D.pool.job,D.detail,D.allDays||D.days,D.devices,recipeMap(RG)));}
 function rgSaveLocal(){try{localStorage.setItem(RG_LS,JSON.stringify(RG));}catch(e){}}
 function rgCommit(groups,msg,keep){const p=(n=>String(n).padStart(2,"0")),d=new Date();
   RG={v:1,saved:`${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`,groups:groups.filter(g=>g.jobs.length)};
@@ -1234,7 +1237,7 @@ function render(){
   const tpl=document.createElement("template");tpl.innerHTML=html;
   if(app.getAttribute("data-anim")!=="el")app.setAttribute("data-anim","el");
   morphChildren(app,tpl.content);
-  for(const el of app.querySelectorAll("input[data-in]")){const v=String(state[el.dataset.in]??"");if(el.value!==v)el.value=v;}   /* 입력한 값은 속성이 아니라 속성값(property)에 있다 — 상태가 비우면 칸도 비운다 */
+  for(const el of app.querySelectorAll("input[data-in]")){const v=el.getAttribute("value")||"";if(el.value!==v&&!(el.type==="date"&&document.activeElement===el))el.value=v;}   /* 입력값은 속성이 아니라 속성값(property)에 있다 — 렌더가 쓴 값을 따르게(입력 중인 날짜 칸만 그대로) */
   const top=topDlg(),topK=top?top.dataset.dlg:null;
   for(const el of app.querySelectorAll(":scope>header,:scope>.stage,:scope>.foot"))el.inert=!!top;
   {const st=app.querySelector(":scope>.stage");if(st)st.classList.toggle("behind",!!top);}
@@ -1253,6 +1256,19 @@ function trapTab(e){const top=topDlg();if(!top)return;
   if(!f.length){e.preventDefault();return;}const a=f[0],z=f[f.length-1];
   if(e.shiftKey&&(document.activeElement===a||!top.contains(document.activeElement))){e.preventDefault();z.focus();}
   else if(!e.shiftKey&&document.activeElement===z){e.preventDefault();a.focus();}}
+/* ── 화면 기간(10/5 사용자 요청 — '상단에서 기간을 고르면 그 기간만 보이게', 프리셋 최근 7일 · 1달 · 전체).
+   모델은 가진 날 전부로 한 번 계산하고(D.allDays) 보이는 날(D.days)만 바꾼다 → 날마다의 값은 그대로, 모든 탭이 그 기간만 그린다.
+   '최근' 은 열람 시계가 아니라 가진 데이터의 끝날 기준(D40). 탭마다 있던 7일 · 21일 버튼은 이것으로 대신한다. ── */
+const addDays=(d,n)=>{const x=new Date(d+"T00:00:00");x.setDate(x.getDate()+n);return dk(x);};
+function rangeOf(p){const A=D.allDays,last=A[A.length-1];if(p==="7")return [addDays(last,-6),last];if(p==="30")return [addDays(last,-29),last];return [A[0],last];}
+function setRange(f,t,p){const A=D.allDays;if(!A||!A.length)return;f=f||A[0];t=t||A[A.length-1];if(f>t)[f,t]=[t,f];
+  const days=A.filter(d=>d>=f&&d<=t);if(!days.length){toast("그 기간에는 데이터가 없습니다");render();return;}
+  const cur=D.days[state.dayI];D.days=days;const i=days.indexOf(cur);
+  setState({vp:p||"custom",dayI:i>=0?i:days.length-1,pickDay:undefined,errDays:null,errDayI:null,errDev:null,modalDev:null,modalDayI:null,modalType:null,modalJob:null,selLot:null,
+    stack:state.stack.filter(k=>k==="recipe")});}
+function rangeHtml(){if(!D||!D.allDays||!D.allDays.length)return"";const A=D.allDays,lo=A[0],hi=A[A.length-1];
+  const segs=[["7","최근 7일"],["30","1달"],["all","전체"]].map(([k,l])=>({label:l,on:state.vp===k,pick:()=>{const [f,t]=rangeOf(k);setRange(f,t,k);}}));
+  return `<div class="rangebar" data-key="rangebar" title="이 기간의 날만 모든 탭에 보입니다(가진 데이터 ${lo} ~ ${hi})">${segHtml(segs)}<input class="inp" type="date" data-in="vf" data-fk="range:vf" value="${esc(D.days[0])}" min="${lo}" max="${hi}" aria-label="보이는 기간 시작"><span class="muted">~</span><input class="inp" type="date" data-in="vt" data-fk="range:vt" value="${esc(D.days[D.days.length-1])}" min="${lo}" max="${hi}" aria-label="보이는 기간 끝"><span class="num rdays">${D.days.length}일</span></div>`;}
 function headerHtml(V){
   const hasD=!!(D&&D.days.length);
   const day=hasD?S.dayStr():null;
@@ -1264,6 +1280,7 @@ function headerHtml(V){
   const nav=[["home","가동률"],["errors","Error"],["trend","추이"],["report","TB500 · Kendall"],["recipe","레시피"]];
   return `<header class="hdr" data-key="hdr"><div class="brand"><span class="lt" data-lottie="scan" data-loop="1" data-static aria-hidden="true"></span>AOI 가동 현황</div>
     <nav class="nav"><i class="ind" data-key="ind" data-static aria-hidden="true"><b class="l"></b><b class="m"></b><b class="r"></b></i>${nav.map(([k,l])=>`<button class="${V===k?"on":""}" data-h="${h(S.go(k))}" data-fk="nav:${k}">${l}</button>`).join("")}</nav>
+    ${hasD?rangeHtml():""}
     <div class="spacer"></div>
     ${hasD?`<div class="daynav"><button class="ib" data-h="${h(()=>{if(state.dayI>0)setState({dayI:state.dayI-1,pickDay:undefined});})}" title="이전 날짜" data-fk="day:prev" ${state.dayI>0?"":"disabled"}>‹</button>
       <span class="daylab num">${dayName(day)}${D.partialDays&&D.partialDays.includes(day)?`<span class="partial" title="보관 기간의 첫날 — 수집 창이 이 날 도중에 시작해 하루 전체가 아닙니다">부분</span>`:""}</span>
@@ -1324,7 +1341,7 @@ let errCtx=null;   /* 유형·Job 팝업이 같은 집계를 쓴다 */
 function errorsHtml(){
   const day=S.dayStr(),devs=S.devList(),P=D.pool;
   const floors=S.segGroup([{k:"all",label:"전체"},{k:"2",label:"2층"},{k:"4",label:"4층"}],state.floor,k=>setState({floor:k}));
-  const spanDays=state.span===0?D.days:D.days.slice(-state.span);
+  const spanDays=D.days;   /* 기간은 헤더에서(10/5) */
   const pickDay=state.pickDay===undefined?day:state.pickDay;
   const eDayI=pickDay?D.days.indexOf(pickDay):D.days.indexOf(spanDays[spanDays.length-1]);
   const useDays=pickDay?[pickDay]:spanDays;
@@ -1364,7 +1381,7 @@ function errorsHtml(){
   const dayV=d=>(byDay[d]||[0,0])[mi];
   const fmtV=v=>MET?(v>=60?(v/60).toFixed(0)+"h":v+"m"):String(v);
   errCtx={spanDays,useDays,pickDay,eDayI,lotRows,jobRows,pkDay,pkDev,jobAgg,byType,MET};
-  const spans=[{k:-1,label:"일자별"},{k:7,label:"최근 7일"},{k:21,label:"최근 21일"},{k:0,label:"전체 "+D.days.length+"일"}]
+  const spans=[{k:-1,label:"일자별"},{k:0,label:"기간 전체 "+D.days.length+"일"}]
     .map(it=>({label:it.label,on:it.k===-1?!!pickDay:(!pickDay&&state.span===it.k),pick:it.k===-1?(()=>setState({pickDay:undefined})):(()=>setState({span:it.k,pickDay:null}))}));
   const metrics=S.segGroup([{k:"n",label:"건수"},{k:"min",label:"Error 대기"}],state.metric,k=>setState({metric:k}));
   const nW=MET?"400":"700",nInk=MET?"#5A6673":"#0F151C",mW=MET?"700":"400",mInk=MET?"#0F151C":"#5A6673";
@@ -1602,7 +1619,7 @@ function trendHtml(){
 
 /* ---------- 리포트 (TB500 · Kendall, D49) ---------- */
 function reportHtml(){
-  const P=D.pool,span=state.rptSpan,days=span?D.days.slice(-span):D.days;
+  const P=D.pool,days=D.days;   /* 기간은 헤더에서(10/5) */
   const aliasCache={};
   const aliasOf=gi=>{if(aliasCache[gi]!==undefined)return aliasCache[gi];const G=D.jobGroups[gi];let al=JOB_ALIAS[P.job[G.l]]||null;if(!al)for(const [i] of G.m){if(JOB_ALIAS[P.job[i]]){al=JOB_ALIAS[P.job[i]];break;}}if(al&&G.nm){al=G.nm;}return aliasCache[gi]=al;};
   const blank=()=>({n:0,err:0,errMin:0,fS:0,fN:0,ex:{err:0,small:0,noTime:0},pts:[]});
@@ -1648,10 +1665,9 @@ function reportHtml(){
   const gsum=ns=>ns.reduce((a,al)=>{const Sx=byAlias[al].all;a.n+=Sx.n;a.s+=Sx.pts.length;a.e+=Sx.err;a.m+=Sx.errMin;return a;},{n:0,s:0,e:0,m:0});
   const rowsH=groups.map(([g,ns])=>{const t=gsum(ns);return `<div class="grp" data-key="grp:${g}">${g}<small>Job ${ns.length}개 · 표본 ${t.s} / 배치 ${t.n}${t.e?" · Error "+t.e+"건 · Error 대기 "+hm(t.m):""}</small></div>`+(ns.map(rowH).join("")||`<p class="empty" data-key="empty:${g}">이 기간 ${g} Job 의 기록이 없습니다.</p>`);}).join("");
   const tot=gsum(names);
-  const spans=S.segGroup([{k:7,label:"최근 7일"},{k:21,label:"최근 21일"},{k:0,label:"전체 "+D.days.length+"일"}],span,k=>setState({rptSpan:k}));
   const pct=lotAll?Math.round(lotIn/lotAll*100):0;
   const sortLabel=(COLS.find(c=>c[0]===SK)||COLS[0])[1]+(SD>0?" 오름차순":" 내림차순");
-  return `<div class="bar-h"><h1>TB500 · Kendall</h1><span style="font-size:12.5px;color:#5A6673">Kendall ${groups[0][1].length}개 · TB500 ${groups[1][1].length}개 · ${esc(sortLabel)}</span><div class="spacer"></div>${segHtml(spans)}</div>
+  return `<div class="bar-h"><h1>TB500 · Kendall</h1><span style="font-size:12.5px;color:#5A6673">Kendall ${groups[0][1].length}개 · TB500 ${groups[1][1].length}개 · ${esc(sortLabel)}</span><div class="spacer"></div><span class="num" style="font-size:12.5px;color:#5A6673">${md(days[0])} ~ ${md(days[days.length-1])}</span></div>
     <p style="margin:-6px 0 14px;font-size:12.5px;color:#5A6673;word-break:keep-all">이 탭은 TB500 · Kendall 을 위한 것입니다 — 표기명 ${Object.keys(JOB_ALIAS).length}개 Job 만 봅니다(이 기간 Lot ${lotAll}개 중 ${lotIn}개, ${pct}%). 나머지 Job 은 가동률·Error 탭에 있습니다. 열 머리를 누르면 그 열로 정렬합니다.</p>
     <section class="cards sm" style="margin-bottom:16px">${[{k:"Job",h:cnt(names.length)+"개",s:"표기명이 있는 것만"},{k:"표본 배치",h:cnt(tot.s)+"개",s:"배치 "+tot.n+"개 중 (Error·5장 미만 제외)"},{k:"Error",h:cnt(tot.e)+"건",s:"Lot 단위"},{k:"Error 대기",h:esc(hm(tot.m)),s:"Error 구간 + 그 뒤 공백"}].map(s=>`<div><p class="k">${s.k}</p><p class="v num">${s.h}</p><p class="s">${esc(s.s)}</p></div>`).join("")}</section>
     <div class="panel" style="overflow-x:auto"><div style="min-width:980px"><div class="thead" style="grid-template-columns:${cols};gap:10px;align-items:end">${COLS.map(th).join("")}</div>
@@ -1669,7 +1685,7 @@ function reportHtml(){
    날짜는 Wafer 시작일(없으면 배치 시작일), 이 파일의 기간(D.days) 안만. 전후 비교는 사용자가 고른 두 기간·두 레시피 묶음(전 기간 자동 비교가 아니다, D23 과 별개). */
 let _rcp=null;
 function rcpIndex(){if(_rcp&&_rcp.D===D&&_rcp.G===D.jobGroups)return _rcp;
-  const jix=new Map(D.pool.job.map((n,i)=>[n,i])),dayset=new Set(D.days),recs=[],seen=new Set(),reps=new Map();
+  const jix=new Map(D.pool.job.map((n,i)=>[n,i])),dayset=new Set(D.allDays||D.days),recs=[],seen=new Set(),reps=new Map();
   for(const r of rows){if(r.kind)continue;const ji=jix.get(r.job||"");if(ji==null)continue;const g=D.jobG[ji];
     const ws=P(r.wafer_start_time),we=P(r.wafer_end_time),bs=P(r.batch_start),be=P(r.batch_end),t0=ws||bs;if(!t0)continue;
     const day=dk(t0);if(!dayset.has(day))continue;
@@ -1693,13 +1709,13 @@ function rcpAgg(gs,from,to){const X=rcpIndex(),devs={},all={w:0,lots:new Set(),s
     for(const o of [all,d]){o.w++;o.lots.add(q.rk);o.days.add(q.day);if(q.s!=null)o.s.push(q.s);if(q.f!=null)o.f.push(q.f);if(q.sub.split("|").some(t=>/^x5$/i.test(t.trim())))o.x5++;}
     if(q.s!=null)all.occ+=q.s;d.sub[q.sub||"(없음)"]=(d.sub[q.sub||"(없음)"]||0)+1;}
   for(const [rk,v] of X.per){const dev=rk.split("\u0001")[0],d=devs[dev];if(!d)continue;if(all.lots.has(rk)){all.b.push(v);d.b.push(v);}}
-  const span=D.days.filter(x=>x>=from&&x<=to),dv=Object.keys(devs);
+  const span=(D.allDays||D.days).filter(x=>x>=from&&x<=to),dv=Object.keys(devs);   /* 전후 비교는 보이는 기간 밖 날도 고를 수 있다 */
   const util=ns=>avg(span.flatMap(day=>ns.map(n=>S.util(S.at(day,n))).filter(u=>u!==null)));
   return {all,devs,span,util:util(dv),fleet:util(D.devices),nd:dv.length};}
 function rcpGroupsOf(raws){const X=rcpIndex(),out=new Set();for(const r of raws||[]){const i=X.jix.get(r);if(i!=null)out.add(D.jobG[i]);}return out;}
 const f1=v=>v==null?"—":v.toFixed(1),f0=v=>v==null?"—":Math.round(v).toLocaleString("ko-KR");
 function rcpHtml(){
-  const X=rcpIndex(),span=state.rcpSpan,days=span?D.days.slice(-span):D.days,from=days[0],to=days[days.length-1];
+  const X=rcpIndex(),days=D.days,from=days[0],to=days[days.length-1];   /* 기간은 헤더에서(10/5) */
   /* 레시피 목록 — 이 기간 생산량 순 */
   const wn={},devc={};for(const q of X.recs){if(q.day<from||q.day>to)continue;wn[q.g]=(wn[q.g]||0)+1;(devc[q.g]||(devc[q.g]=new Set())).add(q.dev);}
   const Q=(state.rcpQ||"").trim().toUpperCase();
@@ -1707,7 +1723,6 @@ function rcpHtml(){
   const list=Object.keys(wn).map(Number).filter(hitQ).sort((a,b)=>wn[b]-wn[a]);
   let sel=state.rcpSel!=null?[...rcpGroupsOf([state.rcpSel])][0]:undefined;if(sel==null&&list.length)sel=list[0];
   const leadOf=gi=>D.pool.job[D.jobGroups[gi].l];
-  const spans=S.segGroup([{k:7,label:"최근 7일"},{k:21,label:"최근 21일"},{k:0,label:"전체 "+D.days.length+"일"}],span,k=>setState({rcpSpan:k}));
   const listH=list.slice(0,40).map((gi,i)=>{const on=gi===sel,N=jobNm(D.jobGroups[gi]);
     return `<button class="rowbtn rcprow ${on?"on":""}" data-key="slot:${i}" data-row="rcp:${gi}" data-h="${h(()=>setState({rcpSel:leadOf(gi),...(state.cmpA==null?{cmpA:[leadOf(gi)],cmpB:[leadOf(gi)]}:{})}))}" aria-pressed="${on}" title="${esc(D.jobGroups[gi].m.map(([j])=>D.pool.job[j]).join("\n"))}" style="grid-template-columns:1fr 64px 40px">
       <span style="min-width:0;font-size:12.5px;font-weight:${on?700:600};white-space:nowrap;overflow:hidden;text-overflow:ellipsis;${N.al?"":"font-family:"+MONO}">${esc(N.nm)}</span><span class="num" style="text-align:right;font-size:12.5px">${wn[gi].toLocaleString("ko-KR")}</span><span class="num" style="text-align:right;font-size:12px;color:#5A6673">${devc[gi].size}대</span></button>`;}).join("")||`<p class="empty">이 기간에 맞는 레시피가 없습니다</p>`;
@@ -1732,7 +1747,7 @@ function rcpHtml(){
         <div class="tbl-h" style="grid-template-columns:${cols};padding:6px 18px"><span>장비</span><span class="r">Wafer</span><span class="r">Lot</span><span class="r">하루 평균</span><span>장당 스캔(INI) 10~90% · 중앙</span><span class="r">배치 기준 장당</span><span class="r">fault 중앙</span><span>하위 레시피</span></div>
         ${devH||`<p class="empty">기록 없음</p>`}</div></div>
       <div class="panel" style="padding:14px 18px"><h3 class="s" style="margin-bottom:9px">날짜별 생산량 <span style="font-weight:400;color:#5A6673;font-size:12px">막대에 마우스를 올리면 장당 스캔</span></h3><div data-key="chart:recipe">${barsHtml(bars,110,false)}</div></div>`;}
-  return `<div class="bar-h"><h1>레시피</h1><span style="font-size:12.5px;color:#5A6673">레시피 ${list.length}개 · ${md(from)} ~ ${md(to)}</span><div class="spacer"></div>${segHtml(spans)}</div>
+  return `<div class="bar-h"><h1>레시피</h1><span style="font-size:12.5px;color:#5A6673">레시피 ${list.length}개 · ${md(from)} ~ ${md(to)}</span></div>
     <p style="margin:-6px 0 14px;font-size:12.5px;color:#5A6673;word-break:keep-all">레시피 = Job 묶음입니다(헤더의 '레시피 묶음' 에서 같은 레시피를 묶으면 여기서 하나로 보입니다). 생산량은 PASS 장(Test 제외), 장당 스캔은 INI 의 Wafer 시작~끝, 배치 기준 장당은 Report 배치 시간 ÷ 장수입니다.</p>
     <div class="rcpgrid"><div class="panel rcplist"><div style="padding:10px 12px;border-bottom:1px solid #EDF1F5"><input class="inp" type="search" data-in="rcpQ" data-fk="rcp:q" placeholder="레시피 · Job 이름 검색" value="${esc(state.rcpQ||"")}" style="width:100%"></div>
       <div class="tbl-h" style="grid-template-columns:1fr 64px 40px;padding:6px 12px"><span>레시피</span><span class="r">Wafer</span><span class="r">장비</span></div><div class="rcpscroll">${listH}</div></div>
@@ -1749,7 +1764,7 @@ function cmpHtml(sel){
   const A=rcpAgg(GA,af,at),B=rcpAgg(GB,bf,bt),a=A.all,b=B.all;
   const chips=(k,raws)=>[...rcpGroupsOf(raws)].map(gi=>{const N=jobNm(D.jobGroups[gi]);return `<span class="rchip" style="${N.al?"":"font-family:"+MONO}">${esc(N.nm)}<button class="x sm" data-h="${h(()=>setState({[k]:raws.filter(r=>!rcpGroupsOf([r]).has(gi))}))}" title="빼기">✕</button></span>`;}).join("")||`<span class="muted" style="font-size:12px">레시피 없음</span>`;
   const add=(k,raws)=>sel==null||rcpGroupsOf(raws).has(sel)?"":`<button class="btn" data-h="${h(()=>setState({[k]:[...raws,leadOf(sel)]}))}" title="왼쪽에서 고른 레시피를 이쪽에 더합니다">＋ ${esc(cut(jobNm(D.jobGroups[sel]).nm,22))}</button>`;
-  const side=(t,k,raws,fk,tk,f,tt)=>`<div class="cmpside"><p class="k">${t}</p><div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin:6px 0"><input class="inp" type="date" data-in="${fk}" data-fk="cmp:${fk}" value="${esc(f)}" min="${D.days[0]}" max="${D.days[D.days.length-1]}"><span class="muted">~</span><input class="inp" type="date" data-in="${tk}" data-fk="cmp:${tk}" value="${esc(tt)}" min="${D.days[0]}" max="${D.days[D.days.length-1]}"></div><div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">${chips(k,raws)}${add(k,raws)}</div></div>`;
+  const side=(t,k,raws,fk,tk,f,tt)=>`<div class="cmpside"><p class="k">${t}</p><div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin:6px 0"><input class="inp" type="date" data-in="${fk}" data-fk="cmp:${fk}" value="${esc(f)}" min="${(D.allDays||D.days)[0]}" max="${(D.allDays||D.days).slice(-1)[0]}"><span class="muted">~</span><input class="inp" type="date" data-in="${tk}" data-fk="cmp:${tk}" value="${esc(tt)}" min="${(D.allDays||D.days)[0]}" max="${(D.allDays||D.days).slice(-1)[0]}"></div><div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">${chips(k,raws)}${add(k,raws)}</div></div>`;
   const pd=(o,S0)=>o.w/Math.max(1,S0.span.length);
   const rowsM=[["생산량(Wafer)",a.w,b.w,f0,1],["하루 평균 Wafer",pd(a,A),pd(b,B),f1,1],["Lot",a.lots.size,b.lots.size,f0,1],
     ["장당 스캔 중앙(분)",qs(a.s,.5),qs(b.s,.5),f1,-1],["장당 스캔 평균(분)",avg(a.s),avg(b.s),f1,-1],["장당 스캔 상위 10%(분)",qs(a.s,.9),qs(b.s,.9),f1,-1],
