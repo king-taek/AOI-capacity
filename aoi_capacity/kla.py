@@ -169,7 +169,8 @@ def read_wafer(path: str) -> Optional[dict]:
 # ── 수집(메인 스레드가 합친다) ───────────────────────────────────────────────
 def collect_kla(cfg: dict, devs: List[dict], cache: dict, *, run: Callable, now: dt.datetime,
                 backfill: bool, refresh_days: int, rebuild: bool, log: Callable[[str], None],
-                progress: Callable[[int, int, str], None], phase: str) -> Tuple[List[dict], List[dict], bool, dict]:
+                progress: Callable[[int, int, str], None], phase: str,
+                refresh_from: Optional[dt.datetime] = None, refresh_until: Optional[dt.datetime] = None) -> Tuple[List[dict], List[dict], bool, dict]:
     """KLA 장비들을 모은다 → (dev_meta, errors, 바뀐 것 있음, stats).
 
     `run(items, fn, path_of)` 는 collect 의 `_run` 을 NAS 별로 감싼 것(같은 동시성 예산). 나열은 매번 하고(전부 나열이 장비당 2~6초,
@@ -234,7 +235,7 @@ def collect_kla(cfg: dict, devs: List[dict], cache: dict, *, run: Callable, now:
     r2 = run(jobs, p2, lambda j: str(j[0]["path"]))
     want: List[tuple] = []
     seen: set = set()
-    refresh_since = (now - dt.timedelta(days=refresh_days)) if refresh_days > 0 else None
+    refresh_since = refresh_from or ((now - dt.timedelta(days=refresh_days)) if refresh_days > 0 else None)
     for (d, dd), (lots, err) in zip(jobs, r2):
         k = str(d["key"])
         m, e = metas[k], store[k]
@@ -251,7 +252,7 @@ def collect_kla(cfg: dict, devs: List[dict], cache: dict, *, run: Callable, now:
                 seen.add((k, lot, w))                          # 자정 넘긴 Lot 이 두 날짜 폴더에 겹쳐도 한 번만(D71)
                 m["found"] += 1
                 old = have.get(w)
-                if old is not None and not rebuild and not (refresh_since and t >= refresh_since):
+                if old is not None and not rebuild and not (refresh_since and t >= refresh_since and (refresh_until is None or t < refresh_until)):
                     m["kept"] += 1
                     continue
                 if old is not None:

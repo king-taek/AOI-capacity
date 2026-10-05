@@ -488,6 +488,29 @@ def test_refresh_window_rereads_same_mtime_reports_inside_the_window_and_keeps_t
     assert len(rows) == 18 and after["last_mtime"] == before["last_mtime"]  # 행이 겹쳐 붙지 않고 커서도 그대로
 
 
+def test_refresh_range_rereads_only_reports_that_ended_inside_the_chosen_days(tmp_path, fake_nas, monkeypatch):
+    """10/5 수집 창 '기간 다시 읽기': 고른 기간(시작~끝날)에 수정된 Report 만 캐시에 있어도 다시 읽는다 — 그 앞뒤는 지문까지 그대로."""
+    import datetime as dt
+    nas, csv_path = fake_nas
+    r10 = _add_report(nas, "AOI-10", "10.00.00", 10)
+    r45 = _add_report(nas, "AOI-9", "45.00.00", 45)
+    cfg = make_cfg(tmp_path, csv_path, backfill_days=100)
+    _run(cfg)
+    before = _cache_of(cfg)
+    today = dt.date.today()
+    seen = _count_nas_reads(monkeypatch)
+    rows, meta, errors, _ = _run(cfg, refresh_range=(str(today - dt.timedelta(days=11)), str(today - dt.timedelta(days=9))))
+    assert not errors and seen["htm"] == 1                         # r10 만 — 오늘 Report 3장(기간 뒤)과 r45(기간 앞)는 그대로
+    assert sum(d["refreshed"] for d in meta) == 1
+    after = _cache_of(cfg)
+    assert _entry_fp(after, r45) == _entry_fp(before, r45) and len(rows) == 15
+    seen = _count_nas_reads(monkeypatch)                           # 거꾸로 준 기간도 바로잡는다
+    _run(cfg, refresh_range=(str(today), str(today - dt.timedelta(days=1))))
+    assert seen["htm"] == 3
+    with pytest.raises(ValueError):
+        collect.parse_range(("2026-13-01", "2026-10-05"))
+
+
 def test_refresh_window_via_cfg_key_matches_the_argument(tmp_path, fake_nas, monkeypatch):
     """GUI 는 prefs → cfg["refresh_window_days"] 로 켠다 — 인자와 같은 동작이어야 한다."""
     nas, csv_path = fake_nas

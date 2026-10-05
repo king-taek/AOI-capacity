@@ -6,6 +6,7 @@
   평소 수집(처음이면 '처음 수집')  ← 거의 늘 이것
   ─ 결과가 이상하거나 비어 있을 때만 ─
   빠진 날 채우기(backfill) · 최근 며칠 다시 읽기(refresh) · 시간 미확인 복구(recover) · 전체 다시 만들기(rebuild)
+  · 기간 다시 읽기(range, 10/5 — 전체 다시 만들기 밑, 날짜 두 칸)
 
 카드는 한 번에 하나만 고르고, 수집이 끝나면 '평소 수집' 으로 돌아간다(문제 해결용 수집이 다음에도 켜져 있지 않게).
 결과 화면은 이 프로그램 안에 없다 — 수집이 만든 HTML 을 사용자가 더블클릭해서 본다('결과 화면 열기' 는 편의 버튼)."""
@@ -27,9 +28,9 @@ MAX_LOG_LINES = 1000
 K = i18n.KO
 
 #: 상황 카드의 열쇠 → 워커 인자(full, backfill, recover). refresh 는 prefs.refresh_window_days 로 간다(D60).
-MODES = ("normal", "backfill", "refresh", "recover", "rebuild")
+MODES = ("normal", "backfill", "refresh", "recover", "rebuild", "range")
 _ARGS = {"normal": (False, False, False), "backfill": (False, True, False), "refresh": (False, False, False),
-         "recover": (False, False, True), "rebuild": (True, False, False)}
+         "recover": (False, False, True), "rebuild": (True, False, False), "range": (False, False, False)}   # range 는 refresh_range() 로
 
 
 def _repolish(w: QWidget) -> None:
@@ -259,6 +260,23 @@ class CollectPage(QWidget):
         self._cards["rebuild"] = ModeCard("rebuild", K.MODE_REBUILD_TITLE, K.MODE_REBUILD_WHEN, "", pick)
         for i, key in enumerate(("backfill", "refresh", "recover", "rebuild")):
             grid.addWidget(self._cards[key], i // 2, i % 2)
+        # 10/5: '전체 다시 만들기' 밑에 — 고른 기간만 다시 읽기(그 기간에 끝난 Report · 시작한 KLA Wafer, 기간 밖 이력은 그대로)
+        self._cards["range"] = ModeCard("range", K.MODE_RANGE_TITLE, K.MODE_RANGE_WHEN, K.MODE_RANGE_WHAT, pick)
+        grid.addWidget(self._cards["range"], 2, 0, 1, 2)
+        today = QDate.currentDate()
+        self._r_from, self._r_to = QDateEdit(self._cards["range"]), QDateEdit(self._cards["range"])
+        for w, d in ((self._r_from, today.addDays(-6)), (self._r_to, today)):
+            w.setCalendarPopup(True)
+            w.setDisplayFormat("yyyy-MM-dd")
+            w.setMaximumDate(today)
+            w.setDate(d)
+            w.setMinimumWidth(130)
+        rx = self._cards["range"].extra
+        rx.addWidget(_label(K.HTML_ONLY_FROM, "muted", self._cards["range"]))
+        rx.addWidget(self._r_from)
+        rx.addWidget(_label(K.HTML_ONLY_TO, "muted", self._cards["range"]))
+        rx.addWidget(self._r_to)
+        rx.addStretch(1)
         grid.setColumnStretch(0, 1)
         grid.setColumnStretch(1, 1)
         pl.addLayout(grid)
@@ -277,6 +295,7 @@ class CollectPage(QWidget):
         self._cards["refresh"].set_badges([(K.MODE_BADGE_MEDIUM, "slow")])
         self._cards["recover"].set_badges([(K.MODE_BADGE_MEDIUM, "slow")])
         self._cards["rebuild"].set_badges([(K.MODE_BADGE_SLOW, "warn")])
+        self._cards["range"].set_badges([(K.MODE_BADGE_MEDIUM, "slow")])
 
         rule = QFrame(pick)
         rule.setProperty("role", "rule")
@@ -387,6 +406,8 @@ class CollectPage(QWidget):
         self._b_stop.clicked.connect(self.stop_requested.emit)
         self._b_out.clicked.connect(self._browse_out)
         self._refresh_days.valueChanged.connect(self._on_refresh_days)
+        for w in (self._r_from, self._r_to):
+            w.dateChanged.connect(lambda _d: self._mode == "range" and self.refresh_plan())
         self._csv.toggled.connect(lambda on: prefs.patch(write_csv=bool(on)))
         self._out.editingFinished.connect(self._apply_out)
         self._pick("normal")
@@ -420,6 +441,13 @@ class CollectPage(QWidget):
 
     def refresh_days(self) -> int:
         return int(self._refresh_days.value()) if self._mode == "refresh" else 0
+
+    def refresh_range(self) -> Optional[tuple]:
+        """'기간 다시 읽기' 를 고른 동안만 (시작일, 끝날) — 순서가 거꾸로면 바로잡는다. 다른 카드면 None."""
+        if self._mode != "range":
+            return None
+        a, b = self._r_from.date().toString("yyyy-MM-dd"), self._r_to.date().toString("yyyy-MM-dd")
+        return tuple(sorted((a, b)))
 
     def options(self) -> tuple:
         return _ARGS[self._mode]
@@ -543,6 +571,9 @@ class CollectPage(QWidget):
         self._update_cards(plan, n_recover)
         if self._mode == "rebuild":
             text = K.COLLECT_PLAN_FULL_FMT.format(days=_days_text(plan.retention_days))
+        elif self._mode == "range":
+            a, b = self.refresh_range()
+            text = K.COLLECT_PLAN_RANGE_FMT.format(a=a, b=b)
         elif plan.mode == "first":
             text = K.COLLECT_PLAN_FIRST_FMT.format(days=plan.backfill_days)
         elif plan.refresh_days > 0:
@@ -561,7 +592,7 @@ class CollectPage(QWidget):
         first = plan.total_reports == 0 and self._mode != "rebuild"
         if first != self._first_run:
             self._first_run = first
-            for k in ("backfill", "refresh", "recover", "rebuild"):
+            for k in ("backfill", "refresh", "recover", "rebuild", "range"):
                 self._cards[k].set_available(not first, K.MODE_DISABLED_FIRST)
         n = self._cards["normal"]
         if first:
@@ -584,7 +615,7 @@ class CollectPage(QWidget):
         self._b_run.setEnabled(not running)
         self._b_stop.setVisible(running)
         self._b_stop.setEnabled(running)
-        for w in (*self._cards.values(), self._refresh_days, self._out, self._b_out, self._csv, self._b_html, self._b_all):
+        for w in (*self._cards.values(), self._refresh_days, self._r_from, self._r_to, self._out, self._b_out, self._csv, self._b_html, self._b_all):
             w.setEnabled(not running)
         self._b_all.setEnabled(not running and bool(self._span))
         self._status.setText(K.COLLECT_RUNNING if running else K.COLLECT_IDLE)

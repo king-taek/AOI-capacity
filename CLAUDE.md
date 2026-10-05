@@ -219,7 +219,7 @@ Camtek AOI 장비의 BatchReport/WaferInfo.ini 를 읽어 장비별 가동률을
 - **수집 창 UI(9/23 개편, 사용자 요청 — "HTML 테마에 맞게", "어떤 상황에 어떤 옵션을 눌러야 하는지 직관적으로")**: 결과 HTML 과 같은 틀 — 상단 바(`widgets/nav_bar.NavBar`: 브랜드 · 내비 탭 · 마지막 수집, 옛 왼쪽 사이드바 대체)와
   가운데 정렬 페이지, 라이트가 기본(prefs v4 가 옛 기본값 "dark" 만 옮긴다 · 어두운 화면은 설정), 글꼴은 HTML 의 `--sans`/`--mono`. 수집 페이지는 체크박스 대신 **상황 카드**(`collect_page.ModeCard`):
   평소 수집(캐시가 없으면 '처음 수집' — 이때 나머지 카드는 잠김) + '결과가 이상하거나 비어 있을 때만' 네 장(빠진 날 채우기 = backfill · 최근 며칠 다시 읽기 = refresh(카드 안 일수, prefs `refresh_pick_days`) ·
-  시간 미확인 복구 = recover(캐시로 센 대상 수 표시) · 전체 다시 만들기 = rebuild). 카드마다 '이럴 때' · '무엇을 하나' · 걸리는 시간 배지, 실행 버튼 이름이 고른 카드를 따르고, 수집이 끝나면 평소 수집으로 돌아간다.
+  시간 미확인 복구 = recover(캐시로 센 대상 수 표시) · 전체 다시 만들기 = rebuild) + 그 밑 **기간 다시 읽기**(range, 10/5 — 날짜 두 칸, `collect(refresh_range=(시작, 끝))`: 그 기간에 수정된 Report · 시작한 KLA Wafer 만 캐시에 있어도 다시 읽고 기간 밖은 그대로). 카드마다 '이럴 때' · '무엇을 하나' · 걸리는 시간 배지, 실행 버튼 이름이 고른 카드를 따르고, 수집이 끝나면 평소 수집으로 돌아간다.
 - 시각 테마의 단일 출처는 `aoi_capacity/ui/assets/template.html` 의 `:root` 토큰 두 블록(dark · light). `ui/theme.py` 는 그 값을 그대로 쓴다(가드: `test_theme.py`).
   결과 화면은 라이트 단일(D48-⑥, `<html data-theme="light">`)이고 dark 블록은 수집 창의 다크 모드 값이다. CSS 주석에 `:root{` 를 적지 않는다(파서가 첫 블록으로 오인한다 — 실측).
 - 사용자 데이터는 `%LOCALAPPDATA%\AOI_Capacity`(`utils/paths.data_root()`), 절대 `app/` 안이 아니다(업데이트가 `app/` 를 통째로 교체).

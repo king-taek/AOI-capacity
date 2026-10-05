@@ -74,7 +74,7 @@ class CollectorSignals(QObject):
 
 class CollectorWorker(QThread):
     def __init__(self, token: int, cfg: dict, *, full: bool = False, backfill: bool = False, recover: bool = False,
-                 refresh_window_days=None, rebuild_all=None, parent=None):
+                 refresh_window_days=None, rebuild_all=None, refresh_range=None, parent=None):
         super().__init__(parent)
         self.token = token
         self.cfg = cfg
@@ -83,6 +83,7 @@ class CollectorWorker(QThread):
         self.recover = recover
         self.refresh_window_days = refresh_window_days   # None 이면 cfg["refresh_window_days"](prefs 에서 옴)
         self.rebuild_all = rebuild_all                   # None 이면 cfg["rebuild_all"]; full 은 그 별칭
+        self.refresh_range = refresh_range               # ("YYYY-MM-DD", "YYYY-MM-DD") — 수집 창 '기간 다시 읽기'(10/5)
         self.signals = CollectorSignals()
         self._stop = threading.Event()
 
@@ -100,7 +101,7 @@ class CollectorWorker(QThread):
         try:
             rows, dev_meta, errors = collect.collect(
                 self.cfg, self.full, self.backfill, recover=self.recover,
-                refresh_window_days=self.refresh_window_days, rebuild_all=self.rebuild_all,
+                refresh_window_days=self.refresh_window_days, rebuild_all=self.rebuild_all, refresh_range=self.refresh_range,
                 progress=lambda d, t, p: self.signals.progress.emit(tok, int(d), int(t), str(p)),
                 log=lambda m: self.signals.log.emit(tok, str(m)),
                 should_stop=self._stop.is_set,

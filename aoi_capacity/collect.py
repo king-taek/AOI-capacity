@@ -1486,6 +1486,12 @@ def _cache_summary(path: str) -> dict:
     return summary
 
 
+def parse_range(r) -> Optional[Tuple[dt.date, dt.date]]:
+    """('YYYY-MM-DD', 'YYYY-MM-DD') → (시작일, 끝날) — 순서가 거꾸로면 바로잡는다. 틀린 형식은 ValueError(조용히 넘기지 않는다)."""
+    a, b = (dt.date.fromisoformat(str(x).strip()) for x in r)
+    return (a, b) if a <= b else (b, a)
+
+
 def _mode_args(cfg: dict, full: bool, refresh_window_days, rebuild_all) -> Tuple[int, bool]:
     """인자가 None 이면 cfg 값을 쓴다. `full` 은 `rebuild_all` 의 별칭(D60). 돌려주는 값: (refresh 창 일수, rebuild 여부)."""
     try:
@@ -1635,13 +1641,14 @@ def _list_all(rep_dir: str, name: str) -> list:
 
 
 def _list_new_reports(devs, cache, cfg, backfill, log, progress, on_device, should_stop, recover=False,
-                      refresh_days: int = 0, window_days=None):
+                      refresh_days: int = 0, window_days=None, refresh_since_ts=None, refresh_until_ts=None):
     """1차 패스: 장비마다 Report 폴더를 한 번 나열(scandir+stat 만)해 읽을 파일을 고른다. NAS 읽기 전용.
 
     장비 30대를 한 줄로 나열하면 SMB 왕복 지연이 30번 더해진다 — 동시에 나열한다(`read_workers`).
 
     고르는 규칙(캐시에 **같은 수정시각**으로 들어 있는 파일은 원래 건너뛴다 — backfill 은 검색 창만 넓힌다):
       * `refresh_days>0`: 최근 그 일수 안의 파일은 캐시에 있어도 다시 읽는다(D60, `dm["refreshed"]`).
+        `refresh_since_ts`·`refresh_until_ts`(10/5 '기간 다시 읽기')를 주면 수정시각이 [since, until) 인 파일만 — 기간 밖은 그대로 둔다.
       * `recover`: INI 를 못 찾았던 Report 만 다시 읽는다(`dm["recovered"]`).
       * 지난번 다시 읽다 실패해 이전 행을 그대로 둔 Report(`failed` 에 재시도가 남은 것)는 다시 읽는다(`dm["retried"]`).
     `window_days` 는 backfill 창 길이(기본 `backfill_days`; rebuild 는 `retention_days`).
@@ -1658,6 +1665,8 @@ def _list_new_reports(devs, cache, cfg, backfill, log, progress, on_device, shou
     now = time.time()
     backfill_since = now - float(cfg["backfill_days"] if window_days is None else window_days) * 86400
     refresh_since = (now - float(refresh_days) * 86400) if refresh_days and refresh_days > 0 else None
+    if refresh_since_ts is not None:
+        refresh_since = float(refresh_since_ts)
     # 다시 읽다 실패해 이전 행을 그대로 둔 Report 는 보통 커서보다 오래됐다 — 장비별로 그 파일까지는 훑어야 재시도가 실제로 일어난다.
     # (커서는 뒤로 가지 않는다. 나열만 조금 더 하고, 고르는 건 위의 규칙대로라 다른 파일은 그대로 known 이다.)
     pending_since: Dict[str, float] = {}
@@ -1716,7 +1725,7 @@ def _list_new_reports(devs, cache, cfg, backfill, log, progress, on_device, shou
                 cached = reports.get(key)
                 if cached and abs(float(cached.get("mtime", 0)) - m) < 1:
                     pending = failed.get(key) or {}
-                    if refresh_since is not None and m >= refresh_since:
+                    if refresh_since is not None and m >= refresh_since and (refresh_until_ts is None or m < float(refresh_until_ts)):
                         dm["refreshed"] += 1
                         pick.append((e, key))
                     elif recover and _needs_recovery(cached):
@@ -1806,7 +1815,7 @@ def _backup_roots(d: dict, scan_root: str) -> ScanRoots:
 
 
 def collect(cfg: dict, full: bool = False, backfill: bool = False, *, recover: bool = False,
-            refresh_window_days=None, rebuild_all=None,
+            refresh_window_days=None, rebuild_all=None, refresh_range=None,
             progress: Optional[ProgressFn] = None, log: Optional[LogFn] = None,
             should_stop: Optional[Callable[[], bool]] = None,
             on_device: Optional[DeviceFn] = None, stats: Optional[dict] = None) -> Tuple[List[dict], List[dict], List[dict]]:
@@ -1820,6 +1829,8 @@ def collect(cfg: dict, full: bool = False, backfill: bool = False, *, recover: b
       * `recover`: INI 를 못 찾았던 Report(`RECOVERABLE_INI`)만 수정시각과 상관없이 다시 읽는다 — 파서를 고친 뒤 옛 캐시를 되살리는 길.
       * `refresh_window_days=N`: 최근 N일 안의 Report 는 캐시에 있어도 다시 읽는다. 창 밖 이력은 손대지 않고, 다시 읽다 실패하면
         그 Report 의 이전 행을 그대로 두고 `failed` 에 재시도만 남긴다.
+      * `refresh_range=("YYYY-MM-DD", "YYYY-MM-DD")`(10/5, 수집 창 '기간 다시 읽기'): 그 기간에 끝난 Report(수정시각 = 배치 종료 무렵)와
+        그 기간에 시작한 KLA Wafer 만 캐시에 있어도 다시 읽는다. 기간 밖 이력은 손대지 않는다(refresh 와 같은 규칙, 끝이 있는 창).
       * `rebuild_all`(= `full`): 보관 기간 전부를 새 후보 캐시에 모아 `_validate_rebuild` 를 통과할 때만 교체한다.
         미접근 장비·지금 목록에 없는 장비·다시 읽다 실패한 Report 의 이전 이력은 후보로 옮긴다. 실패면 `RebuildRejected`(원 캐시 그대로)."""
     progress = progress or (lambda d, t, p: None)
@@ -1831,6 +1842,11 @@ def collect(cfg: dict, full: bool = False, backfill: bool = False, *, recover: b
     cfg = config_mod.check_or_raise(cfg)   # ★ C13: 형·범위를 맞추고, 범위·경로 설정이 잘못됐으면 ConfigError — NAS 접근 0
     nas_guard.check_cfg(cfg)  # 출력·캐시가 NAS 아래면 시작조차 하지 않는다
     refresh_days, rebuild = _mode_args(cfg, full, refresh_window_days, rebuild_all)
+    rng = parse_range(refresh_range) if (refresh_range and not rebuild) else None
+    if rng is not None:                                   # 기간 다시 읽기 — 나열 창은 시작일부터 오늘까지, 다시 읽는 건 기간 안만
+        refresh_days = max(1, (dt.date.today() - rng[0]).days + 1)
+    rng_ts = (dt.datetime.combine(rng[0], dt.time()).timestamp(),
+              dt.datetime.combine(rng[1] + dt.timedelta(days=1), dt.time()).timestamp()) if rng else (None, None)
     progress(0, 0, i18n.KO.COLLECT_PHASE_DEVICES)
     old_cache: Optional[dict] = None
     dirty = _Dirty()                                          # C04: 저장 이유 — 비어 있으면 캐시 파일을 건드리지 않는다
@@ -1864,14 +1880,17 @@ def collect(cfg: dict, full: bool = False, backfill: bool = False, *, recover: b
                   f"(검증을 통과할 때만 기존 캐시 {len(old_cache['reports'])}개 항목을 바꿉니다)")
     elif backfill:
         _say(log, f"초기 수집: 최근 {cfg['backfill_days']}일 안의 Report 를 전부 읽습니다")
-    if refresh_days > 0 and not rebuild:
+    if rng is not None:
+        _say(log, f"기간 다시 읽기: {rng[0]} ~ {rng[1]} 에 끝난 Report 는 캐시에 있어도 다시 읽습니다(기간 밖 이력은 그대로)")
+    elif refresh_days > 0 and not rebuild:
         _say(log, f"다시 읽기: 최근 {refresh_days}일 안의 Report 는 캐시에 있어도 다시 읽습니다(창 밖 이력은 그대로)")
     if recover and not rebuild:
         _say(log, f"누락 복구: 최근 {cfg['backfill_days']}일 안에서 INI 를 못 찾았던 Report 만 다시 읽습니다")
     kla_devs = [d for d in devs if d.get("kind") == "kla"]      # D73: KLA 는 Report 가 없다 — 아래에서 kla.collect_kla 로
     cam_devs = [d for d in devs if d.get("kind") != "kla"]
     plan = _list_new_reports(cam_devs, cache, cfg, backfill, log, progress, on_device, should_stop, recover=recover,
-                             refresh_days=0 if rebuild else refresh_days, window_days=window_days)
+                             refresh_days=0 if rebuild else refresh_days, window_days=window_days,
+                             refresh_since_ts=rng_ts[0], refresh_until_ts=rng_ts[1])
     stats["list_ms"] = int((clock() - t1) * 1000)
     stats["list_pattern"] = sum(1 for _d, dm, _p, _k in plan if dm.get("listing") == "pattern")
     if PATTERN_LISTER is not None:                            # 패턴 나열을 쓰는 PC 에서만 — 다음 전체 나열 시각을 정하는 근거
@@ -1995,7 +2014,9 @@ def collect(cfg: dict, full: bool = False, backfill: bool = False, *, recover: b
         k_meta, k_err, k_changed, k_stats = kla_mod.collect_kla(
             cfg, kla_devs, cache, run=lambda items, fn, path_of: _run(cfg, items, fn, should_stop, group=lambda x: nas_group(path_of(x))),
             now=dt.datetime.now(), backfill=backfill, refresh_days=0 if rebuild else refresh_days, rebuild=rebuild,
-            log=lambda m: _say(log, m), progress=progress, phase=i18n.KO.COLLECT_PHASE_KLA)
+            log=lambda m: _say(log, m), progress=progress, phase=i18n.KO.COLLECT_PHASE_KLA,
+            refresh_from=dt.datetime.combine(rng[0], dt.time()) if rng else None,
+            refresh_until=dt.datetime.combine(rng[1] + dt.timedelta(days=1), dt.time()) if rng else None)
         if k_changed:
             dirty.add(DIRTY_KLA)
         for dm in k_meta:
@@ -2052,7 +2073,7 @@ def collect(cfg: dict, full: bool = False, backfill: bool = False, *, recover: b
                   "reports_read": n_new, "reports_failed": len(errors), "devices": len(devs),
                   "reports_refreshed": sum(int(dm.get("refreshed") or 0) for dm in dev_meta),
                   "reports_kept": sum(int(dm.get("kept") or 0) for dm in dev_meta),
-                  "mode": "rebuild" if rebuild else "refresh" if refresh_days > 0 else "recover" if recover
+                  "mode": "rebuild" if rebuild else "range" if rng else "refresh" if refresh_days > 0 else "recover" if recover
                           else "backfill" if backfill else "incremental",
                   "read_workers": _workers(cfg, max(1, len(jobs))), "nas_groups": len({nas_group(d["path"]) for d in devs}),
                   "total_ms": int((clock() - t0) * 1000)})

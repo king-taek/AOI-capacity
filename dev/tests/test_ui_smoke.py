@@ -232,6 +232,16 @@ def test_mode_cards_pick_one_situation_and_map_to_worker_options(window, styled_
     assert prefs.load().refresh_window_days == 5 and page.options() == (False, False, False)
     page._pick("normal")
     assert prefs.load().refresh_window_days == 0
+    # 10/5 '기간 다시 읽기' — 전체 다시 만들기 밑, 날짜 두 칸(거꾸로 골라도 바로잡음), 고른 동안만 refresh_range
+    from PyQt6.QtCore import QDate
+    assert page.refresh_range() is None and not page._cards["range"].isHidden()
+    page._r_from.setDate(QDate(2026, 9, 20))
+    page._r_to.setDate(QDate(2026, 9, 10))
+    page._pick("range")
+    assert page.refresh_range() == ("2026-09-10", "2026-09-20") and page.options() == (False, False, False)
+    assert prefs.load().refresh_window_days == 0
+    page._pick("normal")
+    assert page.refresh_range() is None
     page._pick("recover")
     page.set_running(True)
     page.set_running(False)
