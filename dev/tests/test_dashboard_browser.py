@@ -459,3 +459,43 @@ def test_tab_indicator_moves_like_a_body_dragged_by_its_front(page):
     assert all(l <= l0 + 0.5 for l, _ in fr[:2])                                            # 뒤 끝은 늦게 출발한다
     assert errors == []
 
+
+
+def test_recipe_groups_apply_at_once_persist_in_browser_and_export(page, tmp_path):
+    """D67: 레시피 묶음 편집기 — 묶으면 Error 탭 Job별이 그 이름 하나로 바로 바뀌고, 다시 열어도 이 브라우저에 남으며,
+    '내보내기' 는 수집기가 읽는 모양(v · saved · groups[name, jobs])이고 '사본 저장' 도 그 묶음을 담는다. 바깥 요청 0건."""
+    pg, errors, requests = page
+    pg.locator('[data-fk="rg:open"]').click()
+    pg.wait_for_selector('[data-dlg="recipe"]')
+    pg.fill('[data-fk="rg:q"]', "R_")
+    pg.wait_for_timeout(150)
+    assert sorted(pg.locator(".rgrow .mono").all_inner_texts()) == ["R_KENDALL_A0_FS", "R_TB500_LIVE_PI2"]
+    assert pg.evaluate("document.activeElement.dataset.fk") == "rg:q"           # 입력 중 다시 그려도 포커스는 그 칸
+    pg.get_by_role("button", name="목록 전부 선택").click()
+    pg.fill('[data-fk="rg:name"]', "MIX RECIPE")
+    pg.get_by_role("button", name="새 묶음으로").click()
+    assert pg.locator(".rgcard b").all_inner_texts() == ["MIX RECIPE"]
+    assert pg.input_value('[data-fk="rg:name"]') == ""                        # 만든 뒤 이름 칸은 비운다(속성값까지)
+    with pg.expect_download() as dl:
+        pg.get_by_role("button", name="내보내기").click()
+    exp = json.loads(Path(dl.value.path()).read_text(encoding="utf-8"))
+    assert dl.value.suggested_filename == "recipe_groups.json"
+    assert exp["v"] == 1 and exp["saved"] and [g["name"] for g in exp["groups"]] == ["MIX RECIPE"]
+    assert sorted(exp["groups"][0]["jobs"]) == ["R_KENDALL_A0_FS", "R_TB500_LIVE_PI2"]
+    pg.keyboard.press("Escape")
+    pg.locator('button[data-fk="nav:errors"]').click()
+    pg.wait_for_selector('main[data-key="view:errors"]')
+    assert "MIX RECIPE" in pg.locator('[data-row^="job:"]').all_inner_texts()[0]
+    pg.reload()
+    pg.wait_for_selector('main[data-key^="view:"]')
+    pg.locator('[data-fk="rg:open"]').click()
+    pg.wait_for_selector('[data-dlg="recipe"]')
+    assert pg.locator(".rgcard b").all_inner_texts() == ["MIX RECIPE"]
+    assert "내보내기 필요" in pg.locator('[data-dlg="recipe"] .dh').inner_text()
+    with pg.expect_download() as dl2:
+        pg.evaluate("saveHtml()")                                   # 헤더 버튼은 팝업 아래(inert) — 같은 함수를 직접
+    meta = sample_rows.unfold(sample_rows.embedded(Path(dl2.value.path()).read_text(encoding="utf-8")))[1]
+    assert [g["name"] for g in meta["recipe_groups"]["groups"]] == ["MIX RECIPE"]
+    pg.get_by_role("button", name="되돌리기").click()
+    assert pg.locator(".rgcard").count() == 0
+    assert requests == [] and errors == []

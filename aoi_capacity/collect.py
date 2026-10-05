@@ -56,6 +56,7 @@ from typing import Callable, Dict, List, Optional, Tuple
 
 from . import devices as devices_mod
 from . import i18n, nas_guard, scope
+from . import recipes as recipes_mod
 from .utils import config as config_mod
 
 _LOG = logging.getLogger("aoi.collect")
@@ -105,6 +106,7 @@ DEFAULT_CONFIG: Dict[str, object] = {
     "attention_util": 40,                         # D14: 살펴볼 장비 = 가동률 이 값(%) 미만 — 결과 HTML 의 meta.dashboard_settings 로 나간다
     "attention_err": 3,                           # D14: 또는 Error 건수 이 값 이상
     "split_mb": 30,                               # 결과 HTML 이 이 MB 를 넘으면 기간별 여러 장으로 나눈다(0 = 안 나눔, 9/23)
+    "recipe_groups_file": "",                     # D67: 결과 HTML 에 담을 레시피 묶음(화면에서 내보낸 JSON). 비우면 데이터 폴더·다운로드에서 가장 최근 것
 }
 MAX_READ_RETRY = 3   # 읽기에 실패한 Report 를 몇 번까지 다시 시도하고 커서를 붙잡아 둘지
 INI_KEYS = {
@@ -2231,6 +2233,9 @@ def write_html(cfg: dict, rows: List[dict], dev_meta: List[dict], errors: List[d
             "sha": ver.get("sha", ""), "branch": ver.get("branch", ""), "repo": ver.get("repo", ""),
             "version": (str(ver.get("sha", ""))[:7]) if ver.get("sha") else "",
             "dashboard_settings": config_mod.dashboard_settings(cfg)}      # D14: 살펴볼 장비 문턱(attentionUtil · attentionErr)
+    rg, _rg_path = recipes_mod.load(cfg, log)
+    if rg is not None:
+        meta["recipe_groups"] = rg                 # D67: 화면의 레시피 묶음 — 통계·표시에만, Rescan 판정에는 쓰지 않는다
     emb = _embed_rows(rows)
     if meta["timing"]:
         meta["timing"]["html_ms"] = int((time.perf_counter() - t_html) * 1000)   # 템플릿 읽기 + 접기까지(쓰기 전)

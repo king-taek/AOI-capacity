@@ -178,6 +178,9 @@ Camtek AOI 장비의 BatchReport/WaferInfo.ini 를 읽어 장비별 가동률을
   Lot 선택 키는 `lotKey`(Job·Lot·시작·배치시작·**Report**, D16 — 같은 Lot 이 하루에 Report 두 장이면 갈린다). 팝업은 ESC 로 닫힌다(Error 팝업 → 장비 팝업 → 유형/Job 팝업 순).
   접근성(D05): `render()` 는 그리기 전 포커스(`data-fk`)·창/팝업 스크롤을 적어 두고 되돌린다, 팝업이 열리면 아래는 `inert`, Tab 은 맨 위 팝업 안에서만(`trapTab`), 열리면 제목(`aria-labelledby`)으로·닫히면 열었던 버튼으로 포커스.
   Lot 이 40개를 넘는 날은 이름표를 Error·Test·선택 Lot 만 그린다(막대 클릭 영역은 전부, D10). 화면 어디에도 열람 시계는 없다 — 수집 시각 정보가 없으면 모든 날 분모 24시간(D11).
+- **레시피 묶음(D67)**: 헤더 '레시피 묶음' 팝업(`recipePopupHtml`)에서 Job 원문을 묶는다. 모델의 Job 묶음은 `groupJobs`(사용자 묶음 → 그 이름, 나머지 `jobKey`), 표시 이름은 `jobNm` 한 곳(묶음 이름 → `JOB_ALIAS` → 원문).
+  **통계·표시에만** — `matKey`(Rescan)에는 넣지 않는다. 고치면 `rgApply` 로 그 자리에서 다시 묶고 localStorage `aoi.recipeGroups.v1` 에 보관(HTML 에 담긴 것과 `saved` 가 늦은 쪽), '내보내기' 는 `recipe_groups.json`.
+  수집기는 `aoi_capacity/recipes.py`(읽기만 — cfg `recipe_groups_file`, 비우면 데이터 폴더·다운로드에서 `saved` 가 가장 늦은 것)로 찾아 `write_html` 이 `meta.recipe_groups` 로 넣는다. '사본 저장' 도 담는다.
 - **Report 열기**는 장비 팝업의 선택 Lot 에서만(`reportUrl` · `openReport`). 경로는 `meta.devices[].note` + `report_dir` + `report` 로만 만들고 드라이브 문자와 UNC(`\\10.x`) 를 모두 다룬다.
   여는 주체는 사람이 연 그 탭이지 이 화면이 아니다 — 화면은 여전히 바깥으로 요청을 한 건도 보내지 않는다. 수집 상태 칩(`collectChip`: 수집 실패 · 일부 누락)과 '수집 범위 / 수집 안 함' 은 `meta` 에서 그린다. **사본 저장**(`saveHtml`)은 수집기가 준 열·풀 구조 그대로 다시 접는다.
 - 추이 화면에 **전 기간 대비(전주·전월·전일)는 두지 않는다**(사용자 확정, 가드: `test_no_period_over_period_comparison_anywhere`). 선택한 기간의 값만 보여 준다.

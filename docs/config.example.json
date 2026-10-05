@@ -27,5 +27,7 @@
   "write_csv": false,
   "_분할": "split_mb: 결과 HTML 이 이 크기(MB)를 넘으면 기간별로 여러 장으로 나눕니다(0 = 나누지 않음). 가장 최근 구간이 output_name 그대로이고, 옛 구간은 이름 뒤에 _시작일~끝일 이 붙습니다. 각 파일은 따로 더블클릭해 열 수 있습니다.",
   "split_mb": 30,
+  "_레시피묶음": "recipe_groups_file: 결과 HTML 의 '레시피 묶음' 편집기에서 내보낸 recipe_groups.json 의 경로. 비우면 데이터 폴더(%LOCALAPPDATA%\\AOI_Capacity)의 recipe_groups.json 과 다운로드 폴더의 recipe_groups*.json 중 안에 적힌 저장 시각이 가장 늦은 것을 다음 HTML 에 담습니다.",
+  "recipe_groups_file": "",
   "cache_file": "C:\\AOI_capacity\\aoi_cache.json"
 }

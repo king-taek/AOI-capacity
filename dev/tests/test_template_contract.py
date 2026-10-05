@@ -139,12 +139,13 @@ def test_today_basis_wording_is_last_record_not_now():
     assert "마지막 기록" in HTML and "수집 기준" in HTML and "수집 시각 정보 없음" in HTML   # D11: 수집 시각이 없으면 24시간 분모
 
 
-def test_the_three_dialogs_have_accessible_names():
-    """D05: 팝업은 role=dialog · aria-modal · 제목 id(aria-labelledby) 를 갖는다. 포커스가 실제로 그리 가는지는 browser 테스트."""
-    assert HTML.count('role="dialog"') == 3
-    assert HTML.count('aria-modal="true"') == 3
-    assert sorted(re.findall(r'aria-labelledby="(dlg-[a-z]+-title)"', HTML)) == ["dlg-dev-title", "dlg-err-title", "dlg-type-title"]
-    for t in ("dlg-dev-title", "dlg-err-title", "dlg-type-title"):
+def test_the_dialogs_have_accessible_names():
+    """D05: 팝업은 role=dialog · aria-modal · 제목 id(aria-labelledby) 를 갖는다. 포커스가 실제로 그리 가는지는 browser 테스트.
+    팝업은 넷 — 장비 · Error · 유형/Job + 레시피 묶음 편집기(D67)."""
+    assert HTML.count('role="dialog"') == 4
+    assert HTML.count('aria-modal="true"') == 4
+    assert sorted(re.findall(r'aria-labelledby="(dlg-[a-z]+-title)"', HTML)) == ["dlg-dev-title", "dlg-err-title", "dlg-recipe-title", "dlg-type-title"]
+    for t in ("dlg-dev-title", "dlg-err-title", "dlg-recipe-title", "dlg-type-title"):
         assert f'id="{t}"' in HTML, t
 
 

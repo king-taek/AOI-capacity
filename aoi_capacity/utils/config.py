@@ -41,6 +41,7 @@ RULES: Dict[str, Tuple[str, Any, Optional[int], Optional[int]]] = {
     "devices_csv": (PATH, "", None, None),
     "cache_file": (PATH, "", None, None),
     "output_dir": (PATH, "", None, None),
+    "recipe_groups_file": (PATH, "", None, None),  # D67: 결과 HTML 에 담을 레시피 묶음 파일(비우면 데이터 폴더·다운로드에서 가장 최근 것)
 }
 _TRUE = {"true", "1", "yes", "y", "on"}
 _FALSE = {"false", "0", "no", "n", "off"}

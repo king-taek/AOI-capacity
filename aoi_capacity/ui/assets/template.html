@@ -244,6 +244,21 @@ main{max-width:1420px;margin:0 auto;padding:22px 24px 90px}
 .tline i{position:absolute;top:0;bottom:0;min-width:3px;border-radius:2px}
 .tbl-h{display:grid;gap:10px;padding:8px 14px;background:#FBFCFD;border-bottom:1px solid #EDF1F5;font-size:11.5px;font-weight:600;color:var(--ink-3)}
 .box{border:1px solid #E7ECF1;border-radius:11px;overflow:hidden}
+.inp{padding:6px 10px;border:1px solid var(--line-2);border-radius:7px;background:#fff;font:inherit;font-size:12.5px;color:var(--ink)}
+.inp:focus{outline:2px solid var(--accent-2);outline-offset:-1px}
+.btn:disabled{opacity:.45;cursor:default}.btn.primary{background:var(--nav-on);border-color:var(--nav-on);color:#fff}
+.rggrid{display:grid;grid-template-columns:minmax(0,1.35fr) minmax(0,1fr);gap:18px;padding:14px 22px 18px}
+@media (max-width:860px){.rggrid{grid-template-columns:1fr}}
+.rglist{max-height:46vh;overflow:auto;border:1px solid var(--line);border-radius:10px}
+.rgrow{gap:8px;padding:6px 8px;min-height:32px}.rgrow:hover{background:#F7F9FB}.rgrow.on{background:var(--accent-soft)}
+.rgrow .ck{width:16px;height:16px;border:1px solid var(--line-2);border-radius:4px;background:#fff;display:inline-flex;align-items:center;justify-content:center;font-size:11px;color:var(--nav-on);font-weight:700}
+.rgrow.on .ck{border-color:var(--nav-on)}
+.rgbar{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:10px}
+.rgright{max-height:62vh;overflow:auto}
+.rgcard{padding:10px 12px;border:1px solid var(--line);border-radius:10px;margin-bottom:10px;background:#fff}
+.rgm{display:flex;gap:8px;align-items:center;font-size:12px;padding:2px 0}.rgm .mono{flex:1;min-width:0;word-break:break-all}.rgm .num{color:#5A6673}
+.x.sm{width:22px;height:22px;font-size:11px;border-radius:6px}
+.rgsug{display:flex;gap:6px;align-items:center;padding:6px 0;border-top:1px solid #F1F4F7}
 .members{margin-top:8px;padding:10px 12px;background:#F7F9FB;border:1px solid #E7ECF1;border-radius:10px}
 .empty{padding:12px 14px;font-size:12.5px;color:var(--ink-3)}
 @media (max-width:820px){main{padding:16px 12px 70px}.hdr{padding:0 12px}.daylab{min-width:0}}
@@ -410,6 +425,16 @@ function jobKey(s){ const tk=String(s||'').toUpperCase().split(/[\s_\-]+/).filte
   const k=o.join(''); return JM[k]||k; }
 const RT=new Set(['RE','RESCAN','REWORK','SRD','R']);
 const matKey=(j,l,w)=>jobKey(j)+'|'+String(l||'').toUpperCase().split(/[-_ #+,'%.~]+/).filter(x=>x&&!RT.has(x)).join('')+'|'+String(w||'').toUpperCase().replace(/[^A-Z0-9]/g,'');
+/* ── 레시피 묶음(D67) — 사용자가 묶은 Job 원문은 그 묶음 이름 하나로, 나머지는 jobKey 자동 묶음. 통계·표시에만 쓰고 자재 키(matKey · Rescan)에는 쓰지 않는다. ── */
+function recipeMap(rg){const m=new Map();if(!rg||!Array.isArray(rg.groups))return m;
+  for(const g of rg.groups){if(!g||typeof g.name!=="string"||!g.name.trim()||!Array.isArray(g.jobs))continue;for(const j of g.jobs)if(typeof j==="string"&&!m.has(j))m.set(j,g.name.trim());}return m;}
+function groupJobs(jobs,detail,days,dev,rmap){
+  const uj={}; for(const dy of days) for(const dv of dev){const t=(detail[dy]||{})[dv]; if(!t)continue; for(const L of t.lots) uj[L[0]]=(uj[L[0]]||0)+1;}
+  const gm={}; jobs.forEach((n,i)=>{const r=rmap&&rmap.get(n);(gm[r!=null?"\u0001"+r:jobKey(n)]||=[]).push(i);});
+  const jobGroups=[]; const jobG=new Array(jobs.length).fill(0);
+  for(const [k,ids] of Object.entries(gm)){const mem=ids.map(i=>[i,uj[i]||0]).sort((a,b)=>b[1]-a[1]);
+    const gi=jobGroups.length; const G={l:mem[0][0],m:mem}; if(k.charCodeAt(0)===1)G.nm=k.slice(1); jobGroups.push(G); for(const i of ids) jobG[i]=gi;}
+  return {jobGroups,jobG};}
 const dk=x=>`${x.getFullYear()}-${String(x.getMonth()+1).padStart(2,'0')}-${String(x.getDate()).padStart(2,'0')}`;
 const isPass=s=>/^pass$/i.test(String(s||'').trim());
 
@@ -556,11 +581,7 @@ if(all.length){
 const PART=metaIn&&metaIn.part&&metaIn.part.from&&metaIn.part.to?metaIn.part:null;
 if(PART)for(const dy of [...daySet])if(dy<PART.from||dy>PART.to){daySet.delete(dy);delete detail[dy];}
 const days=[...daySet].sort(); for(const dy of days)if(!detail[dy])detail[dy]={};
-const uj={}; for(const dy of days) for(const dv of dev){const t=(detail[dy]||{})[dv]; if(!t)continue; for(const L of t.lots) uj[L[0]]=(uj[L[0]]||0)+1;}
-const gm={}; SP.job.forEach((n,i)=>{(gm[jobKey(n)]||=[]).push(i);});
-const jobGroups=[]; const jobG=new Array(SP.job.length).fill(0);
-for(const ids of Object.values(gm)){const mem=ids.map(i=>[i,uj[i]||0]).sort((a,b)=>b[1]-a[1]);
-  const gi=jobGroups.length; jobGroups.push({l:mem[0][0],m:mem}); for(const i of ids) jobG[i]=gi;}
+const {jobGroups,jobG}=groupJobs(SP.job,detail,days,dev,recipeMap(metaIn&&metaIn.recipe_groups));
 const day=(today&&days.includes(today))?today:(days[days.length-1]||null);
 /* 보관 기간의 첫날은 수집 창이 그 날 도중에 시작해 하루 전체가 아니다(10일치 실물: 9/10 이 20%). 화면이 '부분' 으로 표시하고 추이 평균에서 뺀다. */
 const _ret=Number(metaIn&&metaIn.retention_days)||0;let partialDays=[];
@@ -703,6 +724,8 @@ const JOB_ALIAS={
   "R_KENDALL_A0_PI2":"Kendall PI2",
   "2D@RE-KENDALL A0 TOP DIE_0859659PD-0B":"Kendall TOP DIE",
   "R_MSFT_Kendall_0859275PD_BS-CAMTEK":"Kendall BS"};
+/* Job 묶음의 표시 이름: 레시피 묶음 이름(D67) → 표기명(JOB_ALIAS) → 대표 원문. al = 원문이 아닌 이름(고정폭 글꼴을 쓰지 않는다) */
+function jobNm(G){if(!G)return{nm:"",al:false,raw:""};const raw=D.pool.job[G.l]||"(Job 없음)";if(G.nm)return{nm:G.nm,al:true,raw};const a=JOB_ALIAS[raw];return{nm:a||raw,al:!!a,raw};}
 const PROPS={attentionUtil:40,attentionErr:3};   /* 살펴볼 장비 문턱 — meta.dashboard_settings 의 같은 이름 숫자가 있으면 그것으로(D14) */
 function applySettings(m){const o=(m&&m.dashboard_settings)||{};for(const k of Object.keys(PROPS)){const v=Number(o[k]);if(o[k]!==undefined&&Number.isFinite(v)&&v>=0)PROPS[k]=v;}}
 let D=null;
@@ -712,16 +735,20 @@ const state={view:"home",dayI:null,sort:"name",floor:"all",span:21,unit:"day",me
   stack:[],                                  /* 열린 팝업의 순서(type · dev · err) — 마지막이 맨 위, 나머지는 뒤로 물러난다 */
   errDays:null,errFType:null,errFJob:null,   /* Error 팝업의 기간(여러 날) · Error 탭의 유형/Job 필터 */
   rptSort:{k:"name",d:1},
-  errDev:null,errDayI:null,errJob:null,errType:null,rptSpan:0,rptOpen:null};
+  errDev:null,errDayI:null,errJob:null,errType:null,rptSpan:0,rptOpen:null,
+  rgQ:"",rgName:"",rgSel:[],rgFilter:"all"};   /* 레시피 묶음 편집기(D67): 검색 · 새 이름 · 고른 Job 원문 · 목록 필터 */
 let H=[];const h=fn=>{H.push(fn);return H.length-1;};
 function setState(p){Object.assign(state,p);render();}
 function init(){
   for(const d of (meta.devices||[]))if(d.status)devStatus[d.name]={status:d.status,error:d.error||"",readErrors:d.read_errors||0};
   applySettings(meta);
   D=buildModel(rows,meta);
+  rgLoad();if(!rgSame(RG,rgNorm(meta.recipe_groups)))rgApply();   /* 이 브라우저에서 더 늦게 고친 묶음이 있으면 그것으로(D67) */
   state.dayI=D.day?D.days.indexOf(D.day):-1;
   document.addEventListener("click",e=>{const el=e.target.closest("[data-h]");if(!el)return;const fn=H[+el.dataset.h];if(fn){e.preventDefault();fn(e);}});
   document.addEventListener("keydown",e=>{if(e.key==="Tab"){trapTab(e);return;}if(e.key!=="Escape")return;closeTop();});
+  document.addEventListener("input",e=>{const el=e.target;const k=el&&el.dataset?el.dataset.in:null;if(k==="rgQ"||k==="rgName")setState({[k]:el.value});});
+  document.addEventListener("change",e=>{const el=e.target;if(el&&el.id==="rgFile"&&el.files&&el.files[0])rgImportFile(el.files[0]);});
   log(meta.mode==="demo"?"데모 데이터":"수집 결과를 불러왔습니다. 장비 "+D.devices.length+"대 · "+D.days.length+"일");
   render();}
 
@@ -784,7 +811,7 @@ function saveHtml(){if(!rows.length){toast("저장할 데이터가 없습니다"
   /* 수집기가 준 열을 하나도 빠뜨리지 않고 같은 문자열 풀 구조로 다시 접는다(collect._embed_rows 와 같은 계약) */
   const cols=embCols.length?embCols:Object.keys(rows[0]);const pooled=embCols.length?embPooled:cols.filter(c=>c!=="wafer_start_time"&&c!=="wafer_end_time");
   const pool=[],idx=new Map(),F=new Set(pooled);const put=v=>{v=v==null?"":String(v);let i=idx.get(v);if(i==null){i=pool.length;pool.push(v);idx.set(v,i);}return i;};
-  const emb={cols,pooled,pool,rows:rows.map(r=>cols.map(c=>F.has(c)?put(r[c]):(r[c]??""))),meta:{...meta,mode:meta.mode==="demo"?"demo":"saved",saved_iso:new Date().toISOString().slice(0,19)}};
+  const emb={cols,pooled,pool,rows:rows.map(r=>cols.map(c=>F.has(c)?put(r[c]):(r[c]??""))),meta:{...meta,...(RG.groups.length||RG_EMB?{recipe_groups:RG}:{}),mode:meta.mode==="demo"?"demo":"saved",saved_iso:new Date().toISOString().slice(0,19)}};
   const clone=document.documentElement.cloneNode(true);clone.querySelector("#embedded").textContent=JSON.stringify(emb).replace(/<\//g,"<\\/");
   clone.querySelector("#app").innerHTML='<main><p class="muted" style="padding:40px 0">불러오는 중…</p></main>';clone.querySelector("#toast").classList.remove("on");
   const blob=new Blob(["<!doctype html>\n"+clone.outerHTML],{type:"text/html;charset=utf-8"});const url=URL.createObjectURL(blob);
@@ -795,7 +822,8 @@ function pushTop(k){return state.stack.filter(x=>x!==k).concat([k]);}
 function without(k){return state.stack.filter(x=>x!==k);}
 const CLOSE={type:()=>({modalType:null,modalJob:null,showMembers:false,stack:without("type")}),
   dev:()=>({modalDev:null,selLot:null,stack:without("dev")}),
-  err:()=>({errDev:null,errDays:null,errJob:null,errType:null,stack:without("err")})};
+  err:()=>({errDev:null,errDays:null,errJob:null,errType:null,stack:without("err")}),
+  recipe:()=>({rgSel:[],stack:without("recipe")})};
 function closeTop(){const k=state.stack[state.stack.length-1];if(k)setState(CLOSE[k]());}
 const FUNNEL=`<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M1.5 2.5h13l-5 6v4.3l-3 1.7V8.5z" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/></svg>`;
 const SORTICON=d=>`<svg viewBox="0 0 10 10" aria-hidden="true">${d>0?`<path d="M5 1.5 8.5 7h-7z" fill="currentColor"/>`:d<0?`<path d="M5 8.5 1.5 3h7z" fill="currentColor"/>`:`<path d="M5 1 7.6 4.5H2.4zM5 9 2.4 5.5h5.2z" fill="currentColor"/>`}</svg>`;
@@ -1023,11 +1051,104 @@ function flipLeave(p,o,b){
 let _lastTop=null,_openerFk=null;
 const ovZ=o=>+(o.style.zIndex||0);
 function topDlg(){const d=[...document.querySelectorAll(".dlg[data-dlg]")].filter(x=>!leaving(x.parentElement)).sort((a,b)=>ovZ(a.parentElement)-ovZ(b.parentElement));return d.length?d[d.length-1]:null;}   /* 맨 위 = z-index 가 가장 큰 팝업(DOM 순서는 고정) */
-const POPUP={type:()=>typePopupHtml(),dev:()=>devPopupHtml(),err:()=>errPopupHtml()};
-const POPUP_TITLE={type:()=>{const mt=state.modalType,mj=state.modalJob;if(mt)return mt;const G=D&&D.jobGroups[mj];const raw=G?(D.pool.job[G.l]||""):"";return JOB_ALIAS[raw]||raw||"Job";},
+/* ── 레시피 묶음 편집기(D67) — 화면에서 Job 원문을 묶어 이름을 붙인다.
+   고치면 이 화면에 바로 적용되고(통계·표시만, Rescan 판정은 그대로) 이 브라우저에 보관된다.
+   '내보내기' 한 recipe_groups.json 을 수집기가 찾아 다음 HTML 부터 meta.recipe_groups 로 담는다. '사본 저장' 도 지금 묶음을 담는다.
+   이 브라우저의 보관본과 HTML 에 담긴 것 중 저장 시각(saved)이 늦은 쪽을 쓴다. ── */
+const RG_LS="aoi.recipeGroups.v1";
+let RG={v:1,saved:"",groups:[]},RG_EMB=null;
+function rgNorm(d){if(!d||!Array.isArray(d.groups))return null;const out=[],names=new Set(),taken=new Set();
+  for(const g of d.groups){if(!g||typeof g.name!=="string"||!g.name.trim()||!Array.isArray(g.jobs))continue;const nm=g.name.trim();if(names.has(nm))continue;
+    const keep=g.jobs.filter(j=>typeof j==="string"&&!taken.has(j)&&(taken.add(j),true));if(keep.length){names.add(nm);out.push({name:nm,jobs:keep});}}
+  return {v:1,saved:typeof d.saved==="string"?d.saved:"",groups:out};}
+function rgLoad(){RG_EMB=rgNorm(meta.recipe_groups);let ls=null;try{ls=rgNorm(JSON.parse(localStorage.getItem(RG_LS)||"null"));}catch(e){ls=null;}
+  RG=(ls&&(!RG_EMB||ls.saved>RG_EMB.saved))?ls:(RG_EMB||{v:1,saved:"",groups:[]});}
+const rgSame=(a,b)=>JSON.stringify((a&&a.groups)||[])===JSON.stringify((b&&b.groups)||[]);
+function rgApply(){Object.assign(D,groupJobs(D.pool.job,D.detail,D.days,D.devices,recipeMap(RG)));}
+function rgSaveLocal(){try{localStorage.setItem(RG_LS,JSON.stringify(RG));}catch(e){}}
+function rgCommit(groups,msg,keep){const p=(n=>String(n).padStart(2,"0")),d=new Date();
+  RG={v:1,saved:`${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`,groups:groups.filter(g=>g.jobs.length)};
+  rgSaveLocal();rgApply();
+  /* Job 묶음 번호가 바뀌었으니 번호를 쥔 필터·팝업은 놓는다 */
+  const st=state.modalJob!=null?state.stack.filter(k=>k!=="type"):state.stack;
+  setState({modalJob:null,errFJob:null,errJob:null,rptOpen:null,stack:st,rgSel:keep?state.rgSel:[],rgName:keep?state.rgName:""});if(msg)toast(msg);}
+function rgGroupsCopy(){return RG.groups.map(g=>({name:g.name,jobs:g.jobs.slice()}));}
+function rgAdd(name,raws){name=String(name||"").trim();if(!name||!raws.length)return;const gs=rgGroupsCopy(),set=new Set(raws);
+  for(const g of gs)g.jobs=g.jobs.filter(j=>!set.has(j));
+  let g=gs.find(x=>x.name===name);const merged=!!g;if(!g){g={name,jobs:[]};gs.push(g);}g.jobs.push(...raws);
+  rgCommit(gs,merged?`'${name}' 에 ${raws.length}개를 넣었습니다`:`'${name}' 묶음을 만들었습니다(${raws.length}개)`);}
+function rgRemove(raw){const gs=rgGroupsCopy();for(const g of gs)g.jobs=g.jobs.filter(j=>j!==raw);rgCommit(gs,"묶음에서 뺐습니다",true);}
+function rgDrop(name){rgCommit(rgGroupsCopy().filter(g=>g.name!==name),`'${name}' 묶음을 풀었습니다`,true);}
+function rgRename(name,to){to=String(to||"").trim();if(!to||to===name)return;const gs=rgGroupsCopy();if(gs.some(g=>g.name===to)){toast("같은 이름의 묶음이 이미 있습니다");return;}
+  const g=gs.find(x=>x.name===name);if(g)g.name=to;rgCommit(gs,`이름을 '${to}' 로 바꿨습니다`);}
+function rgExport(){const blob=new Blob([JSON.stringify(RG,null,1)],{type:"application/json;charset=utf-8"});const url=URL.createObjectURL(blob);
+  const a=document.createElement("a");a.href=url;a.download="recipe_groups.json";document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),4000);
+  toast("recipe_groups.json 을 내려받았습니다 — 다음 수집부터 HTML 에 담깁니다");}
+function rgImportFile(f){if(!f)return;const r=new FileReader();r.onload=()=>{let d=null;try{d=rgNorm(JSON.parse(String(r.result||"")));}catch(e){d=null;}
+  if(!d){toast("레시피 묶음 파일이 아닙니다");return;}rgCommit(d.groups,`묶음 ${d.groups.length}개를 가져왔습니다`);};r.readAsText(f,"utf-8");}
+function rgRevert(){if(!RG_EMB&&!RG.groups.length)return;RG=RG_EMB||{v:1,saved:"",groups:[]};try{localStorage.removeItem(RG_LS);}catch(e){}rgApply();
+  setState({modalJob:null,errFJob:null,errJob:null,rptOpen:null,stack:state.modalJob!=null?state.stack.filter(k=>k!=="type"):state.stack,rgSel:[]});toast("이 HTML 에 담긴 묶음으로 되돌렸습니다");}
+let _rgDev=null;
+function rgJobDevs(){if(_rgDev&&_rgDev.D===D)return _rgDev.m;const m={};
+  for(const dy of D.days){const X=D.detail[dy]||{};for(const dv of D.devices){const t=X[dv];if(!t)continue;for(const L of t.lots)(m[L[0]]||(m[L[0]]=new Set())).add(dv);}}
+  _rgDev={D,m};return m;}
+function recipePopupHtml(){
+  const P=D.pool,devs=rgJobDevs(),q=(state.rgQ||"").trim().toUpperCase(),qk=q?jobKey(q):"",sel=new Set(state.rgSel||[]),F=state.rgFilter||"all";
+  const inUser=new Map();for(const g of RG.groups)for(const j of g.jobs)inUser.set(j,g.name);
+  const all=[];for(const G of D.jobGroups){const auto=!G.nm&&G.m.length>1?jobNm(G).nm:null;for(const [i,c] of G.m){const raw=P.job[i];if(!raw)continue;all.push({raw,c,grp:inUser.get(raw)||null,auto,nd:devs[i]?devs[i].size:0});}}
+  all.sort((a,b)=>(a.grp?0:1)-(b.grp?0:1)||String(a.grp||"").localeCompare(String(b.grp||""))||b.c-a.c||a.raw.localeCompare(b.raw));
+  const hitQ=x=>!q||x.raw.toUpperCase().includes(q)||(qk.length>=4&&jobKey(x.raw).includes(qk))||(x.grp&&x.grp.toUpperCase().includes(q));
+  const list=all.filter(x=>hitQ(x)&&(F==="all"||(F==="free"?!x.grp:!!x.grp)));const cap=500,shown=list.slice(0,cap);
+  const byRaw=new Map(all.map(x=>[x.raw,x]));
+  const nm=(state.rgName||"").trim(),nSel=sel.size;
+  const close=()=>setState(CLOSE.recipe());
+  const tog=raw=>()=>{const s=new Set(state.rgSel||[]);s.has(raw)?s.delete(raw):s.add(raw);setState({rgSel:[...s]});};
+  const dirty=!rgSame(RG,RG_EMB);
+  const status=dirty?`<span class="pill" style="background:#FFF4DB;color:#8A5A00" title="내보내기 한 파일을 수집기가 찾아 다음 HTML 부터 담습니다">이 브라우저에만 저장됨 · 내보내기 필요</span>`
+    :(RG.groups.length?`<span class="pill ok">이 HTML 에 담긴 묶음</span>`:`<span class="pill" style="background:#F0F3F7;color:#5A6673">묶음 없음 · 자동 묶음만</span>`);
+  const cards=RG.groups.map(g=>{const lots=g.jobs.reduce((a,j)=>a+((byRaw.get(j)||{}).c||0),0);
+    return `<div class="rgcard" data-key="rg:${esc(g.name)}"><div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap"><b style="font-size:13.5px">${esc(g.name)}</b><span class="num" style="font-size:12px;color:#5A6673">Job ${g.jobs.length}개 · Lot ${lots}개</span><div class="spacer"></div>
+      ${nSel?`<button class="btn" data-h="${h(()=>rgAdd(g.name,[...sel]))}" title="선택한 Job 을 이 묶음에 넣습니다">선택 ${nSel}개 넣기</button>`:""}
+      <button class="btn" data-h="${h(()=>rgRename(g.name,nm))}" ${nm&&nm!==g.name?"":"disabled"} title="${nm?"이름을 '"+esc(nm)+"' 로 바꿉니다":"아래 이름 칸에 새 이름을 적으세요"}">이름 바꾸기</button>
+      <button class="btn" data-h="${h(()=>rgDrop(g.name))}" title="묶음을 풀어 자동 묶음으로 되돌립니다">풀기</button></div>
+      <div style="margin-top:6px">${g.jobs.map(j=>`<p class="rgm"><span class="mono">${esc(j)}</span><span class="num">${(byRaw.get(j)||{}).c||0}</span><button class="x sm" data-h="${h(()=>rgRemove(j))}" title="이 묶음에서 빼기">✕</button></p>`).join("")}</div></div>`;}).join("");
+  const sug=D.jobGroups.filter(G=>!G.nm&&G.m.filter(([i])=>P.job[i]).length>1).map(G=>({G,lots:G.m.reduce((a,[,c])=>a+c,0)})).sort((a,b)=>b.lots-a.lots).slice(0,30);
+  return `<div class="ov z58"><button class="scrim" data-h="${h(close)}" aria-label="닫기"></button><div class="dlg w1120" role="dialog" aria-modal="true" aria-labelledby="dlg-recipe-title" data-dlg="recipe">
+    <div class="dh"><h2 id="dlg-recipe-title" tabindex="-1" class="mid">레시피 묶음</h2><span class="sub">묶음 ${RG.groups.length}개 · 묶인 Job ${inUser.size}개${RG.saved?" · 저장 "+esc(RG.saved.replace("T"," ").slice(0,16)):""}</span>${status}
+      <div class="spacer"></div>
+      <button class="btn" data-h="${h(rgExport)}" title="recipe_groups.json 으로 내려받습니다 — 수집기가 데이터 폴더·다운로드 폴더에서 찾아 다음 HTML 에 담습니다">내보내기</button>
+      <button class="btn" data-h="${h(()=>{const f=document.getElementById("rgFile");if(f){f.value="";f.click();}})}" title="내보냈던 recipe_groups.json 을 불러옵니다">가져오기</button>
+      ${dirty&&(RG_EMB||RG.groups.length)?`<button class="btn" data-h="${h(rgRevert)}" title="이 브라우저에서 고친 것을 버리고 이 HTML 에 담긴 묶음으로">되돌리기</button>`:""}
+      <button class="x" data-h="${h(close)}" data-fk="x:recipe" title="닫기 (Esc)">✕</button><input type="file" id="rgFile" accept=".json,application/json" hidden></div>
+    <p style="margin:0;padding:10px 22px;background:#FBFCFD;font-size:12.5px;color:#5A6673;word-break:keep-all">같은 레시피인 Job 을 골라 이름을 붙이면 Error 탭의 Job별 · Job 팝업 통계가 그 이름 하나로 모입니다. 고친 것은 이 화면에 바로 적용되고 이 브라우저에 보관됩니다. 다른 PC·다음 HTML 에도 쓰려면 '내보내기' 하세요(사본 저장에도 담깁니다). Rescan 판정에는 쓰지 않습니다.</p>
+    <div class="rggrid">
+      <div class="rgleft">
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:8px"><input class="inp" type="search" data-in="rgQ" data-fk="rg:q" placeholder="Job 이름 · 묶음 이름 검색" value="${esc(state.rgQ||"")}" style="flex:1;min-width:180px">
+          ${segHtml([["all","전체"],["free","묶음 없음"],["grp","묶인 것"]].map(([k,l])=>({label:l,on:F===k,pick:()=>setState({rgFilter:k})})))}</div>
+        <div class="tbl-h" style="grid-template-columns:22px 1fr 120px 44px 52px;padding:6px 8px"><span></span><span>Job 원문 (${list.length}개${list.length>cap?" · 앞 "+cap+"개만":""})</span><span>묶음</span><span style="text-align:right">장비</span><span style="text-align:right">Lot</span></div>
+        <div class="rglist">${shown.map((x,i)=>`<button class="rowbtn rgrow ${sel.has(x.raw)?"on":""}" data-key="rj:${esc(x.raw)}" data-h="${h(tog(x.raw))}" aria-pressed="${sel.has(x.raw)}" title="${esc(x.raw)}" style="grid-template-columns:22px 1fr 120px 44px 52px">
+          <span class="ck" aria-hidden="true">${sel.has(x.raw)?"✓":""}</span><span class="mono" style="font-size:12.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(x.raw)}</span>
+          <span style="font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;${x.grp?"font-weight:600;color:var(--nav-on)":"color:#8A96A3"}">${esc(x.grp||(x.auto?"자동: "+x.auto:"—"))}</span><span class="num" style="text-align:right;font-size:12px;color:#4B5866">${x.nd}</span><span class="num" style="text-align:right;font-size:12.5px">${x.c}</span></button>`).join("")||`<p class="empty">맞는 Job 이 없습니다</p>`}</div>
+        <div class="rgbar"><span class="num" style="font-size:12.5px;font-weight:600;white-space:nowrap">선택 ${nSel}개</span>
+          <input class="inp" type="text" data-in="rgName" data-fk="rg:name" placeholder="묶음 이름 (예: TB500 RDL3)" value="${esc(state.rgName||"")}" style="flex:1;min-width:150px">
+          <button class="btn primary" data-h="${h(()=>rgAdd(nm,[...sel]))}" ${nm&&nSel?"":"disabled"} title="${nSel?"":"왼쪽 목록에서 Job 을 고르세요"}">새 묶음으로</button>
+          <button class="btn" data-h="${h(()=>setState({rgSel:[...new Set([...sel,...list.map(x=>x.raw)])]}))}" ${list.length?"":"disabled"} title="지금 목록에 보이는 Job 을 모두 고릅니다">목록 전부 선택</button>
+          <button class="btn" data-h="${h(()=>setState({rgSel:[]}))}" ${nSel?"":"disabled"}>선택 해제</button></div>
+      </div>
+      <div class="rgright">
+        <h3 class="s" style="margin:0 0 8px">내 묶음</h3>${cards||`<p class="empty" style="padding:4px 0 12px">아직 없습니다 — 왼쪽에서 Job 을 고르고 이름을 붙이세요. 아래 자동 묶음 제안을 그대로 써도 됩니다.</p>`}
+        ${sug.length?`<h3 class="s" style="margin:14px 0 8px">자동 묶음 제안 <span style="font-weight:400;color:#5A6673;font-size:12px">이름 규칙으로 이미 묶이는 것</span></h3>
+        ${sug.map(({G,lots})=>{const raws=G.m.map(([i])=>P.job[i]).filter(Boolean);return `<div class="rgsug" data-key="sg:${esc(raws[0])}"><span style="flex:1;min-width:0"><b style="font-size:12.5px">${esc(jobNm(G).nm)}</b><span class="num" style="font-size:11.5px;color:#5A6673"> · 이름 ${raws.length}개 · Lot ${lots}개</span></span>
+          <button class="btn" data-h="${h(()=>setState({rgSel:raws,rgName:jobNm(G).nm}))}" title="${esc(raws.join("\n"))}">고르기</button><button class="btn" data-h="${h(()=>rgAdd(jobNm(G).nm,raws))}" title="이 이름으로 바로 묶습니다">이대로 묶기</button></div>`;}).join("")}`:""}
+      </div>
+    </div>
+  </div></div>`;}
+const POPUP={type:()=>typePopupHtml(),dev:()=>devPopupHtml(),err:()=>errPopupHtml(),recipe:()=>recipePopupHtml()};
+const POPUP_TITLE={type:()=>{const mt=state.modalType,mj=state.modalJob;if(mt)return mt;const G=D&&D.jobGroups[mj];return G?jobNm(G).nm:"Job";},
   dev:()=>(state.modalDev||"")+" · "+md(D.days[state.modalDayI]||""),
+  recipe:()=>"레시피 묶음",
   err:()=>(state.errDev||"")+" Error"+(state.errDays&&state.errDays.length>1?" · "+state.errDays.length+"일":" · "+md(D.days[state.errDayI]||""))};
-const POPUP_ICON={type:`<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2 3h12M2 8h8M2 13h5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>`,
+const POPUP_ICON={recipe:`<svg viewBox="0 0 16 16" aria-hidden="true"><rect x="2" y="2.5" width="5" height="5" rx="1.2" fill="none" stroke="currentColor" stroke-width="1.5"/><rect x="9" y="2.5" width="5" height="5" rx="1.2" fill="none" stroke="currentColor" stroke-width="1.5"/><rect x="2" y="9.5" width="12" height="4" rx="1.2" fill="currentColor"/></svg>`,type:`<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2 3h12M2 8h8M2 13h5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>`,
   dev:`<svg viewBox="0 0 16 16" aria-hidden="true"><rect x="2" y="6" width="12" height="4" rx="2" fill="currentColor"/></svg>`,
   err:`<svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="6" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M8 4.5v4M8 11v.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>`};
 /* 카드 덱의 물러남 거리: 깊이마다 약 100px 씩 왼쪽으로 보이도록, 맨 위 카드와 그 카드의 폭 차이를 보정한다(폭이 다른 팝업끼리도 같은 만큼 보인다) */
@@ -1047,7 +1168,7 @@ function stackbarHtml(ks){if(ks.length<2)return"";
   return `<div class="stackbar" data-key="stackbar" role="navigation" aria-label="열린 팝업">${ks.map((k,i)=>{const cur=i===ks.length-1,t=POPUP_TITLE[k]?POPUP_TITLE[k]():k;
     return (i?`<span class="arrow" aria-hidden="true">›</span>`:"")+(cur?`<span class="sb cur" title="지금 보는 팝업">${POPUP_ICON[k]||""}<span>${esc(t)}</span></span>`
       :`<button class="sb" data-h="${h(()=>bringToFront(k))}" title="${esc(t)} 팝업을 앞으로">${POPUP_ICON[k]||""}<span>${esc(t)}</span></button>`);}).join("")}</div>`;}
-const POPUP_ORDER=["type","dev","err"];
+const POPUP_ORDER=["type","dev","err","recipe"];
 function popupsHtml(){const ks=state.stack.filter(k=>POPUP[k]);const n=ks.length;if(!n)return"";
   return `<div class="deckscrim" data-key="deckscrim" aria-hidden="true"></div>`+POPUP_ORDER.filter(k=>ks.includes(k)).map(k=>{const i=ks.indexOf(k);const html=POPUP[k]();if(!html)return"";const d=n-1-i;
     return html.replace(/^<div class="ov ([^"]*)"/,`<div class="ov $1${d?" behind":""}" data-key="ov:${k}" style="z-index:${50+i};--d:${d}"`).replace(/<div class="dlg /,`<div data-key="dlg" class="dlg `).replace(/<button class="scrim"[^>]*><\/button>/,`<button class="scrim" data-h="${h(scrimClick)}" aria-label="닫기"></button>`);}).join("")+stackbarHtml(ks);}   /* 스택 바는 덮개 밖 — 팝업 스크롤과 무관하게 왼쪽 위 고정 */
@@ -1080,6 +1201,7 @@ function render(){
   const tpl=document.createElement("template");tpl.innerHTML=html;
   if(app.getAttribute("data-anim")!=="el")app.setAttribute("data-anim","el");
   morphChildren(app,tpl.content);
+  for(const el of app.querySelectorAll("input[data-in]")){const v=String(state[el.dataset.in]??"");if(el.value!==v)el.value=v;}   /* 입력한 값은 속성이 아니라 속성값(property)에 있다 — 상태가 비우면 칸도 비운다 */
   const top=topDlg(),topK=top?top.dataset.dlg:null;
   for(const el of app.querySelectorAll(":scope>header,:scope>.stage,:scope>.foot"))el.inert=!!top;
   {const st=app.querySelector(":scope>.stage");if(st)st.classList.toggle("behind",!!top);}
@@ -1114,7 +1236,8 @@ function headerHtml(V){
       <span class="daylab num">${dayName(day)}${D.partialDays&&D.partialDays.includes(day)?`<span class="partial" title="보관 기간의 첫날 — 수집 창이 이 날 도중에 시작해 하루 전체가 아닙니다">부분</span>`:""}</span>
       <button class="ib" data-h="${h(()=>{if(state.dayI<D.days.length-1)setState({dayI:state.dayI+1,pickDay:undefined});})}" title="다음 날짜" data-fk="day:next" ${state.dayI<D.days.length-1?"":"disabled"}>›</button>
       <button class="btn" data-h="${h(()=>setState({dayI:D.days.length-1,pickDay:undefined}))}">최신</button>
-      <button class="btn" data-h="${h(saveHtml)}" title="지금 데이터를 담은 HTML 사본을 내려받습니다">사본 저장</button></div>`:""}
+      <button class="btn" data-h="${h(saveHtml)}" title="지금 데이터를 담은 HTML 사본을 내려받습니다">사본 저장</button>
+      <button class="btn" data-h="${h(()=>setState({stack:pushTop("recipe")}))}" data-fk="rg:open" title="같은 레시피인 Job 을 묶어 이름을 붙입니다">레시피 묶음</button></div>`:""}
     ${partChip()}<span class="stamp ${fixed?"":"unfixed"}" title="${fixed?"집계 기준시각 = 수집 시각(며칠 뒤 열어도 같은 숫자)":"수집 시각 정보가 없어 모든 날의 분모를 24시간으로 둡니다(열람 시각은 쓰지 않습니다)"}">${esc(stampTxt)}</span></header>`;
 }
 /* 분할 파일 표시: 이 파일이 몇 번째 구간인지 + 다른 구간 파일 이름(같은 폴더에 있다 — 링크가 아니라 글자로, 바깥 요청 0건 규칙) */
@@ -1216,7 +1339,7 @@ function errorsHtml(){
     vTxt:(spanDays.length<=22&&dayV(d))?fmtV(dayV(d)):(dayV(d)===maxDay?fmtV(dayV(d)):""),h:(dayV(d)/maxDay*100).toFixed(1),
     color:pickDay?(pickDay===d?"#8C2A1F":"#E0A9A2"):ERR,   /* 기간 모드는 모두 같은 색(사용자 확정 9/20) — 일자별 모드만 고른 날 진하게·나머지 연하게 */title:md(d)+" · Error "+(byDay[d]||[0,0])[0]+"건 · 대기 시간 "+hm((byDay[d]||[0,0])[1]),
     pick:()=>setState({pickDay:pickDay===d?null:d})}));
-  const fjName=FJ!=null?(()=>{const G=D.jobGroups[FJ],raw=P.job[G.l]||"(Job 없음)";return JOB_ALIAS[raw]||raw;})():"";
+  const fjName=FJ!=null?jobNm(D.jobGroups[FJ]).nm:"";
   const chips=(FT?`<button class="fchip animate__animated animate__fadeInDown" data-h="${h(()=>setState({errFType:null}))}" title="유형 필터 해제"><span class="mono">${esc(FT)}</span><span aria-hidden="true">✕</span></button>`:"")
     +(FJ!=null?`<button class="fchip animate__animated animate__fadeInDown" data-h="${h(()=>setState({errFJob:null}))}" title="Job 필터 해제"><span>${esc(fjName)}</span><span aria-hidden="true">✕</span></button>`:"");
   const stats=[{k:FLT?"Error (필터)":"Error",v:totalN+"건",h:cnt(totalN)+"건",s:(totalN/useDays.length).toFixed(0)+"건 / 하루",mono:false},
@@ -1240,7 +1363,7 @@ function errorsHtml(){
           <span class="num" ${txn(v[0],"n")} style="text-align:right;font-size:13px;font-weight:${nW};color:${nInk}">${v[0]}건</span><span class="num" ${txn(v[1],"hm")} style="text-align:right;font-size:13px;white-space:nowrap;font-weight:${mW};color:${mInk}">${hm(v[1])}</span><span class="chev" style="text-align:right;color:#5A6673;font-size:13px">›</span></button>`).join("")||`<p class="empty">기록 없음</p>`}
       </section>
       <section class="panel errlist"><div style="padding:15px 20px 10px"><h2>Job별${FJ!=null?` <span style="font-weight:400;color:#5A6673;font-size:12px">이 Job 만</span>`:""}</h2></div>
-        ${jobArr.map(([gk,A],i)=>{const gi=+gk,G=D.jobGroups[gi],raw=P.job[G.l]||"(Job 없음)";const nm=JOB_ALIAS[raw]||raw,al=!!JOB_ALIAS[raw];
+        ${jobArr.map(([gk,A],i)=>{const gi=+gk,G=D.jobGroups[gi],raw=P.job[G.l]||"(Job 없음)";const {nm,al}=jobNm(G);
           return `<div class="row2" data-key="slot:${i}" data-row="job:${gi}"><button class="rowbtn" data-h="${h(()=>setState({modalJob:gi,showMembers:false,stack:pushTop("type")}))}" title="${esc(raw)}${G.m.length>1?" (이름 "+G.m.length+"개 묶음)":""} · Lot ${A.lots}개 중 ${A.eLots}개 Error · 점유 ${hm(A.occ)} · Error 대기 ${hm(A.eM)} · 눌러서 자세히" style="grid-template-columns:1fr 50px 72px 14px;gap:9px;padding:9px 6px 9px 20px;border-bottom:0;min-height:44px">
             <span style="display:block;min-width:0"><span data-tx style="display:block;font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;${al?"":"font-family:"+MONO}">${esc(cut(nm,34))}</span><span data-tx style="display:block;font-size:11.5px;color:#5A6673;margin-top:2px">Lot ${A.lots}개 중 ${A.eLots}개 Error</span>
               <span class="jbar" style="display:flex;height:8px;margin-top:4px;border-radius:4px;background:#F0F3F7;overflow:hidden"><i style="height:100%;background:${RUN};width:${MET?0:Math.round(A.eN/jmax*100)}%"></i><i style="height:100%;background:${ERR};width:${MET?Math.round(A.eM/jmax*100):0}%"></i></span></span>
@@ -1261,14 +1384,14 @@ function typePopupHtml(){
   const JA=mt?null:(jobAgg[mj]||{eN:0,eM:0,lots:0,eLots:0,occ:0});
   const pv=mt?(byType[mt]||[0,0]):[JA.eN,JA.eM];const sumN=pv[0],sumM=pv[1];
   const G=mt?null:D.jobGroups[mj];const jraw=G?(P.job[G.l]||"(Job 없음)"):"";
-  const label=mt||JOB_ALIAS[jraw]||jraw,mono=(mt||!JOB_ALIAS[jraw]);
+  const JN=jobNm(G),label=mt||JN.nm,mono=(mt||!JN.al);
   const close=()=>setState(CLOSE.type());
   const onlyThis=mt?()=>setState({errFType:mt,...CLOSE.type()}):()=>setState({errFJob:mj,...CLOSE.type()});
   const dayBars=spanDays.map((d,i)=>({label:(i%Math.ceil(spanDays.length/11)===0||i===spanDays.length-1)?md(d):"",h:((pkDay[d]||[0,0])[1]/dmx*100).toFixed(1),
     vTxt:(pkDay[d]&&pkDay[d][1]>=dmx*0.75)?((pkDay[d][1]/60).toFixed(0)+"h"):"",color:(pkDay[d]&&pkDay[d][1])?ERR:"#EDF1F5",title:md(d)+" · "+((pkDay[d]||[0,0])[0])+"건 · "+hm((pkDay[d]||[0,0])[1]),maxW:96}));
   return `<div class="ov z55"><button class="scrim" data-h="${h(close)}" aria-label="닫기"></button><div class="dlg w960" role="dialog" aria-modal="true" aria-labelledby="dlg-type-title" data-dlg="type">
     <div class="dh"><h2 id="dlg-type-title" tabindex="-1" class="mid" style="word-break:break-all;${mono?"font-family:"+MONO:""}">${esc(label)}</h2><span class="sub">${sumN}건 · Error 대기 ${hm(sumM)} · ${(pickDay?md(pickDay)+" 하루":("최근 "+useDays.length+"일"))+(hit.length>cap?" · 상위 "+cap+"개만 표시":"")}</span>
-      ${G&&JOB_ALIAS[jraw]?`<span class="mono" style="flex-basis:100%;font-size:12px;color:#5A6673;word-break:break-all">${esc(jraw)}</span>`:""}
+      ${G&&JN.al?`<span class="mono" style="flex-basis:100%;font-size:12px;color:#5A6673;word-break:break-all">${esc(jraw)}</span>`:""}
       <div class="spacer"></div><button class="btn" data-h="${h(onlyThis)}" title="Error 탭 전체를 ${mt?"이 유형":"이 Job"}만으로 다시 집계합니다">${mt?"이 유형만 통계":"이 Job 만 통계"}</button><button class="x" data-h="${h(close)}" data-fk="x:type" title="닫기 (Esc)">✕</button></div>
     <div style="padding:16px 22px 0">
       <section class="cards xs" style="margin-bottom:16px">${[{k:"Error",v:sumN+"건"},{k:"Error 대기",v:hm(sumM)},{k:"장비",v:Object.keys(pkDev).length+"대"},{k:mt?"Lot 기록":"Lot",v:mt?(hit.length+"건"):(JA.eLots+" / "+JA.lots+"개")}].map(s=>`<div><p class="k">${s.k}</p><p class="v num">${esc(s.v)}</p></div>`).join("")}</section>
@@ -1378,7 +1501,7 @@ function errPopupHtml(){
   const cnt=dy=>{const x=S.at(dy,eDev);if(!x)return 0;if(!filtered)return x.e||0;return (x.lots||[]).filter(L=>L[5]&&(fj==null||D.jobG[L[0]]===fj)&&(!ft||L[9][ft])).reduce((a,L)=>a+(ft?L[9][ft][0]:L[5]),0);};
   const tr=win.map(cnt),tmax=Math.max(1,...tr);
   const G=fj!=null?D.jobGroups[fj]:null,jraw=G?(P.job[G.l]||"(Job 없음)"):"";
-  const filterTxt=ft?("유형 "+ft):("Job "+(JOB_ALIAS[jraw]||jraw)),filterMono=(ft||(G&&!JOB_ALIAS[jraw]));
+  const filterTxt=ft?("유형 "+ft):("Job "+jobNm(G).nm),filterMono=(ft||(G&&!jobNm(G).al));
   const close=()=>setState(CLOSE.err());
   const stats=[{k:"Error",v:totN+"건",ink:totN?"#B4402F":"#0F151C"},{k:"Error 대기",v:hm(totM),ink:totM?"#B4402F":"#0F151C"},{k:"유형",v:ct.length+"가지",ink:"#0F151C"},{k:"Error 난 Lot",v:eLots.length+" / "+lots.length+"개",ink:"#0F151C"},{k:"가장 많은 유형",v:ct.length?ct[0][0].replace("_ERROR",""):"—",ink:"#0F151C"}];
   const inSpan=new Set(days);
@@ -1448,7 +1571,7 @@ function trendHtml(){
 function reportHtml(){
   const P=D.pool,span=state.rptSpan,days=span?D.days.slice(-span):D.days;
   const aliasCache={};
-  const aliasOf=gi=>{if(aliasCache[gi]!==undefined)return aliasCache[gi];const G=D.jobGroups[gi];let al=JOB_ALIAS[P.job[G.l]]||null;if(!al)for(const [i] of G.m){if(JOB_ALIAS[P.job[i]]){al=JOB_ALIAS[P.job[i]];break;}}return aliasCache[gi]=al;};
+  const aliasOf=gi=>{if(aliasCache[gi]!==undefined)return aliasCache[gi];const G=D.jobGroups[gi];let al=JOB_ALIAS[P.job[G.l]]||null;if(!al)for(const [i] of G.m){if(JOB_ALIAS[P.job[i]]){al=JOB_ALIAS[P.job[i]];break;}}if(al&&G.nm){al=G.nm;}return aliasCache[gi]=al;};
   const blank=()=>({n:0,err:0,errMin:0,fS:0,fN:0,ex:{err:0,small:0,noTime:0},pts:[]});
   const byAlias={};let lotAll=0,lotIn=0;
   for(const dy of days)for(const n of D.devices){const t=S.at(dy,n);if(!t)continue;
