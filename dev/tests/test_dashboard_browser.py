@@ -252,7 +252,7 @@ def test_error_tab_period_popup_filters_and_no_total_link(page):
     assert "전체 기간 합계로" not in pg.inner_text("main")
     pg.locator('main button[data-fk="seg:기간 전체 2일"]').click()        # 10/5: 기간은 헤더에서 — Error 탭은 '일자별' · '기간 전체' 둘
     pg.wait_for_selector('main button[data-fk="seg:기간 전체 2일"].on')
-    pg.locator('main button.rowbtn[data-row="dev:AOI-1"]').click()
+    pg.locator('main .row2[data-row="dev:AOI-1"] .rowbtn').click()
     pg.wait_for_selector('.dlg[data-dlg="err"]')
     txt = pg.locator('.dlg[data-dlg="err"]').inner_text()
     assert "· 2일" in txt and "하루씩 보기" in txt and "날짜별" in txt and "09/17" in txt      # 9/17 + 9/18 두 날
