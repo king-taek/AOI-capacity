@@ -183,7 +183,7 @@ Camtek AOI 장비의 BatchReport/WaferInfo.ini 를 읽어 장비별 가동률을
   수집기는 `aoi_capacity/recipes.py`(읽기만 — cfg `recipe_groups_file`, 비우면 데이터 폴더·다운로드에서 `saved` 가 가장 늦은 것)로 찾아 `write_html` 이 `meta.recipe_groups` 로 넣는다. '사본 저장' 도 담는다.
 - **레시피 탭(D70, `rcpHtml`)**: 레시피 = Job 묶음(`D.jobGroups`). 값은 모델이 아니라 원천 행에서 `rcpIndex`(D·jobGroups 가 바뀔 때만 다시)로 모은다 —
   생산량 = PASS·Test 아님 Wafer 행(장비·Wafer·시작 시각 한 번) · 장당 스캔 = INI 시작~끝(`ini_match` EXACT, 0~180분) · 배치 기준 장당 = Report 배치 시간 ÷ PASS 장수(Error 없고 한 레시피만 돈 Report) ·
-  가동률 = 그 장비들의 장비-일 `S.util` 평균 · 하위 레시피 = INI `recipe` 칸(`x20`·`x5`·`x20|x5` — 'x5 를 쓴 장 비율'). 날짜는 Wafer 시작일, 파일의 기간(`D.days`) 안만.
+  가동률 = 그 장비들의 장비-일 `S.util` 평균 · 하위 레시피 = 행의 `recipe` 열(`x20`·`x5`·`x20|x5` — 'x5 를 쓴 장 비율'). 수집기가 채우는 순서(D74): Wafer 폴더 `RecipesInfo.ini` 의 `[Recipe-n] Name` 전부(멀티 스캔에만 있는 파일, `|` 로 이음) → `WaferInfo.ini` `[Recipe] Name`(단일) → Report 표 Recipe 칸 → 요약 Recipe. 표 칸은 멀티여도 `x20` 만 찍혀 믿지 않는다(실물 10/5). 덮어써진(STALE) INI 의 것은 쓰지 않는다. 날짜는 Wafer 시작일, 파일의 기간(`D.days`) 안만.
   **전후 비교**(`cmpHtml`): 사용자가 고른 두 기간 × 두 레시피 묶음(`state.cmpA/cmpB` = Job 원문 목록 — 처음 고른 레시피가 양쪽의 시작, 그 뒤 ＋·✕ 로만 바뀜). 자동 '전 기간 대비'(D23)와는 별개다.
   입력 칸은 `data-in` + `INPUT_KEYS`(같은 이름의 state). 좁은 화면(≤820px)에서는 탭 줄만 옆으로 밀린다(쪽 가로 스크롤 없음).
 - **화면 기간(10/5)**: 헤더 `rangeHtml` — 프리셋 **최근 7일 · 1달 · 전체**(가진 데이터의 끝날 기준, 열람 시계 아님) + 날짜 두 칸(change 때 `setRange`). 모델은 가진 날 전부로 한 번(`D.allDays`), 보이는 날 `D.days` 만 좁힌다 —

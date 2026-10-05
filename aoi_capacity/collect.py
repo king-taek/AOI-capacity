@@ -577,6 +577,26 @@ def read_ini(path) -> dict:
     return out
 
 
+def read_recipes_info(path) -> List[str]:
+    """Wafer 폴더의 `RecipesInfo.ini`(10/5 사용자 확인) → `[Recipe-1]`·`[Recipe-2]`… 의 `Name` 을 번호 순으로.
+    **멀티 스캔**에서만 생긴다(`Name=x20` · `Name=x5` · `[Recipes] Count=2`). 단일 스캔은 이 파일이 없고 WaferInfo.ini 의 `[Recipe] Name` 만 있다."""
+    names: Dict[int, str] = {}
+    sec = None
+    for line in nas_guard.read_text(path).splitlines():
+        line = line.strip()
+        if not line or line[0] in ";#":
+            continue
+        if line[0] == "[" and line.endswith("]"):
+            m = re.fullmatch(r"recipe-(\d+)", line[1:-1].strip(), re.I)
+            sec = int(m.group(1)) if m else None
+            continue
+        if sec is not None and "=" in line:
+            k, v = line.split("=", 1)
+            if k.strip().lower() == "name" and v.strip():
+                names[sec] = v.strip()
+    return [names[k] for k in sorted(names)]
+
+
 class _IniMemo:
     """수집 한 번 안에서 같은 WaferInfo.ini 를 **한 번만** 연다.
 
@@ -594,6 +614,7 @@ class _IniMemo:
         self._busy: Dict[str, threading.Event] = {}
         self._flags: Dict[str, bool] = {}
         self.asked = 0
+        self._recipes: Optional["_IniMemo"] = None
 
     def get(self, path: str) -> tuple:
         """→ ("ok", 필드 dict) · ("missing", None) · ("error", 예외)"""
@@ -622,6 +643,14 @@ class _IniMemo:
         ev.set()
         return res
 
+    def recipes(self, path: str) -> tuple:
+        """`RecipesInfo.ini` 를 같은 방식(경로별 한 번 · 읽기 전용)으로 — 통계는 WaferInfo 와 따로 센다."""
+        with self._lock:
+            if self._recipes is None:
+                self._recipes = _IniMemo(read_recipes_info)
+            m = self._recipes
+        return m.get(path)
+
     def exists(self, path: str) -> bool:
         """파일 존재만(`MoveResultFlag`) — 같은 경로는 한 번만 stat 한다. 읽기 전용."""
         with self._lock:
@@ -635,8 +664,14 @@ class _IniMemo:
     def stats(self) -> Dict[str, int]:
         with self._lock:
             kinds = [k for k, _ in self._done.values()]
-            return {"ini_asked": self.asked, "ini_unique": len(self._done),
-                    "ini_missing": kinds.count("missing"), "ini_read_error": kinds.count("error")}
+            out = {"ini_asked": self.asked, "ini_unique": len(self._done),
+                   "ini_missing": kinds.count("missing"), "ini_read_error": kinds.count("error")}
+            m = self._recipes
+        if m is not None:
+            with m._lock:
+                rk = [k for k, _ in m._done.values()]
+            out.update({"recipes_info_unique": len(rk), "recipes_info_found": rk.count("ok")})
+        return out
 
 
 def _is_placeholder(w: dict) -> bool:
@@ -706,12 +741,12 @@ def rows_for_report(dev_name: str, rep: dict, scan_root: str, memo: Optional[_In
             roots = ini_roots_for(b_start, scan_root, backups)
             # 존재 확인(stat) 없이 바로 연다 — SMB 왕복이 행마다 2번에서 1번으로 준다. 없으면 open 이 알려 준다.
             # 루트(지금 폴더 · 백업) 바깥 순서, Job 폴더 이름 후보 안쪽 순서 — 원문 이름에서 찾으면 나머지는 열지 않는다.
-            kind, got, found_in, found_job = "missing", None, roots[0], jobs_try[0]
+            kind, got, found_in, found_job, rel_found = "missing", None, roots[0], jobs_try[0], rels[0]
             for root in roots:
                 for j, rel in zip(jobs_try, rels):
                     kind, got = memo.get(os.path.join(root, rel, "WaferInfo.ini"))
                     if kind != "missing":
-                        found_in, found_job = root, j
+                        found_in, found_job, rel_found = root, j, rel
                         break
                 if kind != "missing":
                     break
@@ -745,6 +780,16 @@ def rows_for_report(dev_name: str, rep: dict, scan_root: str, memo: Optional[_In
                         iss.append((ISSUE_FOUND_IN_BACKUP, os.path.basename(found_in.rstrip(chr(92) + '/'))))
                     if found_job != rep["equipment"]:
                         iss.append((ISSUE_JOB_FOLDER_DIFFERS, found_job))
+                    if r["ini_match"] == "EXACT":
+                        # 10/5: 멀티 스캔(x20+x5)은 Report 표의 Recipe 칸에 `x20` 만 찍힌다(실물 GVB·GVC·LGA·LHP 확인).
+                        # 실제로 돈 레시피는 Wafer 폴더에 있다 — 멀티면 RecipesInfo.ini(이름 전부), 단일이면 WaferInfo.ini [Recipe] Name.
+                        # 덮어써진 INI(STALE)는 다른 시도의 것이라 쓰지 않는다. 정확 경로 하나만 연다(규칙 4).
+                        rk, names = memo.recipes(os.path.join(found_in, rel_found, "RecipesInfo.ini"))
+                        one = got.get("Recipe", {}).get("Name", "")
+                        if rk == "ok" and names:
+                            r["recipe"] = "|".join(names)
+                        elif one:
+                            r["recipe"] = one
                     r["issue_codes"] = issue_field(iss)
                 except Exception as e:  # noqa: BLE001
                     r["ini_match"], r["issue_codes"] = "READ_ERROR", issue_field([(ISSUE_INI_READ_ERROR, f"{type(e).__name__}: {e}")])
@@ -2028,7 +2073,7 @@ def _collect_log(stats: dict, dev_meta: List[dict], slow: List[Tuple[int, str, s
             "mode": stats.get("mode"), "phases_ms": phases,
             "settings": {k: stats.get(k) for k in ("read_workers", "nas_groups", "list_pattern") if k in stats},
             "counts": {k: stats.get(k) for k in ("devices", "reports_found", "reports_read", "reports_failed", "reports_refreshed",
-                                                  "reports_kept", "ini_asked", "ini_unique", "ini_missing", "cache_saved",
+                                                  "reports_kept", "ini_asked", "ini_unique", "ini_missing", "recipes_info_unique", "recipes_info_found", "cache_saved",
                                                   "cache_status") if k in stats},
             "cache_dirty": stats.get("cache_dirty"),
             "devices": devs,

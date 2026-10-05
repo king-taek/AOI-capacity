@@ -176,13 +176,15 @@ def test_worker_count_is_clamped_to_the_work_there_is(given, n_tasks, expected):
 def _count_nas_reads(monkeypatch):
     """가짜 NAS 에서 실제로 연 파일 수 — Report(.htm) 와 INI 를 따로 센다."""
     from aoi_capacity import nas_guard
-    seen = {"htm": 0, "ini": 0}
+    seen = {"htm": 0, "ini": 0, "recipes": 0}
     orig_text, orig_bytes = nas_guard.read_text, nas_guard.read_bytes
 
     def count(path):
         low = str(path).lower()
         if low.endswith((".htm", ".html")):
             seen["htm"] += 1
+        elif low.endswith("recipesinfo.ini"):          # 10/5: 멀티 스캔 레시피 — INI 를 찾은 Wafer 폴더에서만
+            seen["recipes"] += 1
         elif low.endswith(".ini"):
             seen["ini"] += 1
 
@@ -217,7 +219,7 @@ def test_parser_version_bump_reclassifies_cached_rows_without_touching_the_nas(t
 
     seen = _count_nas_reads(monkeypatch)
     rows, _, _, _ = _run(cfg)
-    assert seen == {"htm": 0, "ini": 0}                                     # 캐시만으로 고쳤다
+    assert seen == {"htm": 0, "ini": 0, "recipes": 0}                                     # 캐시만으로 고쳤다
     fixed = [r for r in rows if r["wafer_id"] == victim["wafer_id"] and r["device"] == victim["device"]]
     assert fixed and all(r["norm_status"] == "PASS" and r["scan_type"] == "" for r in fixed)
     assert json.loads(cache_path.read_text(encoding="utf-8"))["parser_version"] == collect.PARSER_VERSION
@@ -317,6 +319,7 @@ def test_same_ini_is_opened_once_per_run_and_no_stat_before_open(tmp_path, fake_
     # 장비 3대 × (01B0 있음 1경로 + 99Z9 없음 2경로) = 고유 경로 9개 — 없는 Wafer 는 Job 폴더 이름 후보(원문 · `-0A` 뗀 것)를 다 본다.
     # 9호기 두 번째 Report 의 3건은 기억한 결과를 다시 쓴다(열기 0).
     assert seen["ini"] == 9 and seen["htm"] == 4
+    assert seen["recipes"] == 3 and stats["recipes_info_unique"] == 3 and stats["recipes_info_found"] == 0   # 찾은 INI 3곳 옆만, 같은 경로는 한 번
     assert stats["ini_asked"] == 12 and stats["ini_unique"] == 9 and stats["ini_missing"] == 6
     nine = [r for r in rows if r["device"] == "9호기" and r["wafer_id"] == "K625407-01B0"]
     assert len(nine) == 2 and {r["ini_match"] for r in nine} == {"EXACT"}       # 두 Report 모두 같은 시각을 받았다
