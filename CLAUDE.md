@@ -26,7 +26,7 @@ Camtek AOI 장비의 BatchReport/WaferInfo.ini 를 읽어 장비별 가동률을
    `AOI_capacity.html` 한 장을 사용자가 더블클릭해 브라우저에서 본다. QtWebEngine·로컬 서버·localhost 를 쓰지 않는다.
    그 HTML 은 데이터·CSS·JS 를 모두 품고 **바깥으로 요청을 한 건도 보내지 않는다**(가드: `test_template_contract.py`).
    브라우저가 NAS 를 직접 읽는 경로도 두지 않는다 — 수집은 Python 만 한다. 자동 주기 수집은 없다(수동 실행만, D50).
-   화면은 **재설계 구조**(D47, 9/20): 가동률 · Error · 추이 · TB500 · Kendall(D59) 4탭 + 장비/Error/유형·Job 팝업, 라이트 단일. 모델은 아래 '레이아웃' 의 화면 절.
+   화면은 **재설계 구조**(D47, 9/20): 가동률 · Error · 추이 · TB500 · Kendall(D59) · 레시피(D70) 5탭 + 장비/Error/유형·Job · 레시피 묶음 팝업, 라이트 단일. 모델은 아래 '레이아웃' 의 화면 절.
 4. **Scanresult 를 재귀 검색하지 않는다.** INI 경로는 `{scan}/{job}/{setup}/{lot}/{wafer}/WaferInfo.ini` 로 계산해 존재만 확인한다.
    `job`·`setup` 의 출처는 **Report 안의 `Job/Setup` 값**이다(파일명이 아니다 — 실장비 516개 중 옛 파일명 규칙에 맞는 건 6개뿐이었다).
    `Job/Setup` 이 없는 옛 형식만 파일명 규칙(`{job}_{4자리}_{lot}_…`)으로 되돌아가고, 그것도 안 맞으면
@@ -181,6 +181,11 @@ Camtek AOI 장비의 BatchReport/WaferInfo.ini 를 읽어 장비별 가동률을
 - **레시피 묶음(D67)**: 헤더 '레시피 묶음' 팝업(`recipePopupHtml`)에서 Job 원문을 묶는다. 모델의 Job 묶음은 `groupJobs`(사용자 묶음 → 그 이름, 나머지 `jobKey`), 표시 이름은 `jobNm` 한 곳(묶음 이름 → `JOB_ALIAS` → 원문).
   **통계·표시에만** — `matKey`(Rescan)에는 넣지 않는다. 고치면 `rgApply` 로 그 자리에서 다시 묶고 localStorage `aoi.recipeGroups.v1` 에 보관(HTML 에 담긴 것과 `saved` 가 늦은 쪽), '내보내기' 는 `recipe_groups.json`.
   수집기는 `aoi_capacity/recipes.py`(읽기만 — cfg `recipe_groups_file`, 비우면 데이터 폴더·다운로드에서 `saved` 가 가장 늦은 것)로 찾아 `write_html` 이 `meta.recipe_groups` 로 넣는다. '사본 저장' 도 담는다.
+- **레시피 탭(D70, `rcpHtml`)**: 레시피 = Job 묶음(`D.jobGroups`). 값은 모델이 아니라 원천 행에서 `rcpIndex`(D·jobGroups 가 바뀔 때만 다시)로 모은다 —
+  생산량 = PASS·Test 아님 Wafer 행(장비·Wafer·시작 시각 한 번) · 장당 스캔 = INI 시작~끝(`ini_match` EXACT, 0~180분) · 배치 기준 장당 = Report 배치 시간 ÷ PASS 장수(Error 없고 한 레시피만 돈 Report) ·
+  가동률 = 그 장비들의 장비-일 `S.util` 평균 · 하위 레시피 = INI `recipe` 칸(`x20`·`x5`·`x20|x5` — 'x5 를 쓴 장 비율'). 날짜는 Wafer 시작일, 파일의 기간(`D.days`) 안만.
+  **전후 비교**(`cmpHtml`): 사용자가 고른 두 기간 × 두 레시피 묶음(`state.cmpA/cmpB` = Job 원문 목록 — 처음 고른 레시피가 양쪽의 시작, 그 뒤 ＋·✕ 로만 바뀜). 자동 '전 기간 대비'(D23)와는 별개다.
+  입력 칸은 `data-in` + `INPUT_KEYS`(같은 이름의 state). 좁은 화면(≤820px)에서는 탭 줄만 옆으로 밀린다(쪽 가로 스크롤 없음).
 - **Report 열기**는 장비 팝업의 선택 Lot 에서만(`reportUrl` · `openReport`). 경로는 `meta.devices[].note` + `report_dir` + `report` 로만 만들고 드라이브 문자와 UNC(`\\10.x`) 를 모두 다룬다.
   여는 주체는 사람이 연 그 탭이지 이 화면이 아니다 — 화면은 여전히 바깥으로 요청을 한 건도 보내지 않는다. 수집 상태 칩(`collectChip`: 수집 실패 · 일부 누락)과 '수집 범위 / 수집 안 함' 은 `meta` 에서 그린다. **사본 저장**(`saveHtml`)은 수집기가 준 열·풀 구조 그대로 다시 접는다.
 - 추이 화면에 **전 기간 대비(전주·전월·전일)는 두지 않는다**(사용자 확정, 가드: `test_no_period_over_period_comparison_anywhere`). 선택한 기간의 값만 보여 준다.

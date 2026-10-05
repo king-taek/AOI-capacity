@@ -259,9 +259,28 @@ main{max-width:1420px;margin:0 auto;padding:22px 24px 90px}
 .rgm{display:flex;gap:8px;align-items:center;font-size:12px;padding:2px 0}.rgm .mono{flex:1;min-width:0;word-break:break-all}.rgm .num{color:#5A6673}
 .x.sm{width:22px;height:22px;font-size:11px;border-radius:6px}
 .rgsug{display:flex;gap:6px;align-items:center;padding:6px 0;border-top:1px solid #F1F4F7}
+.ph{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;padding:14px 18px 10px}
+.rcpgrid{display:grid;grid-template-columns:300px minmax(0,1fr);gap:16px;align-items:start}
+@media (max-width:980px){.rcpgrid{grid-template-columns:1fr}}
+.rcplist{overflow:hidden}.rcpscroll{max-height:62vh;overflow:auto}
+.rcprow{gap:8px;padding:8px 12px;min-height:36px}.rcprow:hover{background:#F7F9FB}.rcprow.on{background:var(--accent-soft);color:var(--nav-on)}
+.rcpdev{display:grid;gap:10px;align-items:center;padding:7px 18px;border-top:1px solid #F1F4F7;font-size:12.5px}
+.rcpdev .r,.cmprow .r,.tbl-h .r{text-align:right}
+.rng{position:relative;display:block;height:18px;background:#F0F3F7;border-radius:4px}
+.rng i{position:absolute;top:5px;height:8px;border-radius:4px;background-color:var(--accent-2);opacity:.45}
+.rng b{position:absolute;top:2px;width:2px;height:14px;background:#2E6BA8;margin-left:-1px}
+.rng em{position:absolute;right:4px;top:1px;font-style:normal;font-size:11px;color:#4B5866}
+.cmpgrid{display:grid;grid-template-columns:1fr 1fr;gap:14px;padding:0 18px 14px}
+@media (max-width:860px){.cmpgrid{grid-template-columns:1fr}}
+.cmpside{padding:12px 14px;border:1px solid var(--line);border-radius:10px;background:#FBFCFD}.cmpside .k{font-size:12px;font-weight:700;color:var(--ink-2)}
+.rchip{display:inline-flex;align-items:center;gap:6px;padding:3px 4px 3px 10px;border-radius:999px;border:1px solid var(--line-2);background:#fff;font-size:12px;font-weight:600}
+.cmprow{display:grid;grid-template-columns:minmax(150px,1.4fr) 1fr 1fr 1.3fr;gap:10px;align-items:center;padding:7px 18px;border-top:1px solid #F1F4F7;font-size:12.5px}
+.cmprow.dev{grid-template-columns:96px 1fr 1fr 1.2fr 1fr 1fr 1.2fr}
+.cmprow.head{background:#FBFCFD;font-size:11.5px;font-weight:600;color:var(--ink-3)}
 .members{margin-top:8px;padding:10px 12px;background:#F7F9FB;border:1px solid #E7ECF1;border-radius:10px}
 .empty{padding:12px 14px;font-size:12.5px;color:var(--ink-3)}
-@media (max-width:820px){main{padding:16px 12px 70px}.hdr{padding:0 12px}.daylab{min-width:0}}
+@media (max-width:820px){main{padding:16px 12px 70px}.hdr{padding:0 12px}.daylab{min-width:0}
+  .nav{max-width:100%;overflow-x:auto;scrollbar-width:none;flex-wrap:nowrap}.nav::-webkit-scrollbar{display:none}}   /* 탭 다섯 개 — 좁으면 탭 줄만 옆으로 밀린다(쪽 전체 가로 스크롤 없음) */
 </style>
 </head>
 <body>
@@ -731,14 +750,17 @@ function jobNm(G){if(!G)return{nm:"",al:false,raw:""};const raw=D.pool.job[G.l]|
 const PROPS={attentionUtil:40,attentionErr:3};   /* 살펴볼 장비 문턱 — meta.dashboard_settings 의 같은 이름 숫자가 있으면 그것으로(D14) */
 function applySettings(m){const o=(m&&m.dashboard_settings)||{};for(const k of Object.keys(PROPS)){const v=Number(o[k]);if(o[k]!==undefined&&Number.isFinite(v)&&v>=0)PROPS[k]=v;}}
 let D=null;
-const VIEWS=["home","errors","trend","report"];
+const VIEWS=["home","errors","trend","report","recipe"];
 const state={view:"home",dayI:null,sort:"name",floor:"all",span:21,unit:"day",metric:"min",pickDay:undefined,
   modalDev:null,modalDayI:null,modalType:null,modalJob:null,selLot:null,lotFilter:"all",showMembers:false,
   stack:[],                                  /* 열린 팝업의 순서(type · dev · err) — 마지막이 맨 위, 나머지는 뒤로 물러난다 */
   errDays:null,errFType:null,errFJob:null,   /* Error 팝업의 기간(여러 날) · Error 탭의 유형/Job 필터 */
   rptSort:{k:"name",d:1},
   errDev:null,errDayI:null,errJob:null,errType:null,rptSpan:0,rptOpen:null,
-  rgQ:"",rgName:"",rgSel:[],rgFilter:"all"};   /* 레시피 묶음 편집기(D67): 검색 · 새 이름 · 고른 Job 원문 · 목록 필터 */
+  rgQ:"",rgName:"",rgSel:[],rgFilter:"all",   /* 레시피 묶음 편집기(D67): 검색 · 새 이름 · 고른 Job 원문 · 목록 필터 */
+  rcpSel:null,rcpQ:"",rcpSpan:0,                /* 레시피 탭(D70): 고른 레시피(그 묶음의 Job 원문 하나 — 다시 묶어도 따라간다) · 검색 · 기간 */
+  cmpA:null,cmpB:null,cmpAf:"",cmpAt:"",cmpBf:"",cmpBt:""};   /* 전후 비교: 두 레시피 묶음(원문 목록) · 두 기간 */   /* 레시피 묶음 편집기(D67): 검색 · 새 이름 · 고른 Job 원문 · 목록 필터 */
+const INPUT_KEYS=new Set(["rgQ","rgName","rcpQ","cmpAf","cmpAt","cmpBf","cmpBt"]);   /* data-in 칸 → 같은 이름의 state */
 let H=[];const h=fn=>{H.push(fn);return H.length-1;};
 function setState(p){Object.assign(state,p);render();}
 function init(){
@@ -749,7 +771,7 @@ function init(){
   state.dayI=D.day?D.days.indexOf(D.day):-1;
   document.addEventListener("click",e=>{const el=e.target.closest("[data-h]");if(!el)return;const fn=H[+el.dataset.h];if(fn){e.preventDefault();fn(e);}});
   document.addEventListener("keydown",e=>{if(e.key==="Tab"){trapTab(e);return;}if(e.key!=="Escape")return;closeTop();});
-  document.addEventListener("input",e=>{const el=e.target;const k=el&&el.dataset?el.dataset.in:null;if(k==="rgQ"||k==="rgName")setState({[k]:el.value});});
+  document.addEventListener("input",e=>{const el=e.target;const k=el&&el.dataset?el.dataset.in:null;if(k&&INPUT_KEYS.has(k))setState({[k]:el.value});});
   document.addEventListener("change",e=>{const el=e.target;if(el&&el.id==="rgFile"&&el.files&&el.files[0])rgImportFile(el.files[0]);});
   log(meta.mode==="demo"?"데모 데이터":"수집 결과를 불러왔습니다. 장비 "+D.devices.length+"대 · "+D.days.length+"일");
   render();}
@@ -1207,7 +1229,7 @@ function render(){
   let html;
   if(!D||!D.days.length)html=headerHtml(null)+`<div class="stage" data-key="stage"><main data-key="view:none"><div class="panel" style="padding:28px 24px"><h2>아직 수집한 데이터가 없습니다</h2><p class="muted" style="margin-top:6px">수집 프로그램에서 '수집' 을 실행한 뒤 이 파일을 다시 여세요.</p></div></main></div>`+footHtml();
   else{const V=state.view;let body="";
-    if(V==="home")body=homeHtml();else if(V==="errors")body=errorsHtml();else if(V==="trend")body=trendHtml();else body=reportHtml();
+    if(V==="home")body=homeHtml();else if(V==="errors")body=errorsHtml();else if(V==="trend")body=trendHtml();else if(V==="recipe")body=rcpHtml();else body=reportHtml();
     html=headerHtml(V)+`<div class="stage" data-key="stage" data-anim="el"><main data-key="view:${V}">${body}</main></div>`+footHtml()+popupsHtml();}
   const tpl=document.createElement("template");tpl.innerHTML=html;
   if(app.getAttribute("data-anim")!=="el")app.setAttribute("data-anim","el");
@@ -1239,7 +1261,7 @@ function headerHtml(V){
   let stampTxt=gen?gen+" 수집 기준":"";
   if(meta.mode==="saved")stampTxt+=" · 사본";
   if(!fixed&&gen)stampTxt+=" · 수집 시각 정보 없음";
-  const nav=[["home","가동률"],["errors","Error"],["trend","추이"],["report","TB500 · Kendall"]];
+  const nav=[["home","가동률"],["errors","Error"],["trend","추이"],["report","TB500 · Kendall"],["recipe","레시피"]];
   return `<header class="hdr" data-key="hdr"><div class="brand"><span class="lt" data-lottie="scan" data-loop="1" data-static aria-hidden="true"></span>AOI 가동 현황</div>
     <nav class="nav"><i class="ind" data-key="ind" data-static aria-hidden="true"><b class="l"></b><b class="m"></b><b class="r"></b></i>${nav.map(([k,l])=>`<button class="${V===k?"on":""}" data-h="${h(S.go(k))}" data-fk="nav:${k}">${l}</button>`).join("")}</nav>
     <div class="spacer"></div>
@@ -1636,6 +1658,117 @@ function reportHtml(){
       ${rowsH}
       <p style="margin:0;padding:11px 18px;background:#FBFCFD;font-size:12px;color:#5A6673;border-top:1px solid #EDF1F5">배치시간 = 준비 + 장당 × 장수 로 1차 회귀 — 절편이 준비, 기울기가 장당, ± 는 회귀 표준오차. 환산은 최빈 장수 기준. 표본 5개 미만이면 내지 않음. 배치시간은 Report 의 배치 시작~종료. 평균 fault 는 Report 표 Faults 가 있는 행만(옛 캐시 행은 다시 읽어야 채워짐).</p></div></div>`;
 }
+
+/* ---------- 레시피 탭(D70, 10/5) ----------
+   레시피 = Job 묶음(D.jobGroups — '레시피 묶음' 편집기 D67 + 자동 묶음). 원천 행에서 장 단위로 다시 모은다(모델 값은 건드리지 않는다).
+   · 생산량 = PASS 이고 Test 가 아닌 Wafer 행(같은 장비 · Wafer · 시작 시각은 한 번)
+   · 장당 스캔 = INI 의 Wafer 시작~끝(ini_match EXACT, 0~180분) — 레시피 자체의 속도
+   · 배치 기준 장당 = Report 배치 시작~종료 ÷ 그 Report 의 PASS 장수(Error 없고 한 레시피만 돈 Report) — 반송·정렬까지 포함한 실제 소요
+   · 가동률 = 그 기간 이 레시피를 돌린 장비들의 장비-일 가동률 평균(모델 값 그대로, S.util) — 레시피만의 효과는 아니다
+   · 하위 레시피(INI Recipe 칸: x20 · x5 · PI_Bubble …)는 장마다 실제 쓴 것 — 'x5 포함' 비율로 멀티 레시피 사용을 본다
+   날짜는 Wafer 시작일(없으면 배치 시작일), 이 파일의 기간(D.days) 안만. 전후 비교는 사용자가 고른 두 기간·두 레시피 묶음(전 기간 자동 비교가 아니다, D23 과 별개). */
+let _rcp=null;
+function rcpIndex(){if(_rcp&&_rcp.D===D&&_rcp.G===D.jobGroups)return _rcp;
+  const jix=new Map(D.pool.job.map((n,i)=>[n,i])),dayset=new Set(D.days),recs=[],seen=new Set(),reps=new Map();
+  for(const r of rows){if(r.kind)continue;const ji=jix.get(r.job||"");if(ji==null)continue;const g=D.jobG[ji];
+    const ws=P(r.wafer_start_time),we=P(r.wafer_end_time),bs=P(r.batch_start),be=P(r.batch_end),t0=ws||bs;if(!t0)continue;
+    const day=dk(t0);if(!dayset.has(day))continue;
+    const test=r.scan_type==="TEST"||/(^|[^A-Z])TEST([^A-Z]|$)/i.test(r.lot||""),cause=causeOf(r.status),pass=isPass(r.status);
+    const rk=r.device+"\u0001"+(r.report||"");let R=reps.get(rk);
+    if(!R){R={g,n:0,err:false,mixed:false,bs,be};reps.set(rk,R);}else if(R.g!==g)R.mixed=true;
+    if(cause)R.err=true;
+    if(!pass||test)continue;
+    const key=r.device+"\u0001"+String(r.wafer_id||"")+"\u0001"+(r.wafer_start_time||r.report||"");if(seen.has(key))continue;seen.add(key);R.n++;
+    let s=null;if(ws&&we&&r.ini_match==="EXACT"){const m=(we-ws)/60000;if(m>0&&m<=180)s=m;}
+    const fx=String(r.faults??"").trim(),f=/^\d+$/.test(fx)?+fx:null;
+    recs.push({g,dev:r.device,day,s,f,sub:String(r.recipe||""),rk});}
+  const per=new Map();for(const [rk,R] of reps)if(!R.err&&!R.mixed&&R.n>0&&R.bs&&R.be&&R.be>R.bs)per.set(rk,(R.be-R.bs)/60000/R.n);
+  return _rcp={D,G:D.jobGroups,recs,per,jix};}
+const qs=(a,p)=>{if(!a.length)return null;const b=a.slice().sort((x,y)=>x-y),i=(b.length-1)*p,lo=Math.floor(i),hi=Math.ceil(i);return b[lo]+(b[hi]-b[lo])*(i-lo);};
+const avg=a=>a.length?a.reduce((x,y)=>x+y,0)/a.length:null;
+/* 레시피 묶음 집합(그룹 번호) × 기간 → 모은 값 */
+function rcpAgg(gs,from,to){const X=rcpIndex(),devs={},all={w:0,lots:new Set(),s:[],f:[],b:[],days:new Set(),x5:0,occ:0};
+  for(const q of X.recs){if(!gs.has(q.g)||q.day<from||q.day>to)continue;
+    const d=devs[q.dev]||(devs[q.dev]={w:0,lots:new Set(),s:[],f:[],b:[],days:new Set(),x5:0,sub:{}});
+    for(const o of [all,d]){o.w++;o.lots.add(q.rk);o.days.add(q.day);if(q.s!=null)o.s.push(q.s);if(q.f!=null)o.f.push(q.f);if(q.sub.split("|").some(t=>/^x5$/i.test(t.trim())))o.x5++;}
+    if(q.s!=null)all.occ+=q.s;d.sub[q.sub||"(없음)"]=(d.sub[q.sub||"(없음)"]||0)+1;}
+  for(const [rk,v] of X.per){const dev=rk.split("\u0001")[0],d=devs[dev];if(!d)continue;if(all.lots.has(rk)){all.b.push(v);d.b.push(v);}}
+  const span=D.days.filter(x=>x>=from&&x<=to),dv=Object.keys(devs);
+  const util=ns=>avg(span.flatMap(day=>ns.map(n=>S.util(S.at(day,n))).filter(u=>u!==null)));
+  return {all,devs,span,util:util(dv),fleet:util(D.devices),nd:dv.length};}
+function rcpGroupsOf(raws){const X=rcpIndex(),out=new Set();for(const r of raws||[]){const i=X.jix.get(r);if(i!=null)out.add(D.jobG[i]);}return out;}
+const f1=v=>v==null?"—":v.toFixed(1),f0=v=>v==null?"—":Math.round(v).toLocaleString("ko-KR");
+function rcpHtml(){
+  const X=rcpIndex(),span=state.rcpSpan,days=span?D.days.slice(-span):D.days,from=days[0],to=days[days.length-1];
+  /* 레시피 목록 — 이 기간 생산량 순 */
+  const wn={},devc={};for(const q of X.recs){if(q.day<from||q.day>to)continue;wn[q.g]=(wn[q.g]||0)+1;(devc[q.g]||(devc[q.g]=new Set())).add(q.dev);}
+  const Q=(state.rcpQ||"").trim().toUpperCase();
+  const hitQ=gi=>{if(!Q)return true;const G=D.jobGroups[gi];if(jobNm(G).nm.toUpperCase().includes(Q))return true;return G.m.some(([i])=>String(D.pool.job[i]||"").toUpperCase().includes(Q));};
+  const list=Object.keys(wn).map(Number).filter(hitQ).sort((a,b)=>wn[b]-wn[a]);
+  let sel=state.rcpSel!=null?[...rcpGroupsOf([state.rcpSel])][0]:undefined;if(sel==null&&list.length)sel=list[0];
+  const leadOf=gi=>D.pool.job[D.jobGroups[gi].l];
+  const spans=S.segGroup([{k:7,label:"최근 7일"},{k:21,label:"최근 21일"},{k:0,label:"전체 "+D.days.length+"일"}],span,k=>setState({rcpSpan:k}));
+  const listH=list.slice(0,40).map((gi,i)=>{const on=gi===sel,N=jobNm(D.jobGroups[gi]);
+    return `<button class="rowbtn rcprow ${on?"on":""}" data-key="slot:${i}" data-row="rcp:${gi}" data-h="${h(()=>setState({rcpSel:leadOf(gi),...(state.cmpA==null?{cmpA:[leadOf(gi)],cmpB:[leadOf(gi)]}:{})}))}" aria-pressed="${on}" title="${esc(D.jobGroups[gi].m.map(([j])=>D.pool.job[j]).join("\n"))}" style="grid-template-columns:1fr 64px 40px">
+      <span style="min-width:0;font-size:12.5px;font-weight:${on?700:600};white-space:nowrap;overflow:hidden;text-overflow:ellipsis;${N.al?"":"font-family:"+MONO}">${esc(N.nm)}</span><span class="num" style="text-align:right;font-size:12.5px">${wn[gi].toLocaleString("ko-KR")}</span><span class="num" style="text-align:right;font-size:12px;color:#5A6673">${devc[gi].size}대</span></button>`;}).join("")||`<p class="empty">이 기간에 맞는 레시피가 없습니다</p>`;
+  let detail=`<div class="panel" style="padding:24px"><p class="muted">왼쪽에서 레시피를 고르세요.</p></div>`;
+  if(sel!=null){const A=rcpAgg(new Set([sel]),from,to),a=A.all,N=jobNm(D.jobGroups[sel]);
+    const cards=[{k:"생산량",v:f0(a.w)+"장",s:"Lot "+a.lots.size+"개 · 하루 평균 "+f0(a.w/Math.max(1,A.span.length))+"장"},
+      {k:"장당 스캔(INI)",v:f1(qs(a.s,.5))+"분",s:"중앙 · 상위 10% "+f1(qs(a.s,.9))+"분 · "+a.s.length+"장"},
+      {k:"배치 기준 장당",v:f1(qs(a.b,.5))+"분",s:"Report 배치 시간 ÷ 장수 · "+a.b.length+"개"},
+      {k:"장당 fault",v:f0(qs(a.f,.5)),s:"중앙 · 평균 "+f0(avg(a.f))},
+      {k:"장비",v:A.nd+"대",s:"이 장비들 가동률 "+(A.util==null?"—":A.util.toFixed(1)+"%")}];
+    const dv=Object.entries(A.devs).sort((x,y)=>y[1].w-x[1].w);const smax=Math.max(1,...dv.map(([,d])=>qs(d.s,.9)||0));
+    const cols="96px 70px 56px 70px minmax(150px,1fr) 78px 70px minmax(110px,.8fr)";
+    const devH=dv.map(([n,d],i)=>{const p1=qs(d.s,.1),p5=qs(d.s,.5),p9=qs(d.s,.9);const subs=Object.entries(d.sub).sort((x,y)=>y[1]-x[1]).slice(0,3).map(([k,v])=>k+" "+Math.round(v/d.w*100)+"%").join(" · ");
+      return `<div class="rcpdev" data-key="slot:${i}" data-row="dev:${esc(n)}" style="grid-template-columns:${cols}"><span style="font-weight:600">${esc(n)}</span><span class="num r">${f0(d.w)}</span><span class="num r">${d.lots.size}</span><span class="num r">${f0(d.w/Math.max(1,A.span.length))}</span>
+        <span class="rng" title="장당 스캔 상위 90% ${f1(p9)} · 중앙 ${f1(p5)} · 하위 10% ${f1(p1)} 분">${p5==null?`<span class="muted" style="font-size:12px">INI 시각 없음</span>`:`<i style="left:${(p1/smax*100).toFixed(1)}%;width:${Math.max(1,(p9-p1)/smax*100).toFixed(1)}%"></i><b style="left:${(p5/smax*100).toFixed(1)}%"></b><em class="num">${f1(p5)}분</em>`}</span>
+        <span class="num r">${f1(qs(d.b,.5))}</span><span class="num r">${f0(qs(d.f,.5))}</span><span class="mono" style="font-size:11.5px;color:#4B5866;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="${esc(subs)}">${esc(subs)}</span></div>`;}).join("");
+    const perDay={};const sDay={};for(const q of X.recs){if(q.g!==sel||q.day<from||q.day>to)continue;perDay[q.day]=(perDay[q.day]||0)+1;if(q.s!=null)(sDay[q.day]||(sDay[q.day]=[])).push(q.s);}
+    const pmx=Math.max(1,...A.span.map(d=>perDay[d]||0));
+    const bars=A.span.map((d,i)=>({label:(i%Math.ceil(A.span.length/11)===0||i===A.span.length-1)?md(d):"",h:((perDay[d]||0)/pmx*100).toFixed(1),vTxt:"",color:perDay[d]?RUN:"#EDF1F5",title:md(d)+" · "+(perDay[d]||0)+"장 · 장당 스캔 중앙 "+f1(qs(sDay[d]||[],.5))+"분",maxW:40}));
+    detail=`<section class="cards sm" style="margin-bottom:14px">${cards.map(c=>`<div><p class="k">${c.k}</p><p class="v num">${esc(c.v)}</p><p class="s">${esc(c.s)}</p></div>`).join("")}</section>
+      <div class="panel" style="margin-bottom:14px;overflow-x:auto"><div style="min-width:820px"><div class="ph"><h2 style="${N.al?"":"font-family:"+MONO}">${esc(N.nm)}</h2><span class="muted" style="font-size:12px">장비별 · ${md(from)} ~ ${md(to)}</span></div>
+        <div class="tbl-h" style="grid-template-columns:${cols};padding:6px 18px"><span>장비</span><span class="r">Wafer</span><span class="r">Lot</span><span class="r">하루 평균</span><span>장당 스캔(INI) 10~90% · 중앙</span><span class="r">배치 기준 장당</span><span class="r">fault 중앙</span><span>하위 레시피</span></div>
+        ${devH||`<p class="empty">기록 없음</p>`}</div></div>
+      <div class="panel" style="padding:14px 18px"><h3 class="s" style="margin-bottom:9px">날짜별 생산량 <span style="font-weight:400;color:#5A6673;font-size:12px">막대에 마우스를 올리면 장당 스캔</span></h3><div data-key="chart:recipe">${barsHtml(bars,110,false)}</div></div>`;}
+  return `<div class="bar-h"><h1>레시피</h1><span style="font-size:12.5px;color:#5A6673">레시피 ${list.length}개 · ${md(from)} ~ ${md(to)}</span><div class="spacer"></div>${segHtml(spans)}</div>
+    <p style="margin:-6px 0 14px;font-size:12.5px;color:#5A6673;word-break:keep-all">레시피 = Job 묶음입니다(헤더의 '레시피 묶음' 에서 같은 레시피를 묶으면 여기서 하나로 보입니다). 생산량은 PASS 장(Test 제외), 장당 스캔은 INI 의 Wafer 시작~끝, 배치 기준 장당은 Report 배치 시간 ÷ 장수입니다.</p>
+    <div class="rcpgrid"><div class="panel rcplist"><div style="padding:10px 12px;border-bottom:1px solid #EDF1F5"><input class="inp" type="search" data-in="rcpQ" data-fk="rcp:q" placeholder="레시피 · Job 이름 검색" value="${esc(state.rcpQ||"")}" style="width:100%"></div>
+      <div class="tbl-h" style="grid-template-columns:1fr 64px 40px;padding:6px 12px"><span>레시피</span><span class="r">Wafer</span><span class="r">장비</span></div><div class="rcpscroll">${listH}</div></div>
+      <div style="min-width:0">${detail}</div></div>
+    ${cmpHtml(sel)}`;}
+/* 전후 비교 — 두 기간 × 두 레시피 묶음(예: 전 = RDL3 Multi + PI3, 후 = RDL3 Multi + PI3 Enhanced).
+   처음 고른 레시피가 양쪽 묶음의 시작이 되고(그 전까지는 지금 레시피를 따라감), 그 뒤로는 ＋ · ✕ 로만 바뀐다 — 다른 레시피를 골라도 묶음은 그대로. */
+function cmpHtml(sel){
+  const half=Math.floor(D.days.length/2),dA=[D.days[0],D.days[Math.max(0,half-1)]],dB=[D.days[Math.min(D.days.length-1,half)],D.days[D.days.length-1]];
+  const af=state.cmpAf||dA[0],at=state.cmpAt||dA[1],bf=state.cmpBf||dB[0],bt=state.cmpBt||dB[1];
+  const leadOf=gi=>D.pool.job[D.jobGroups[gi].l];
+  const setOf=k=>{const raws=state[k];return raws&&raws.length?raws:(sel!=null?[leadOf(sel)]:[]);};
+  const ra=setOf("cmpA"),rb=setOf("cmpB"),GA=rcpGroupsOf(ra),GB=rcpGroupsOf(rb);
+  const A=rcpAgg(GA,af,at),B=rcpAgg(GB,bf,bt),a=A.all,b=B.all;
+  const chips=(k,raws)=>[...rcpGroupsOf(raws)].map(gi=>{const N=jobNm(D.jobGroups[gi]);return `<span class="rchip" style="${N.al?"":"font-family:"+MONO}">${esc(N.nm)}<button class="x sm" data-h="${h(()=>setState({[k]:raws.filter(r=>!rcpGroupsOf([r]).has(gi))}))}" title="빼기">✕</button></span>`;}).join("")||`<span class="muted" style="font-size:12px">레시피 없음</span>`;
+  const add=(k,raws)=>sel==null||rcpGroupsOf(raws).has(sel)?"":`<button class="btn" data-h="${h(()=>setState({[k]:[...raws,leadOf(sel)]}))}" title="왼쪽에서 고른 레시피를 이쪽에 더합니다">＋ ${esc(cut(jobNm(D.jobGroups[sel]).nm,22))}</button>`;
+  const side=(t,k,raws,fk,tk,f,tt)=>`<div class="cmpside"><p class="k">${t}</p><div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin:6px 0"><input class="inp" type="date" data-in="${fk}" data-fk="cmp:${fk}" value="${esc(f)}" min="${D.days[0]}" max="${D.days[D.days.length-1]}"><span class="muted">~</span><input class="inp" type="date" data-in="${tk}" data-fk="cmp:${tk}" value="${esc(tt)}" min="${D.days[0]}" max="${D.days[D.days.length-1]}"></div><div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">${chips(k,raws)}${add(k,raws)}</div></div>`;
+  const pd=(o,S0)=>o.w/Math.max(1,S0.span.length);
+  const rowsM=[["생산량(Wafer)",a.w,b.w,f0,1],["하루 평균 Wafer",pd(a,A),pd(b,B),f1,1],["Lot",a.lots.size,b.lots.size,f0,1],
+    ["장당 스캔 중앙(분)",qs(a.s,.5),qs(b.s,.5),f1,-1],["장당 스캔 평균(분)",avg(a.s),avg(b.s),f1,-1],["장당 스캔 상위 10%(분)",qs(a.s,.9),qs(b.s,.9),f1,-1],
+    ["배치 기준 장당 중앙(분)",qs(a.b,.5),qs(b.b,.5),f1,-1],["레시피 점유 시간(시간/일)",a.occ/60/Math.max(1,A.span.length),b.occ/60/Math.max(1,B.span.length),f1,0],
+    ["장당 fault 중앙",qs(a.f,.5),qs(b.f,.5),f0,0],["x5 를 쓴 장 비율(%)",a.w?a.x5/a.w*100:null,b.w?b.x5/b.w*100:null,f1,0],
+    ["돌린 장비",A.nd,B.nd,f0,0],["그 장비들 가동률(%)",A.util,B.util,f1,1],["전체 장비 가동률(%)",A.fleet,B.fleet,f1,1]];
+  const chg=(x,y,fmt,good)=>{if(x==null||y==null)return `<span class="muted">—</span>`;const d=y-x,p=x?d/Math.abs(x)*100:null;
+    const tone=!good||Math.abs(d)<1e-9?"#4B5866":((d>0)===(good>0)?"#1F7A4D":ERR);
+    return `<span class="num" style="color:${tone}">${d>0?"▲":d<0?"▼":""} ${fmt(Math.abs(d))}${p==null?"":` (${p>0?"+":""}${p.toFixed(1)}%)`}</span>`;};
+  const tbl=rowsM.map(([k,x,y,fmt,good],i)=>`<div class="cmprow" data-key="slot:${i}"><span>${k}</span><span class="num r">${fmt(x)}</span><span class="num r">${fmt(y)}</span><span class="r">${chg(x,y,fmt,good)}</span></div>`).join("");
+  const devs=[...new Set([...Object.keys(A.devs),...Object.keys(B.devs)])].sort(cmpDev);
+  const devT=devs.map((n,i)=>{const x=A.devs[n],y=B.devs[n];const wx=x?x.w/Math.max(1,A.span.length):null,wy=y?y.w/Math.max(1,B.span.length):null,sx=x?qs(x.s,.5):null,sy=y?qs(y.s,.5):null;
+    return `<div class="cmprow dev" data-key="dslot:${i}"><span style="font-weight:600">${esc(n)}</span><span class="num r">${f1(wx)}</span><span class="num r">${f1(wy)}</span><span class="r">${chg(wx,wy,f1,1)}</span><span class="num r">${f1(sx)}</span><span class="num r">${f1(sy)}</span><span class="r">${chg(sx,sy,f1,-1)}</span></div>`;}).join("");
+  return `<div class="panel cmp" style="margin-top:18px"><div class="ph"><h2>전후 비교</h2><span class="muted" style="font-size:12px">두 기간 · 두 레시피 묶음을 골라 비교합니다 — 예: 전 = RDL Multi(20x+5x) + PI, 후 = RDL Multi(20x 만) + PI Enhanced</span></div>
+    <div class="cmpgrid">${side("전 (A)","cmpA",ra,"cmpAf","cmpAt",af,at)}${side("후 (B)","cmpB",rb,"cmpBf","cmpBt",bf,bt)}</div>
+    <div class="cmprow head"><span>항목</span><span class="r">전 (A)</span><span class="r">후 (B)</span><span class="r">변화</span></div>${tbl}
+    <div class="cmprow dev head" style="margin-top:10px"><span>장비</span><span class="r">A 하루 Wafer</span><span class="r">B 하루 Wafer</span><span class="r">변화</span><span class="r">A 장당 스캔</span><span class="r">B 장당 스캔</span><span class="r">변화</span></div>${devT||`<p class="empty">두 기간 모두 기록이 없습니다</p>`}
+    <p style="margin:0;padding:11px 18px;background:#FBFCFD;font-size:12px;color:#5A6673;border-top:1px solid #EDF1F5;word-break:keep-all">초록은 좋아진 쪽(생산량·가동률 ↑, 스캔 시간 ↓), 빨강은 나빠진 쪽입니다. 가동률은 그 장비들의 하루 전체 값이라 다른 레시피·대기·Error 도 섞여 있습니다 — 레시피만의 효과는 장당 스캔 · 배치 기준 장당 · 하루 평균 Wafer 로 보세요. 기간이 짧거나 장 수가 적으면 차이가 우연일 수 있습니다.</p></div>`;}
+
 
 /* ---------- boot ---------- */
 loadDemo();

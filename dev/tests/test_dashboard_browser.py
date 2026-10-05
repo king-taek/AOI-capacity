@@ -499,3 +499,34 @@ def test_recipe_groups_apply_at_once_persist_in_browser_and_export(page, tmp_pat
     pg.get_by_role("button", name="되돌리기").click()
     assert pg.locator(".rgcard").count() == 0
     assert requests == [] and errors == []
+
+
+def test_recipe_tab_shows_per_device_stats_and_compares_two_periods(page):
+    """D70: 레시피 탭 — 레시피(Job 묶음)를 고르면 생산량 · 장당 스캔 · 장비별 표, 아래 전후 비교는 두 기간 × 두 레시피 묶음.
+    값은 원천 행에서: AOI-1 의 R_TB500_LIVE_PI2 PASS 는 9/17 3장 + 9/18 6장(Error 행·Test 는 생산량이 아니다)."""
+    pg, errors, requests = page
+    pg.locator('button[data-fk="nav:recipe"]').click()
+    pg.wait_for_selector('main[data-key="view:recipe"]')
+    pg.fill('[data-fk="rcp:q"]', "PI2")
+    pg.wait_for_timeout(150)
+    assert pg.evaluate("document.activeElement.dataset.fk") == "rcp:q"
+    pg.locator(".rcprow").first.click()
+    cards = pg.locator("main section.cards > div").all_inner_texts()
+    assert cards[0].split("\n")[0] == "생산량" and "9장" in cards[0]
+    assert [x.split("\n")[0] for x in pg.locator(".rcpdev").all_inner_texts()] == ["AOI-1"]
+    pg.fill('[data-fk="cmp:cmpAf"]', "2026-09-17")
+    pg.fill('[data-fk="cmp:cmpAt"]', "2026-09-17")
+    pg.fill('[data-fk="cmp:cmpBf"]', "2026-09-18")
+    pg.fill('[data-fk="cmp:cmpBt"]', "2026-09-18")
+    pg.wait_for_timeout(500)                                    # 바뀐 숫자는 제자리에서 0.24초 동안 한 글자씩 넘어간다(9/24)
+    rows = {r.split("\n")[0]: r.split("\n")[1:] for r in pg.locator(".cmp .cmprow:not(.dev):not(.head)").all_inner_texts()}
+    assert rows["생산량(Wafer)"][:2] == ["3", "6"] and "+100.0%" in rows["생산량(Wafer)"][2]
+    # 다른 레시피를 B 에 더하면 B 쪽 생산량이 늘어난다(전 = PI2, 후 = PI2 + Kendall FS)
+    pg.fill('[data-fk="rcp:q"]', "KENDALL")
+    pg.wait_for_timeout(150)
+    pg.locator(".rcprow").first.click()
+    pg.locator(".cmpside").nth(1).get_by_role("button", name=re.compile("＋")).click()
+    pg.wait_for_timeout(500)
+    rows = {r.split("\n")[0]: r.split("\n")[1:] for r in pg.locator(".cmp .cmprow:not(.dev):not(.head)").all_inner_texts()}
+    assert rows["생산량(Wafer)"][:2] == ["3", "10"]               # 첫 레시피가 양쪽 묶음의 시작, 다른 레시피를 골라도 A 는 그대로
+    assert requests == [] and errors == []
