@@ -143,7 +143,7 @@ def test_name_outside_the_rule_is_caught_by_the_periodic_full_listing(tmp_path, 
     _add(nas, "EXPORT.htm", time.time() + 5)
     collect.collect(cfg)
     assert "EXPORT.htm" not in _reports(cfg)                                # 패턴 나열에는 안 보인다
-    monkeypatch.setattr(collect, "FULL_LIST_EVERY_SEC", 0)                 # 전체 나열할 때가 됐다
+    cfg["full_list_every_hours"] = 0                                        # 전체 나열할 때가 됐다
     st: dict = {}
     collect.collect(cfg, stats=st)
     assert st["list_pattern"] == 0 and "EXPORT.htm" in _reports(cfg)
@@ -176,3 +176,32 @@ def test_backfill_and_refresh_always_list_everything(tmp_path, fake_nas, monkeyp
     collect.collect(cfg, refresh_window_days=3)
     collect.collect(cfg, recover=True)
     assert calls == []
+
+
+# ── 전체 나열 주기(10/5, cfg full_list_every_hours — 기본 7일) ──────────────
+def test_full_listing_interval_defaults_to_seven_days_and_is_configurable(tmp_path, fake_nas, monkeypatch):
+    nas, csv_path = fake_nas
+    assert collect.DEFAULT_CONFIG["full_list_every_hours"] == 7 * 24
+    calls: list = []
+    monkeypatch.setattr(collect, "PATTERN_LISTER", _fake_lister(calls))
+    cfg = make_cfg(tmp_path, csv_path)
+    collect.collect(cfg)                                                    # 첫 수집은 전체 나열
+
+    def age_full_listing(hours):
+        c = _cache(cfg)
+        c["full_listed"] = {k: time.time() - hours * 3600 for k in c["full_listed"]}
+        open(cfg["cache_file"], "w", encoding="utf-8").write(json.dumps(c))
+
+    age_full_listing(30)                                                    # 예전 기준(20시간)은 넘었지만 7일 안
+    st: dict = {}
+    collect.collect(cfg, stats=st)
+    assert st["list_pattern"] >= 1
+    age_full_listing(7 * 24 + 1)                                            # 7일 넘음 → 전체 나열
+    st = {}
+    collect.collect(cfg, stats=st)
+    assert st["list_pattern"] == 0
+    age_full_listing(30)
+    cfg["full_list_every_hours"] = 24                                      # 설정으로 24시간
+    st = {}
+    collect.collect(cfg, stats=st)
+    assert st["list_pattern"] == 0

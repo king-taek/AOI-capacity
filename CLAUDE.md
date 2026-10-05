@@ -217,8 +217,9 @@ Camtek AOI 장비의 BatchReport/WaferInfo.ini 를 읽어 장비별 가동률을
 `--rebuild-all`(보관 기간 전부를 **후보 캐시**로 새로 읽고 검증 뒤 교체 — 실패하면 기존 캐시 그대로, `RebuildRejected`) · `--full` 은 `--rebuild-all` 의 별칭(**이력 삭제 없음**) · `--recover`(시간 미확인 Report 다시 읽기).
 **Report 목록(9/23)**: 커서가 있는 장비의 증분 수집은 폴더 전체 대신 Report 이름의 날짜(`…_26-Sep-16_(12.38.36)_BatchReport.htm`, 배치 종료일 = 파일이 생긴 날)로
 `*_YY-Mon-DD_(*` 패턴을 커서 전날~내일만큼 만들어 **NAS 가 거르게** 한다(`report_name_patterns` · `PATTERN_LISTER` = `nas_guard.find_pattern`, Windows `FindFirstFileExW` · 다른 OS 는 None).
-고르는 규칙은 전체 나열과 같다(부분집합만 받는다). 처음 보는 장비 · backfill · refresh · recover · rebuild · 패턴 14일 초과 · 패턴 실패 · 마지막 전체 나열(캐시 `full_listed`)이 20시간(`FULL_LIST_EVERY_SEC`) 넘음이면 **전체 나열** —
+고르는 규칙은 전체 나열과 같다(부분집합만 받는다). 처음 보는 장비 · backfill · refresh · recover · rebuild · 패턴 14일 초과 · 패턴 실패 · 마지막 전체 나열(캐시 `full_listed`)이 `full_list_every_hours`(cfg, 기본 **7일** — 10/5 사용자 확정, 0 = 매번) 넘음이면 **전체 나열** —
 이름 규칙 밖 파일(`EXPORT.htm`)·나중에 다시 쓰인 옛 Report 는 그때 잡힌다(가드 `test_collect_listing.py`, 목록 단계 9/18 실측 5.5분).
+10/5 실측(Wi-Fi+VPN, 30대): 전체 나열이 평소 수집 100~199초의 거의 전부(NAS 가 폴더를 처음 읽는 비용 — 방식과 무관), 패턴 나열만이면 13~28초. 그래서 20시간 → 7일.
 **전체 나열·파일 읽기(9/30)**: 전체 나열은 `FULL_LISTER`(Windows `find_pattern(폴더, "*")` = FindFirstFileExW LARGE_FETCH, 실패하면 scandir)로 — 같은 항목·순서를 적은 왕복으로 받는다(9/29 현장 p50 3.7배).
 `nas_guard.read_bytes/read_text` 는 `os.open`(읽기 전용 `_READ_FLAGS`) + fstat 크기 + `os.read` 대개 한 번 — `open().read()` 의 EOF 확인 읽기(SMB 왕복 하나)가 없다(INI 167 → 118ms).
 결과는 예전과 바이트·문자열까지 같다(보편 줄바꿈 포함). 가드 `test_nas_read.py`. 측정 도구는 저장소 맨 위 `test.py`(읽기 전용, 결과는 로컬 JSON — 메뉴 4 는 앱의 collect 그대로 최근 N일 실제 수집).

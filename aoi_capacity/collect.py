@@ -72,8 +72,8 @@ MAX_READ_THREADS = 64
 #: 증분 수집의 Report 목록은 **파일 이름의 날짜로 NAS 가 거르게** 한다(9/23, Windows `FindFirstFileExW` 패턴).
 #: Report 이름 끝은 `…_26-Sep-16_(12.38.36)_BatchReport.htm` 이고 그 날짜는 배치 종료일(= 파일이 생긴 날)이다 — 샘플 12,663개 중 12,662개 일치.
 #: 폴더 전체(장비당 최대 5,849개)를 매번 받아 오던 목록 단계가 9/18 30일치 실측 5.5분이었다. 이름 규칙 밖 파일(`EXPORT.htm` 같은)과
-#: 나중에 다시 쓰인 옛 Report 를 놓치지 않도록 **전체 나열은 처음·backfill·rebuild·recover·refresh 와 장비마다 `FULL_LIST_EVERY_SEC` 에 한 번** 한다.
-FULL_LIST_EVERY_SEC = 20 * 3600
+#: 나중에 다시 쓰인 옛 Report 를 놓치지 않도록 **전체 나열은 처음·backfill·rebuild·recover·refresh 와 장비마다 `full_list_every_hours`(기본 7일)에 한 번** 한다.
+FULL_LIST_EVERY_HOURS = 7 * 24   # 기본 7일(10/5 사용자 확정) — cfg `full_list_every_hours`(0 = 매번 전체 나열). 10/5 실측: 전체 나열이 평소 수집 100~199초의 거의 전부, 패턴 나열은 13~28초
 PATTERN_MAX_DAYS = 14          # 커서가 이보다 오래됐으면(며칠 수집을 쉬었으면) 패턴 여러 개보다 전체 나열이 낫다
 _MONTHS = ("Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec")
 #: 패턴 나열 함수(폴더, 패턴) → 항목 목록. Windows 에서만 있다 — 다른 OS(개발·CI)는 None 이라 예전처럼 전체 나열만 한다(테스트는 가짜로 바꿔 끼운다).
@@ -96,6 +96,7 @@ DEFAULT_CONFIG: Dict[str, object] = {
     "cache_file": "",
     "scope_devices": list(scope.DEFAULT_SCOPE),   # ★ 수집 허용 장비. ["*"] 면 제한 없음
     "read_workers": READ_WORKERS,                 # NAS 를 동시에 몇 개씩 읽을지(1 = 한 줄로)
+    "full_list_every_hours": FULL_LIST_EVERY_HOURS,   # 전체 나열 주기(시간, 0 = 매번). 사이에는 이름의 날짜 패턴으로만 나열 — 이름 규칙 밖 파일·나중에 다시 쓰인 옛 Report 는 다음 전체 나열 때 잡힌다
     "refresh_window_days": 0,                     # D60: 최근 N일 안의 Report 는 캐시에 있어도 다시 읽는다(0 = 끔). 창 밖 이력은 보존
     "rebuild_all": False,                         # D60: 보관 기간 전부를 새 후보 캐시에 모아 검증 뒤 교체(옛 --full 의 별칭)
     # C03: 사용자가 **명시적으로 승인한** 같은 장비의 다른 경로 표기 묶음 — `{경로: [다른 표기, …]}` 또는 `[[표기, 표기, …], …]`.
@@ -1588,7 +1589,7 @@ def _list_new_reports(devs, cache, cfg, backfill, log, progress, on_device, shou
 
     ★ 나열 방식(9/23): 커서가 있는 장비의 **증분 수집**이면 폴더 전체 대신 이름의 날짜 패턴(`report_name_patterns`)으로
     NAS 가 거른 파일만 받는다(`PATTERN_LISTER`, Windows). 고르는 규칙은 위와 똑같다 — 받은 목록이 전체의 부분집합일 뿐이다.
-    처음 보는 장비 · backfill · rebuild · recover · refresh · 마지막 전체 나열이 `FULL_LIST_EVERY_SEC` 보다 오래됨 · 패턴이 너무 많음
+    처음 보는 장비 · backfill · rebuild · recover · refresh · 마지막 전체 나열이 `full_list_every_hours` 보다 오래됨 · 패턴이 너무 많음
     · 패턴 나열 실패는 전부 예전처럼 **전체 나열**. `dm["listing"]` 에 어느 쪽이었는지("full" · "pattern") 남긴다."""
     reports, last, failed = cache["reports"], cache["last_mtime"], cache.get("failed") or {}
     full_listed = cache.get("full_listed") if isinstance(cache.get("full_listed"), dict) else {}
@@ -1603,6 +1604,7 @@ def _list_new_reports(devs, cache, cfg, backfill, log, progress, on_device, shou
         if dk_f and int(f.get("tries", 0)) < MAX_READ_RETRY:
             m_f = float(f.get("mtime") or 0)
             pending_since[dk_f] = min(pending_since.get(dk_f, m_f), m_f)
+    full_every = float(cfg.get("full_list_every_hours", FULL_LIST_EVERY_HOURS)) * 3600.0
     done = _Counter()
 
     def one(d):
@@ -1623,7 +1625,7 @@ def _list_new_reports(devs, cache, cfg, backfill, log, progress, on_device, shou
             files = None
             lister = PATTERN_LISTER
             incremental = not (backfill or recover or refresh_since is not None or dk not in last)
-            if lister is not None and incremental and now - float(full_listed.get(dk) or 0) < FULL_LIST_EVERY_SEC:
+            if lister is not None and incremental and now - float(full_listed.get(dk) or 0) < full_every:
                 pats = report_name_patterns(since, now)
                 if pats:
                     try:

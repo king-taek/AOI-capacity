@@ -1204,9 +1204,11 @@ def real_collect_runs(cfg, args, out_dir, out) -> None:
                 label = f"w{w}:{kind}"
                 log(f"━━ 실제 수집 {label} — 최근 {args.collect_days}일, NAS 마다 동시 {w}개")
                 rec = OpRecorder(roots)
-                saved_full = collect.FULL_LIST_EVERY_SEC
-                if kind == "full_relist":
-                    collect.FULL_LIST_EVERY_SEC = 0          # 마지막 전체 나열이 20시간 넘은 것처럼 — 하루 한 번 수집과 같은 목록
+                saved_full = None
+                if kind == "full_relist":                    # 마지막 전체 나열이 주기를 넘은 것처럼 — 하루 한 번 수집과 같은 목록
+                    c2["full_list_every_hours"] = 0           # 새 앱(7일 주기 cfg)
+                    if hasattr(collect, "FULL_LIST_EVERY_SEC"):   # 옛 앱(20시간 상수)
+                        saved_full, collect.FULL_LIST_EVERY_SEC = collect.FULL_LIST_EVERY_SEC, 0
                 stats: dict = {}
                 phases: list = []
                 last = {"phase": None}
@@ -1234,7 +1236,8 @@ def real_collect_runs(cfg, args, out_dir, out) -> None:
                     log(f"수집 오류: {e}")
                 finally:
                     rec.uninstall()
-                    collect.FULL_LIST_EVERY_SEC = saved_full
+                    if saved_full is not None:
+                        collect.FULL_LIST_EVERY_SEC = saved_full
                 wall = time.perf_counter() - t0
                 html_ms, html_mb = None, None
                 if status == "ok":
