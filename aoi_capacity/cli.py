@@ -103,6 +103,8 @@ def main(argv=None) -> int:
             stream.reconfigure(encoding="utf-8", errors="replace")
         except Exception:  # noqa: BLE001
             pass
+    from .utils import logs
+    logs.setup_logging(console=False)                    # 10/5: 수집 상세 로그는 app.log 에(GUI 와 같은 파일)
     K = i18n.KO
     ap = argparse.ArgumentParser(description=K.CLI_DESC)
     ap.add_argument("--config", default=os.path.join(os.getcwd(), "config.json"))
@@ -178,8 +180,7 @@ def main(argv=None) -> int:
         _print(K.CLI_REBUILD_REJECTED_FMT.format(error=ex))
         return EXIT_FAILED
     warnings: list = []
-    collect.write_html(cfg, rows, dev_meta, errors, started, mode="auto", log=_print, timing=stats, warnings=warnings,
-                      collect_log=stats.get("log"))
+    collect.write_html(cfg, rows, dev_meta, errors, started, mode="auto", log=_print, timing=stats, warnings=warnings)
     if stats.get("cache_status") == collect.CACHE_CORRUPT:
         _print(K.CLI_CACHE_CORRUPT_FMT.format(path=stats.get("cache_preserved", "")))
     bad = [d for d in dev_meta if d.get("error")]

@@ -2186,13 +2186,14 @@ def collect(cfg: dict, full: bool = False, backfill: bool = False, *, recover: b
               " · NAS {nas_groups}대 × 동시 {read_workers}개 · 이름 패턴 나열 {list_pattern}대".format(**stats))
     if hidden:
         _say(log, f"수집 범위({scope.describe(cfg)}) 밖 장비의 캐시 {hidden}행은 화면에서 제외했습니다(캐시는 그대로 둡니다)")
-    stats["log"] = _collect_log(stats, dev_meta, slow, errors, started_at)   # 결과 HTML 의 meta.collect_log(화면에는 숨김, 10/5)
+    stats["log"] = _collect_log(stats, dev_meta, slow, errors, started_at)
+    _write_detail_log(stats["log"])                       # 10/5: 상세 로그는 app.log 에(결과 HTML 에는 넣지 않는다)
     return render_issue_rows(rows), dev_meta, errors     # 출력용 행 — issue_codes 의 사람 문장은 여기서(캐시에는 코드만, C12)
 
 
 def _collect_log(stats: dict, dev_meta: List[dict], slow: List[Tuple[int, str, str]], errors: List[dict], started_at: str) -> dict:
-    """수집 상세 로그(10/5 사용자 요청 — '어느 장비 · 어느 단계 · 몇 개 · 몇 초'). 결과 HTML 의 `meta.collect_log` 로 들어가고
-    화면에는 그리지 않는다(숨김). 값은 결과에 영향을 주지 않는다 — 시간이 어디서 가는지 보려는 근거일 뿐이다."""
+    """수집 상세 로그(10/5 사용자 요청 — '어느 장비 · 어느 단계 · 몇 개 · 몇 초'). `_write_detail_log` 가 app.log 에 쓴다
+    (처음엔 결과 HTML 에 숨겨 넣었으나 사용자 요청으로 app.log 로 옮김). 값은 결과에 영향을 주지 않는다 — 시간이 어디서 가는지 보려는 근거일 뿐이다."""
     phases = {k: stats.get(k) for k in ("devices_ms", "list_ms", "read_ms", "cache_ms", "total_ms") if k in stats}
     devs = []
     for dm in dev_meta:
@@ -2212,6 +2213,23 @@ def _collect_log(stats: dict, dev_meta: List[dict], slow: List[Tuple[int, str, s
             "devices": devs,
             "slowest_reports": [{"ms": ms, "device": n, "report": f} for ms, n, f in slow[:30]],
             "errors": [{k: e.get(k) for k in ("device", "path", "tries", "error")} for e in errors[:50]]}
+
+
+def _write_detail_log(d: dict) -> None:
+    """수집 상세 로그를 app.log(로거 `aoi.collect`)에 사람이 읽는 줄로 남긴다 — 장비마다 한 줄, 느린 Report, 오류까지."""
+    kv = lambda o: " · ".join(f"{k}={v}" for k, v in (o or {}).items() if v not in (None, ""))
+    lines = [f"[수집 상세] {d.get('kind')} · 모드 {d.get('mode')} · {d.get('started')} ~ {d.get('finished')}",
+             f"  단계(ms): {kv(d.get('phases_ms'))}",
+             f"  설정: {kv(d.get('settings'))}",
+             f"  수: {kv(d.get('counts'))}",
+             f"  캐시 저장 이유: {kv(d.get('cache_dirty')) or '없음'}"]
+    for dv in d.get("devices") or ():
+        lines.append("  장비 " + kv(dv))
+    for s in d.get("slowest_reports") or ():
+        lines.append(f"  느린 Report {s['ms']}ms · {s['device']} · {s['report']}")
+    for e in d.get("errors") or ():
+        lines.append("  오류 " + kv(e))
+    _LOG.info("\n".join(lines))
 
 
 def _carry_over(old: dict, cand: dict, index: _DeviceIndex, plan, cutoff: dt.datetime) -> Dict[str, int]:
@@ -2423,7 +2441,7 @@ def range_name(output_name: str, day_from: str, day_to: str) -> str:
 def write_html(cfg: dict, rows: List[dict], dev_meta: List[dict], errors: List[dict], started: float, *,
                mode: str = "auto", log: Optional[LogFn] = None, progress: Optional[ProgressFn] = None,
                timing: Optional[dict] = None, warnings: Optional[List[dict]] = None,
-               day_from: str = "", day_to: str = "", collect_log: Optional[dict] = None) -> str:
+               day_from: str = "", day_to: str = "") -> str:
     """template.html 에 데이터를 넣어 출력 폴더에 HTML 한 장을 쓴다(분할 없음).
 
     `day_from`·`day_to`(YYYY-MM-DD) 를 주면 그 기간만 담아 `range_name` 이름으로, 안 주면 cfg `html_days` 의 최근 N일을 원래 이름으로. 고유 임시 파일에 쓴 뒤 교체(원자적), 실패하면 자기 임시 파일만 지운다.
@@ -2450,7 +2468,7 @@ def write_html(cfg: dict, rows: List[dict], dev_meta: List[dict], errors: List[d
             "mode": mode, "devices": dev_meta, "reportErrors": errors,
             "scope": {"restricted": not scope.unrestricted(cfg), "devices": scope.scope_list(cfg)},
             "elapsed": int((time.time() - started) * 1000), "retention_days": cfg["retention_days"],
-            "timing": {k: v for k, v in timing.items() if k != "log"} if timing else {},   # 상세 로그는 collect_log 에 따로
+            "timing": {k: v for k, v in timing.items() if k != "log"} if timing else {},   # 상세 로그는 app.log 에(HTML 에 넣지 않는다)
             "sha": ver.get("sha", ""), "branch": ver.get("branch", ""), "repo": ver.get("repo", ""),
             "version": (str(ver.get("sha", ""))[:7]) if ver.get("sha") else "",
             "dashboard_settings": config_mod.dashboard_settings(cfg)}      # D14: 살펴볼 장비 문턱(attentionUtil · attentionErr)
@@ -2470,8 +2488,6 @@ def write_html(cfg: dict, rows: List[dict], dev_meta: List[dict], errors: List[d
         meta["range"] = {"from": r_from, "to": r_to, "explicit": explicit}
     if known_days:
         meta["data_from"], meta["data_to"] = known_days[0], known_days[-1]   # 가진 데이터 전체의 첫날 — 첫날은 수집 창이 도중에 시작해 '부분'
-    if collect_log:
-        meta["collect_log"] = collect_log                # 숨긴 수집 로그(10/5) — 화면에는 그리지 않는다
     emb = _embed_rows(rows)
     if meta["timing"]:
         meta["timing"]["html_ms"] = int((time.perf_counter() - t_html) * 1000)   # 템플릿 읽기 + 접기까지(쓰기 전)
@@ -2556,9 +2572,7 @@ def html_from_cache(cfg: dict, day_from: str = "", day_to: str = "", *, log: Opt
     _mark_device_status(dev_meta, rows)
     _say(log, f"가진 데이터로 HTML 만들기: 캐시 행 {len(rows)}개(범위 밖 {hidden}개 제외) · 기간 {day_from or '처음'} ~ {day_to or '끝'}")
     return write_html(cfg, render_issue_rows(rows), dev_meta, [], started, mode="html_only", log=log, progress=progress,
-                      warnings=warnings, day_from=day_from, day_to=day_to,
-                      collect_log={"kind": "html_only", "at": dt.datetime.now().isoformat(timespec="seconds"),
-                                   "cache_rows": len(rows), "elapsed_ms": int((time.time() - started) * 1000)})
+                      warnings=warnings, day_from=day_from, day_to=day_to)
 
 
 def _write_csv(cfg: dict, path: str, rows: List[dict], log: Optional[LogFn] = None) -> None:

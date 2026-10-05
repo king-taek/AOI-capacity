@@ -102,7 +102,7 @@ def test_html_from_cache_needs_no_nas_and_keeps_report_paths(tmp_path, sample, m
     path = collect.html_from_cache(cfg, first, first)
     emb = _embedded(path)
     assert emb["meta"]["range"]["from"] == first and emb["meta"]["mode"] == "html_only"
-    assert emb["meta"]["collect_log"]["kind"] == "html_only"
+    assert "collect_log" not in emb["meta"]                              # 수집 로그는 app.log 에(10/5) — HTML 에 싣지 않는다
     notes = {d["name"]: d.get("note") for d in emb["meta"]["devices"]}
     assert any(notes.values())                                              # Report 열기 경로는 마지막 수집의 것
 

@@ -104,7 +104,7 @@ def test_collect_reads_kla_once_per_wafer_folder_and_builds_rows(tmp_path, kla_n
     assert m2.get("read_n") == 1 and m2["kept"] == 10 and stats2["kla_pending"] == 0   # 캐시 10장은 그대로, 결과가 생긴 1장만
     assert len([r for r in rows2 if r["device"] == "K1"]) == 11
     # HTML 에도 들어가고, 캐시만으로 다시 만들어도 같다
-    path = collect.write_html(cfg, rows2, meta2, [], 0.0, collect_log=stats2.get("log"))
+    path = collect.write_html(cfg, rows2, meta2, [], 0.0)
     emb_rows, meta = sample_rows.unfold(sample_rows.embedded(open(path, encoding="utf-8").read()))
     assert sum(1 for r in emb_rows if r["device"] == "K1") == 11
     again = collect.html_from_cache(cfg)

@@ -209,8 +209,8 @@ Camtek AOI 장비의 BatchReport/WaferInfo.ini 를 읽어 장비별 가동률을
   화면(`buildModelV3`)은 `meta.range.from~to` 밖 날을 그리지 않는다 → **기간 안 각 날의 장비-일 값이 전부 담은 파일과 같다**(가드 `test_html_range.py`). 헤더 칩(`partChip`)이 기간을 보여 준다.
   `meta.data_from/data_to` = 가진 데이터 전체의 첫날·끝날(첫날은 '부분'). **HTML 만 다시 만들기**(`collect.html_from_cache` · CLI `--html-only --from --to` · 수집 창 카드 — 기간 두 칸 + '전체 기간 HTML 만들기' 버튼):
   NAS 를 건드리지 않고 캐시만 읽어(규칙이 바뀌었으면 메모리에서만 재분류, 캐시 파일 불변) HTML 을 만든다 — 장비 경로는 마지막 수집이 캐시에 남긴 `last_devices`(Report 열기용, 바뀔 때만 저장 이유 `device_info`).
-  **숨긴 수집 로그**: `collect()` 가 `stats["log"]`(`_collect_log` — 단계별 ms · 장비별 나열 방식·`list_dev_ms`·찾은/읽은/유지 수·읽기 합·오류 · 가장 오래 걸린 Report 30개)를 만들고
-  `write_html(collect_log=)` 이 `meta.collect_log` 로 넣는다. 화면 코드는 이 키를 읽지 않는다(가드 `test_collect_log.py`).
+  **수집 상세 로그는 app.log 에**(10/5 사용자 요청 — 결과 HTML 에는 넣지 않는다): `collect()` 가 `stats["log"]`(`_collect_log` — 단계별 ms · 장비별 나열 방식·`list_dev_ms`·찾은/읽은/유지 수·읽기 합·오류 · 가장 오래 걸린 Report 30개)를 만들고
+  `_write_detail_log` 가 로거 `aoi.collect` 로 여러 줄(`[수집 상세] …` · 장비마다 한 줄 · 느린 Report · 오류)을 쓴다. app.log 설정은 `utils/logs.setup_logging` 한 곳(GUI `main.py` · CLI 같이, 5MB × 5 회전, CLI 는 터미널로 다시 찍지 않음). 가드 `test_collect_log.py`.
 - 장비는 `key`(**영속 안정 키** `dev:AOI-25`, C03) · `id`(정규화 경로 — **연결용**, 안정 키를 찾는 열쇠) · `path` · `name`(표시명 `AOI-25` · `4F-AOI-01`) · `aliases`(옛 표시명) · `path_aliases` 로 나눠 다룬다.
   안정 키는 처음 볼 때 표시명에서 한 번 만들어 캐시의 `devices` 대응표(`{key: {name, ids, aliases}}`)에 영속한다 — 표시명·드라이브 문자를 바꿔도 이력이 갈라지지 않는다.
   **Report 캐시 키 = `dev:<장비>|<Report 폴더 아래 상대 경로>`**(절대 경로가 아니다). 같은 장비로 잇는 다른 경로 표기는 **검증·승인된 것만** — OS 가 알려 준 드라이브의 UNC 동치(`devices.UNC_RESOLVER`)와 cfg `device_path_aliases`;

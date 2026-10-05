@@ -16,31 +16,12 @@ if str(_HERE) not in sys.path:
     sys.path.insert(0, str(_HERE))
 
 from aoi_capacity import APP_ID, i18n  # noqa: E402
-from aoi_capacity.utils import paths, prefs  # noqa: E402
-
-LOG_MAX_BYTES = 1_000_000
-LOG_BACKUPS = 3
+from aoi_capacity.utils import logs, paths, prefs  # noqa: E402
 
 
 def _setup_logging() -> logging.Logger:
-    logger = logging.getLogger("aoi")
-    if getattr(logger, "_aoi_configured", False):
-        return logger
-    logger.setLevel(logging.INFO)
-    fmt = logging.Formatter("%(asctime)s %(levelname)s %(name)s: %(message)s")
-    try:
-        fh = logging.handlers.RotatingFileHandler(paths.log_file(), maxBytes=LOG_MAX_BYTES, backupCount=LOG_BACKUPS,
-                                                  encoding="utf-8")
-        fh.setFormatter(fmt)
-        logger.addHandler(fh)
-    except OSError:
-        pass
-    if os.environ.get("AOI_DEBUG") == "1" or sys.stderr is not None and sys.stderr.isatty():
-        sh = logging.StreamHandler()
-        sh.setFormatter(fmt)
-        logger.addHandler(sh)
-    logger._aoi_configured = True  # type: ignore[attr-defined]
-    return logger
+    """app.log — 설정은 `aoi_capacity.utils.logs` 한 곳(CLI 와 같이 쓴다)."""
+    return logs.setup_logging()
 
 
 def _ensure_deps_installed(logger: logging.Logger) -> bool:
