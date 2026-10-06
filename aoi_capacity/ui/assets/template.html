@@ -350,6 +350,12 @@ main{max-width:1420px;margin:0 auto;padding:22px 24px 90px}
 .tbars{display:grid;grid-template-columns:repeat(var(--n),minmax(0,1fr));gap:3px;align-items:end;height:110px;padding:6px 6px 0;border-radius:8px;background:#FBFCFD;border:1px solid #EDF1F5}.tcol{display:flex;gap:1px;align-items:flex-end;height:100%;justify-content:center}.tb{flex:1 1 0;max-width:14px;border-radius:2px 2px 0 0;min-height:2px}.tb.none{background:transparent;min-height:0}
 .tx{display:flex;justify-content:space-between;font-size:11px;color:var(--ink-3);margin-top:3px}
 .pdet{border:1px solid var(--line);border-radius:10px;margin-bottom:8px;background:#fff}.pdh{display:flex;align-items:center;gap:10px;width:100%;border:0;background:transparent;padding:10px 14px;cursor:pointer;font:inherit;color:inherit;text-align:left;border-radius:10px}.pdh:hover{background:#FBFCFD}.pdh .muted{font-size:12px}.pdh .chev{margin-left:auto;color:var(--ink-3);font-style:normal}.pdb{padding:4px 14px 14px}
+.tip{position:fixed;z-index:300;max-width:340px;pointer-events:none;background:#16202A;color:#F4F7FA;padding:7px 11px;border-radius:8px;font-size:12px;line-height:1.55;box-shadow:0 6px 20px rgba(15,21,28,.28);display:flex;flex-direction:column}.tip[hidden]{display:none}.tip b{font-size:12.5px;font-weight:700;color:#fff}.tip span{color:#CBD5DF;font-variant-numeric:tabular-nums}
+button.kbtn{border:0;background:transparent;font:inherit;color:inherit;cursor:pointer;padding:2px 8px 2px 4px;margin:-2px 0;border-radius:6px;display:inline-flex;align-items:center;gap:6px;font-weight:600;transition:background-color .16s,opacity .16s}button.kbtn:hover{background:#F0F4F8}button.kbtn.off{opacity:.45;text-decoration:line-through}button.kbtn:focus-visible{outline:2px solid var(--nav-on);outline-offset:1px}
+.plegend{display:flex;align-items:center;gap:10px;margin:14px 0 -6px;font-size:12px}
+button.sd{border:0;padding:0;cursor:pointer;transition:opacity .15s,transform .15s}button.sd.me{cursor:default}button.sd:focus-visible{outline:2px solid var(--nav-on);outline-offset:2px}.dlg.xh .sd:not(.hl):not(.me){opacity:.2}.dlg.xh .sd.hl{transform:scale(1.5);z-index:3;box-shadow:0 0 0 2px #fff,0 0 0 3px #16202A}
+button.hb{border:0;padding:0;background:transparent;cursor:pointer;outline-offset:1px;transition:filter .15s,background-color .15s}button.hb:hover:not(:disabled){background:rgba(46,107,168,.10);filter:brightness(1.08)}button.hb.sel{background:rgba(46,107,168,.18);box-shadow:inset 0 -2px 0 var(--nav-on)}button.hb:disabled{cursor:default}button.hb:focus-visible{outline:2px solid var(--nav-on)}
+.binchip{display:flex;align-items:center;gap:10px;justify-content:space-between;margin:2px 0 8px;padding:7px 12px;border-radius:8px;background:var(--accent-soft);font-size:12.5px}
 .tlg{margin-left:10px;font-weight:400;font-size:12px;display:inline-flex;gap:12px}.tlg span{display:inline-flex;align-items:center;gap:5px}
 .tfade{animation:tfade .28s var(--ease) both}@keyframes tfade{from{opacity:0}to{opacity:1}}
 .rangebar.dim{opacity:.55;filter:grayscale(1)}.rangebar.dim:hover,.rangebar.dim:focus-within{opacity:.85}.rangebar .dimnote{font-size:11.5px;color:var(--ink-3)}
@@ -953,7 +959,7 @@ const state={view:"home",dayI:null,sort:"name",floor:"all",maker:"all",span:0,vp
   rptSort:{k:"name",d:1},
   errDev:null,errDayI:null,errJob:null,errType:null,rptOpen:null,
   rgQ:"",rgName:"",rgSel:[],rgFilter:"all",   /* 레시피 묶음 편집기(D67): 검색 · 새 이름 · 고른 Job 원문 · 목록 필터 */
-  rcpSel:null,rcpJob:null,rcpPop:null,rcpUnit:"wafer",rcpMetric:"time",rcpOff:{},rcpHowAll:false,rcpPopOpen:{},rcpQ:"",rcpMore:false,rcpDevSel:null,rcpHowOpen:{},dayNote:"",                /* 레시피 탭(D70): 고른 레시피(그 묶음의 Job 원문 하나 — 다시 묶어도 따라간다) · 검색 · 기간 */
+  rcpSel:null,rcpJob:null,rcpPop:null,rcpUnit:"wafer",rcpMetric:"time",rcpOff:{},rcpHowAll:false,rcpPopOpen:{},rcpHide:{},rcpDevSort:"name",rcpBin:null,rcpQ:"",rcpMore:false,rcpDevSel:null,rcpHowOpen:{},dayNote:"",                /* 레시피 탭(D70): 고른 레시피(그 묶음의 Job 원문 하나 — 다시 묶어도 따라간다) · 검색 · 기간 */
   errWinEnd:null,errFDev:null,                /* Error 팝업 21일 창의 끝(끌어서 옮김) · Error 탭 장비 필터(10/5) */
   _end:0};   /* 레시피 묶음 편집기(D67): 검색 · 새 이름 · 고른 Job 원문 · 목록 필터 */
 const INPUT_KEYS=new Set(["rgQ","rgName","rcpQ"]);   /* data-in 칸 → 같은 이름의 state */
@@ -977,6 +983,31 @@ function init(){
     document.addEventListener("mouseover",e=>{const r=rowOf(e.target),f=e.relatedTarget&&rowOf(e.relatedTarget);if(r!==f)mdevPeek(devOf(r)||(document.activeElement&&devOf(rowOf(document.activeElement))));});
     document.addEventListener("focusin",e=>{const r=rowOf(e.target);if(r)mdevPeek(devOf(r));});
     document.addEventListener("focusout",e=>{if(rowOf(e.target)&&!rowOf(e.relatedTarget))mdevPeek(null);});}
+  /* ── 그래프 툴팁 · 교차 강조(10/6 사용자 — 모든 그래프를 interactive 하게) ──
+     브라우저 기본 title 은 1초 뒤에야 뜨고 한 줄이라 그래프 값을 읽기 어렵다. 그래프 요소(TIP_SEL — 막대 · 타임라인 · 점 · 분포 칸 · [data-tip])는 올리는 즉시 뜨는 툴팁(첫 줄 굵게)으로,
+     키보드 포커스도 같다. title 은 첫 호버 때 data-tip 으로 옮긴다(빈 요소에는 aria-label 로 남긴다). 점(.sd[data-dev])에 올리면 같은 장비의 점이 모든 그래프에서 함께 켜지고 나머지는 흐려진다(클래스만 — 다시 그리지 않는다). */
+  {const TIP_SEL='[data-tip],[data-bar],.chart [title],.tline [title],.hbar[title],.hit[title],.callout[title],.srng[title],.mbar[title],.dtrack [title],.stk [title],.hist [title],.hist[title],.dbrow[title],.tbars [title]';
+    let el=null,box=null,lx=0,ly=0;
+    /* 24시간 막대(가동률 목록 · 장비 팝업)는 한 요소 안의 그라디언트라 마우스 위치(분)로 구간을 찾아 말해 준다 */
+    const hh=v=>String(Math.floor(v/60)).padStart(2,"0")+":"+String(Math.floor(v%60)).padStart(2,"0"),SEGN={0:"Scan",1:"Error",2:"Test",3:"에러 후 대기",4:"Rescan"};
+    const barText=(n,x)=>{const [day,dev]=n.dataset.bar.split("|"),t=S.at(day,dev);if(!t)return dev+"\n이 날 기록 없음";const r=n.getBoundingClientRect(),den=S.den(t),m=Math.max(0,Math.min(1439,Math.floor((x-r.left)/Math.max(1,r.width)*1440))),g=S.segsOf(t).find(q=>m>=q.a&&m<q.b);
+      if(g)return dev+" · "+SEGN[g.k]+"\n"+hh(g.a)+" ~ "+hh(g.b)+" ("+Math.round(g.b-g.a)+"분)";
+      return m>=den?dev+"\n"+hh(m)+" — 아직 오지 않은 시간":dev+" · 대기\n"+hh(m)+" 무렵 — 스캔 기록 없는 시간";};
+    const textOf=(n,x)=>{if(n.hasAttribute("data-bar"))return barText(n,x==null?lx:x);let t=n.getAttribute("data-tip");if(t==null&&n.hasAttribute("title")){t=n.getAttribute("title");n.setAttribute("data-tip",t);n.removeAttribute("title");if(!n.textContent.trim()&&!n.getAttribute("aria-label"))n.setAttribute("aria-label",t.replace(/\n+/g," · "));}return t;};
+    const hide=()=>{el=null;if(box)box.hidden=true;};
+    const place=()=>{if(!box||box.hidden)return;const w=box.offsetWidth,hh=box.offsetHeight,W=innerWidth,H2=innerHeight;let x=lx+14,y=ly+18;if(x+w>W-8)x=Math.max(8,lx-w-14);if(y+hh>H2-8)y=Math.max(8,ly-hh-12);box.style.left=x+"px";box.style.top=y+"px";};
+    const show=(n,x,y)=>{const t=textOf(n,x);if(!t){hide();return;}el=n;lx=x;ly=y;if(!box){box=document.createElement("div");box.className="tip";box.setAttribute("role","tooltip");box.hidden=true;document.body.appendChild(box);}
+      box.textContent="";const ls=String(t).split("\n");ls.forEach((l,i)=>{if(!l&&i)return;const d=document.createElement(i?"span":"b");d.textContent=l;box.appendChild(d);});box.hidden=false;place();};
+    window.tipSync=()=>{if(el&&!el.isConnected)hide();else if(el&&box&&!box.hidden)show(el,lx,ly);};
+    document.addEventListener("mouseover",e=>{const n=e.target.closest?e.target.closest(TIP_SEL):null;if(n!==el){if(n)show(n,e.clientX,e.clientY);else hide();}});
+    document.addEventListener("mousemove",e=>{if(!el)return;lx=e.clientX;ly=e.clientY;if(el.hasAttribute("data-bar"))show(el,lx,ly);else place();},{passive:true});
+    document.addEventListener("mouseout",e=>{if(el&&!(e.relatedTarget&&el.contains(e.relatedTarget)))hide();});
+    document.addEventListener("focusin",e=>{const n=e.target.closest?e.target.closest(TIP_SEL):null;if(n&&n.matches&&n.matches(":focus-visible")){const r=n.getBoundingClientRect();show(n,r.left+r.width/2,r.bottom-4);}});
+    document.addEventListener("focusout",hide);document.addEventListener("scroll",hide,true);document.addEventListener("keydown",e=>{if(e.key==="Escape")hide();});
+    const sameDev=(root,dev,on)=>{if(!root)return;root.classList.toggle("xh",on);for(const d of root.querySelectorAll(".sd[data-dev]"))d.classList.toggle("hl",on&&d.dataset.dev===dev);};
+    document.addEventListener("mouseover",e=>{const d=e.target.closest?e.target.closest(".sd[data-dev]"):null;if(d)sameDev(d.closest(".dlg"),d.dataset.dev,true);});
+    document.addEventListener("mouseout",e=>{const d=e.target.closest?e.target.closest(".sd[data-dev]"):null;if(d&&!(e.relatedTarget&&e.relatedTarget.closest&&e.relatedTarget.closest(".sd[data-dev]")))sameDev(d.closest(".dlg"),"",false);});
+  }
   document.addEventListener("dblclick",e=>{const el=e.target.closest("[data-dh]");if(!el)return;const fn=H[+el.dataset.dh];if(fn){e.preventDefault();fn(e);}});   /* 더블클릭 전용 핸들러(장비별 장당 스캔 행 → 상세 팝업) */
   document.addEventListener("keydown",e=>{if(e.key==="Tab"){trapTab(e);return;}if(e.key!=="Escape")return;closeTop();});
   document.addEventListener("input",e=>{const el=e.target;const k=el&&el.dataset?el.dataset.in:null;if(k&&INPUT_KEYS.has(k))setState({[k]:el.value});});
@@ -1064,7 +1095,7 @@ const CLOSE={type:()=>({modalType:null,modalJob:null,showMembers:false,stack:wit
   dev:()=>({modalDev:null,selLot:null,stack:without("dev")}),
   err:()=>({errDev:null,errDays:null,errJob:null,errType:null,errWinEnd:null,stack:without("err")}),
   recipe:()=>({rgSel:[],stack:without("recipe")}),
-  rcpdev:()=>({rcpPop:null,stack:without("rcpdev")})};
+  rcpdev:()=>({rcpPop:null,rcpBin:null,stack:without("rcpdev")})};
 function closeTop(){const k=state.stack[state.stack.length-1];if(k)setState(CLOSE[k]());}
 const FUNNEL=`<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M1.5 2.5h13l-5 6v4.3l-3 1.7V8.5z" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/></svg>`;
 const SORTICON=d=>`<svg viewBox="0 0 10 10" aria-hidden="true">${d>0?`<path d="M5 1.5 8.5 7h-7z" fill="currentColor"/>`:d<0?`<path d="M5 8.5 1.5 3h7z" fill="currentColor"/>`:`<path d="M5 1 7.6 4.5H2.4zM5 9 2.4 5.5h5.2z" fill="currentColor"/>`}</svg>`;
@@ -1485,7 +1516,7 @@ function render(){
   else if(!topK&&prevTop){target=_openerFk?app.querySelector(`[data-fk="${CSS.escape(_openerFk)}"]`):null;_openerFk=null;}
   else if(fk&&document.activeElement!==ae){const c=(top||app).querySelector(`[data-fk="${CSS.escape(fk)}"]`);if(c&&!c.disabled)target=c;}
   if(target)try{target.focus({preventScroll:true});}catch(e){}
-  _lastTop=topK;state.viewDir=0;
+  _lastTop=topK;state.viewDir=0;if(window.tipSync)window.tipSync();
 }
 function trapTab(e){const top=topDlg();if(!top)return;
   const f=[...top.querySelectorAll('button:not([disabled]),[href],input,select,textarea,[tabindex]:not([tabindex="-1"])')].filter(x=>x.offsetParent!==null);
@@ -1953,7 +1984,7 @@ function rcpIndex(){if(_rcp&&_rcp.D===D&&_rcp.G===D.jobGroups)return _rcp;
   /* Report 1LOT당(10/6) = (Batch End − Batch Start) — Error 가 있는 Report · 다른 레시피가 섞인 Report · 배치 시각 없음 · PASS 20장 미만은 뺀다. 20~24장이면 25장 기준으로 환산(×25÷장수), 25장 이상은 그대로 */
   const per=new Map(),repWhy=new Map();
   for(const [rk,R] of reps){const why=R.err?"err":R.mixed?"mixed":!(R.n>0&&R.bs&&R.be&&R.be>R.bs)?"time":R.n<LOT_MIN?"few":"";repWhy.set(rk,why);
-    if(!why){const raw=(R.be-R.bs)/60000;per.set(rk,{v:R.n<LOT_STD?raw*LOT_STD/R.n:raw,raw,n:R.n,dev:R.dev,lot:R.lot,day:R.day,d:R.fN===R.n?(R.n<LOT_STD?R.fSum*LOT_STD/R.n:R.fSum):null});}}
+    if(!why){const raw=(R.be-R.bs)/60000;per.set(rk,{rk,v:R.n<LOT_STD?raw*LOT_STD/R.n:raw,raw,n:R.n,dev:R.dev,lot:R.lot,day:R.day,d:R.fN===R.n?(R.n<LOT_STD?R.fSum*LOT_STD/R.n:R.fSum):null});}}
   return _rcp={D,G:D.jobGroups,recs,ign,per,repWhy,jix,kindG};}
 const qs=(a,p)=>{if(!a.length)return null;const b=a.slice().sort((x,y)=>x-y),i=(b.length-1)*p,lo=Math.floor(i),hi=Math.ceil(i);return b[lo]+(b[hi]-b[lo])*(i-lo);};
 const avg=a=>a.length?a.reduce((x,y)=>x+y,0)/a.length:null;
@@ -2021,9 +2052,9 @@ const rcpAl=gi=>famIndex().canon[gi]||jobNm(D.jobGroups[gi]).al;
 function rcpSuffix(gi){const m=String(D.pool.job[D.jobGroups[gi].l]||"").match(SFX_RE);return m?m[1]:"";}
 function scanRange(arr,mx,c,label,cnt){cnt=cnt||"장";const p1=qs(arr,.1),p5=qs(arr,.5),p9=qs(arr,.9);if(p5==null)return `<span class="muted" style="font-size:12px">계산 가능한 스캔 시간 없음</span>`;
   const x=v=>(Math.min(v,mx)/mx*100).toFixed(1);
-  return `<span class="srng" title="${esc(label)} · 하위 10% ${f1(p1)} · 중앙 ${f1(p5)} · 상위 10% ${f1(p9)} 분 · ${arr.length}${cnt}"><i style="left:${x(p1)}%;width:${Math.max(.8,x(p9)-x(p1))}%;background-color:${c}"></i><b style="left:${x(p5)}%;background-color:${c}"></b></span>`;}
+  return `<span class="srng" title="${esc(label+" · "+arr.length+cnt+"\n하위 10% "+f1(p1)+"분\n중앙 "+f1(p5)+"분\n상위 10% "+f1(p9)+"분")}"><i style="left:${x(p1)}%;width:${Math.max(.8,x(p9)-x(p1))}%;background-color:${c}"></i><b style="left:${x(p5)}%;background-color:${c}"></b></span>`;}
 /* 모드 비율 막대(목록 · 머리글): 멀티 · 단일 · 판정 못 함 장 수를 한 줄 막대로 */
-function modeBar(c,h,pi){const t=c.M+c.S+c.U||1;return `<span class="mbar" style="height:${h||6}px" title="${nmK("M",pi)} ${c.M}장 · ${nmK("S",pi)} ${c.S}장 · 판정 못 함 ${c.U}장">${["M","S","U"].filter(k=>c[k]).map(k=>`<i style="width:${(c[k]/t*100).toFixed(1)}%;background-color:${MODE_C[k]}"></i>`).join("")}</span>`;}
+function modeBar(c,h,pi){const t=c.M+c.S+c.U||1;return `<span class="mbar" style="height:${h||6}px" title="${nmK("M",pi)} ${c.M}장\n${nmK("S",pi)} ${c.S}장\n판정 못 함 ${c.U}장">${["M","S","U"].filter(k=>c[k]).map(k=>`<i style="width:${(c[k]/t*100).toFixed(1)}%;background-color:${MODE_C[k]}"></i>`).join("")}</span>`;}
 let _rcpLast=null;   /* 마지막으로 오른쪽에 보인 레시피(검색 0개일 때 '이전 선택' 요약 — 화면 기억일 뿐 state 가 아니다) */
 const rcpPi=gs=>{const X=rcpIndex();for(const g of gs)if(X.kindG.get(g)==="pi")return true;return false;};
 const nmK=(k,pi)=>pi?(k==="M"?"기존":k==="S"?"Enhanced":MODE_NM[k]):MODE_NM[k];   /* PI 는 멀티 vs 단일 대신 기존(코드 M) vs Enhanced(코드 S) */
@@ -2033,6 +2064,10 @@ function rcpU(){const lot=state.rcpUnit==="lot";
   return {lot,T:o=>lot?o.b:o.s,XT:o=>lot?o.xb:o.xs,F:o=>lot?o.lf:o.f,XF:o=>lot?o.xl:o.xf,
     tu:lot?"분/Lot":"분/장",fu:lot?"개/Lot":"개/장",tl:lot?"LOT당 시간":"장당 스캔",fl:lot?"LOT당 Defect":"장당 Defect",cnt:lot?"Lot":"장"};}
 const RCP_ORDER=["TB500 RDL4","TB500 RDL3","TB500 RDL2","TB500 RDL1","TB500 PI4","TB500 PI3","TB500 PI2"];   /* 목록 순서(사용자 10/6): RDL 4 · 3 · 2 · 1, PI 4 · 3 · 2 */
+const rcpShow=k=>!((state.rcpHide||{})[k]);   /* 그래프에서 보이는 방식(타일의 숫자는 늘 둘 다) */
+function rcpToggleKind(k){const H0={...(state.rcpHide||{})},o=k==="M"?"S":"M";if(!H0[k]&&H0[o]){toast("그래프에는 한 가지는 보여야 합니다");return;}H0[k]=!H0[k];setState({rcpHide:H0,rcpBin:null});}
+const kbtn=(k,name)=>`<button type="button" class="sk kbtn${rcpShow(k)?"":" off"}" aria-pressed="${rcpShow(k)}" data-tip="${esc(name+"\n눌러서 그래프에서 "+(rcpShow(k)?"숨기기":"다시 보이기")+" (타일 숫자는 그대로)")}" data-h="${h(()=>rcpToggleKind(k))}"><i class="sw" style="background-color:${MODE_C[k]}"></i>${esc(name)}</button>`;
+const HN=14,histBin=(v,mx)=>Math.max(0,Math.min(HN-1,Math.floor(v/mx*HN)));
 const rcpOffOf=raw=>!!((state.rcpOff||{})[raw]);   /* 통계에서 뺀 Job(원문 이름) — 칩 단추로 켜고 끈다 */
 const rcpToggleJob=raw=>setState({rcpOff:{...(state.rcpOff||{}),[raw]:!rcpOffOf(raw)}});
 /* 이상치 안내를 짧게 — 한 줄 'n개 제외' + 자세한 내용(범위 · 가장 먼 값들)은 마우스를 올리면(title) */
@@ -2106,8 +2141,8 @@ function rcpHtml(){
         ${vrow(pr?`같은 장비 <span class="muted">${pr.n}대</span>`:"같은 장비",pr?[pr.m,pr.s]:[null,null],f1,U.lot?"분/Lot":"분/장","빠름")}
         ${vrow("Defect",mF,fD,U.lot?"개/Lot":"개/장","적음")}
       </div><p class="hint2">낮을수록 좋음 · 같은 장비 = 두 방식을 다 돌린 장비끼리</p></div>`;
-    const mx=Math.max(1,...[a.M,a.S,a.U].map(k=>qs(U.T(k),.9)||0))*1.08;
-    const rr=k=>`<div class="srow"><span class="sk"><i class="sw" style="background-color:${MODE_C[k]}"></i>${NMK(k)}</span>${scanRange(U.T(a[k]),mx,MODE_C[k],NMK(k),U.cnt)}<span class="num r">${f1(qs(U.T(a[k]),.5))}</span></div>`;
+    const shownK=["M","S"].filter(rcpShow),mx=Math.max(1,...shownK.map(k=>qs(U.T(a[k]),.9)||0),qs(U.T(a.U),.9)||0)*1.08;
+    const rr=k=>`<div class="srow">${k==="U"?`<span class="sk"><i class="sw" style="background-color:${MODE_C[k]}"></i>${NMK(k)}</span>`:kbtn(k,NMK(k))}${k!=="U"&&!rcpShow(k)?`<span class="muted" style="font-size:12px">그래프에서 숨김</span>`:scanRange(U.T(a[k]),mx,MODE_C[k],NMK(k),U.cnt)}<span class="num r">${k!=="U"&&!rcpShow(k)?"":f1(qs(U.T(a[k]),.5))}</span></div>`;
     const scale=`<div class="srow axis"><span></span><span class="sax">${[0,.25,.5,.75,1].map(t=>`<em style="left:${t*100}%">${Math.round(mx*t)}분</em>`).join("")}</span><span class="r">중앙</span></div>`;
     hero=`<div class="panel scanhero" data-key="rcp:hero">${head}${jobsRow}
       <div class="mtiles">${tile("M",a.M)+tile("S",a.S)+verdict}</div>
@@ -2115,24 +2150,27 @@ function rcpHtml(){
       <p class="hint">띠 = ${U.tl} 하위 10% ~ 상위 10% · 굵은 눈금 = 중앙 · 이상치 = 평균 ± ${OUT_SIGMA}σ 밖(표본 ${OUT_MIN_N}개 미만이면 빼지 않음)${U.lot?` · LOT당 = Error 없는(Aborted 만 있는 것은 포함) PASS ${LOT_MIN}장 이상 Report 만, ${LOT_MIN}~${LOT_STD-1}장이면 ${LOT_STD}장 기준으로 환산`:""}</p></div>`;}
     /* 장비별 — 같은 장비 안에서 두 방식을 한 줄에. 지표(시간 | Defect)는 단추로. 행을 누르면 근거 · 더블클릭하면 상세 팝업 */
     const MET=state.rcpMetric==="defect"?"defect":"time",mu=MET==="defect"?(U.lot?"개/Lot":"개/장"):U.tu,mpu=MET==="defect"?"개":"분",mfm=MET==="defect"?fD:f1;
-    const sel=o=>MET==="defect"?U.F(o):U.T(o);
-    const dv=Object.entries(A.devs).sort((x,y)=>cmpDev(x[0],y[0]));
-    const dmx=Math.max(1,...dv.flatMap(([,d])=>[qs(sel(d.M),.5)||0,qs(sel(d.S),.5)||0]))*1.12,px=v=>(v/dmx*100).toFixed(2);
+    const sel=o=>MET==="defect"?U.F(o):U.T(o),MET_L=MET==="defect"?U.fl:U.tl;
+    const SORT=state.rcpDevSort==="big"||state.rcpDevSort==="small"?state.rcpDevSort:"name";
+    const sortKey=d=>{for(const k of ["M","S"])if(rcpShow(k)){const m=qs(sel(d[k]),.5);if(m!=null)return m;}return null;};   /* 보이는 방식의 중앙값 — 없으면 맨 뒤 */
+    const dv=Object.entries(A.devs).sort((x,y)=>{if(SORT==="name")return cmpDev(x[0],y[0]);const a1=sortKey(x[1]),b1=sortKey(y[1]);if(a1==null||b1==null)return a1==null&&b1==null?cmpDev(x[0],y[0]):(a1==null?1:-1);return (SORT==="big"?b1-a1:a1-b1)||cmpDev(x[0],y[0]);});
+    const dmx=Math.max(1,...dv.flatMap(([,d])=>["M","S"].filter(rcpShow).map(k=>qs(sel(d[k]),.5)||0)))*1.12,px=v=>(v/dmx*100).toFixed(2);
     const hasT=d=>sel(d.M).length||sel(d.S).length||sel(d.U).length;
     const devSel=dv.some(([n])=>n===state.rcpDevSel)?state.rcpDevSel:((dv.find(([,d])=>hasT(d))||dv[0]||[])[0]||null);
-    const devH=dv.map(([n,d],i)=>{const x=qs(sel(d.M),.5),y=qs(sel(d.S),.5),df=x!=null&&y!=null?y-x:null,on=n===devSel;
-      const line=x!=null&&y!=null?`<i class="dl" style="left:${px(Math.min(x,y))}%;width:${(Math.abs(y-x)/dmx*100).toFixed(2)}%"></i>`:"";
-      const dot=(v,k,o)=>v==null?"":`<b class="dd" style="left:${px(v)}%;background-color:${MODE_C[k]}" title="${esc(n)} · ${NMK(k)} ${mfm(v)}${mu} · ${f0(o.n)}장 · ${o.lots.size} Lot"></b><em class="dlab ${k} num" data-p="${px(v)}" style="left:${px(v)}%">${mfm(v)}</em>`;
+    const devH=dv.map(([n,d],i)=>{const x=qs(sel(d.M),.5),y=qs(sel(d.S),.5),df=x!=null&&y!=null?y-x:null,on=n===devSel,vx=rcpShow("M")?x:null,vy=rcpShow("S")?y:null;
+      const line=vx!=null&&vy!=null?`<i class="dl" style="left:${px(Math.min(x,y))}%;width:${(Math.abs(y-x)/dmx*100).toFixed(2)}%"></i>`:"";
+      const dot=(v,k,o)=>v==null?"":`<b class="dd" style="left:${px(v)}%;background-color:${MODE_C[k]}" title="${esc(n+" · "+NMK(k)+"\n"+MET_L+" "+mfm(v)+mu+"\n"+f0(o.n)+"장 · "+o.lots.size+" Lot\n(누르면 근거 · 더블클릭하면 상세 팝업)")}"></b><em class="dlab ${k} num" data-p="${px(v)}" style="left:${px(v)}%">${mfm(v)}</em>`;
       const lw=k=>d[k].lots.size;
-      return `<button type="button" class="dbrow${on?" on":""}" data-key="slot:${i}" data-row="dev:${esc(n)}" aria-pressed="${on}" data-h="${h(()=>setState({rcpDevSel:n}))}" data-dh="${h(()=>rcpDevOpen(n,SF.k))}" title="더블클릭하면 ${esc(n)} 상세 팝업"><span class="dn">${esc(n)}</span><span class="dtrack">${line}${dot(x,"M",d.M)}${dot(y,"S",d.S)}${x==null&&y==null?`<em class="dnone">값 없음</em>`:""}</span>
+      return `<button type="button" class="dbrow${on?" on":""}" data-key="slot:${i}" data-row="dev:${esc(n)}" aria-pressed="${on}" data-h="${h(()=>setState({rcpDevSel:n}))}" data-dh="${h(()=>rcpDevOpen(n,SF.k))}" title="더블클릭하면 ${esc(n)} 상세 팝업"><span class="dn">${esc(n)}</span><span class="dtrack">${line}${dot(vx,"M",d.M)}${dot(vy,"S",d.S)}${vx==null&&vy==null?`<em class="dnone">${x==null&&y==null?"값 없음":"숨김"}</em>`:""}</span>
         <span class="r num dx" style="color:${df==null?"#8A96A3":df<0?MODE_C.S:df>0?MODE_C.M:"#4B5866"}">${df==null?(x!=null?W1+"만":y!=null?W2+"만":"—"):(Math.abs(df)<0.05?"차이 없음":(df<0?W2+" ":W1+" ")+mfm(Math.abs(df))+mpu+(MET==="defect"?"↓":"↓"))}</span>
         <span class="r num dc" title="${W1} ${d.M.n}장 · ${W2} ${d.S.n}장${d.U.n?" · 판정 못 함 "+d.U.n+"장":""}">${d.M.n}·${d.S.n}${d.U.n?"·"+d.U.n:""}<small>장</small></span><span class="r num dc" title="${W1} ${lw("M")} Lot · ${W2} ${lw("S")} Lot">${lw("M")}·${lw("S")}${d.U.n?"·"+lw("U"):""}<small>Lot</small></span></button>`;}).join("");
     const daxis=`<div class="dbrow axis"><span></span><span class="dtrack ax">${[0,.25,.5,.75,1].map(t=>`<em style="left:${t*100}%">${Math.round(dmx*t)}${mpu}</em>`).join("")}</span><span></span><span></span><span></span></div>`;
     const mline=(k,o)=>o.n?`<p><i class="sw" style="background-color:${MODE_C[k]}"></i><b>${NMK(k)}</b> ${U.tl} <span class="num">${f1(qs(U.T(o),.5))}</span>${U.tu.replace("분","분")} · ${U.fl} <span class="num">${fD(qs(U.F(o),.5))}</span>${U.fu}<span class="src num">${f0(o.n)}장 · ${o.lots.size} Lot${U.lot?"":" · INI "+f0(o.sI.length)+" + Report 보완 "+f0(o.rep)}</span></p>`:"";
     const mdet=dv.map(([n,d])=>`<div class="mdsel" data-key="md:${esc(n)}" data-dev="${esc(n)}"${n===devSel?"":" hidden"}><p class="mdh"><b>${esc(n)}</b> · 근거</p>${mline("M",d.M)}${mline("S",d.S)}${mline("U",d.U)}</div>`).join("");
     const metSeg=segHtml([{label:"시간",on:MET==="time",pick:()=>setState({rcpMetric:"time"})},{label:"Defect",on:MET==="defect",pick:()=>setState({rcpMetric:"defect"})}],'aria-label="장비별 그래프의 지표"');
-    const devT=!famGs.size?"":`<div class="panel" data-key="rcp:mdev" style="margin-top:14px"><div class="ph"><h2>장비별 ${MET==="defect"?U.fl:U.tl}</h2><span class="muted" style="font-size:12px">같은 장비에서 ${W1}와 ${W2}를 한 줄로 · 중앙(${mu})</span><div class="spacer"></div>${metSeg}<button class="btn sm" data-fk="rcp:devpop" ${devSel?"":"disabled"} data-h="${h(()=>{if(devSel)rcpDevOpen(devSel,SF.k);})}" title="고른 장비의 상세 팝업 — 행을 더블클릭해도 열립니다">상세 팝업</button></div>
-      <div class="dblegend"><span><i class="sw" style="background-color:${MODE_C.M}"></i>${W1}</span><span><i class="sw" style="background-color:${MODE_C.S}"></i>${W2}</span><span class="muted">선 길이 = 두 방식의 차이 · 장 · Lot 은 ${W1}·${W2} 순</span><span class="muted hlink">행을 누르면 근거 · 더블클릭하면 상세 팝업</span></div>
+    const sortSeg=segHtml([{label:"장비순",on:SORT==="name",pick:()=>setState({rcpDevSort:"name"})},{label:"큰 값 순",on:SORT==="big",pick:()=>setState({rcpDevSort:"big"})},{label:"작은 값 순",on:SORT==="small",pick:()=>setState({rcpDevSort:"small"})}],'aria-label="장비 정렬"');
+    const devT=!famGs.size?"":`<div class="panel" data-key="rcp:mdev" style="margin-top:14px"><div class="ph"><h2>장비별 ${MET==="defect"?U.fl:U.tl}</h2><span class="muted" style="font-size:12px">같은 장비에서 ${W1}와 ${W2}를 한 줄로 · 중앙(${mu})</span><div class="spacer"></div>${sortSeg}${metSeg}<button class="btn sm" data-fk="rcp:devpop" ${devSel?"":"disabled"} data-h="${h(()=>{if(devSel)rcpDevOpen(devSel,SF.k);})}" title="고른 장비의 상세 팝업 — 행을 더블클릭해도 열립니다">상세 팝업</button></div>
+      <div class="dblegend">${kbtn("M",W1)}${kbtn("S",W2)}<span class="muted">눌러서 숨기기/보이기 · 선 길이 = 두 방식의 차이 · 장 · Lot 은 ${W1}·${W2} 순</span><span class="muted hlink">행을 누르면 근거 · 더블클릭하면 상세 팝업</span></div>
       <div class="dbrow head"><span>장비</span><span></span><span class="r">차이</span><span class="r">장 수</span><span class="r">Lot 수</span></div><div class="dbrows" data-key="rcp:mdev:rows">${devH||`<p class="empty">기록 없음</p>`}</div>${dv.length?daxis:""}
       <div class="mdetail" data-key="rcp:mdev:detail" data-sel="${esc(devSel||"")}" aria-live="polite">${mdet||`<p class="muted">기록 없음</p>`}</div></div>`;
     /* 어떻게 셌나 — 기본은 접어 둔다(사용자 10/6), 누르면 펼침(state.rcpHowAll). 안의 카드는 따로 펼친다(handoff C5) */
@@ -2198,11 +2236,13 @@ function rcpHtml(){
 /* ── 장비 상세 팝업(10/6 사용자 — 팀장이 한눈에 볼 수 있게 전체 재구성) ──
    ① 맨 위 KPI: 방식마다 큰 숫자 둘(시간 | Defect) + 전체 장비 중앙 대비 ▲▼ ② '전체 장비 속 위치' — 장비들을 점으로 늘어놓고 이 장비를 짚는다(빠른/적은 순 n위)
    ③ 날짜별 추이 두 칸(시간 | Defect) ④ 자세히(접힘): LOT별 표(Report 한 장 = 한 줄) · 분포. 단위(장당 | LOT당)는 이 화면과 같은 값이다. */
-function rcpDevOpen(dev,k){setState({rcpPop:{dev,k},stack:pushTop("rcpdev")});}
+function rcpDevOpen(dev,k){setState({rcpPop:{dev,k},rcpBin:null,stack:pushTop("rcpdev")});}
 const hhmm=t=>{const x=new Date(t);return String(x.getHours()).padStart(2,"0")+":"+String(x.getMinutes()).padStart(2,"0");};
-function histHtml(items,outs,color,mx,unit,fm,med){const ax=v=>Math.abs(v)>=100?f0(v):fm(v),N=14,bin=v=>Math.max(0,Math.min(N-1,Math.floor(v/mx*N))),kc=new Array(N).fill(0),oc=new Array(N).fill(0);
-  for(const v of items)kc[bin(v)]++;for(const v of outs)oc[bin(v)]++;const top=Math.max(1,...kc.map((x,i)=>x+oc[i]));
-  return `<div class="hwrap"><div class="hist" role="img" aria-label="분포 막대 그래프">${kc.map((c,i)=>`<span class="hb" title="${fm(mx/N*i)}~${fm(mx/N*(i+1))}${unit} · ${c}${oc[i]?" + 이상치 "+oc[i]:""}"><i class="ho" style="height:${(oc[i]/top*100).toFixed(1)}%"></i><i class="hk" style="height:${(c/top*100).toFixed(1)}%;background-color:${color}"></i></span>`).join("")}</div>${med==null?"":`<i class="hmed" style="left:${Math.min(100,med/mx*100).toFixed(1)}%" title="중앙 ${fm(med)}${unit}"></i>`}</div>
+/* 분포 막대 — 칸마다 단추: 올리면 범위 · 개수, 누르면 그 칸의 값이 든 Lot 만 아래 목록에 걸린다(opt.pick). kept · outs 는 {v, rk} 목록 */
+function histHtml(kept,outs,color,mx,unit,fm,med,opt){opt=opt||{};const ax=v=>Math.abs(v)>=100?f0(v):fm(v),kc=new Array(HN).fill(0),oc=new Array(HN).fill(0);
+  for(const it of kept)kc[histBin(it.v,mx)]++;for(const it of outs)oc[histBin(it.v,mx)]++;const top=Math.max(1,...kc.map((x,i)=>x+oc[i]));
+  return `<div class="hwrap"><div class="hist" role="group" aria-label="분포 막대 그래프 — 칸을 누르면 그 값이 든 Lot 만 목록에 보입니다">${kc.map((c,i)=>{const tot=c+oc[i],lo=fm(mx/HN*i),hi=i===HN-1?"이상":fm(mx/HN*(i+1))+unit,tip=lo+(i===HN-1?unit+" 이상(이상치 포함)":"~"+hi)+"\n"+c+(oc[i]?" + 이상치 "+oc[i]:"")+"개"+(tot?"\n누르면 이 칸의 Lot 만 목록에":"");
+    return `<button type="button" class="hb${opt.sel===i?" sel":""}${tot?"":" nil"}" ${tot?"":"disabled "}aria-pressed="${opt.sel===i}" aria-label="${esc(tip.replace(/\n/g," · "))}" title="${esc(tip)}"${tot&&opt.pick?` data-h="${h(()=>opt.pick(i))}"`:""}><i class="ho" style="height:${(oc[i]/top*100).toFixed(1)}%"></i><i class="hk" style="height:${(c/top*100).toFixed(1)}%;background-color:${color}"></i></button>`;}).join("")}</div>${med==null?"":`<i class="hmed" style="left:${Math.min(100,med/mx*100).toFixed(1)}%" title="중앙 ${fm(med)}${unit}"></i>`}</div>
     <div class="hax"><span>0</span><span>${ax(mx/2)}${unit}</span><span>${ax(mx)}${unit}</span></div>`;}
 function rcpDevPopupHtml(){const S0=state.rcpPop;if(!S0||!D||!D.days.length)return"";
   const X=rcpIndex(),from=D.days[0],to=D.days[D.days.length-1],gs=new Set(),U=rcpU();
@@ -2215,6 +2255,7 @@ function rcpDevPopupHtml(){const S0=state.rcpPop;if(!S0||!D||!D.days.length)retu
   const A=rcpAgg(gs,from,to),d=A.devs[S0.dev],PI=rcpPi(gs),NMK=k=>nmK(k,PI),KS=["M","S"],anyG=[...gs].map(g=>[g,!!D.jobGroups[g].nm]).sort((x,y)=>y[1]-x[1])[0][0],FN=rcpFamName(anyG);
   if(!d)return shell(S0.dev+" · "+FN,md(from)+" ~ "+md(to),`<p class="empty">이 장비는 이 기간에 이 레시피를 돈 기록이 없습니다</p>`);
   const kinds0=KS.concat(d.U.n?["U"]:[]),kinds=kinds0.filter(k=>d[k].n).length?kinds0.filter(k=>d[k].n):KS.slice(0,1);   /* 이 장비가 돌린 방식만 */
+  const kindsV=(()=>{const v=kinds.filter(k=>k==="U"||rcpShow(k));return v.length?v:kinds;})();   /* 그래프에 보이는 방식(KPI 는 전부) */
   const devEntries=Object.entries(A.devs);
   /* 전체 장비 대비: 같은 방식의 장비별 중앙값들 → 그 중앙 · 이 장비 순위(낮을수록 좋음) */
   const medOf=(o,k,m)=>qs(m==="d"?U.F(o[k]):U.T(o[k]),.5);
@@ -2230,28 +2271,37 @@ function rcpDevPopupHtml(){const S0=state.rcpPop;if(!S0||!D||!D.days.length)retu
       <div><p class="v num">${fD(df)}<small>${U.fu}</small></p><p class="vl">${U.fl} (중앙)</p><p class="cc">${cmpChip(df,fleetMed(k,"d"),"개",fD,"적음","많음")}</p></div></div></div>`;};
   /* 전체 장비 속 위치: 장비마다 점 하나(회색), 이 장비는 방식 색 큰 점, 세로선 = 전체 중앙 */
   const strip=(k,m,unit,fm)=>{const f=fleetOf(k,m);if(!f.length)return"";const vals=f.map(x=>x[1]),mx=Math.max(...vals)*1.06||1,px=v=>(v/mx*100).toFixed(2),med=fleetMed(k,m),me=f.find(x=>x[0]===S0.dev),rk=rankOf(k,m);
-    return `<div class="strip"><span class="sk"><i class="sw" style="background-color:${MODE_C[k]}"></i>${NMK(k)}</span><div class="stk"><i class="sm" style="left:${px(med)}%" title="전체 장비 중앙 ${fm(med)}${unit}"></i>${f.filter(x=>x[0]!==S0.dev).map(x=>`<b class="sd" style="left:${px(x[1])}%" title="${esc(x[0])} ${fm(x[1])}${unit}"></b>`).join("")}${me?`<b class="sd me" style="left:${px(me[1])}%;background-color:${MODE_C[k]}" title="${esc(S0.dev)} ${fm(me[1])}${unit}"></b><em class="sl num" style="left:${px(me[1])}%">${fm(me[1])}</em>`:""}</div><span class="rk num">${rk?`<b>${rk.r}위</b> / ${rk.n}대`:"—"}</span></div>`;};
-  const stripBlock=(title,m,unit,fm,low)=>`<div class="sblock"><h4>${title} <span class="muted">${low} 순 · 점 = 장비 · 세로선 = 전체 중앙</span></h4>${kinds.map(k=>strip(k,m,unit,fm)).join("")||`<p class="empty">기록 없음</p>`}</div>`;
+    const dot=(n,v,mine)=>`<button type="button" class="sd${mine?" me":""}" data-dev="${esc(n)}" style="left:${px(v)}%${mine?`;background-color:${MODE_C[k]}`:""}" title="${esc(n+" · "+NMK(k)+(mine?" (이 장비)":"")+"\n"+fm(v)+unit+(mine?"":"\n누르면 이 장비의 상세로"))}" aria-label="${esc(n+" "+NMK(k)+" "+fm(v)+unit)}"${mine?"":` data-h="${h(()=>rcpDevOpen(n,S0.k))}"`}></button>`;
+    return `<div class="strip"><span class="sk"><i class="sw" style="background-color:${MODE_C[k]}"></i>${NMK(k)}</span><div class="stk"><i class="sm" style="left:${px(med)}%" title="전체 장비 중앙\n${fm(med)}${unit}"></i>${f.filter(x=>x[0]!==S0.dev).map(x=>dot(x[0],x[1],false)).join("")}${me?dot(S0.dev,me[1],true):""}</div><span class="rk num">${rk?`<b>${rk.r}위</b> / ${rk.n}대`:"—"}</span></div>`;};
+  const stripBlock=(title,m,unit,fm,low)=>`<div class="sblock"><h4>${title} <span class="muted">${low} 순 · 점을 누르면 그 장비로</span></h4>${kindsV.map(k=>strip(k,m,unit,fm)).join("")||`<p class="empty">기록 없음</p>`}</div>`;
   /* 값의 분포(사용자 10/6: 날짜별 추이는 필요 없다 → 대신 '얼마나 들쭉날쭉한가'): 방식마다 값을 막대로 쌓아 중앙선 · 이상치(붉은 칸)를 보인다 */
-  const vals=(k,m)=>{const o=d[k],t=m==="t"?(U.lot?o.xb:o.xs):(U.lot?o.xl:o.xf);if(!t)return{kept:[],out:[]};const g=t.get;return{kept:t.kept.map(g),out:t.out.map(g)};};
-  const distBlock=(m,title,unit,fm)=>{const per=kinds.map(k=>[k,vals(k,m)]),all=[].concat(...per.map(([,v])=>v.kept.concat(v.out))),mx=Math.max(1,...[].concat(...per.map(([,v])=>v.kept)))*1.06;   /* 축은 남긴 값 기준 — 이상치는 맨 오른쪽 칸에 붉게 모은다 */
-    return `<div class="dblock"><h4>${title} <span class="muted">막대 = 개수 · 점선 = 중앙 · 붉은 칸 = 이상치(맨 끝 칸에 모음)</span></h4>${all.length?per.map(([k,v])=>`<div class="hrow"><span class="sk"><i class="sw" style="background-color:${MODE_C[k]}"></i>${NMK(k)}</span><div>${histHtml(v.kept,v.out,MODE_C[k],mx,unit,fm,qs(v.kept,.5))}</div></div>`).join(""):`<p class="empty">기록 없음</p>`}</div>`;};
+  const vals=(k,m)=>{const o=d[k],t=m==="t"?(U.lot?o.xb:o.xs):(U.lot?o.xl:o.xf);if(!t)return{kept:[],out:[]};const g=t.get,w=x=>({v:g(x),rk:x.rk});return{kept:t.kept.map(w),out:t.out.map(w)};};
+  const dist={};for(const m of ["t","d"]){const per=kindsV.map(k=>[k,vals(k,m)]);dist[m]={per,mx:Math.max(1,...[].concat(...per.map(([,v])=>v.kept.map(x=>x.v))))*1.06};}   /* 축은 남긴 값 기준 — 이상치는 맨 오른쪽 칸에 붉게 모은다 */
+  const BIN=state.rcpBin&&dist[state.rcpBin.m]&&dist[state.rcpBin.m].per.some(([k])=>k===state.rcpBin.k)?state.rcpBin:null;
+  const binSet=BIN?(()=>{const dd=dist[BIN.m],v=dd.per.find(([k])=>k===BIN.k)[1],st=new Set();for(const it of v.kept.concat(v.out))if(histBin(it.v,dd.mx)===BIN.i)st.add(it.rk);return st;})():null;
+  const pickBin=(m,k)=>i=>{const same=state.rcpBin&&state.rcpBin.m===m&&state.rcpBin.k===k&&state.rcpBin.i===i;setState({rcpBin:same?null:{m,k,i},rcpPopOpen:{...(state.rcpPopOpen||{}),lots:true}});
+    if(!same)requestAnimationFrame(()=>{const b=document.querySelector('[data-fk="pd:lots"]');if(b)b.scrollIntoView({block:"center",behavior:reduced()?"auto":"smooth"});});};
+  const distBlock=(m,title,unit,fm)=>{const dd=dist[m],all=[].concat(...dd.per.map(([,v])=>v.kept.concat(v.out)));
+    return `<div class="dblock"><h4>${title} <span class="muted">막대를 누르면 그 칸의 Lot 만 아래 목록에</span></h4>${all.length?dd.per.map(([k,v])=>`<div class="hrow"><span class="sk"><i class="sw" style="background-color:${MODE_C[k]}"></i>${NMK(k)}</span><div>${histHtml(v.kept,v.out,MODE_C[k],dd.mx,unit,fm,qs(v.kept.map(x=>x.v),.5),{sel:BIN&&BIN.m===m&&BIN.k===k?BIN.i:-1,pick:pickBin(m,k)})}</div></div>`).join(""):`<p class="empty">기록 없음</p>`}</div>`;};
   /* LOT별 표: Report 한 장 = 한 줄 — 이 장비 · 이 레시피 · 이 기간 */
   const outB=new Set(),outL=new Set(),outQ=new Set();for(const k of ["M","S","U"]){for(const p of d[k].xb.out)outB.add(p);for(const p of d[k].xl.out)outL.add(p);for(const q of d[k].xs.out)outQ.add(q);}
   const groups=new Map();for(const q of X.recs){if(!gs.has(q.g)||q.dev!==S0.dev||q.day<from||q.day>to)continue;let G=groups.get(q.rk);if(!G){G={rk:q.rk,t:q.t,lot:q.lot,m:q.m||"U",day:q.day,s:[],f:[],out:0,w:0};groups.set(q.rk,G);}
     G.w++;if(q.t<G.t)G.t=q.t;if(q.s!=null)G.s.push(q.s);if(q.f!=null)G.f.push(q.f);if(outQ.has(q))G.out++;}
   const WHY={err:"Error 있음",mixed:"다른 레시피 섞임",time:"배치 시각 없음",few:`PASS ${LOT_MIN}장 미만`};
-  const lots=[...groups.values()].sort((x,y)=>y.t-x.t),cap=300;
+  const lotsAll=[...groups.values()].sort((x,y)=>y.t-x.t),lots=binSet?lotsAll.filter(G=>binSet.has(G.rk)):lotsAll,cap=300;
   const lotRows=lots.slice(0,cap).map((G,i)=>{const p=X.per.get(G.rk),why=X.repWhy.get(G.rk);const st=p?(outB.has(p)||outL.has(p)?`<span class="bad">이상치 제외</span>`:`<span>포함</span>`):`<span class="muted">${WHY[why]||"제외"}</span>`;
     return `<div class="rawrow" data-key="lr:${i}"><span class="num">${md(G.day)} ${hhmm(G.t)}</span><span class="mono" title="${esc(G.lot)}">${esc(G.lot||"(Lot 확인 불가)")}</span><span>${NMK(G.m)}</span><span class="num r">${G.w}</span><span class="num r">${G.s.length?f1(qs(G.s,.5)):"—"}${G.out?`<small class="bad"> ·이상치 ${G.out}</small>`:""}</span><span class="num r${p&&outB.has(p)?" bad":""}">${p?f1(p.v):"—"}</span><span class="num r${p&&outL.has(p)?" bad":""}">${p&&p.d!=null?fD(p.d):(G.f.length?fD(G.f.reduce((x,y)=>x+y,0)):"—")}</span><span>${st}</span></div>`;}).join("");
   const lotsOpen=!!state.rcpPopOpen&&!!state.rcpPopOpen.lots;
   const tog=(key,label,sub,open,inner)=>`<div class="pdet"><button type="button" class="pdh" aria-expanded="${open}" data-fk="pd:${key}" data-h="${h(()=>setState({rcpPopOpen:{...(state.rcpPopOpen||{}),[key]:!open}}))}"><b>${label}</b><span class="muted">${sub}</span><i class="chev" aria-hidden="true">${open?"▴":"▾"}</i></button>${open?`<div class="pdb" data-reveal="pd:${key}">${inner}</div>`:""}</div>`;
-  const lotTbl=`<div class="rawh"><span>시작</span><span>Lot</span><span>방식</span><span class="r">장</span><span class="r">장당 스캔(중앙)</span><span class="r">LOT당 시간</span><span class="r">Defect(LOT당)</span><span>LOT당 통계</span></div><div class="rawbox">${lotRows||`<p class="empty">기록 없음</p>`}</div>${lots.length>cap?`<p class="muted" style="font-size:11.5px;margin:6px 0 0">처음 ${cap}개만 · 전체 ${lots.length}개</p>`:""}`;
+  const binChip=BIN?(()=>{const dd=dist[BIN.m],fm=BIN.m==="t"?f1:fD,un=BIN.m==="t"?"분":"개",lo=dd.mx/HN*BIN.i,hi=dd.mx/HN*(BIN.i+1);
+    return `<div class="binchip"><span><b>필터</b> ${BIN.m==="t"?U.tl:U.fl} · ${NMK(BIN.k)} · ${BIN.i===HN-1?fm(lo)+un+" 이상":fm(lo)+"~"+fm(hi)+un} → Lot ${lots.length}개</span><button type="button" class="btn sm" data-h="${h(()=>setState({rcpBin:null}))}">필터 해제</button></div>`;})():"";
+  const lotTbl=`${binChip}<div class="rawh"><span>시작</span><span>Lot</span><span>방식</span><span class="r">장</span><span class="r">장당 스캔(중앙)</span><span class="r">LOT당 시간</span><span class="r">Defect(LOT당)</span><span>LOT당 통계</span></div><div class="rawbox">${lotRows||`<p class="empty">기록 없음</p>`}</div>${lots.length>cap?`<p class="muted" style="font-size:11.5px;margin:6px 0 0">처음 ${cap}개만 · 전체 ${lots.length}개</p>`:""}`;
   return shell(S0.dev+" · "+FN,md(from)+" ~ "+md(to)+" · "+f0(d.w)+"장 · "+d.lots.size+" Lot",
     `<div class="pbody"><div class="kpis${kinds.length>1?"":" one"}">${kinds.map(stat).join("")}</div>
-    <section class="psec"><h3>전체 장비 속 위치</h3><div class="sgrid">${stripBlock(U.tl,"t","분",f1,"빠른")}${stripBlock(U.fl,"d","개",fD,"적은")}</div></section>
-    <section class="psec"><h3>값의 분포 <span class="muted">얼마나 들쭉날쭉한가</span></h3><div class="tgrid">${distBlock("t",U.tl,"분",f1)}${distBlock("d",U.fl,"개",fD)}</div></section>
-    <section class="psec"><h3>자세히</h3>${tog("lots","LOT별 목록","Report 한 장 = 한 줄 · "+lots.length+"개",lotsOpen,lotTbl)}</section></div>`);}
+    ${kinds.filter(k=>k!=="U").length>1?`<div class="plegend"><span class="muted">그래프에 보일 방식</span>${kinds.filter(k=>k!=="U").map(k=>kbtn(k,NMK(k))).join("")}</div>`:""}
+    <section class="psec"><h3>전체 장비 속 위치 <span class="muted">점 = 장비 · 점선 = 전체 중앙</span></h3><div class="sgrid">${stripBlock(U.tl,"t","분",f1,"빠른")}${stripBlock(U.fl,"d","개",fD,"적은")}</div></section>
+    <section class="psec"><h3>값의 분포 <span class="muted">점선 = 중앙 · 붉은 칸 = 이상치(맨 끝 칸에 모음)</span></h3><div class="tgrid">${distBlock("t",U.tl,"분",f1)}${distBlock("d",U.fl,"개",fD)}</div></section>
+    <section class="psec"><h3>자세히</h3>${tog("lots","LOT별 목록","Report 한 장 = 한 줄 · "+lots.length+"개"+(BIN?" (필터 중)":""),lotsOpen,lotTbl)}</section></div>`);}
 
 
 

@@ -779,12 +779,11 @@ def _rdl_rows():
     return rows
 
 
-@pytest.fixture
-def rdl_page(page_factory, tmp_path):
-    emb = collect._embed_rows(_rdl_rows())
+def _open_rows_page(page_factory, tmp_path, rows, devices):
+    emb = collect._embed_rows(rows)
     meta = _meta()
-    meta["scope"]["devices"] = ["AOI-5"]
-    meta["devices"] = [{"name": "AOI-5", "note": "X:\\AOI-5", "report_dir": "Report", "status": "ok"}]
+    meta["scope"]["devices"] = list(devices)
+    meta["devices"] = [{"name": d, "note": f"X:\\{d}", "report_dir": "Report", "status": "ok"} for d in devices]
     emb["meta"] = meta
     out = tmp_path / "rdl.html"
     out.write_text(TEMPLATE.read_text(encoding="utf-8").replace("__DATA__", json.dumps(emb, ensure_ascii=False).replace("</", "<\\/"), 1), encoding="utf-8")
@@ -795,6 +794,26 @@ def rdl_page(page_factory, tmp_path):
     pg.on("console", lambda m: errors.append("console: " + m.text) if m.type == "error" else None)
     pg.goto(out.as_uri())
     pg.wait_for_selector('main[data-key^="view:"]')
+    return ctx, pg, errors
+
+
+@pytest.fixture
+def rdl_page(page_factory, tmp_path):
+    ctx, pg, errors = _open_rows_page(page_factory, tmp_path, _rdl_rows(), ["AOI-5"])
+    yield pg, errors
+    ctx.close()
+
+
+@pytest.fixture
+def rdl2_page(page_factory, tmp_path):
+    """AOI-5(1분/장) 와 AOI-6(3분/장) — 같은 TB500_RDL4 단일. 장비끼리 비교 · 점 누르기 · 정렬을 본다."""
+    rows = _rdl_rows()
+    for i in range(22):
+        r = _row("AOI-6", f"D{i}", f"09:{i * 3:02d}" if i * 3 < 60 else f"10:{i * 3 - 60:02d}", f"09:{i * 3 + 2:02d}" if i * 3 + 2 < 60 else f"10:{i * 3 - 58:02d}",
+                 lot="LOT-D", job="TB500_RDL4", report="RD.htm", bs="09:00", be="12:00", mode="SINGLE")
+        r["recipe"] = "x20"
+        rows.append(r)
+    ctx, pg, errors = _open_rows_page(page_factory, tmp_path, rows, ["AOI-5", "AOI-6"])
     yield pg, errors
     ctx.close()
 
@@ -865,4 +884,81 @@ def test_day_row_only_where_a_day_is_the_basis_and_range_is_dimmed_then(rdl_page
     pg.locator(".rangebar .seg button").first.click()                    # 기간 버튼을 누르면 하루 기준이 풀린다
     pg.wait_for_timeout(300)
     assert pg.locator('[data-key="daynav"]').count() == 0 and pg.locator(".rangebar.dim").count() == 0
+    assert errors == []
+
+
+# ── 10/6 모든 그래프를 interactive 하게: 즉시 뜨는 툴팁 · 방식 켜기/끄기 · 정렬 · 점 누르기 · 분포 칸 필터 · 교차 강조 ────────────────
+def test_graph_tooltips_appear_at_once_and_replace_native_titles(page):
+    pg, errors, _ = page
+    bar = pg.locator("[data-bar]").first.bounding_box()
+    pg.mouse.move(bar["x"] + bar["width"] * 0.1, bar["y"] + bar["height"] / 2)           # 24시간 막대: 마우스 위치(분)의 구간을 말해 준다
+    pg.wait_for_timeout(150)
+    assert pg.locator(".tip:not([hidden])").count() == 1 and "AOI-" in pg.locator(".tip").inner_text()
+    pg.mouse.move(2, 2)
+    pg.wait_for_timeout(100)
+    assert pg.locator(".tip:not([hidden])").count() == 0
+    pg.locator('button[data-fk="nav:recipe"]').click()
+    pg.wait_for_selector('main[data-key="view:recipe"]')
+    pg.locator(".rcprow", has_text="RDL2").click()
+    pg.wait_for_timeout(300)
+    dot = pg.locator(".dbrow .dd").first
+    dot.scroll_into_view_if_needed()
+    pg.wait_for_timeout(500)                                                                # 스크롤 · 등장 연출이 끝난 뒤에 올린다(스크롤은 툴팁을 닫는다)
+    dot.hover()
+    pg.wait_for_timeout(200)
+    tip = pg.locator(".tip:not([hidden])").inner_text()
+    assert "AOI-1" in tip and "장당 스캔" in tip and "Lot" in tip                          # 값 · 장 수 · Lot 수가 줄마다
+    assert dot.get_attribute("title") is None and dot.get_attribute("data-tip")            # 느린 기본 title 은 tip 으로 옮겨졌다
+    assert errors == []
+
+
+def test_chart_series_toggle_sort_and_metric_buttons(rdl2_page):
+    pg, errors = rdl2_page
+    pg.locator('button[data-fk="nav:recipe"]').click()
+    pg.wait_for_selector('main[data-key="view:recipe"]')
+    rows = lambda: [x.split("\n")[0] for x in pg.locator(".dbrow:not(.head):not(.axis)").all_inner_texts()]
+    assert rows() == ["AOI-5", "AOI-6"]
+    pg.locator(".seg button", has_text="큰 값 순").click()
+    pg.wait_for_timeout(300)
+    assert rows() == ["AOI-6", "AOI-5"]                                                     # 3분/장 > 1분/장
+    pg.locator(".seg button", has_text="작은 값 순").click()
+    pg.wait_for_timeout(300)
+    assert rows() == ["AOI-5", "AOI-6"]
+    assert pg.locator(".dbrow .dd").count() == 2
+    pg.locator(".dblegend .kbtn").first.click()                                              # 방식 켜기/끄기 — 그래프만(타일 숫자는 그대로)
+    pg.wait_for_timeout(300)
+    assert pg.locator(".dblegend .kbtn.off").count() == 1
+    pg.locator(".dblegend .kbtn").nth(1).click()                                             # 마지막 하나는 끌 수 없다
+    pg.wait_for_timeout(200)
+    assert pg.locator(".dblegend .kbtn.off").count() == 1 and "표본" in pg.locator(".scanhero .mtile").nth(1).inner_text()
+    pg.locator(".dblegend .kbtn").first.click()
+    pg.locator(".seg button", has_text="Defect").first.click()
+    pg.wait_for_timeout(300)
+    assert "Defect" in pg.locator('[data-key="rcp:mdev"] h2').inner_text()
+    assert errors == []
+
+
+def test_popup_dots_switch_device_bins_filter_lots_and_hover_highlights(rdl2_page):
+    pg, errors = rdl2_page
+    pg.locator('button[data-fk="nav:recipe"]').click()
+    pg.wait_for_selector('main[data-key="view:recipe"]')
+    pg.locator(".dbrow[data-row='dev:AOI-6']").dblclick()
+    pg.wait_for_selector('.dlg[data-dlg="rcpdev"]')
+    dlg = pg.locator('.dlg[data-dlg="rcpdev"]')
+    other = dlg.locator(".sd:not(.me)").first
+    other.hover()                                                                           # 같은 장비의 점이 함께 켜지고 나머지는 흐려진다
+    pg.wait_for_timeout(200)
+    assert dlg.evaluate("e => e.classList.contains('xh')") and dlg.locator(".sd.hl").count() >= 1
+    assert "AOI-5" in pg.locator(".tip:not([hidden])").inner_text()
+    bins = dlg.locator("button.hb:not(:disabled)")
+    assert bins.count() >= 1 and dlg.locator(".rawrow").count() == 0
+    bins.first.click()                                                                      # 분포 칸 → 그 칸의 값이 든 Lot 만 목록에
+    pg.wait_for_timeout(400)
+    assert dlg.locator(".binchip").count() == 1 and dlg.locator(".rawrow").count() == 1 and "LOT-D" in dlg.inner_text()
+    dlg.locator(".binchip .btn").click()
+    pg.wait_for_timeout(300)
+    assert dlg.locator(".binchip").count() == 0 and dlg.locator(".rawrow").count() == 1       # AOI-6 은 Lot 하나(LOT-D)
+    dlg.locator(".sd:not(.me)").first.click()                                               # 점을 누르면 그 장비의 상세로
+    pg.wait_for_timeout(500)
+    assert "AOI-5" in pg.locator("#dlg-rcpdev-title").inner_text()
     assert errors == []
