@@ -838,7 +838,7 @@ def test_rdl_device_row_double_click_opens_detail_popup(rdl_page):
     pg.wait_for_selector('.dlg[data-dlg="rcpdev"]')
     dlg = pg.locator('.dlg[data-dlg="rcpdev"]')
     txt = dlg.inner_text()
-    assert "AOI-5" in txt and "TB500 RDL4" in txt and "전체 장비 속 위치" in txt and "날짜별 추이" in txt and "이상치 1개 제외" in txt   # 한눈에: KPI · 위치 · 추이
+    assert "AOI-5" in txt and "TB500 RDL4" in txt and "전체 장비 속 위치" in txt and "값의 분포" in txt and "날짜별" not in txt and "이상치 1개 제외" in txt   # 한눈에: KPI · 위치 · 추이
     assert dlg.locator(".kpi").count() == 1 and dlg.locator(".strip").count() >= 2 and dlg.locator(".rawrow").count() == 0   # 자세히는 접혀 있다
     assert pg.evaluate("document.activeElement && document.activeElement.id") == "dlg-rcpdev-title"
     dlg.locator('[data-fk="pd:lots"]').click()

@@ -354,6 +354,7 @@ main{max-width:1420px;margin:0 auto;padding:22px 24px 90px}
 .tfade{animation:tfade .28s var(--ease) both}@keyframes tfade{from{opacity:0}to{opacity:1}}
 .rangebar.dim{opacity:.55;filter:grayscale(1)}.rangebar.dim:hover,.rangebar.dim:focus-within{opacity:.85}.rangebar .dimnote{font-size:11.5px;color:var(--ink-3)}
 .hrow{display:grid;grid-template-columns:76px minmax(0,1fr);gap:10px;align-items:end;margin-bottom:10px}.hrow .sk{display:flex;align-items:center;gap:6px;font-size:12px;font-weight:600;padding-bottom:18px}
+.hwrap{position:relative}.hmed{position:absolute;top:0;bottom:0;border-left:2px dashed #1F2A36;opacity:.55;pointer-events:none}.dblock h4{margin:0 0 8px;font-size:12.5px}.dblock h4 .muted{font-weight:400;font-size:11px;margin-left:4px}
 .hist{display:flex;align-items:flex-end;gap:3px;height:84px}.hist .hb{flex:1;height:100%;display:flex;flex-direction:column;justify-content:flex-end;min-width:0}.hist .hb i{display:block;width:100%}.hist .hk{border-radius:2px 2px 0 0}.hist .ho{background-color:var(--err,#C0392B);border-radius:2px 2px 0 0}
 .hax{display:flex;justify-content:space-between;font-size:11px;color:var(--ink-3);margin-top:2px}
 .dayrows .drow,.cmprows .crow{display:grid;align-items:center;gap:10px;padding:3px 0}.drow>.num:first-child,.crow .dn{font-size:12.5px}.crow .dn{font-weight:600}
@@ -2199,10 +2200,10 @@ function rcpHtml(){
    ③ 날짜별 추이 두 칸(시간 | Defect) ④ 자세히(접힘): LOT별 표(Report 한 장 = 한 줄) · 분포. 단위(장당 | LOT당)는 이 화면과 같은 값이다. */
 function rcpDevOpen(dev,k){setState({rcpPop:{dev,k},stack:pushTop("rcpdev")});}
 const hhmm=t=>{const x=new Date(t);return String(x.getHours()).padStart(2,"0")+":"+String(x.getMinutes()).padStart(2,"0");};
-function histHtml(items,outs,color,mx){const N=14,bin=v=>Math.min(N-1,Math.floor(v/mx*N)),kc=new Array(N).fill(0),oc=new Array(N).fill(0);
+function histHtml(items,outs,color,mx,unit,fm,med){const ax=v=>Math.abs(v)>=100?f0(v):fm(v),N=14,bin=v=>Math.max(0,Math.min(N-1,Math.floor(v/mx*N))),kc=new Array(N).fill(0),oc=new Array(N).fill(0);
   for(const v of items)kc[bin(v)]++;for(const v of outs)oc[bin(v)]++;const top=Math.max(1,...kc.map((x,i)=>x+oc[i]));
-  return `<div class="hist" role="img" aria-label="분포 막대 그래프">${kc.map((c,i)=>`<span class="hb" title="${f1(mx/N*i)}~${f1(mx/N*(i+1))}분 · ${c}장${oc[i]?" + 이상치 "+oc[i]+"장":""}"><i class="ho" style="height:${(oc[i]/top*100).toFixed(1)}%"></i><i class="hk" style="height:${(c/top*100).toFixed(1)}%;background-color:${color}"></i></span>`).join("")}</div>
-    <div class="hax"><span>0</span><span>${Math.round(mx/2)}분</span><span>${Math.round(mx)}분</span></div>`;}
+  return `<div class="hwrap"><div class="hist" role="img" aria-label="분포 막대 그래프">${kc.map((c,i)=>`<span class="hb" title="${fm(mx/N*i)}~${fm(mx/N*(i+1))}${unit} · ${c}${oc[i]?" + 이상치 "+oc[i]:""}"><i class="ho" style="height:${(oc[i]/top*100).toFixed(1)}%"></i><i class="hk" style="height:${(c/top*100).toFixed(1)}%;background-color:${color}"></i></span>`).join("")}</div>${med==null?"":`<i class="hmed" style="left:${Math.min(100,med/mx*100).toFixed(1)}%" title="중앙 ${fm(med)}${unit}"></i>`}</div>
+    <div class="hax"><span>0</span><span>${ax(mx/2)}${unit}</span><span>${ax(mx)}${unit}</span></div>`;}
 function rcpDevPopupHtml(){const S0=state.rcpPop;if(!S0||!D||!D.days.length)return"";
   const X=rcpIndex(),from=D.days[0],to=D.days[D.days.length-1],gs=new Set(),U=rcpU();
   D.jobGroups.forEach((G,gi)=>{if(rcpFamKey(gi)===S0.k&&!rcpOffOf(D.pool.job[G.l]))gs.add(gi);});
@@ -2231,16 +2232,10 @@ function rcpDevPopupHtml(){const S0=state.rcpPop;if(!S0||!D||!D.days.length)retu
   const strip=(k,m,unit,fm)=>{const f=fleetOf(k,m);if(!f.length)return"";const vals=f.map(x=>x[1]),mx=Math.max(...vals)*1.06||1,px=v=>(v/mx*100).toFixed(2),med=fleetMed(k,m),me=f.find(x=>x[0]===S0.dev),rk=rankOf(k,m);
     return `<div class="strip"><span class="sk"><i class="sw" style="background-color:${MODE_C[k]}"></i>${NMK(k)}</span><div class="stk"><i class="sm" style="left:${px(med)}%" title="전체 장비 중앙 ${fm(med)}${unit}"></i>${f.filter(x=>x[0]!==S0.dev).map(x=>`<b class="sd" style="left:${px(x[1])}%" title="${esc(x[0])} ${fm(x[1])}${unit}"></b>`).join("")}${me?`<b class="sd me" style="left:${px(me[1])}%;background-color:${MODE_C[k]}" title="${esc(S0.dev)} ${fm(me[1])}${unit}"></b><em class="sl num" style="left:${px(me[1])}%">${fm(me[1])}</em>`:""}</div><span class="rk num">${rk?`<b>${rk.r}위</b> / ${rk.n}대`:"—"}</span></div>`;};
   const stripBlock=(title,m,unit,fm,low)=>`<div class="sblock"><h4>${title} <span class="muted">${low} 순 · 점 = 장비 · 세로선 = 전체 중앙</span></h4>${kinds.map(k=>strip(k,m,unit,fm)).join("")||`<p class="empty">기록 없음</p>`}</div>`;
-  /* 날짜별 추이: 날마다 방식별 중앙값 막대(남긴 값만) */
-  const byDay={t:{},d:{}};
-  for(const k of kinds){const o=d[k];
-    const tk=U.lot?(o.xb?o.xb.kept:[]).map(p=>[p.day,p.v]):(o.xs?o.xs.kept:[]).map(q=>[q.day,q.s]);
-    const dk2=U.lot?(o.xl?o.xl.kept:[]).map(p=>[p.day,p.d]):(o.xf?o.xf.kept:[]).map(q=>[q.day,q.f]);
-    for(const [dy,v] of tk)(((byDay.t[dy]||(byDay.t[dy]={}))[k])||(byDay.t[dy][k]=[])).push(v);
-    for(const [dy,v] of dk2)(((byDay.d[dy]||(byDay.d[dy]={}))[k])||(byDay.d[dy][k]=[])).push(v);}
-  const trend=(m,title,unit,fm)=>{const dd=D.days.filter(x=>byDay[m][x]),mxv=Math.max(1,...dd.flatMap(x=>kinds.map(k=>qs(byDay[m][x][k]||[],.5)||0)))*1.08;
-    return `<div class="tblock"><h4>${title} <span class="muted">날짜별 중앙(${unit})</span></h4>${dd.length?`<div class="tbars" style="--n:${dd.length}">${dd.map(x=>`<div class="tcol" title="${md(x)}">${kinds.map(k=>{const v=qs(byDay[m][x][k]||[],.5);return v==null?`<span class="tb none"></span>`:`<span class="tb" style="height:${(v/mxv*100).toFixed(1)}%;background-color:${MODE_C[k]}" title="${md(x)} · ${NMK(k)} ${fm(v)}${unit} · ${byDay[m][x][k].length}${U.cnt}"></span>`;}).join("")}</div>`).join("")}</div>
-      <div class="tx"><span>${md(dd[0])}</span><span class="num">최대 ${fm(mxv/1.08)}${unit}</span><span>${md(dd[dd.length-1])}</span></div>`:`<p class="empty">기록 없음</p>`}</div>`;};
+  /* 값의 분포(사용자 10/6: 날짜별 추이는 필요 없다 → 대신 '얼마나 들쭉날쭉한가'): 방식마다 값을 막대로 쌓아 중앙선 · 이상치(붉은 칸)를 보인다 */
+  const vals=(k,m)=>{const o=d[k],t=m==="t"?(U.lot?o.xb:o.xs):(U.lot?o.xl:o.xf);if(!t)return{kept:[],out:[]};const g=t.get;return{kept:t.kept.map(g),out:t.out.map(g)};};
+  const distBlock=(m,title,unit,fm)=>{const per=kinds.map(k=>[k,vals(k,m)]),all=[].concat(...per.map(([,v])=>v.kept.concat(v.out))),mx=Math.max(1,...[].concat(...per.map(([,v])=>v.kept)))*1.06;   /* 축은 남긴 값 기준 — 이상치는 맨 오른쪽 칸에 붉게 모은다 */
+    return `<div class="dblock"><h4>${title} <span class="muted">막대 = 개수 · 점선 = 중앙 · 붉은 칸 = 이상치(맨 끝 칸에 모음)</span></h4>${all.length?per.map(([k,v])=>`<div class="hrow"><span class="sk"><i class="sw" style="background-color:${MODE_C[k]}"></i>${NMK(k)}</span><div>${histHtml(v.kept,v.out,MODE_C[k],mx,unit,fm,qs(v.kept,.5))}</div></div>`).join(""):`<p class="empty">기록 없음</p>`}</div>`;};
   /* LOT별 표: Report 한 장 = 한 줄 — 이 장비 · 이 레시피 · 이 기간 */
   const outB=new Set(),outL=new Set(),outQ=new Set();for(const k of ["M","S","U"]){for(const p of d[k].xb.out)outB.add(p);for(const p of d[k].xl.out)outL.add(p);for(const q of d[k].xs.out)outQ.add(q);}
   const groups=new Map();for(const q of X.recs){if(!gs.has(q.g)||q.dev!==S0.dev||q.day<from||q.day>to)continue;let G=groups.get(q.rk);if(!G){G={rk:q.rk,t:q.t,lot:q.lot,m:q.m||"U",day:q.day,s:[],f:[],out:0,w:0};groups.set(q.rk,G);}
@@ -2249,16 +2244,14 @@ function rcpDevPopupHtml(){const S0=state.rcpPop;if(!S0||!D||!D.days.length)retu
   const lots=[...groups.values()].sort((x,y)=>y.t-x.t),cap=300;
   const lotRows=lots.slice(0,cap).map((G,i)=>{const p=X.per.get(G.rk),why=X.repWhy.get(G.rk);const st=p?(outB.has(p)||outL.has(p)?`<span class="bad">이상치 제외</span>`:`<span>포함</span>`):`<span class="muted">${WHY[why]||"제외"}</span>`;
     return `<div class="rawrow" data-key="lr:${i}"><span class="num">${md(G.day)} ${hhmm(G.t)}</span><span class="mono" title="${esc(G.lot)}">${esc(G.lot||"(Lot 확인 불가)")}</span><span>${NMK(G.m)}</span><span class="num r">${G.w}</span><span class="num r">${G.s.length?f1(qs(G.s,.5)):"—"}${G.out?`<small class="bad"> ·이상치 ${G.out}</small>`:""}</span><span class="num r${p&&outB.has(p)?" bad":""}">${p?f1(p.v):"—"}</span><span class="num r${p&&outL.has(p)?" bad":""}">${p&&p.d!=null?fD(p.d):(G.f.length?fD(G.f.reduce((x,y)=>x+y,0)):"—")}</span><span>${st}</span></div>`;}).join("");
-  const lotsOpen=!!state.rcpPopOpen&&!!state.rcpPopOpen.lots,distOpen=!!state.rcpPopOpen&&!!state.rcpPopOpen.dist;
+  const lotsOpen=!!state.rcpPopOpen&&!!state.rcpPopOpen.lots;
   const tog=(key,label,sub,open,inner)=>`<div class="pdet"><button type="button" class="pdh" aria-expanded="${open}" data-fk="pd:${key}" data-h="${h(()=>setState({rcpPopOpen:{...(state.rcpPopOpen||{}),[key]:!open}}))}"><b>${label}</b><span class="muted">${sub}</span><i class="chev" aria-hidden="true">${open?"▴":"▾"}</i></button>${open?`<div class="pdb" data-reveal="pd:${key}">${inner}</div>`:""}</div>`;
-  const allV=[].concat(...kinds.map(k=>d[k].sq.map(q=>q.s))),mxv2=Math.max(1,...allV)*1.02;
-  const dist=kinds.map(k=>`<div class="hrow"><span class="sk"><i class="sw" style="background-color:${MODE_C[k]}"></i>${NMK(k)}</span><div>${histHtml(d[k].s,d[k].xs.out.map(q=>q.s),MODE_C[k],mxv2)}</div></div>`).join("");
   const lotTbl=`<div class="rawh"><span>시작</span><span>Lot</span><span>방식</span><span class="r">장</span><span class="r">장당 스캔(중앙)</span><span class="r">LOT당 시간</span><span class="r">Defect(LOT당)</span><span>LOT당 통계</span></div><div class="rawbox">${lotRows||`<p class="empty">기록 없음</p>`}</div>${lots.length>cap?`<p class="muted" style="font-size:11.5px;margin:6px 0 0">처음 ${cap}개만 · 전체 ${lots.length}개</p>`:""}`;
   return shell(S0.dev+" · "+FN,md(from)+" ~ "+md(to)+" · "+f0(d.w)+"장 · "+d.lots.size+" Lot",
     `<div class="pbody"><div class="kpis${kinds.length>1?"":" one"}">${kinds.map(stat).join("")}</div>
     <section class="psec"><h3>전체 장비 속 위치</h3><div class="sgrid">${stripBlock(U.tl,"t","분",f1,"빠른")}${stripBlock(U.fl,"d","개",fD,"적은")}</div></section>
-    <section class="psec"><h3>날짜별 추이 <span class="tlg">${kinds.map(k=>`<span><i class="sw" style="background-color:${MODE_C[k]}"></i>${NMK(k)}</span>`).join("")}</span></h3><div class="tgrid">${trend("t",U.tl,"분",f1)}${trend("d",U.fl,"개",fD)}</div></section>
-    <section class="psec"><h3>자세히</h3>${tog("lots","LOT별 목록","Report 한 장 = 한 줄 · "+lots.length+"개",lotsOpen,lotTbl)}${tog("dist","장당 스캔 분포","붉은 칸 = 이상치로 뺀 장",distOpen,dist||`<p class="empty">기록 없음</p>`)}</section></div>`);}
+    <section class="psec"><h3>값의 분포 <span class="muted">얼마나 들쭉날쭉한가</span></h3><div class="tgrid">${distBlock("t",U.tl,"분",f1)}${distBlock("d",U.fl,"개",fD)}</div></section>
+    <section class="psec"><h3>자세히</h3>${tog("lots","LOT별 목록","Report 한 장 = 한 줄 · "+lots.length+"개",lotsOpen,lotTbl)}</section></div>`);}
 
 
 
