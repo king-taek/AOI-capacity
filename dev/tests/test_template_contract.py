@@ -91,7 +91,8 @@ def test_browser_never_reads_the_nas_itself():
 
 def test_light_only_theme():
     """D48-⑥ 라이트 단일. 수집 창이 읽는 `:root` 토큰 블록의 값은 test_theme.py 가 실제로 파싱해서 본다."""
-    assert '<html lang="ko" data-theme="light">' in HTML
+    assert '<html lang="ko" data-theme="light" translate="no" class="notranslate">' in HTML
+    assert '<meta name="google" content="notranslate">' in HTML   # 10/6: 브라우저 자동 번역이 Job·Lot·용어를 엉뚱한 한국어로 바꾸고 화면 갱신(morph)을 깨뜨린다
     assert "setTheme(" not in HTML and "prefers-color-scheme: dark" not in HTML
 
 
