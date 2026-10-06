@@ -142,11 +142,11 @@ def test_today_basis_wording_is_last_record_not_now():
 
 def test_the_dialogs_have_accessible_names():
     """D05: 팝업은 role=dialog · aria-modal · 제목 id(aria-labelledby) 를 갖는다. 포커스가 실제로 그리 가는지는 browser 테스트.
-    팝업은 넷 — 장비 · Error · 유형/Job + 레시피 묶음 편집기(D67)."""
-    assert HTML.count('role="dialog"') == 4
-    assert HTML.count('aria-modal="true"') == 4
-    assert sorted(re.findall(r'aria-labelledby="(dlg-[a-z]+-title)"', HTML)) == ["dlg-dev-title", "dlg-err-title", "dlg-recipe-title", "dlg-type-title"]
-    for t in ("dlg-dev-title", "dlg-err-title", "dlg-recipe-title", "dlg-type-title"):
+    팝업은 다섯 — 장비 · Error · 유형/Job + 레시피 묶음 편집기(D67) + RDL 단일스캔 장비 상세(10/6)."""
+    assert HTML.count('role="dialog"') == 5
+    assert HTML.count('aria-modal="true"') == 5
+    assert sorted(re.findall(r'aria-labelledby="(dlg-[a-z]+-title)"', HTML)) == ["dlg-dev-title", "dlg-err-title", "dlg-rcpdev-title", "dlg-recipe-title", "dlg-type-title"]
+    for t in ("dlg-dev-title", "dlg-err-title", "dlg-rcpdev-title", "dlg-recipe-title", "dlg-type-title"):
         assert f'id="{t}"' in HTML, t
 
 

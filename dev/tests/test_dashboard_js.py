@@ -434,7 +434,7 @@ def test_header_has_four_tabs_and_each_popup_renders_an_accessible_dialog():
         ["errorsHtml"], ["typePopupHtml"]],
         state={"modalDev": "AOI-1", "modalDayI": 0, "errDev": "AOI-1", "errDayI": 0})
     assert re.findall(r'data-fk="nav:([a-z]+)"', head) == ["home", "errors", "report", "recipe"]   # 10/5: KLA 탭 · 추이 탭 없음
-    for label in (">가동률<", ">Error<", ">TB500 · Kendall<", ">레시피<", ">사본 저장<"):
+    for label in (">가동률<", ">Error<", ">TB500 · Kendall<", ">RDL 단일스캔<", ">사본 저장<"):
         assert label in head, label
     assert ">추이<" not in head and ">KLA<" not in head
     assert 'data-dlg="dev"' in dev and 'aria-labelledby="dlg-dev-title"' in dev and 'role="dialog"' in dev
@@ -539,12 +539,68 @@ def test_recipe_wording_distinguishes_ini_and_report_time():
         assert old not in html
 
 
-def test_recipe_list_limit_is_disclosed_and_search_is_not_limited():
-    """10/6 handoff C6: 목록은 생산량 상위 40개만 그리지만 그 사실을 한 줄로 알리고, 검색은 이 기간의 레시피 전부에서 찾는다."""
-    rows = [w("AOI-1", f"W{i}", f"{8 + i // 6:02d}:{(i % 6) * 10:02d}", f"{8 + i // 6:02d}:{(i % 6) * 10 + 5:02d}", lot=f"L{i}", job=f"ALPHA{i:02d}") for i in range(42)]
+def test_recipe_list_is_limited_to_tb500_rdl_and_pi_and_the_count_line_is_short():
+    """10/6 사용자: 레시피는 TB500 RDL(RDL1~4 계열) · TB500 PI(2/3/4, Enhanced 는 따로) 만 — 다른 Job · 복사본 변형은 한 줄로.
+    목록 안내는 짧게: 검색 안 하면 '전체 n개', 검색하면 '검색 결과 n개'(40개를 넘을 때만 ' · 40개 표시')."""
+    jobs = ["TB500_RDL1 - Multi", "TB500_RDL2 - Multi", "TB500_RDL2 - Multi_COPY", "R_TB500_LIVE_PI3", "R_TB500_LIVE_PI3 AOI-13 Copy_0702",
+            "R_TB500_LIVE_PI3 - Enhanced", "R_TB500_LIVE_PI4-x5", "R_KENDALL_A0_PI3", "ROOT-HVM-4DT-TB500-H-M1-RDL2_NEW", "ALPHA00"]
+    rows = [w("AOI-1", f"W{i}", f"{8 + i // 6:02d}:{(i % 6) * 10:02d}", f"{8 + i // 6:02d}:{(i % 6) * 10 + 5:02d}", lot=f"L{i}", job=j) for i, j in enumerate(jobs)]
     html, = screen(rows, meta("AOI-1"), [["rcpHtml"]])
-    assert "생산량 상위 40개 / 전체 42개 · 전체 검색 가능" in html and html.count('class="rowbtn rcprow') == 40
-    found, = screen(rows, meta("AOI-1"), [["rcpHtml"]], state={"rcpQ": "alpha41"})
-    assert "검색 결과 1개 · 1개 표시" in found and "ALPHA41" in found
+    names = re.findall(r'data-row="rcp:[^"]*"[^>]*>\s*<span class="rn"[^>]*>([^<]*)</span>', html)
+    assert sorted(names) == ["TB500 PI3", "TB500 PI3 Enhanced", "TB500 RDL1", "TB500 RDL2"]   # PI4-x5 · Kendall · ROOT-… · ALPHA 는 이 탭에 없다, 복사본은 한 줄로
+    note = lambda h: re.search(r'data-key="rcp:note">([^<]*)<', h).group(1)
+    assert note(html) == "전체 4개" and "레시피 4개" not in html.split('class="rcpgrid"')[0]
+    found, = screen(rows, meta("AOI-1"), [["rcpHtml"]], state={"rcpQ": "rdl1"})
+    assert note(found) == "검색 결과 1개"
     none, = screen(rows, meta("AOI-1"), [["rcpHtml"]], state={"rcpQ": "zzz"})
     assert "검색 결과 0개" in none and "검색 결과가 없습니다" in none and 'data-fk="rcp:clear"' in none and 'class="panel scanhero"' not in none
+
+
+def _lot_rows(n, rep="R1.htm", bs="08:00", be="10:00", dev="AOI-1"):
+    rows = []
+    for i in range(n):
+        rows.append(_rdl(dev, f"W{i}", f"08:{i:02d}", f"08:{i + 1:02d}", "LOT-A", "SINGLE", report=rep, bs=bs, be=be))
+    return rows
+
+
+def test_report_lot_time_is_scaled_to_25_wafers_only_for_20_to_24():
+    """10/6 사용자: Report 1LOT당 = Batch Start→End. 20~24장이면 ×25÷장수(25장 기준), 25장 이상은 그대로, 19장 이하는 뺀다.
+    (120분짜리 Report 로) 26장 → 120.0 · 24장 → 125.0 · 20장 → 150.0 · 19장 → 계산 안 함."""
+    for n, want in ((26, "120.0"), (24, "125.0"), (20, "150.0")):
+        html, = screen(_lot_rows(n), meta("AOI-1"), [["rcpHtml"]])
+        assert f'Report 1LOT당 <b class="num">{want}</b>분' in html and "Lot 1개 (25장 기준)" in html, (n, want)
+    html, = screen(_lot_rows(19), meta("AOI-1"), [["rcpHtml"]])
+    assert 'Report 1LOT당 <b class="num">—</b>분' in html and "PASS 20장 미만 Lot 1개" in html
+
+
+def test_report_lot_time_skips_reports_with_an_error_but_keeps_abort_only_ones():
+    """Error 유형이 있는 Report 는 Report 기준 통계에서 빠지고, 원인 없이 Aborted 만 있는 Report 는 들어간다."""
+    err = _lot_rows(22, rep="E.htm") + [w("AOI-1", "E1", "09:00", "09:01", status="Alignment Error.", job="TB500_RDL4 - Multi", report="E.htm", bs="08:00", be="10:00")]
+    html, = screen(err, meta("AOI-1"), [["rcpHtml"]])
+    assert "Lot 0개 (25장 기준)" in html and "Error 가 있는 Lot 1개" in html
+    ab = _lot_rows(22, rep="A.htm") + [w("AOI-1", "A1", None, None, status="Aborted.", job="TB500_RDL4 - Multi", report="A.htm", bs="08:00", be="10:00")]
+    html, = screen(ab, meta("AOI-1"), [["rcpHtml"]])
+    assert "Lot 1개 (25장 기준)" in html and "Error 가 있는 Lot" not in html
+
+
+def test_outliers_beyond_3_sigma_are_dropped_once_and_listed_but_not_for_tiny_samples():
+    """3σ 한 번 · 표본 5개 미만이면 제거 안 함 · 제거했으면 값과 이유(평균 ± 3σ 범위)를 통계 밑에 적는다."""
+    rows = [_rdl("AOI-1", f"W{i}", f"08:{i * 2:02d}", f"08:{i * 2 + 1:02d}", "LOT-A", "SINGLE") for i in range(21)]
+    rows.append(_rdl("AOI-1", "BIG", "11:00", "13:30", "LOT-A", "SINGLE"))
+    html, = screen(rows, meta("AOI-1"), [["rcpHtml"]])
+    assert "이상치 1개 제외" in html and "150.0분" in html and "3σ" in html and "22장 중 21장으로 계산" in html
+    tiny = [_rdl("AOI-1", f"T{i}", f"08:{i * 3:02d}", f"08:{i * 3 + 1:02d}", "LOT-A", "SINGLE") for i in range(3)] + [_rdl("AOI-1", "BIG", "11:00", "13:30", "LOT-A", "SINGLE")]
+    html, = screen(tiny, meta("AOI-1"), [["rcpHtml"]])
+    assert "개 제외" not in html and "4장 중 4장으로 계산" in html
+
+
+def test_single_scan_counts_x20_only_and_pi_has_no_multi_single_split():
+    """단일은 x20 만 — x5 · x10 만 쓴 단일은 무시(실수로 돌린 것). PI 는 멀티·단일 구분이 없다('전체' 한 묶음, 레시피 칸의 '|' 도 멀티가 아니다)."""
+    rows = [_rdl("AOI-1", f"S{i}", f"08:{i * 2:02d}", f"08:{i * 2 + 1:02d}", "A", "SINGLE") for i in range(3)]
+    rows += [dict(_rdl("AOI-1", f"X{i}", f"09:{i * 2:02d}", f"09:{i * 2 + 1:02d}", "B", "SINGLE"), recipe="x5") for i in range(2)]
+    html, = screen(rows, meta("AOI-1"), [["rcpHtml"]])
+    assert "3장 중 3장으로 계산" in html and "x5 · x10 단일 2장 제외" in html
+    pi = [dict(w("AOI-1", f"P{i}", f"08:{i * 2:02d}", f"08:{i * 2 + 1:02d}", job="R_TB500_LIVE_PI3"), recipe="PI BUBBLE|PI3") for i in range(3)]
+    html, = screen(pi, meta("AOI-1"), [["rcpHtml"]])
+    assert ">전체</span>" in html or "전체</p>" in html or "</i>전체" in html
+    assert "(x20 + x5)" not in html and 'class="mtile verdict"' not in html and "멀티 · 단일을 가릴" not in html

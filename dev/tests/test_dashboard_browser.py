@@ -51,8 +51,8 @@ def _fixture_rows():
     rows = []
     # AOI-1: 정상 스캔 두 Lot + Error 하나(원인 ALIGN) + INI 없는 Pass 행(배치 창 추정)
     for i in range(6):
-        rows.append(_row("AOI-1", f"W{i}", f"08:{i*5:02d}", f"08:{i*5+4:02d}", lot="LOT-A", job="R_TB500_LIVE_PI2", mode="MULTI"))
-    rows.append(_row("AOI-1", "E1", "09:00", "09:03", lot="LOT-B", status="Alignment Error.", job="R_TB500_LIVE_PI2"))
+        rows.append(_row("AOI-1", f"W{i}", f"08:{i*5:02d}", f"08:{i*5+4:02d}", lot="LOT-A", job="TB500_RDL2", mode="MULTI"))
+    rows.append(_row("AOI-1", "E1", "09:00", "09:03", lot="LOT-B", status="Alignment Error.", job="TB500_RDL2"))
     for i in range(4):
         rows.append(_row("AOI-1", f"X{i}", f"10:{i*6:02d}", f"10:{i*6+5:02d}", lot="LOT-C", job="R_KENDALL_A0_FS"))
     rows.append(_row("AOI-1", "N1", lot="LOT-D", bs="11:00", be="11:30", job="J-OTHER"))
@@ -63,11 +63,11 @@ def _fixture_rows():
         rows.append(_row("AOI-2", f"S{i}", f"12:{i*10:02d}", f"12:{i*10+9:02d}", lot="LOT-E"))
     # AOI-10: 홈 목록이 번호순(AOI-2 뒤)인지 보기 위한 한 Lot — 사전순이면 AOI-1 다음에 온다
     for i in range(2):
-        rows.append(_row("AOI-10", f"K{i}", f"09:{i*10:02d}", f"09:{i*10+8:02d}", lot="LOT-K"))
+        rows.append(_row("AOI-10", f"K{i}", f"09:{i*10:02d}", f"09:{i*10+8:02d}", lot="LOT-K", job="TB500_RDL3"))
     # 전날(9/17): AOI-1 에 Error 하나 — Error 탭의 '최근 7일' 이 이틀이 되어 기간 팝업(여러 날)을 검사할 수 있다
-    rows.append(_row("AOI-1", "P1", "14:00", "14:03", lot="LOT-P", status="Scan Error.", job="R_TB500_LIVE_PI2", day="2026-09-17"))
+    rows.append(_row("AOI-1", "P1", "14:00", "14:03", lot="LOT-P", status="Scan Error.", job="TB500_RDL2", day="2026-09-17"))
     for i in range(3):
-        rows.append(_row("AOI-1", f"Q{i}", f"15:{i*5:02d}", f"15:{i*5+3:02d}", lot="LOT-Q", job="R_TB500_LIVE_PI2", day="2026-09-17", mode="SINGLE"))
+        rows.append(_row("AOI-1", f"Q{i}", f"15:{i*5:02d}", f"15:{i*5+3:02d}", lot="LOT-Q", job="TB500_RDL2", day="2026-09-17", mode="SINGLE"))
     return rows
 
 
@@ -192,7 +192,7 @@ def test_error_popup_type_popup_trend_and_report_tab(page):
     pg.wait_for_selector('main[data-key="view:report"]')   # 새 화면은 표시자가 출발한 두 프레임 뒤에 그린다
     rpt = pg.inner_text("main")
     assert "TB500 · Kendall" in rpt and "개 Job 만 봅니다" in rpt                    # D59
-    assert "평균 fault" in rpt and "수집 예정" not in rpt                             # D08
+    assert "평균 Defect" in rpt and "수집 예정" not in rpt                             # D08
     assert pg.evaluate("[...document.querySelectorAll('main .panel')].some(p => p.style.overflowX === 'auto')")   # D10
     assert errors == []
 
@@ -320,7 +320,7 @@ def test_report_tab_groups_and_sorts_by_column(page):
     groups = pg.evaluate("[...document.querySelectorAll('.grp')].map(g => g.firstChild.textContent)")
     assert groups == ["Kendall", "TB500"]
     order = pg.evaluate("[...document.querySelectorAll('[data-row^=\"job:\"]')].map(e => e.dataset.row.slice(4))")
-    assert order == ["Kendall FS", "TB500 PI2", "TB500 PI2-Multi"]                      # 그룹 순서 · 이름순 · 멀티는 다른 Job(D76)
+    assert order == ["Kendall FS", "TB500 RDL2-Multi"]                      # 그룹 순서 · 이름순 · 멀티는 다른 Job(D76)
     hdr = pg.locator('.thead button.th', has_text="배치")
     hdr.click()
     pg.wait_for_selector('.thead button.th[aria-sort="descending"]')
@@ -466,9 +466,9 @@ def test_recipe_groups_apply_at_once_persist_in_browser_and_export(page, tmp_pat
     pg, errors, requests = page
     pg.locator('[data-fk="rg:open"]').click()
     pg.wait_for_selector('[data-dlg="recipe"]')
-    pg.fill('[data-fk="rg:q"]', "R_")
+    pg.fill('[data-fk="rg:q"]', "_")
     pg.wait_for_timeout(150)
-    assert sorted(pg.locator(".rgrow .mono").all_inner_texts()) == ["R_KENDALL_A0_FS", "R_TB500_LIVE_PI2", "R_TB500_LIVE_PI2-Multi"]
+    assert sorted(pg.locator(".rgrow .mono").all_inner_texts()) == ["R_KENDALL_A0_FS", "TB500_RDL2", "TB500_RDL2-Multi", "TB500_RDL3"]
     assert pg.evaluate("document.activeElement.dataset.fk") == "rg:q"           # 입력 중 다시 그려도 포커스는 그 칸
     pg.get_by_role("button", name="목록 전부 선택").click()
     pg.fill('[data-fk="rg:name"]', "MIX RECIPE")
@@ -480,7 +480,7 @@ def test_recipe_groups_apply_at_once_persist_in_browser_and_export(page, tmp_pat
     exp = json.loads(Path(dl.value.path()).read_text(encoding="utf-8"))
     assert dl.value.suggested_filename == "recipe_groups.json"
     assert exp["v"] == 1 and exp["saved"] and [g["name"] for g in exp["groups"]] == ["MIX RECIPE"]
-    assert sorted(exp["groups"][0]["jobs"]) == ["R_KENDALL_A0_FS", "R_TB500_LIVE_PI2", "R_TB500_LIVE_PI2-Multi"]
+    assert sorted(exp["groups"][0]["jobs"]) == ["R_KENDALL_A0_FS", "TB500_RDL2", "TB500_RDL2-Multi", "TB500_RDL3"]
     pg.keyboard.press("Escape")
     pg.locator('button[data-fk="nav:errors"]').click()
     pg.wait_for_selector('main[data-key="view:errors"]')
@@ -502,15 +502,15 @@ def test_recipe_groups_apply_at_once_persist_in_browser_and_export(page, tmp_pat
 
 def test_recipe_tab_shows_per_device_stats_and_compares_two_periods(page):
     """D70: 레시피 탭 — 레시피(Job 묶음)를 고르면 생산량 · 장당 스캔 · 장비별 표, 아래 전후 비교는 두 기간 × 두 레시피 묶음.
-    값은 원천 행에서: AOI-1 의 R_TB500_LIVE_PI2 PASS 는 9/17 3장 + 9/18 6장(Error 행·Test 는 생산량이 아니다)."""
+    값은 원천 행에서: AOI-1 의 TB500_RDL2 PASS 는 9/17 3장 + 9/18 6장(Error 행·Test 는 생산량이 아니다)."""
     pg, errors, requests = page
     pg.locator('button[data-fk="nav:recipe"]').click()
     pg.wait_for_selector('main[data-key="view:recipe"]')
-    pg.fill('[data-fk="rcp:q"]', "PI2")
+    pg.fill('[data-fk="rcp:q"]', "RDL2")
     pg.wait_for_timeout(150)
     assert pg.evaluate("document.activeElement.dataset.fk") == "rcp:q"
     pg.wait_for_timeout(450)                                                    # 바뀐 글자는 0.24초 동안 한 글자씩 넘어간다
-    assert [x.split("\n")[0] for x in pg.locator(".rcprow").all_inner_texts()] == ["TB500 PI2"]   # 10/6: 멀티 · 단일 Job(D76)은 한 레시피 줄로
+    assert [x.split("\n")[0] for x in pg.locator(".rcprow").all_inner_texts()] == ["TB500 RDL2"]   # 10/6: 멀티 · 단일 Job(D76)은 한 레시피 줄로
     assert "멀티 67%" in pg.locator(".rcprow").first.inner_text()
     pg.locator(".rcprow").first.click()
     # 첫 화면(10/5): 장당 스캔 멀티 vs 단일 — 9/18 W 6장 멀티 4분, 9/17 Q 3장 단일 3분 → 단일 1분 빠름(같은 장비 AOI-1)
@@ -518,7 +518,7 @@ def test_recipe_tab_shows_per_device_stats_and_compares_two_periods(page):
     assert "4.0" in tiles[0] and "6장" in tiles[0] and "3.0" in tiles[1] and "3장" in tiles[1]
     assert "전체 장\n단일 1.0분 빠름" in tiles[2] and "같은 장비\n단일 1.0분 빠름" in tiles[2] and "1대를 합침" in tiles[2]   # 10/6 C1: 두 비교를 같은 크기로
     assert pg.locator(".scanhero .scan-source-chip").count() == 4                       # 10/6 C2: 방식마다 INI · Report 보완 칩
-    assert pg.locator(".scanhero .jchip").count() == 2                 # 이 레시피로 보는 Job: PI2-Multi · PI2
+    assert pg.locator(".scanhero .jchip").count() == 2                 # 이 레시피로 보는 Job: RDL2-Multi · PI2
     assert [x.split("\n")[0] for x in pg.locator(".dbrow:not(.head):not(.axis)").all_inner_texts()] == ["AOI-1"]
     assert pg.locator(".dbrow .dd").count() == 2                        # 같은 장비에 멀티 · 단일 두 점
     how = pg.locator(".how").inner_text()                               # 10/6: 어떻게 셌나 — 실제 숫자로
@@ -527,12 +527,12 @@ def test_recipe_tab_shows_per_device_stats_and_compares_two_periods(page):
     pg.locator('[data-fk="rcp:more"]').click()
     pg.wait_for_timeout(200)
     cards = pg.locator("main section.cards > div").all_inner_texts()
-    assert cards[0].split("\n")[0] == "생산량" and "6장" in cards[0]           # 상세는 고른 Job(PI2-Multi)만
+    assert cards[0].split("\n")[0] == "생산량" and "6장" in cards[0]           # 상세는 고른 Job(RDL2-Multi)만
     assert [x.split("\n")[0] for x in pg.locator(".rcpdev").all_inner_texts()] == ["AOI-1"]
     assert pg.locator(".cmp").count() == 0
     pg.locator('[data-fk="rcp:cmp"]').click()
     pg.wait_for_selector(".cmp")
-    pg.locator(".jpick .btn").nth(1).click()                               # 상세에서 단일(PI2)을 골라 A 쪽에 더한다
+    pg.locator(".jpick .btn").nth(1).click()                               # 상세에서 단일(RDL2)을 골라 A 쪽에 더한다
     pg.locator(".cmpside").nth(0).get_by_role("button", name=re.compile("＋")).click()
     pg.wait_for_timeout(300)
     pg.fill('[data-fk="cmp:cmpAf"]', "2026-09-17")
@@ -543,14 +543,14 @@ def test_recipe_tab_shows_per_device_stats_and_compares_two_periods(page):
     rows = {r.split("\n")[0]: r.split("\n")[1:] for r in pg.locator(".cmp .cmprow:not(.dev):not(.head)").all_inner_texts()}
     assert rows["생산량(Wafer)"][:2] == ["3", "6"] and "+100.0%" in rows["생산량(Wafer)"][2]
     assert rows["멀티 스캔 장 비율(%)"][:2] == ["0.0", "100.0"]
-    # 다른 레시피를 B 에 더하면 B 쪽 생산량이 늘어난다(전 = PI2, 후 = PI2 + Kendall FS)
-    pg.fill('[data-fk="rcp:q"]', "KENDALL")
+    # 다른 레시피를 B 에 더하면 B 쪽 생산량이 늘어난다(전 = RDL2, 후 = RDL2 + RDL3)
+    pg.fill('[data-fk="rcp:q"]', "RDL3")                         # 10/6: 레시피 탭은 TB500 RDL · TB500 PI 만 — 다른 레시피(RDL3)를 더한다
     pg.wait_for_timeout(150)
     pg.locator(".rcprow").first.click()
     pg.locator(".cmpside").nth(1).get_by_role("button", name=re.compile("＋")).click()
     pg.wait_for_timeout(500)
     rows = {r.split("\n")[0]: r.split("\n")[1:] for r in pg.locator(".cmp .cmprow:not(.dev):not(.head)").all_inner_texts()}
-    assert rows["생산량(Wafer)"][:2] == ["3", "10"]               # 첫 레시피가 양쪽 묶음의 시작, 다른 레시피를 골라도 A 는 그대로
+    assert rows["생산량(Wafer)"][:2] == ["3", "8"]               # 첫 레시피가 양쪽 묶음의 시작, 다른 레시피를 골라도 A 는 그대로
     assert requests == [] and errors == []
 
 
@@ -589,25 +589,25 @@ def test_floor_and_maker_filters_are_picked_separately(page):
 
 
 def test_recipe_group_of_multi_job_still_shows_single_on_the_same_row(page):
-    """10/6(사용자 보고): 레시피 묶음(D67)에 멀티 Job(`R_TB500_LIVE_PI2-Multi`)만 넣어 두면 단일 Job 이 같은 이름으로 한 줄 더 생겼다.
+    """10/6(사용자 보고): 레시피 묶음(D67)에 멀티 Job(`TB500_RDL2-Multi`)만 넣어 두면 단일 Job 이 같은 이름으로 한 줄 더 생겼다.
     줄기가 같은 Job 묶음은 한 레시피(이름은 사용자 묶음 이름)."""
     pg, errors, _ = page
     pg.evaluate("""localStorage.setItem('aoi.recipeGroups.v1', JSON.stringify({v:1, saved:'2099-01-01T00:00:00',
-        groups:[{name:'PI2 묶음', jobs:['R_TB500_LIVE_PI2-Multi']}]}))""")
+        groups:[{name:'RDL2 묶음', jobs:['TB500_RDL2-Multi']}]}))""")
     pg.reload()
     pg.wait_for_selector('main[data-key^="view:"]')
     pg.locator('button[data-fk="nav:recipe"]').click()
     pg.wait_for_selector('main[data-key="view:recipe"]')
-    pg.fill('[data-fk="rcp:q"]', "PI2")
+    pg.fill('[data-fk="rcp:q"]', "RDL2")
     pg.wait_for_timeout(450)
     rows = [x.split("\n")[0] for x in pg.locator(".rcprow").all_inner_texts()]
-    assert rows == ["PI2 묶음"]
+    assert rows == ["TB500 RDL2"]                                         # 10/6: 이 탭의 레시피 이름은 표기 이름(묶음 편집기와 무관) — 멀티 · 단일 Job 은 한 줄
     assert pg.locator(".scanhero .jchip").count() == 2                    # 멀티 · 단일 둘 다 이 레시피
     pg.evaluate("localStorage.removeItem('aoi.recipeGroups.v1')")
     assert errors == []
 
 
-def _open_recipe(pg, q="PI2"):
+def _open_recipe(pg, q="RDL2"):
     pg.locator('button[data-fk="nav:recipe"]').click()
     pg.wait_for_selector('main[data-key="view:recipe"]')
     pg.fill('[data-fk="rcp:q"]', q)
@@ -655,7 +655,7 @@ def test_recipe_how_summary_and_details_are_accessible(page):
     pg, errors, _ = page
     _open_recipe(pg)
     items = pg.locator(".how .how-item")
-    assert items.count() == 6 and pg.locator(".how .how-item[open]").count() == 0
+    assert items.count() == 8 and pg.locator(".how .how-item[open]").count() == 0
     how = pg.locator(".how").inner_text()
     assert "PASS 9장" in how and "WaferStartTime → WaferEndTime" in how and "Batch Start → Batch End" in how
     pg.locator('[data-fk="how:time"]').click()
@@ -681,7 +681,7 @@ def test_recipe_no_match_clearly_identifies_retained_or_empty_detail(page):
     pg.wait_for_timeout(450)
     empty = pg.locator('[data-key="rcp:empty-detail"]')
     assert pg.locator(".scanhero").count() == 0 and "검색 결과가 없습니다" in empty.inner_text()
-    assert "이전 선택" in empty.inner_text() and "TB500 PI2" in empty.inner_text()
+    assert "이전 선택" in empty.inner_text() and "TB500 RDL2" in empty.inner_text()
     assert "검색 결과 0개" in pg.locator(".rcpnote").inner_text()
     pg.locator('[data-fk="rcp:clear"]').click()
     pg.wait_for_timeout(450)
@@ -713,7 +713,8 @@ def test_date_controls_keep_day_inside_the_visible_period(page):
     assert day() == "2026-09-18"
     pg.locator('button[data-fk="nav:recipe"]').click()
     pg.wait_for_selector('main[data-key="view:recipe"]')
-    assert "가동률 · Error 일자별에서 사용" in pg.locator(".daynav").inner_text() and "2일" in pg.locator('main[data-key="view:recipe"] .scope-badge').inner_text()
+    assert pg.locator(".daynav").count() == 0 and pg.locator(".date-controls .date-control-row").count() == 1     # 10/6: 하루가 기준이 아닌 탭은 하루 날짜 줄이 없다
+    assert "2일" in pg.locator('main[data-key="view:recipe"] .scope-badge').inner_text()
     assert errors == []
 
 
@@ -757,4 +758,109 @@ def test_narrow_dashboard_controls_and_labels_stay_visible(page):
             return [...b.querySelectorAll('.callout')].every(c => {const r = c.getBoundingClientRect(); return r.left >= B.left - 1 && r.right <= B.right + 1;});})()""")
         pg.keyboard.press("Escape")
         pg.wait_for_timeout(400)
+    assert errors == []
+
+
+# ── 10/6 'RDL 단일스캔' 개편: Report 1LOT당 · 이상치 · x5 단일 무시 · 장비 상세 팝업 · 하루 날짜 줄 ────────────────────
+def _rdl_rows():
+    """AOI-5 의 TB500_RDL4(단일 x20): Report A = PASS 22장(+Aborted 한 줄 — 원인 없는 중단은 허용) · 한 장만 150분(이상치) ·
+    Report B = Error 가 있어 제외 · Report C = 19장이라 제외 · x5 만 쓴 단일 6장(실수로 돌린 것 — 무시)."""
+    rows = []
+    def add(wafer, s, e, *, lot, report, bs, be, status="Pass", recipe="x20"):
+        r = _row("AOI-5", wafer, s, e, lot=lot, job="TB500_RDL4", report=report, bs=bs, be=be, mode="SINGLE", status=status)
+        r["recipe"] = recipe
+        rows.append(r)
+    for i in range(21):
+        add(f"A{i}", f"08:{i*2:02d}" if i < 30 else "09:00", f"08:{i*2+1:02d}", lot="LOT-A", report="RA.htm", bs="08:00", be="14:00")
+    add("A21", "11:00", "13:30", lot="LOT-A", report="RA.htm", bs="08:00", be="14:00")                    # 150분 — 평균 ± 3σ 밖
+    rows.append(_row("AOI-5", "A22", lot="LOT-A", status="Aborted.", job="TB500_RDL4", report="RA.htm", bs="08:00", be="14:00", mode="SINGLE"))
+    for i in range(20):
+        add(f"B{i}", f"16:{i*2:02d}", f"16:{i*2+1:02d}", lot="LOT-B", report="RB.htm", bs="16:00", be="17:00")
+    add("BE", "17:00", "17:01", lot="LOT-B", report="RB.htm", bs="16:00", be="17:00", status="Alignment Error.")
+    for i in range(19):
+        add(f"C{i}", f"18:{i*2:02d}", f"18:{i*2+1:02d}", lot="LOT-C", report="RC.htm", bs="18:00", be="19:00")
+    for i in range(6):
+        add(f"X{i}", f"20:{i*2:02d}", f"20:{i*2+1:02d}", lot="LOT-X", report="RX.htm", bs="20:00", be="21:00", recipe="x5")
+    return rows
+
+
+@pytest.fixture
+def rdl_page(page_factory, tmp_path):
+    emb = collect._embed_rows(_rdl_rows())
+    meta = _meta()
+    meta["scope"]["devices"] = ["AOI-5"]
+    meta["devices"] = [{"name": "AOI-5", "note": "X:\\AOI-5", "report_dir": "Report", "status": "ok"}]
+    emb["meta"] = meta
+    out = tmp_path / "rdl.html"
+    out.write_text(TEMPLATE.read_text(encoding="utf-8").replace("__DATA__", json.dumps(emb, ensure_ascii=False).replace("</", "<\\/"), 1), encoding="utf-8")
+    ctx = page_factory.new_context(viewport={"width": 1280, "height": 900})
+    pg = ctx.new_page()
+    errors: list = []
+    pg.on("pageerror", lambda e: errors.append("pageerror: " + str(e)))
+    pg.on("console", lambda m: errors.append("console: " + m.text) if m.type == "error" else None)
+    pg.goto(out.as_uri())
+    pg.wait_for_selector('main[data-key^="view:"]')
+    yield pg, errors
+    ctx.close()
+
+
+def test_rdl_tab_lot_stat_outlier_x5_rule_and_wording(rdl_page):
+    pg, errors = rdl_page
+    assert [t.strip() for t in pg.locator("nav button").all_inner_texts()] == ["가동률", "Error", "TB500 · Kendall", "RDL 단일스캔"]
+    pg.locator('button[data-fk="nav:recipe"]').click()
+    pg.wait_for_selector('main[data-key="view:recipe"]')
+    pg.wait_for_timeout(400)
+    assert pg.locator("main h1").inner_text().strip() == "RDL 단일스캔"
+    assert pg.locator('[data-key="rcp:note"]').inner_text().strip() == "전체 1개"            # '레시피 n개' · '상위 n개' 군더더기 없음
+    assert pg.locator('[data-key="rcp:detail"] .scanhero h2').inner_text().strip() == "TB500 RDL4"   # '장당 스캔 — 멀티 vs 단일 ·' 문구 없음
+    assert "tfade" in pg.locator('[data-key="rcp:detail"] .scanhero h2').get_attribute("class")
+    tiles = pg.locator(".scanhero .mtile").all_inner_texts()
+    single = [t for t in tiles if t.startswith("단일")][0]
+    assert "(x20)" in single
+    assert "Report 1LOT당 409.1분" in single.replace("\n", " ") and "Lot 1개" in single      # 22장 → 360분 × 25 ÷ 22(20~24장은 25장 기준으로 환산) · Error/19장 Report 는 제외
+    assert "이상치 1개 제외" in single and "150.0분" in single and "3σ" in single               # 어떤 값이 왜 빠졌는지
+    how = pg.locator(".how").inner_text()
+    assert "x5 · x10 단일 6장 제외" in how and "PASS 4" not in how                           # x5 만 쓴 단일은 통계에서 무시
+    assert "제외 Lot 2개" in how and "이상치" in how
+    body = pg.locator("main").inner_text().lower()
+    assert "fault" not in body and "배치 기준" not in body and "하루 평균" not in body and "날짜별 생산량" not in body
+    pg.locator('[data-fk="rcp:more"]').click()
+    pg.wait_for_timeout(300)
+    assert "하루 평균" not in pg.locator("main").inner_text() and "날짜별 생산량" not in pg.locator("main").inner_text()
+    assert errors == []
+
+
+def test_rdl_device_row_double_click_opens_detail_popup(rdl_page):
+    pg, errors = rdl_page
+    pg.locator('button[data-fk="nav:recipe"]').click()
+    pg.wait_for_selector('main[data-key="view:recipe"]')
+    pg.locator(".dbrow[data-row='dev:AOI-5']").dblclick()
+    pg.wait_for_selector('.dlg[data-dlg="rcpdev"]')
+    dlg = pg.locator('.dlg[data-dlg="rcpdev"]')
+    txt = dlg.inner_text()
+    assert "AOI-5" in txt and "TB500 RDL4" in txt and "장(행)별 원자료" in txt and "장비 간 비교" in txt and "이상치 제외" in txt
+    assert dlg.locator(".rawrow").count() == 22 + 20 + 19          # 이 기간 AOI-5 의 PASS 장(Error 행 · x5 단일은 없음)
+    assert dlg.locator(".rawrow .bad").count() >= 1                    # 이상치로 뺀 장은 붉게
+    assert pg.evaluate("document.activeElement && document.activeElement.id") == "dlg-rcpdev-title"
+    pg.keyboard.press("Escape")
+    pg.wait_for_timeout(500)
+    assert pg.locator('.dlg[data-dlg="rcpdev"]').count() == 0
+    pg.locator('[data-fk="rcp:devpop"]').click()                        # 키보드 · 터치용 단추도 같은 팝업
+    pg.wait_for_selector('.dlg[data-dlg="rcpdev"]')
+    assert errors == []
+
+
+def test_day_row_only_where_a_day_is_the_basis_and_range_is_dimmed_then(rdl_page):
+    pg, errors = rdl_page
+    assert pg.locator('[data-key="daynav"]').count() == 1 and pg.locator(".rangebar.dim").count() == 1      # 가동률: 하루 기준 → 조회 기간은 회색
+    for k in ("report", "recipe"):
+        pg.locator(f'button[data-fk="nav:{k}"]').click()
+        pg.wait_for_selector(f'main[data-key="view:{k}"]')
+        assert pg.locator('[data-key="daynav"]').count() == 0 and pg.locator(".rangebar.dim").count() == 0
+    pg.locator('button[data-fk="nav:errors"]').click()
+    pg.wait_for_selector('main[data-key="view:errors"]')
+    assert pg.locator('[data-key="daynav"]').count() == 1 and pg.locator(".rangebar.dim").count() == 1      # Error 일자별
+    pg.locator(".rangebar .seg button").first.click()                    # 기간 버튼을 누르면 하루 기준이 풀린다
+    pg.wait_for_timeout(300)
+    assert pg.locator('[data-key="daynav"]').count() == 0 and pg.locator(".rangebar.dim").count() == 0
     assert errors == []
