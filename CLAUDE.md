@@ -175,7 +175,7 @@ Camtek AOI 장비의 BatchReport/WaferInfo.ini 를 읽어 장비별 가동률을
   TB500 · Kendall 탭: **Kendall · TB500 두 묶음**(표기명이 Kendall 로 시작하면 Kendall) 안에서 열 머리를 눌러 정렬(`rptSort`, 기본 이름 오름차순, 같은 열 다시 누르면 반대, `aria-sort`).
   **수집 창 시작일**(`D.partialDays` — `meta.retention_days` 로 계산, 보관 기간의 첫날은 수집 창이 도중에 시작해 하루 전체가 아니다): 헤더에 '부분' 표, 홈 카드 안내, 추이의 평균·주/월 묶음에서 제외(막대는 회색으로 남긴다).
   가동률(카드 3 · 층 필터 · 정렬 · 24시간 막대 목록) → **장비 팝업**(통계 6 · 막대 · Lot 이름표 지시선 · 선택 Lot 원문 · **Report 열기**) ↔ **Error 상세 팝업**(언제 났나 · 유형별 · 최근 21일 · Lot 별, 유형/Job 팝업에서 오면 필터 칩, D51) ·
-  Error(기간 · 층 · 장비 종류 · 지표 → 날짜별 → 유형별·장비별·Job별 → 유형/Job 팝업) · **TB500 · Kendall**(D59, 옛 이름 '리포트' — 표기명 21개 Job 만 보는 탭이라 이름을 바꿨고
+  Error(**KLA 제외**, 10/6 — 층 필터만 · 장비 종류 필터 없음 · `S.devList(true)`; 기간 · 층 · 지표 → 날짜별 → 유형별·장비별·Job별 → 유형/Job 팝업) · **TB500 · Kendall**(D59, 옛 이름 '리포트' — 표기명 21개 Job 만 보는 탭이라 이름을 바꿨고
   '표기명 n개 Job 만(이 기간 Lot 의 p%)' 안내 한 줄을 둔다. D49: 배치시간 = Report 배치 시작~종료 회귀, 표본 5개 미만 생략, 제외 = 원인 Error 있는 Report · 5장 미만 · 배치 시각 없음. 평균 fault = `faults` 열이 있는 행의 장당 평균, `lots[13]`·`[14]`, D08).
   살펴볼 장비 = 가동률 40% 미만 또는 Error 3건 이상(`PROPS` — `meta.dashboard_settings` 의 같은 이름 숫자가 있으면 그것으로, D14). **기록 없음은 살펴볼 장비가 아니라 별도 대수**(`S.noRec`, D06·D57).
   Lot 선택 키는 `lotKey`(Job·Lot·시작·배치시작·**Report**, D16 — 같은 Lot 이 하루에 Report 두 장이면 갈린다). 팝업은 ESC 로 닫힌다(Error 팝업 → 장비 팝업 → 유형/Job 팝업 순).

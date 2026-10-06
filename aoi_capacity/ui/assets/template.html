@@ -846,10 +846,10 @@ const S={
   alert(t){const u=S.util(t);return u!==null&&(u<S.thU()||(t&&t.e||0)>=S.thE());},
   floorOf(n){return n.indexOf("4F")===0?"4":"2";},
   /* 층(전체 · 2층 · 4층)과 장비 종류(전체 · Camtek · KLA)는 따로 고르고 함께 걸린다(10/5 — 예: 4층 + KLA) */
-  devList(){const f=state.floor,k=state.maker;
+  devList(floorOnly){const f=state.floor,k=floorOnly?"all":state.maker;   /* floorOnly: Error 탭(KLA 제외 · 장비 종류 필터 없음) */
     return D.devices.filter(n=>(f==="all"||S.floorOf(n)===f)&&(k==="all"||(k==="kla"?isKla(n):!isKla(n))));},
-  filterSegs(){return segHtml(S.segGroup([{k:"all",label:"전체 층"},{k:"2",label:"2층"},{k:"4",label:"4층"}],state.floor,k=>setState({floor:k})))
-    +segHtml(S.segGroup([{k:"all",label:"전체 장비"},{k:"cam",label:"Camtek"},{k:"kla",label:"KLA"}],state.maker,k=>setState({maker:k})));},
+  filterSegs(floorOnly){return segHtml(S.segGroup([{k:"all",label:"전체 층"},{k:"2",label:"2층"},{k:"4",label:"4층"}],state.floor,k=>setState({floor:k})))
+    +(floorOnly?"":segHtml(S.segGroup([{k:"all",label:"전체 장비"},{k:"cam",label:"Camtek"},{k:"kla",label:"KLA"}],state.maker,k=>setState({maker:k}))));},
   fleetUtil(day,devs){const v=devs.map(n=>S.util(S.at(day,n))).filter(x=>x!==null);return v.length?v.reduce((a,b)=>a+b,0)/v.length:0;},
   segGroup(items,cur,on){return items.map(it=>({label:it.label,on:cur===it.k,pick:()=>on(it.k)}));},
   go(view){return()=>{const apply=()=>{const o=VIEWS.indexOf(state.view),n=VIEWS.indexOf(view);state.viewDir=o<0||n<0||o===n?0:(n>o?1:-1);setState({view,modalType:null,modalJob:null,errDev:null,modalDev:null,selLot:null,stack:[]});window.scrollTo(0,0);};
@@ -1388,7 +1388,7 @@ function homeHtml(){
 let errCtx=null;   /* 유형·Job 팝업이 같은 집계를 쓴다 */
 function errorsHtml(){
   const FD=state.errFDev;   /* 장비 필터(10/5): 유형·Job 필터와 함께 — 예: SCAN_ERROR + AOI-19 */
-  const day=S.dayStr(),devs=S.devList().filter(n=>FD==null||n===FD),P=D.pool;
+  const day=S.dayStr(),devs=S.devList(true).filter(n=>!isKla(n)&&(FD==null||n===FD)),P=D.pool;   /* 10/6: Error 탭은 KLA 제외(KLA 는 Error 를 모으지 않는다, D68) */
   const spanDays=D.days;   /* 기간은 헤더에서(10/5) */
   const pickDay=state.pickDay===undefined?day:state.pickDay;
   const eDayI=pickDay?D.days.indexOf(pickDay):D.days.indexOf(spanDays[spanDays.length-1]);
@@ -1445,7 +1445,7 @@ function errorsHtml(){
     {k:"Error 대기",v:hm(totalM),s:"하루 평균 "+hm(totalM/useDays.length),mono:false},
     {k:MET?"시간이 가장 긴 유형":"가장 많은 유형",v:typeArr.length?typeArr[0][0]:"—",s:typeArr.length?(typeArr[0][1][0]+"건 · "+hm(typeArr[0][1][1])):"",mono:true},
     {k:"Error 난 장비",v:Object.keys(byDev).length+"대",h:cnt(Object.keys(byDev).length)+"대",s:devs.length+"대 중",mono:false}];
-  return `<div class="bar-h"><h1>Error</h1>${chips}<div class="spacer"></div>${S.filterSegs()}${segHtml(spans)}${segHtml(metrics)}</div>
+  return `<div class="bar-h"><h1>Error</h1>${chips}<div class="spacer"></div>${S.filterSegs(true)}${segHtml(spans)}${segHtml(metrics)}</div>
     <section class="cards sm" style="margin-bottom:16px">${stats.map(s=>`<div><p class="k">${esc(s.k)}</p><p class="v num" style="${s.mono?"font-family:"+MONO:""}">${s.h||esc(s.v)}</p><p class="s">${esc(s.s)}</p></div>`).join("")}</section>
     <section class="panel pad"><div style="display:flex;align-items:baseline;gap:10px;margin-bottom:12px"><h2>날짜별 ${MET?"대기 시간":"건수"}</h2><span style="font-size:12.5px;color:#5A6673">${pickDay?(md(pickDay)+" 하루만 보는 중 — 막대를 다시 누르면 기간으로"):(spanDays.length===D.days.length?"전체 "+spanDays.length+"일":"최근 "+spanDays.length+"일")}</span></div>
       <div data-anim><div data-key="chart:errors">${barsHtml(bars,140,true)}</div></div></section>
