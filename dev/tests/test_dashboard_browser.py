@@ -510,13 +510,18 @@ def test_recipe_tab_shows_per_device_stats_and_compares_two_periods(page):
     pg.wait_for_timeout(150)
     assert pg.evaluate("document.activeElement.dataset.fk") == "rcp:q"
     pg.wait_for_timeout(450)                                                    # 바뀐 글자는 0.24초 동안 한 글자씩 넘어간다
-    assert [x.split("\n")[0] for x in pg.locator(".rcprow").all_inner_texts()] == ["TB500 PI2-Multi", "TB500 PI2"]   # D76: 멀티는 다른 Job
+    assert [x.split("\n")[0] for x in pg.locator(".rcprow").all_inner_texts()] == ["TB500 PI2"]   # 10/6: 멀티 · 단일 Job(D76)은 한 레시피 줄로
+    assert "멀티 67%" in pg.locator(".rcprow").first.inner_text()
     pg.locator(".rcprow").first.click()
     # 첫 화면(10/5): 장당 스캔 멀티 vs 단일 — 9/18 W 6장 멀티 4분, 9/17 Q 3장 단일 3분 → 단일 1분 빠름(같은 장비 AOI-1)
     tiles = pg.locator(".scanhero .mtile").all_inner_texts()
     assert "4.0" in tiles[0] and "6장" in tiles[0] and "3.0" in tiles[1] and "3장" in tiles[1]
     assert "단일 1.0" in tiles[2] and "같은 장비끼리(1대)" in tiles[2]
-    assert [x.split("\n")[0] for x in pg.locator(".mdev:not(.head)").all_inner_texts()] == ["AOI-1"]
+    assert pg.locator(".scanhero .jchip").count() == 2                 # 이 레시피로 보는 Job: PI2-Multi · PI2
+    assert [x.split("\n")[0] for x in pg.locator(".dbrow:not(.head):not(.axis)").all_inner_texts()] == ["AOI-1"]
+    assert pg.locator(".dbrow .dd").count() == 2                        # 같은 장비에 멀티 · 단일 두 점
+    how = pg.locator(".how").inner_text()                               # 10/6: 어떻게 셌나 — 실제 숫자로
+    assert "9장" in how and "WaferStartTime" in how and "Batch Start" in how
     assert pg.locator("main section.cards").count() == 0              # 생산량 등은 상세 보기 안
     pg.locator('[data-fk="rcp:more"]').click()
     pg.wait_for_timeout(200)
@@ -526,7 +531,7 @@ def test_recipe_tab_shows_per_device_stats_and_compares_two_periods(page):
     assert pg.locator(".cmp").count() == 0
     pg.locator('[data-fk="rcp:cmp"]').click()
     pg.wait_for_selector(".cmp")
-    pg.locator(".rcprow").nth(1).click()                                     # 단일(PI2)도 A 쪽에 더한다
+    pg.locator(".jpick .btn").nth(1).click()                               # 상세에서 단일(PI2)을 골라 A 쪽에 더한다
     pg.locator(".cmpside").nth(0).get_by_role("button", name=re.compile("＋")).click()
     pg.wait_for_timeout(300)
     pg.fill('[data-fk="cmp:cmpAf"]', "2026-09-17")
