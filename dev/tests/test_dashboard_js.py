@@ -472,3 +472,11 @@ def test_floor_and_maker_filters_combine():
     assert four_kla == ["4F-K1"] and two_cam == ["AOI-1"] and kla == ["K1", "4F-K1"]
     home, = screen(rows, meta(*devs), [["homeHtml"]])
     assert "전체 층" in home and "전체 장비" in home and ">KLA<" in home
+
+
+def test_recipe_tab_leaves_kla_out():
+    """10/6: 레시피 탭에는 KLA 장비의 행이 들어가지 않는다 — 목록에도, 장비별 표에도."""
+    rows = [w("AOI-1", "W1", "08:00", "08:10", job="TB500_RDL4 - Multi"),
+            w("K1", "W2", "09:00", "09:10", job="ROOT-HVM-KLA-ONLY-SETUP")]
+    html, = screen(rows, meta("AOI-1", "K1"), [["rcpHtml"]])
+    assert "ROOT-HVM-KLA-ONLY-SETUP" not in html and ">K1<" not in html and "AOI-1" in html

@@ -1705,11 +1705,11 @@ function reportHtml(){
    · 장당 스캔 = INI 의 Wafer 시작~끝(ini_match EXACT, 0~180분) — 레시피 자체의 속도. '같은 장비끼리' 는 두 방식을 다 돌린 장비만 장비별 중앙값 차이를 장 수로 가중 평균
    · 생산량 = PASS 이고 Test 가 아닌 Wafer 행(같은 장비 · Wafer · 시작 시각은 한 번) · 배치 기준 장당 = Report 배치 시간 ÷ PASS 장수(Error 없고 한 레시피만 돈 Report)
    · 가동률 = 그 기간 이 레시피를 돌린 장비들의 장비-일 가동률 평균(모델 값 그대로, S.util) — 레시피만의 효과는 아니다
-   생산량·fault·배치 기준·날짜별 막대는 '상세 보기', 전후 비교는 아래 접힌 칸. 날짜는 Wafer 시작일(없으면 배치 시작일). */
+   생산량·fault·배치 기준·날짜별 막대는 '상세 보기', 전후 비교는 아래 접힌 칸. KLA 장비의 행은 이 탭에 넣지 않는다(10/6 사용자 — 비교 '전체 가동률' 도 Camtek 만). 날짜는 Wafer 시작일(없으면 배치 시작일). */
 let _rcp=null;
 function rcpIndex(){if(_rcp&&_rcp.D===D&&_rcp.G===D.jobGroups)return _rcp;
   const jix=new Map(D.pool.job.map((n,i)=>[n,i])),dayset=new Set(D.allDays||D.days),recs=[],seen=new Set(),reps=new Map();
-  for(const r of rows){if(r.kind)continue;const ji=jix.get(modeJob(r.job,r));if(ji==null)continue;const g=D.jobG[ji];
+  for(const r of rows){if(r.kind||isKla(r.device))continue;const ji=jix.get(modeJob(r.job,r));   /* 10/6: KLA 는 레시피 탭에 넣지 않는다(사용자) */if(ji==null)continue;const g=D.jobG[ji];
     const ws=P(r.wafer_start_time),we=P(r.wafer_end_time),bs=P(r.batch_start),be=P(r.batch_end),t0=ws||bs;if(!t0)continue;
     const day=dk(t0);if(!dayset.has(day))continue;
     const test=r.scan_type==="TEST"||/(^|[^A-Z])TEST([^A-Z]|$)/i.test(r.lot||""),cause=causeOf(r.status),pass=isPass(r.status);
@@ -1738,7 +1738,7 @@ function rcpAgg(gs,from,to){const X=rcpIndex(),devs={},all=rcpBox();
   const util=ns=>avg(span.flatMap(day=>ns.map(n=>S.util(S.at(day,n))).filter(u=>u!==null)));
   /* 같은 장비끼리: 두 방식 모두 장당 스캔이 3장 이상인 장비의 (단일 중앙 − 멀티 중앙), 적은 쪽 장 수로 가중 */
   let pw=0,ps=0,pn=0;for(const d of Object.values(devs)){if(d.M.s.length>=3&&d.S.s.length>=3){const wt=Math.min(d.M.s.length,d.S.s.length);ps+=(qs(d.S.s,.5)-qs(d.M.s,.5))*wt;pw+=wt;pn++;}}
-  return {all,devs,span,util:util(dv),fleet:util(D.devices),nd:dv.length,paired:pw?{d:ps/pw,n:pn}:null};}
+  return {all,devs,span,util:util(dv),fleet:util(D.devices.filter(n=>!isKla(n))),nd:dv.length,paired:pw?{d:ps/pw,n:pn}:null};}
 function rcpGroupsOf(raws){const X=rcpIndex(),out=new Set();for(const r of raws||[]){const i=X.jix.get(r);if(i!=null)out.add(D.jobG[i]);}return out;}
 const f1=v=>v==null?"—":v.toFixed(1),f0=v=>v==null?"—":Math.round(v).toLocaleString("ko-KR");
 const MODE_C={M:"#5A6673",S:RUN};          /* 멀티 = 짙은 회색 · 단일 = 파랑. 색만으로 가리지 않는다 — 글자 이름표가 늘 함께 */
@@ -1839,7 +1839,7 @@ function cmpHtml(sel){
     ["장당 스캔 중앙(분)",qs(a.s,.5),qs(b.s,.5),f1,-1],["장당 스캔 중앙 — 멀티(분)",qs(a.M.s,.5),qs(b.M.s,.5),f1,-1],["장당 스캔 중앙 — 단일(분)",qs(a.S.s,.5),qs(b.S.s,.5),f1,-1],["장당 스캔 평균(분)",avg(a.s),avg(b.s),f1,-1],["장당 스캔 상위 10%(분)",qs(a.s,.9),qs(b.s,.9),f1,-1],
     ["배치 기준 장당 중앙(분)",qs(a.b,.5),qs(b.b,.5),f1,-1],["레시피 점유 시간(시간/일)",a.occ/60/Math.max(1,A.span.length),b.occ/60/Math.max(1,B.span.length),f1,0],
     ["장당 fault 중앙",qs(a.f,.5),qs(b.f,.5),f0,0],["멀티 스캔 장 비율(%)",a.M.n+a.S.n?a.M.n/(a.M.n+a.S.n)*100:null,b.M.n+b.S.n?b.M.n/(b.M.n+b.S.n)*100:null,f1,0],
-    ["돌린 장비",A.nd,B.nd,f0,0],["그 장비들 가동률(%)",A.util,B.util,f1,1],["전체 장비 가동률(%)",A.fleet,B.fleet,f1,1]];
+    ["돌린 장비",A.nd,B.nd,f0,0],["그 장비들 가동률(%)",A.util,B.util,f1,1],["Camtek 전체 가동률(%)",A.fleet,B.fleet,f1,1]];
   const chg=(x,y,fmt,good)=>{if(x==null||y==null)return `<span class="muted">—</span>`;const d=y-x,p=x?d/Math.abs(x)*100:null;
     const tone=!good||Math.abs(d)<1e-9?"#4B5866":((d>0)===(good>0)?"#1F7A4D":ERR);
     return `<span class="num" style="color:${tone}">${d>0?"▲":d<0?"▼":""} ${fmt(Math.abs(d))}${p==null?"":` (${p>0?"+":""}${p.toFixed(1)}%)`}</span>`;};
