@@ -506,3 +506,45 @@ def test_unjudged_rows_take_the_mode_of_their_report_or_the_nearest_report():
     assert lots["A"] == "TB500_RDL4-Multi"          # 같은 Report 의 W1 이 멀티
     assert lots["C"] == "TB500_RDL4-Single"         # 가장 가까운 판정 Report(b, 12:00)가 단일
     assert lots["D"] == "TB500_RDL4-미구분"          # AOI-2 에는 근거가 없다
+
+
+def _rdl(dev, wafer, s, e, lot, mode, **kw):
+    return dict(w(dev, wafer, s, e, lot=lot, job="TB500_RDL4 - Multi", **kw), scan_mode=mode)
+
+
+def test_recipe_verdict_labels_both_comparison_scopes():
+    """10/6 handoff C1: '전체 장' 과 '같은 장비' 두 비교를 같은 크기로 — 방향이 반대여도 둘 다 읽힌다.
+    AOI-1 은 멀티 10분 · 단일 12분(같은 장비면 멀티가 2분 빠름), AOI-2 는 단일 5분만 → 전체 장끼리는 단일 중앙 8.5 로 단일이 1.5분 빠름."""
+    rows = [_rdl("AOI-1", f"M{i}", f"08:{i*10:02d}", f"08:{i*10+10:02d}", "A", "MULTI") for i in range(3)]
+    rows += [_rdl("AOI-1", f"S{i}", f"10:{i*12:02d}", f"10:{i*12+12:02d}", "B", "SINGLE") for i in range(3)]
+    rows += [_rdl("AOI-2", f"T{i}", f"11:{i*5:02d}", f"11:{i*5+5:02d}", "C", "SINGLE") for i in range(3)]
+    html, = screen(rows, meta("AOI-1", "AOI-2"), [["rcpHtml"]])
+    assert 'class="verdict-table"' in html
+    assert re.search(r'전체 장</div><div class="result num"[^>]*>단일 1\.5분 빠름', html)
+    assert re.search(r'같은 장비</div><div class="result num"[^>]*>멀티 2\.0분 빠름', html) and "1대를 합침" in html
+    only_multi, = screen(rows[:3], meta("AOI-1"), [["rcpHtml"]])
+    assert "이 기간에는 멀티만 돌았습니다" in only_multi and "비교 가능한 장비 없음" in only_multi
+    assert "두 방식 모두 계산 가능한 장이 3장 이상인 장비가 없습니다." in only_multi
+
+
+def test_recipe_wording_distinguishes_ini_and_report_time():
+    """10/6 handoff C2: 장당 스캔은 INI + Report 보완 — 출처는 칩 두 개(INI n장 · Report 보완 n장), 'INI 만' 이라고 잘못 부르지 않는다.
+    W2 는 INI 가 덮어써져(STALE) 그 Report 배치 창(08:00~08:30)에서 W1 의 10분을 뺀 20분을 받는다."""
+    rows = [_rdl("AOI-1", "W1", "08:00", "08:10", "A", "MULTI", bs="08:00", be="08:30"),
+            dict(_rdl("AOI-1", "W2", None, None, "A", "", bs="08:00", be="08:30"), ini_match="STALE")]
+    html, = screen(rows, meta("AOI-1"), [["rcpHtml"]])
+    assert 'INI <b class="num">1장</b>' in html and 'Report 보완 <b class="num">1장</b>' in html
+    assert "INI만 <b class=\"num\">10.0</b>분/장" in html and "2장으로 계산" in html
+    for old in ("장당 스캔(INI)", "INI 장당 중앙", "INI 시각 있는 장 없음", "이 칩은 스캔 시간의 출처입니다"):
+        assert old not in html
+
+
+def test_recipe_list_limit_is_disclosed_and_search_is_not_limited():
+    """10/6 handoff C6: 목록은 생산량 상위 40개만 그리지만 그 사실을 한 줄로 알리고, 검색은 이 기간의 레시피 전부에서 찾는다."""
+    rows = [w("AOI-1", f"W{i}", f"{8 + i // 6:02d}:{(i % 6) * 10:02d}", f"{8 + i // 6:02d}:{(i % 6) * 10 + 5:02d}", lot=f"L{i}", job=f"ALPHA{i:02d}") for i in range(42)]
+    html, = screen(rows, meta("AOI-1"), [["rcpHtml"]])
+    assert "생산량 상위 40개 / 전체 42개 · 전체 검색 가능" in html and html.count('class="rowbtn rcprow') == 40
+    found, = screen(rows, meta("AOI-1"), [["rcpHtml"]], state={"rcpQ": "alpha41"})
+    assert "검색 결과 1개 · 1개 표시" in found and "ALPHA41" in found
+    none, = screen(rows, meta("AOI-1"), [["rcpHtml"]], state={"rcpQ": "zzz"})
+    assert "검색 결과 0개" in none and "검색 결과가 없습니다" in none and 'data-fk="rcp:clear"' in none and 'class="panel scanhero"' not in none

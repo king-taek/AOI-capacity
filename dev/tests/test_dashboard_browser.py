@@ -335,13 +335,13 @@ def test_motion_hooks_lottie_countup_sweep_and_recede(page):
     pg, errors, _ = page
     assert pg.locator('.brand .lt svg').count() == 1                                     # lottie 가 브랜드 표식을 그렸다
     pg.locator('button[data-fk="day:prev"]').click()                                     # 날짜를 바꾸면 카드 숫자가 이전 값에서 새 값으로
-    pg.wait_for_selector('.daylab:has-text("9월 17일")')
+    pg.wait_for_function("document.querySelector('[data-fk=\"day:date\"]').value === '2026-09-17'")   # 10/6 C8: 하루 날짜는 입력 칸
     pg.wait_for_timeout(900)
     v = pg.locator('main .cards [data-count]').first
     assert v.inner_text() == f"{float(v.get_attribute('data-count')):.1f}"              # 카운트업이 끝나면 정확히 새 값
     assert pg.evaluate("[...document.querySelectorAll('[data-bar]')].every(e => !e.style.clipPath)")   # sweep 뒤 clip-path 정리
     pg.locator('button[data-fk="day:next"]').click()
-    pg.wait_for_selector('.daylab:has-text("9월 18일")')
+    pg.wait_for_function("document.querySelector('[data-fk=\"day:date\"]').value === '2026-09-18'")
     pg.locator('button.rowbtn[data-fk="dev:AOI-2"]').click()                              # AOI-2 는 Error 가 없다
     pg.wait_for_selector('.dlg[data-dlg="dev"]')
     assert pg.evaluate("document.querySelector('#app>.stage').classList.contains('behind')")   # 팝업이 열리면 무대가 물러난다
@@ -516,7 +516,8 @@ def test_recipe_tab_shows_per_device_stats_and_compares_two_periods(page):
     # 첫 화면(10/5): 장당 스캔 멀티 vs 단일 — 9/18 W 6장 멀티 4분, 9/17 Q 3장 단일 3분 → 단일 1분 빠름(같은 장비 AOI-1)
     tiles = pg.locator(".scanhero .mtile").all_inner_texts()
     assert "4.0" in tiles[0] and "6장" in tiles[0] and "3.0" in tiles[1] and "3장" in tiles[1]
-    assert "단일 1.0" in tiles[2] and "같은 장비끼리(1대)" in tiles[2]
+    assert "전체 장\n단일 1.0분 빠름" in tiles[2] and "같은 장비\n단일 1.0분 빠름" in tiles[2] and "1대를 합침" in tiles[2]   # 10/6 C1: 두 비교를 같은 크기로
+    assert pg.locator(".scanhero .scan-source-chip").count() == 4                       # 10/6 C2: 방식마다 INI · Report 보완 칩
     assert pg.locator(".scanhero .jchip").count() == 2                 # 이 레시피로 보는 Job: PI2-Multi · PI2
     assert [x.split("\n")[0] for x in pg.locator(".dbrow:not(.head):not(.axis)").all_inner_texts()] == ["AOI-1"]
     assert pg.locator(".dbrow .dd").count() == 2                        # 같은 장비에 멀티 · 단일 두 점
@@ -603,4 +604,157 @@ def test_recipe_group_of_multi_job_still_shows_single_on_the_same_row(page):
     assert rows == ["PI2 묶음"]
     assert pg.locator(".scanhero .jchip").count() == 2                    # 멀티 · 단일 둘 다 이 레시피
     pg.evaluate("localStorage.removeItem('aoi.recipeGroups.v1')")
+    assert errors == []
+
+
+def _open_recipe(pg, q="PI2"):
+    pg.locator('button[data-fk="nav:recipe"]').click()
+    pg.wait_for_selector('main[data-key="view:recipe"]')
+    pg.fill('[data-fk="rcp:q"]', q)
+    pg.wait_for_timeout(450)
+
+
+def test_recipe_close_point_labels_do_not_overlap(page):
+    """10/6 handoff C3: 장비별 점 그래프의 두 숫자는 같은 높이, 가까우면 가운데에서 좌우로 10px 이상 띄운다(점은 그대로) · 칸 밖으로 안 나간다.
+    작은 fixture 에는 겹치는 값이 없어 두 숫자를 같은 자리(50%)로 옮긴 뒤 배치 함수를 다시 부른다."""
+    pg, errors, _ = page
+    for width in (1440, 820, 390):
+        pg.set_viewport_size({"width": width, "height": 900})
+        _open_recipe(pg)
+        r = pg.evaluate("""(() => {const tr = document.querySelector('[data-key="rcp:mdev"] button.dbrow .dtrack');
+            const dots = [...tr.querySelectorAll('.dd')].map(d => d.style.left);
+            for (const l of tr.querySelectorAll('.dlab')) l.dataset.p = '50';
+            layoutPairLabels(document);
+            const T = tr.getBoundingClientRect(), [a, b] = [...tr.querySelectorAll('.dlab')].map(l => l.getBoundingClientRect()).sort((x, y) => x.left - y.left);
+            return {top: [a.top, b.top], gap: b.left - a.right, inside: a.left >= T.left - 0.5 && b.right <= T.right + 0.5,
+                    dots: [...tr.querySelectorAll('.dd')].map(d => d.style.left).join() === dots.join()};})()""")
+        assert abs(r["top"][0] - r["top"][1]) < 0.5 and r["gap"] >= 9.5 and r["inside"] and r["dots"], (width, r)
+    assert errors == []
+
+
+def test_recipe_device_row_selection_shows_matching_provenance(page):
+    """10/6 handoff C3: 장비 행을 누르면(Enter · Space 도) 아래 고정 칸에 그 장비의 중앙 · 계산 장 수 · INI/Report 보완 — 행은 같은 노드로 남는다."""
+    pg, errors, _ = page
+    _open_recipe(pg)
+    row = pg.locator('[data-key="rcp:mdev"] button.dbrow[data-row="dev:AOI-1"]')
+    pg.evaluate("window.__row = document.querySelector('[data-key=\"rcp:mdev\"] button.dbrow[data-row=\"dev:AOI-1\"]')")
+    row.focus()
+    pg.keyboard.press("Enter")
+    pg.wait_for_timeout(200)
+    assert row.get_attribute("aria-pressed") == "true"
+    det = pg.locator('[data-key="rcp:mdev:detail"] .mdsel:not([hidden])')
+    assert det.count() == 1 and det.get_attribute("data-dev") == "AOI-1"
+    txt = det.inner_text()
+    assert "멀티" in txt and "6장으로 계산 / PASS 6장" in txt and "INI 6 + Report 보완 0" in txt and "단일" in txt
+    assert pg.evaluate("window.__row === document.querySelector('[data-key=\"rcp:mdev\"] button.dbrow[data-row=\"dev:AOI-1\"]')")
+    assert errors == []
+
+
+def test_recipe_how_summary_and_details_are_accessible(page):
+    """10/6 handoff C5: '어떻게 셌나' 여섯 카드 — 닫혀 있어도 핵심 숫자 · 두 시각 필드가 보이고, 카드마다 따로 펼치며(키보드도) 다시 그려도 유지된다."""
+    pg, errors, _ = page
+    _open_recipe(pg)
+    items = pg.locator(".how .how-item")
+    assert items.count() == 6 and pg.locator(".how .how-item[open]").count() == 0
+    how = pg.locator(".how").inner_text()
+    assert "PASS 9장" in how and "WaferStartTime → WaferEndTime" in how and "Batch Start → Batch End" in how
+    pg.locator('[data-fk="how:time"]').click()
+    pg.locator('[data-fk="how:batch"]').focus()
+    pg.keyboard.press("Enter")
+    pg.wait_for_timeout(250)
+    assert pg.locator(".how .how-item[open]").count() == 2
+    pg.locator('[data-fk="rcp:more"]').click()                                       # 다른 곳을 눌러 다시 그려도 펼친 카드는 그대로
+    pg.wait_for_timeout(250)
+    assert pg.locator(".how .how-item[open]").count() == 2
+    pg.locator('[data-fk="how:time"]').click()
+    pg.wait_for_timeout(150)
+    assert pg.locator(".how .how-item[open]").count() == 1
+    assert errors == []
+
+
+def test_recipe_no_match_clearly_identifies_retained_or_empty_detail(page):
+    """10/6 handoff C7: 검색 결과 0개면 이전 상세를 그대로 두지 않고 '검색 결과가 없습니다' + 이전 선택 요약 — 버튼은 검색만 지우고 그 상세로, 검색 칸에 포커스."""
+    pg, errors, _ = page
+    _open_recipe(pg)
+    assert pg.locator(".scanhero").count() == 1
+    pg.fill('[data-fk="rcp:q"]', "ZZZ-NOPE")
+    pg.wait_for_timeout(450)
+    empty = pg.locator('[data-key="rcp:empty-detail"]')
+    assert pg.locator(".scanhero").count() == 0 and "검색 결과가 없습니다" in empty.inner_text()
+    assert "이전 선택" in empty.inner_text() and "TB500 PI2" in empty.inner_text()
+    assert "검색 결과 0개" in pg.locator(".rcpnote").inner_text()
+    pg.locator('[data-fk="rcp:clear"]').click()
+    pg.wait_for_timeout(450)
+    assert pg.input_value('[data-fk="rcp:q"]') == "" and pg.evaluate("document.activeElement.dataset.fk") == "rcp:q"
+    assert pg.locator(".scanhero").count() == 1
+    assert errors == []
+
+
+def test_date_controls_keep_day_inside_the_visible_period(page):
+    """10/6 handoff C8: 날짜는 두 줄 — 위 '조회 기간', 아래 '하루 날짜'. 하루는 기간 안의 데이터 날짜만, 기간이 하루를 밀어내면 마지막 날로 옮기고 짧게 알린다."""
+    pg, errors, _ = page
+    day = lambda: pg.input_value('[data-fk="day:date"]')
+    assert pg.locator(".date-controls .date-control-row").count() == 2 and day() == "2026-09-18"
+    pg.locator('[data-fk="day:date"]').fill("2026-09-17")
+    pg.locator('[data-fk="day:date"]').dispatch_event("change")
+    pg.wait_for_timeout(250)
+    assert day() == "2026-09-17" and "09/17 하루" in pg.locator('main[data-key="view:home"] .scope-badge').inner_text()
+    pg.locator('[data-fk="range:vf"]').fill("2026-09-18")
+    pg.locator('[data-fk="range:vf"]').dispatch_event("change")
+    pg.wait_for_timeout(300)
+    assert day() == "2026-09-18" and "하루 날짜 09/17 → 09/18" in pg.locator(".daynote").inner_text()
+    assert pg.locator('[data-fk="day:prev"]').is_disabled() and pg.locator('[data-fk="day:next"]').is_disabled()   # 하루짜리 기간
+    pg.get_by_role("button", name="전체", exact=True).first.click()
+    pg.wait_for_timeout(300)
+    assert day() == "2026-09-18" and pg.locator(".daynote").count() == 0             # 안에 있으면 그대로 · 알림 없음
+    pg.locator('[data-fk="day:date"]').fill("2026-09-01")                            # 데이터 없는 날은 고르지 않는다
+    pg.locator('[data-fk="day:date"]').dispatch_event("change")
+    pg.wait_for_timeout(250)
+    assert day() == "2026-09-18"
+    pg.locator('button[data-fk="nav:recipe"]').click()
+    pg.wait_for_selector('main[data-key="view:recipe"]')
+    assert "가동률 · Error 일자별에서 사용" in pg.locator(".daynav").inner_text() and "2일" in pg.locator('main[data-key="view:recipe"] .scope-badge').inner_text()
+    assert errors == []
+
+
+def test_error_day_selection_matches_the_header_date(page):
+    """10/6 handoff C8: Error 기간 전체에서 날짜 막대를 고르면 일자별이 되고 헤더의 하루 날짜도 그 날 — 같은 막대를 다시 누르면 기간 전체로."""
+    pg, errors, _ = page
+    pg.locator('button[data-fk="nav:errors"]').click()
+    pg.wait_for_selector('main[data-key="view:errors"]')
+    pg.get_by_role("button", name=re.compile("^기간 전체")).first.click()
+    pg.wait_for_timeout(250)
+    assert "~" in pg.locator('main[data-key="view:errors"] .scope-badge').inner_text()
+    pg.locator('main [data-key="chart:errors"] .chart > button').first.click()       # 09/17
+    pg.wait_for_timeout(300)
+    assert pg.input_value('[data-fk="day:date"]') == "2026-09-17" and pg.locator('main[data-key="view:errors"] .scope-badge').inner_text() == "09/17 하루"
+    pg.locator('main [data-key="chart:errors"] .chart > button').first.click()
+    pg.wait_for_timeout(300)
+    assert "~" in pg.locator('main[data-key="view:errors"] .scope-badge').inner_text()
+    assert errors == []
+
+
+def test_narrow_dashboard_controls_and_labels_stay_visible(page):
+    """10/6 handoff C4: 820 · 390px 에서 네 탭과 장비 팝업 모두 쪽 가로 스크롤이 없고, 필터 버튼 · 숫자가 화면 안에 있다(표 안 스크롤은 허용)."""
+    pg, errors, _ = page
+    js_out = """[...document.querySelectorAll('main button, main .num, header button, header input, .dlg button')].filter(e => {const r = e.getBoundingClientRect();
+        return r.width && (r.right > innerWidth + 1 || r.left < -1) && !e.closest('.cmpdev, .nav, [style*="overflow-x"]');}).length"""
+    for width in (820, 390):
+        pg.set_viewport_size({"width": width, "height": 860})
+        for v in ("home", "errors", "report", "recipe"):
+            pg.locator(f'button[data-fk="nav:{v}"]').click()
+            pg.wait_for_selector(f'main[data-key="view:{v}"]')
+            pg.wait_for_timeout(300)
+            assert pg.evaluate("document.documentElement.scrollWidth") <= width, (width, v)
+            assert pg.evaluate(js_out) == 0, (width, v)
+        pg.locator('button[data-fk="nav:home"]').click()
+        pg.wait_for_selector('main[data-key="view:home"]')
+        pg.locator('button.rowbtn[data-fk="dev:AOI-1"]').click()
+        pg.wait_for_selector('.dlg[data-dlg="dev"]')
+        pg.wait_for_timeout(500)
+        assert pg.evaluate("document.documentElement.scrollWidth") <= width
+        assert pg.evaluate("""(() => {const b = document.querySelector('[data-callw]'); if (!b) return true; const B = b.getBoundingClientRect();
+            return [...b.querySelectorAll('.callout')].every(c => {const r = c.getBoundingClientRect(); return r.left >= B.left - 1 && r.right <= B.right + 1;});})()""")
+        pg.keyboard.press("Escape")
+        pg.wait_for_timeout(400)
     assert errors == []
