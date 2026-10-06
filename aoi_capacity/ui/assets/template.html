@@ -1802,7 +1802,15 @@ const MODE_C={M:"#5A6673",S:RUN,U:"#C3CCD6"};   /* 멀티 = 짙은 회색 · 단
 const MODE_NM={M:"멀티",S:"단일",U:"판정 못 함"};
 const SFX_RE=/-(Multi|Single|미구분)$/;
 /* 레시피 = 멀티/단일로 나뉜 Job(D76) 들을 다시 한 줄로 — 같은 줄기(jobStem)면 한 레시피. 사용자 묶음(D67)은 그 묶음 하나가 한 레시피 */
-function rcpFamKey(gi){const G=D.jobGroups[gi];if(G.nm)return "u:"+G.nm;return jobStem(String(D.pool.job[G.l]||"").replace(SFX_RE,"")).toUpperCase();}
+const famStem=raw=>jobStem(String(raw||"").replace(SFX_RE,"")).toUpperCase();
+/* 레시피(한 줄) = 줄기를 함께 쓰는 Job 묶음끼리 이어 붙인 것(10/6) — 자동 묶음은 줄기 하나, 사용자 묶음(D67)은 안의 Job 줄기 전부.
+   'TB500_RDL4-Multi' 만 사용자 묶음에 넣어 두면 단일 Job 이 따로 한 줄 더 생겼다(사용자 보고). 줄기가 겹치는 묶음은 한 레시피, 이름은 사용자 묶음 이름이 먼저 */
+let _fam=null;
+function famIndex(){if(_fam&&_fam.G===D.jobGroups)return _fam;const par=new Map(),f=x=>{while(par.get(x)!==x){par.set(x,par.get(par.get(x)));x=par.get(x);}return x;};
+  const add=x=>{if(!par.has(x))par.set(x,x);};const stems=D.jobGroups.map(G=>[...new Set((G.nm?G.m.map(([i])=>i):[G.l]).map(i=>famStem(D.pool.job[i])))]);
+  stems.forEach(st=>{st.forEach(add);for(const x of st.slice(1)){const a=f(st[0]),b=f(x);if(a!==b)par.set(b,a);}});
+  return _fam={G:D.jobGroups,key:stems.map(st=>f(st[0]))};}
+function rcpFamKey(gi){return famIndex().key[gi];}
 function rcpFamName(gi){return String(jobNm(D.jobGroups[gi]).nm).replace(SFX_RE,"");}
 function rcpSuffix(gi){const m=String(D.pool.job[D.jobGroups[gi].l]||"").match(SFX_RE);return m?m[1]:"";}
 function scanRange(arr,mx,c,label){const p1=qs(arr,.1),p5=qs(arr,.5),p9=qs(arr,.9);if(p5==null)return `<span class="muted" style="font-size:12px">INI 시각 있는 장 없음</span>`;
@@ -1821,16 +1829,17 @@ function rcpHtml(){
   const list=[...fam.values()].filter(hitQ).sort((a,b)=>b.w-a.w);
   const leadOf=gi=>D.pool.job[D.jobGroups[gi].l];
   const biggest=F=>[...F.gs.entries()].sort((a,b)=>b[1]-a[1])[0][0];
+  const titleG=F=>{const n=[...F.gs.entries()].filter(([g])=>D.jobGroups[g].nm).sort((a,b)=>b[1]-a[1]);return n.length?n[0][0]:biggest(F);};   /* 이름은 사용자 묶음 이름이 먼저 */
   let selG=state.rcpSel!=null?[...rcpGroupsOf([state.rcpSel])][0]:undefined;
   let SF=selG!=null?fam.get(rcpFamKey(selG)):undefined;if(!SF&&list.length)SF=list[0];
   const pickF=F=>{const gi=biggest(F);return ()=>setState({rcpSel:leadOf(gi),rcpJob:null,...(state.cmpA==null?{cmpA:[leadOf(gi)],cmpB:[leadOf(gi)]}:{})});};
-  const listH=list.slice(0,40).map((F,i)=>{const on=SF&&F.k===SF.k,gi=biggest(F),nm=rcpFamName(gi),al=jobNm(D.jobGroups[gi]).al,t=F.c.M+F.c.S;
+  const listH=list.slice(0,40).map((F,i)=>{const on=SF&&F.k===SF.k,gi=titleG(F),nm=rcpFamName(gi),al=jobNm(D.jobGroups[gi]).al,t=F.c.M+F.c.S;
     return `<button class="rowbtn rcprow ${on?"on":""}" data-key="slot:${i}" data-row="rcp:${esc(F.k)}" data-h="${h(pickF(F))}" aria-pressed="${!!on}" title="${esc([...F.gs.keys()].map(g=>D.pool.job[D.jobGroups[g].l]).join("\n"))}">
       <span class="rn" style="${al?"":"font-family:"+MONO}">${esc(nm)}</span><span class="num rw">${F.w.toLocaleString("ko-KR")}</span>
       <span class="rb">${modeBar(F.c,6)}</span><span class="rp num">${t?"멀티 "+Math.round(F.c.M/t*100)+"%":"판정 전"}</span></button>`;}).join("")||`<p class="empty">이 기간에 맞는 레시피가 없습니다</p>`;
   let detail=`<div class="panel" style="padding:24px"><p class="muted">왼쪽에서 레시피를 고르세요.</p></div>`,cmpSel=undefined;
   if(SF){
-    const famGs=new Set(SF.gs.keys()),A=rcpAgg(famGs,from,to),a=A.all,anyG=biggest(SF),FN=rcpFamName(anyG),al=jobNm(D.jobGroups[anyG]).al;
+    const famGs=new Set(SF.gs.keys()),A=rcpAgg(famGs,from,to),a=A.all,anyG=titleG(SF),FN=rcpFamName(anyG),al=jobNm(D.jobGroups[anyG]).al;
     const members=[...SF.gs.entries()].sort((x,y)=>y[1]-x[1]);
     let jobG=state.rcpJob!=null?[...rcpGroupsOf([state.rcpJob])][0]:undefined;if(jobG==null||!famGs.has(jobG))jobG=members[0][0];cmpSel=jobG;
     const sfxC=gi=>{const s=rcpSuffix(gi);return s==="Multi"?MODE_C.M:s==="Single"?MODE_C.S:s==="미구분"?MODE_C.U:"#8A96A3";};

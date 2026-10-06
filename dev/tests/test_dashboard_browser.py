@@ -585,3 +585,22 @@ def test_floor_and_maker_filters_are_picked_separately(page):
     pg.wait_for_timeout(200)
     assert pg.locator(".homelist .rowbtn").count() == 0 and pg.locator('button[data-fk="seg:2층"].on').count() == 1
     assert errors == []
+
+
+def test_recipe_group_of_multi_job_still_shows_single_on_the_same_row(page):
+    """10/6(사용자 보고): 레시피 묶음(D67)에 멀티 Job(`R_TB500_LIVE_PI2-Multi`)만 넣어 두면 단일 Job 이 같은 이름으로 한 줄 더 생겼다.
+    줄기가 같은 Job 묶음은 한 레시피(이름은 사용자 묶음 이름)."""
+    pg, errors, _ = page
+    pg.evaluate("""localStorage.setItem('aoi.recipeGroups.v1', JSON.stringify({v:1, saved:'2099-01-01T00:00:00',
+        groups:[{name:'PI2 묶음', jobs:['R_TB500_LIVE_PI2-Multi']}]}))""")
+    pg.reload()
+    pg.wait_for_selector('main[data-key^="view:"]')
+    pg.locator('button[data-fk="nav:recipe"]').click()
+    pg.wait_for_selector('main[data-key="view:recipe"]')
+    pg.fill('[data-fk="rcp:q"]', "PI2")
+    pg.wait_for_timeout(450)
+    rows = [x.split("\n")[0] for x in pg.locator(".rcprow").all_inner_texts()]
+    assert rows == ["PI2 묶음"]
+    assert pg.locator(".scanhero .jchip").count() == 2                    # 멀티 · 단일 둘 다 이 레시피
+    pg.evaluate("localStorage.removeItem('aoi.recipeGroups.v1')")
+    assert errors == []
