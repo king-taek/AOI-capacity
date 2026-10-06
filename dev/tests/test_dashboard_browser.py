@@ -515,42 +515,34 @@ def test_recipe_tab_shows_per_device_stats_and_compares_two_periods(page):
     pg.locator(".rcprow").first.click()
     # 첫 화면(10/5): 장당 스캔 멀티 vs 단일 — 9/18 W 6장 멀티 4분, 9/17 Q 3장 단일 3분 → 단일 1분 빠름(같은 장비 AOI-1)
     tiles = pg.locator(".scanhero .mtile").all_inner_texts()
-    assert "4.0" in tiles[0] and "6장" in tiles[0] and "3.0" in tiles[1] and "3장" in tiles[1]
-    assert "전체 장\n단일 1.0분 빠름" in tiles[2] and "같은 장비\n단일 1.0분 빠름" in tiles[2] and "1대를 합침" in tiles[2]   # 10/6 C1: 두 비교를 같은 크기로
-    assert pg.locator(".scanhero .scan-source-chip").count() == 4                       # 10/6 C2: 방식마다 INI · Report 보완 칩
-    assert pg.locator(".scanhero .jchip").count() == 2                 # 이 레시피로 보는 Job: RDL2-Multi · PI2
+    assert "4.0" in tiles[0] and "표본 6 / 6장" in tiles[0] and "3.0" in tiles[1] and "표본 3 / 3장" in tiles[1]
+    v = tiles[2].replace("\n", " ")                                                   # 10/6: 차이가 아니라 두 대상의 실제 값 + 밑에 어느 쪽이 빠른지
+    assert "전체 장 4.0분/장 3.0분/장 단일 1.0분/장 빠름" in v and "같은 장비 1대 4.0분/장 3.0분/장 단일 1.0분/장 빠름" in v and "Defect 3개/장 3개/장 차이 없음" in v
+    assert pg.locator(".scanhero .jtog").count() == 2 and pg.locator(".scanhero .jtog[aria-pressed='true']").count() == 2   # 이 레시피로 보는 Job — 통계에 넣을지 고르는 단추
     assert [x.split("\n")[0] for x in pg.locator(".dbrow:not(.head):not(.axis)").all_inner_texts()] == ["AOI-1"]
     assert pg.locator(".dbrow .dd").count() == 2                        # 같은 장비에 멀티 · 단일 두 점
-    how = pg.locator(".how").inner_text()                               # 10/6: 어떻게 셌나 — 실제 숫자로
+    row = pg.locator(".dbrow[data-row='dev:AOI-1']").inner_text().replace("\n", " ")
+    assert "6·3장" in row and "1·1Lot" in row                          # 몇 장 · 몇 Lot(멀티·단일 순)
+    assert pg.locator(".how .how-item").count() == 0 and pg.locator('[data-fk="how:all"]').get_attribute("aria-expanded") == "false"   # 어떻게 셌나는 기본 접힘
+    pg.locator('[data-fk="how:all"]').click()
+    pg.wait_for_timeout(250)
+    how = pg.locator(".how").inner_text()                               # 누르면 펼침 — 실제 숫자로
     assert "9장" in how and "WaferStartTime" in how and "Batch Start" in how
-    assert pg.locator("main section.cards").count() == 0              # 생산량 등은 상세 보기 안
+    assert pg.locator(".cmp").count() == 0 and "전후 비교" not in pg.locator("main").inner_text()   # 전후 비교는 없앴다(사용자 10/6)
+    # 장당 | LOT당: 같은 레시피를 Lot(Report) 단위로 — fixture 의 Lot 은 20장 미만이라 값이 없다
+    pg.locator(".scanhero .seg button", has_text="LOT당").click()
+    pg.wait_for_timeout(300)
+    assert "분/Lot" in pg.locator(".scanhero .mtile").first.inner_text() and "장비별 LOT당 시간" in pg.locator('[data-key="rcp:mdev"]').inner_text()
+    pg.locator(".scanhero .seg button", has_text="장당").click()
+    # Job 단추로 멀티 Job 을 빼면 단일만 남는다
+    pg.locator(".scanhero .jtog", has_text="RDL2-Multi").click()
+    pg.wait_for_timeout(300)
+    t2 = pg.locator(".scanhero .mtile").all_inner_texts()
+    assert "표본 0 / 0장" in t2[0] and "표본 3 / 3장" in t2[1] and pg.locator(".scanhero .jtog.off").count() == 1
     pg.locator('[data-fk="rcp:more"]').click()
     pg.wait_for_timeout(200)
     cards = pg.locator("main section.cards > div").all_inner_texts()
-    assert cards[0].split("\n")[0] == "생산량" and "6장" in cards[0]           # 상세는 고른 Job(RDL2-Multi)만
-    assert [x.split("\n")[0] for x in pg.locator(".rcpdev").all_inner_texts()] == ["AOI-1"]
-    assert pg.locator(".cmp").count() == 0
-    pg.locator('[data-fk="rcp:cmp"]').click()
-    pg.wait_for_selector(".cmp")
-    pg.locator(".jpick .btn").nth(1).click()                               # 상세에서 단일(RDL2)을 골라 A 쪽에 더한다
-    pg.locator(".cmpside").nth(0).get_by_role("button", name=re.compile("＋")).click()
-    pg.wait_for_timeout(300)
-    pg.fill('[data-fk="cmp:cmpAf"]', "2026-09-17")
-    pg.fill('[data-fk="cmp:cmpAt"]', "2026-09-17")
-    pg.fill('[data-fk="cmp:cmpBf"]', "2026-09-18")
-    pg.fill('[data-fk="cmp:cmpBt"]', "2026-09-18")
-    pg.wait_for_timeout(500)                                    # 바뀐 숫자는 제자리에서 0.24초 동안 한 글자씩 넘어간다(9/24)
-    rows = {r.split("\n")[0]: r.split("\n")[1:] for r in pg.locator(".cmp .cmprow:not(.dev):not(.head)").all_inner_texts()}
-    assert rows["생산량(Wafer)"][:2] == ["3", "6"] and "+100.0%" in rows["생산량(Wafer)"][2]
-    assert rows["멀티 스캔 장 비율(%)"][:2] == ["0.0", "100.0"]
-    # 다른 레시피를 B 에 더하면 B 쪽 생산량이 늘어난다(전 = RDL2, 후 = RDL2 + RDL3)
-    pg.fill('[data-fk="rcp:q"]', "RDL3")                         # 10/6: 레시피 탭은 TB500 RDL · TB500 PI 만 — 다른 레시피(RDL3)를 더한다
-    pg.wait_for_timeout(150)
-    pg.locator(".rcprow").first.click()
-    pg.locator(".cmpside").nth(1).get_by_role("button", name=re.compile("＋")).click()
-    pg.wait_for_timeout(500)
-    rows = {r.split("\n")[0]: r.split("\n")[1:] for r in pg.locator(".cmp .cmprow:not(.dev):not(.head)").all_inner_texts()}
-    assert rows["생산량(Wafer)"][:2] == ["3", "8"]               # 첫 레시피가 양쪽 묶음의 시작, 다른 레시피를 골라도 A 는 그대로
+    assert cards[0].split("\n")[0] == "생산량" and "3장" in cards[0]           # 상세는 켜 둔 Job 만
     assert requests == [] and errors == []
 
 
@@ -645,7 +637,7 @@ def test_recipe_device_row_selection_shows_matching_provenance(page):
     det = pg.locator('[data-key="rcp:mdev:detail"] .mdsel:not([hidden])')
     assert det.count() == 1 and det.get_attribute("data-dev") == "AOI-1"
     txt = det.inner_text()
-    assert "멀티" in txt and "6장으로 계산 / PASS 6장" in txt and "INI 6 + Report 보완 0" in txt and "단일" in txt
+    assert "멀티" in txt and "6장 · 1 Lot" in txt and "INI 6 + Report 보완 0" in txt and "단일" in txt
     assert pg.evaluate("window.__row === document.querySelector('[data-key=\"rcp:mdev\"] button.dbrow[data-row=\"dev:AOI-1\"]')")
     assert errors == []
 
@@ -655,7 +647,10 @@ def test_recipe_how_summary_and_details_are_accessible(page):
     pg, errors, _ = page
     _open_recipe(pg)
     items = pg.locator(".how .how-item")
-    assert items.count() == 8 and pg.locator(".how .how-item[open]").count() == 0
+    assert items.count() == 0                                                          # 10/6: 어떻게 셌나는 기본 접힘 — 누르면 펼침
+    pg.locator('[data-fk="how:all"]').click()
+    pg.wait_for_timeout(300)
+    assert items.count() == 7 and pg.locator(".how .how-item[open]").count() == 0
     how = pg.locator(".how").inner_text()
     assert "PASS 9장" in how and "WaferStartTime → WaferEndTime" in how and "Batch Start → Batch End" in how
     pg.locator('[data-fk="how:time"]').click()
@@ -817,9 +812,13 @@ def test_rdl_tab_lot_stat_outlier_x5_rule_and_wording(rdl_page):
     tiles = pg.locator(".scanhero .mtile").all_inner_texts()
     single = [t for t in tiles if t.startswith("단일")][0]
     assert "(x20)" in single
-    assert "Report 1LOT당 409.1분" in single.replace("\n", " ") and "Lot 1개" in single      # 22장 → 360분 × 25 ÷ 22(20~24장은 25장 기준으로 환산) · Error/19장 Report 는 제외
-    assert "이상치 1개 제외" in single and "150.0분" in single and "3σ" in single
+    assert "LOT당 409.1분" in single.replace("\n", " ")                                    # 22장 → 360분 × 25 ÷ 22(20~24장은 25장 기준으로 환산) · Error/19장 Report 는 제외
+    assert "이상치 1개 제외" in single and "표본 60 / 61장" in single                         # 한 줄로 짧게
+    tip = pg.locator(".scanhero .otag").first.get_attribute("title")                          # 어떤 값이 왜 빠졌는지는 마우스를 올리면
+    assert "150.0분" in tip and "3σ" in tip
     assert "장당 스캔 (중앙)" in single and "장당 Defect (중앙)" in single               # 타일 맨 위 큰 숫자 둘 — 시간 | Defect(사용자 10/6)               # 어떤 값이 왜 빠졌는지
+    pg.locator('[data-fk="how:all"]').click()
+    pg.wait_for_timeout(300)
     how = pg.locator(".how").inner_text()
     assert "x5 · x10 단일 6장 제외" in how and "PASS 4" not in how                           # x5 만 쓴 단일은 통계에서 무시
     assert "제외 Lot 2개" in how and "이상치" in how
@@ -839,10 +838,12 @@ def test_rdl_device_row_double_click_opens_detail_popup(rdl_page):
     pg.wait_for_selector('.dlg[data-dlg="rcpdev"]')
     dlg = pg.locator('.dlg[data-dlg="rcpdev"]')
     txt = dlg.inner_text()
-    assert "AOI-5" in txt and "TB500 RDL4" in txt and "장(행)별 원자료" in txt and "장비 간 비교" in txt and "이상치 제외" in txt
-    assert dlg.locator(".rawrow").count() == 22 + 20 + 19          # 이 기간 AOI-5 의 PASS 장(Error 행 · x5 단일은 없음)
-    assert dlg.locator(".rawrow .bad").count() >= 1                    # 이상치로 뺀 장은 붉게
+    assert "AOI-5" in txt and "TB500 RDL4" in txt and "전체 장비 속 위치" in txt and "날짜별 추이" in txt and "이상치 1개 제외" in txt   # 한눈에: KPI · 위치 · 추이
+    assert dlg.locator(".kpi").count() == 1 and dlg.locator(".strip").count() >= 2 and dlg.locator(".rawrow").count() == 0   # 자세히는 접혀 있다
     assert pg.evaluate("document.activeElement && document.activeElement.id") == "dlg-rcpdev-title"
+    dlg.locator('[data-fk="pd:lots"]').click()
+    pg.wait_for_timeout(300)
+    assert dlg.locator(".rawrow").count() == 3 and "LOT-A" in dlg.inner_text()          # 원자료는 Wafer 가 아니라 LOT(Report)별
     pg.keyboard.press("Escape")
     pg.wait_for_timeout(500)
     assert pg.locator('.dlg[data-dlg="rcpdev"]').count() == 0

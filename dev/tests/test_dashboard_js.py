@@ -519,12 +519,12 @@ def test_recipe_verdict_labels_both_comparison_scopes():
     rows += [_rdl("AOI-1", f"S{i}", f"10:{i*12:02d}", f"10:{i*12+12:02d}", "B", "SINGLE") for i in range(3)]
     rows += [_rdl("AOI-2", f"T{i}", f"11:{i*5:02d}", f"11:{i*5+5:02d}", "C", "SINGLE") for i in range(3)]
     html, = screen(rows, meta("AOI-1", "AOI-2"), [["rcpHtml"]])
-    assert 'class="verdict-table"' in html
-    assert re.search(r'전체 장</div><div class="result num"[^>]*>단일 1\.5분 빠름', html)
-    assert re.search(r'같은 장비</div><div class="result num"[^>]*>멀티 2\.0분 빠름', html) and "1대를 합침" in html
+    assert 'class="vtab"' in html and 'class="verdict-table"' not in html
+    # 10/6: 차이가 아니라 두 대상의 실제 값(멀티 중앙 · 단일 중앙)을 보이고 그 밑에 작게 어느 쪽이 빠른지
+    assert re.search(r'전체 장</div><div class="vv num">10\.0<small>분/장</small></div><div class="vv num win">8\.5<small>분/장</small></div><div class="vn"><span[^>]*>단일 1\.5분/장 빠름', html)
+    assert re.search(r'같은 장비 <span class="muted">1대</span></div><div class="vv num win">10\.0<small>분/장</small></div><div class="vv num">12\.0<small>분/장</small></div><div class="vn"><span[^>]*>멀티 2\.0분/장 빠름', html)
     only_multi, = screen(rows[:3], meta("AOI-1"), [["rcpHtml"]])
-    assert "이 기간에는 멀티만 돌았습니다" in only_multi and "비교 가능한 장비 없음" in only_multi
-    assert "두 방식 모두 계산 가능한 장이 3장 이상인 장비가 없습니다." in only_multi
+    assert "단일 값이 없어 비교할 수 없습니다" in only_multi and "비교할 값이 없습니다" in only_multi
 
 
 def test_recipe_wording_distinguishes_ini_and_report_time():
@@ -533,8 +533,7 @@ def test_recipe_wording_distinguishes_ini_and_report_time():
     rows = [_rdl("AOI-1", "W1", "08:00", "08:10", "A", "MULTI", bs="08:00", be="08:30"),
             dict(_rdl("AOI-1", "W2", None, None, "A", "", bs="08:00", be="08:30"), ini_match="STALE")]
     html, = screen(rows, meta("AOI-1"), [["rcpHtml"]])
-    assert 'INI <b class="num">1장</b>' in html and 'Report 보완 <b class="num">1장</b>' in html
-    assert "INI만 <b class=\"num\">10.0</b>분/장" in html and "2장으로 계산" in html
+    assert "· INI 1 · Report 보완 1" in html and '표본 <b class="num">2</b> / 2장' in html
     for old in ("장당 스캔(INI)", "INI 장당 중앙", "INI 시각 있는 장 없음", "이 칩은 스캔 시간의 출처입니다"):
         assert old not in html
 
@@ -568,19 +567,21 @@ def test_report_lot_time_is_scaled_to_25_wafers_only_for_20_to_24():
     (120분짜리 Report 로) 26장 → 120.0 · 24장 → 125.0 · 20장 → 150.0 · 19장 → 계산 안 함."""
     for n, want in ((26, "120.0"), (24, "125.0"), (20, "150.0")):
         html, = screen(_lot_rows(n), meta("AOI-1"), [["rcpHtml"]])
-        assert f'Report 1LOT당 <b class="num">{want}</b>분' in html and "Lot 1개 (25장 기준)" in html, (n, want)
-    html, = screen(_lot_rows(19), meta("AOI-1"), [["rcpHtml"]])
-    assert 'Report 1LOT당 <b class="num">—</b>분' in html and "PASS 20장 미만 Lot 1개" in html
+        assert f"LOT당 {want}분" in html, (n, want)
+        lot, = screen(_lot_rows(n), meta("AOI-1"), [["rcpHtml"]], state={"rcpUnit": "lot"})     # LOT당 보기: 같은 값이 큰 숫자
+        assert f'<p class="v num">{want}<small>분/Lot</small></p>' in lot and '표본 <b class="num">1</b> / 1Lot' in lot
+    html, = screen(_lot_rows(19), meta("AOI-1"), [["rcpHtml"]], state={"rcpHowAll": True})
+    assert "LOT당 —분" in html and "PASS 20장 미만 Lot 1개" in html
 
 
 def test_report_lot_time_skips_reports_with_an_error_but_keeps_abort_only_ones():
     """Error 유형이 있는 Report 는 Report 기준 통계에서 빠지고, 원인 없이 Aborted 만 있는 Report 는 들어간다."""
     err = _lot_rows(22, rep="E.htm") + [w("AOI-1", "E1", "09:00", "09:01", status="Alignment Error.", job="TB500_RDL4 - Multi", report="E.htm", bs="08:00", be="10:00")]
-    html, = screen(err, meta("AOI-1"), [["rcpHtml"]])
-    assert "Lot 0개 (25장 기준)" in html and "Error 가 있는 Lot 1개" in html
+    html, = screen(err, meta("AOI-1"), [["rcpHtml"]], state={"rcpHowAll": True})
+    assert "Error 가 있는 Lot 1개" in html and "LOT당 120" not in html
     ab = _lot_rows(22, rep="A.htm") + [w("AOI-1", "A1", None, None, status="Aborted.", job="TB500_RDL4 - Multi", report="A.htm", bs="08:00", be="10:00")]
-    html, = screen(ab, meta("AOI-1"), [["rcpHtml"]])
-    assert "Lot 1개 (25장 기준)" in html and "Error 가 있는 Lot" not in html
+    html, = screen(ab, meta("AOI-1"), [["rcpHtml"]], state={"rcpHowAll": True})
+    assert "LOT당 136.4분" in html and "Error 가 있는 Lot" not in html            # 22장 · 120분 → 25장 기준 136.4(Aborted 만 있는 Report 는 포함)
 
 
 def test_outliers_beyond_3_sigma_are_dropped_once_and_listed_but_not_for_tiny_samples():
@@ -588,10 +589,10 @@ def test_outliers_beyond_3_sigma_are_dropped_once_and_listed_but_not_for_tiny_sa
     rows = [_rdl("AOI-1", f"W{i}", f"08:{i * 2:02d}", f"08:{i * 2 + 1:02d}", "LOT-A", "SINGLE") for i in range(21)]
     rows.append(_rdl("AOI-1", "BIG", "11:00", "13:30", "LOT-A", "SINGLE"))
     html, = screen(rows, meta("AOI-1"), [["rcpHtml"]])
-    assert "이상치 1개 제외" in html and "150.0분" in html and "3σ" in html and "22장 중 21장으로 스캔 계산" in html
+    assert "이상치 1개 제외" in html and "150.0분" in html and "3σ" in html and "표본 <b class=\"num\">21</b> / 22장" in html
     tiny = [_rdl("AOI-1", f"T{i}", f"08:{i * 3:02d}", f"08:{i * 3 + 1:02d}", "LOT-A", "SINGLE") for i in range(3)] + [_rdl("AOI-1", "BIG", "11:00", "13:30", "LOT-A", "SINGLE")]
     html, = screen(tiny, meta("AOI-1"), [["rcpHtml"]])
-    assert "개 제외" not in html and "4장 중 4장으로 스캔 계산" in html
+    assert "개 제외" not in html and "표본 <b class=\"num\">4</b> / 4장" in html
 
 
 def test_single_scan_counts_x20_only_and_pi_compares_existing_vs_enhanced():
@@ -600,11 +601,12 @@ def test_single_scan_counts_x20_only_and_pi_compares_existing_vs_enhanced():
     rows = [_rdl("AOI-1", f"S{i}", f"08:{i * 2:02d}", f"08:{i * 2 + 1:02d}", "A", "SINGLE") for i in range(3)]
     rows += [dict(_rdl("AOI-1", f"X{i}", f"09:{i * 2:02d}", f"09:{i * 2 + 1:02d}", "B", "SINGLE"), recipe="x5") for i in range(2)]
     html, = screen(rows, meta("AOI-1"), [["rcpHtml"]])
-    assert "3장 중 3장으로 스캔 계산" in html and "x5 · x10 단일 2장 제외" in html
+    html, = screen(rows, meta("AOI-1"), [["rcpHtml"]], state={"rcpHowAll": True})
+    assert "표본 <b class=\"num\">3</b> / 3장" in html and "x5 · x10 단일 2장 제외" in html
     pi = [dict(w("AOI-1", f"P{i}", f"08:{i * 2:02d}", f"08:{i * 2 + 1:02d}", job="R_TB500_LIVE_PI3"), recipe="PI") for i in range(3)]
     pi += [dict(w("AOI-1", f"E{i}", f"10:{i * 2:02d}", f"10:{i * 2 + 1:02d}", job="R_TB500_LIVE_PI3 - Enhanced"), recipe="PI") for i in range(2)]
     html, = screen(pi, meta("AOI-1"), [["rcpHtml"]])
     assert html.count('class="rowbtn rcprow') == 1 and "Enhanced 40%" in html                  # 한 줄(PI3) · Enhanced 비율
     assert "</i>기존" in html and "</i>Enhanced" in html and "(x20 + x5)" not in html and "멀티 · 단일을 가릴" not in html
-    assert "3장 중 3장으로 스캔 계산" in html and "2장 중 2장으로 스캔 계산" in html
+    assert "표본 <b class=\"num\">3</b> / 3장" in html and "표본 <b class=\"num\">2</b> / 2장" in html
     assert "<p class=\"vl\">장당 Defect (중앙)</p>" in html and "장당 스캔 (중앙)" in html     # 타일 맨 위 큰 숫자 둘: 스캔 시간 | Defect
