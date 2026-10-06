@@ -376,7 +376,7 @@ main{max-width:1420px;margin:0 auto;padding:22px 24px 90px}
       legacy(buildModelLegacy)는 디자인 세션의 make_aoi_data.js [원본] 이식이라 네 스위치를 끄면 그 스크립트와 같은 출력이 나온다(가드 test_dashboard_js).
    ④ 화면: 가동률 · Error · 추이 · 리포트 + 장비/Error/유형·Job 팝업 (docs/design/dashboard-redesign/app/AOI-Dashboard.dc.html 의 로직).
    ============================================================================ */
-const MODEL_VERSION=4;
+const MODEL_VERSION=5;
 const $=s=>document.querySelector(s);
 const esc=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const p2=n=>String(n).padStart(2,"0");
@@ -499,7 +499,23 @@ function jobKey(s){ const tk=String(s||'').toUpperCase().split(/[\s_\-]+/).filte
    줄기 = 원문에서 ' - Multi' 를 뗀 것(`TB500_RDL4 - Multi` → `TB500_RDL4-Multi` · `TB500_RDL4-Single`). 자재 키(matKey · Rescan)는 원문으로 — 같은 Wafer 를 멀티 뒤 단일로 다시 보면 Rescan 이다. */
 const MULTI_RE=/(^|[\s_\-]+)multi(?=$|[\s_\-])/ig,HAS_MULTI=/(^|[\s_\-])multi($|[\s_\-])/i;   /* 낱말 'Multi' 만(`Multi_Final` 도) — 'Multiple' 같은 건 아니다 */
 const jobStem=j=>String(j||"").replace(MULTI_RE,"").replace(/^[\s_\-]+|[\s_\-]+$/g,"").trim();
-function scanMode(r){const m=String(r.scan_mode||"").toUpperCase();if(m==="MULTI")return "M";if(m==="SINGLE")return "S";return String(r.recipe||"").includes("|")?"M":"";}
+function ownMode(r){const m=String(r.scan_mode||"").toUpperCase();if(m==="MULTI")return "M";if(m==="SINGLE")return "S";return String(r.recipe||"").includes("|")?"M":"";}
+/* 10/6(사용자): 판정 근거가 없는 행(INI 가 다른 검사로 덮어써짐 · INI 없음 · 업데이트 전 행)을 '미구분' 으로 두지 않고 Report 로 채운다 — 화면 규칙(수집기·캐시는 그대로).
+   ① 같은 Report(장비 + Report 이름)의 다른 Wafer 판정 — 한 Report 는 한 방식으로 돈다(실데이터 RDL Report 중 멀티·단일이 섞인 것 0개) → 'rep'
+   ② Report 전체가 판정 못 함이면 같은 장비 · 같은 Job 원문에서 배치 시작이 가장 가까운 판정된 Report(같은 거리면 앞선 것) → 'near'(추정 — 실데이터로 맞혀 보니 97.5%)
+   그래도 근거가 없으면 '' 그대로(미구분). 결과는 행 → [방식, 출처] WeakMap(행 객체는 건드리지 않는다). */
+const MODE_FILL=new WeakMap();
+function fillModes(rs){const reps=new Map();
+  for(const r of rs){if(!r||isKla(r.device))continue;const k=r.device+"\u0001"+(r.report||"");let R=reps.get(k);
+    if(!R){R={dev:r.device,job:String(r.job||""),t:null,m:new Set(),rows:[]};reps.set(k,R);}R.rows.push(r);
+    const o=ownMode(r);if(o)R.m.add(o);if(R.t==null){const b=P(r.batch_start)||P(r.wafer_start_time);if(b)R.t=b.getTime();}}
+  const pool=new Map();for(const R of reps.values())if(R.m.size===1&&R.t!=null){const k=R.dev+"\u0001"+R.job;(pool.get(k)||pool.set(k,[]).get(k)).push(R);}
+  for(const R of reps.values()){let m="",by="";
+    if(R.m.size===1){m=[...R.m][0];by="rep";}
+    else if(!R.m.size&&R.t!=null){let best=null,bd=Infinity;for(const Q of pool.get(R.dev+"\u0001"+R.job)||[]){const d=Math.abs(Q.t-R.t);if(d<bd||(d===bd&&Q.t<best.t)){bd=d;best=Q;}}if(best){m=[...best.m][0];by="near";}}
+    if(m)for(const r of R.rows)if(!ownMode(r))MODE_FILL.set(r,[m,by]);}}
+function scanMode(r){const o=ownMode(r);if(o)return o;const f=MODE_FILL.get(r);return f?f[0]:"";}
+const modeSrc=r=>ownMode(r)?"own":(MODE_FILL.get(r)||[,""])[1];   /* own · rep · near · "" */
 function modeJob(job,r){job=String(job||"");const m=scanMode(r),mj=HAS_MULTI.test(job);
   if(m==="M")return jobStem(job)+"-Multi";if(!mj)return job;return jobStem(job)+(m==="S"?"-Single":"-미구분");}
 const RT=new Set(['RE','RESCAN','REWORK','SRD','R']);
@@ -535,6 +551,7 @@ const K_PRI={[K_ERR]:0,[K_SCAN]:1,[K_RESCAN]:2,[K_TEST]:3};
 const K_SEG={[K_SCAN]:0,[K_ERR]:1,[K_TEST]:2,[K_WAIT]:3,[K_RESCAN]:4};        /* 화면 seg 번호(0 Scan · 1 Error · 2 Test · 3 대기 · 4 Rescan) */
 function buildModelV3(rowsIn,metaIn,rules){
 const val=(r,c)=>r[c];
+fillModes(rowsIn);   /* 10/6: 판정 못 한 행의 멀티/단일을 Report 로 채운다 — modeJob 보다 먼저 */
 const all=[]; let bad=0;
 for(let i=0;i<rowsIn.length;i++){const r=rowsIn[i];
   const ws=P(val(r,'wafer_start_time')), we=P(val(r,'wafer_end_time')), bs=P(val(r,'batch_start')), be=P(val(r,'batch_end'));
@@ -1741,28 +1758,35 @@ function rcpIndex(){if(_rcp&&_rcp.D===D&&_rcp.G===D.jobGroups)return _rcp;
     const day=dk(t0);if(!dayset.has(day))continue;
     const test=r.scan_type==="TEST"||/(^|[^A-Z])TEST([^A-Z]|$)/i.test(r.lot||""),cause=causeOf(r.status),pass=isPass(r.status);
     const rk=r.device+"\u0001"+(r.report||"");let R=reps.get(rk);
-    if(!R){R={g,n:0,err:false,mixed:false,bs,be};reps.set(rk,R);}else if(R.g!==g)R.mixed=true;
+    if(!R){R={g,n:0,err:false,mixed:false,bs,be,sumS:0,share:0};reps.set(rk,R);}else if(R.g!==g)R.mixed=true;
     if(cause)R.err=true;
+    if(cause&&!test&&!(r.ini_match==="EXACT"&&ws&&we))R.share++;   /* 시각 없는 Error 행도 배치 창의 빈 시간을 나눠 가진다(D58) */
     if(!pass||test)continue;
     const key=r.device+"\u0001"+String(r.wafer_id||"")+"\u0001"+(r.wafer_start_time||r.report||"");if(seen.has(key))continue;seen.add(key);R.n++;
     /* 장당 스캔(INI) 제외 사유: ini = INI 를 못 찾음 · stale = 다른 검사로 덮어써진 INI · range = 시각이 거꾸로이거나 180분 넘음 */
-    let s=null,why="";if(r.ini_match==="EXACT"&&ws&&we){const m=(we-ws)/60000;if(m>0&&m<=180)s=m;else why="range";}else why=r.ini_match==="STALE"?"stale":"ini";
+    let s=null,why="";if(r.ini_match==="EXACT"&&ws&&we){const m=(we-ws)/60000;if(m>0&&m<=180){s=m;R.sumS+=m;}else why="range";}else why=r.ini_match==="STALE"?"stale":"ini";
+    if(s==null)R.share++;
     const fx=String(r.faults??"").trim(),f=/^\d+$/.test(fx)?+fx:null;
-    recs.push({g,dev:r.device,day,s,why,f,sub:String(r.recipe||""),m:scanMode(r),rk});}
+    recs.push({g,dev:r.device,day,s,src:s!=null?"ini":"",why,f,sub:String(r.recipe||""),m:scanMode(r),ms:modeSrc(r),rk,R});}
+  /* 10/6(사용자): INI 시각이 없는 장(덮어써짐 · INI 없음)은 Report 로 채운다 — 화면 타임라인(D56)과 같은 규칙:
+     그 Report 의 배치 창(Batch Start~End)에서 INI 로 잰 장들의 시간을 뺀 나머지를, INI 없는 PASS 장 · 시각 없는 Error 행이 똑같이 나눠 가진다(0~180분일 때만) */
+  for(const q of recs){if(q.s!=null)continue;const R=q.R;if(!(R.bs&&R.be&&R.be>R.bs&&R.share>0))continue;
+    const v=((R.be-R.bs)/60000-R.sumS)/R.share;if(v>0&&v<=180){q.s=v;q.src="rep";}}
   /* 배치 기준 장당 = (Batch End − Batch Start) ÷ 그 Report 의 PASS 장수 — Error 가 있거나 다른 레시피가 섞인 Report · 배치 시각이 없는 Report 는 뺀다 */
   const per=new Map(),repWhy=new Map();
   for(const [rk,R] of reps){const why=R.err?"err":R.mixed?"mixed":!(R.n>0&&R.bs&&R.be&&R.be>R.bs)?"time":"";repWhy.set(rk,why);if(!why)per.set(rk,(R.be-R.bs)/60000/R.n);}
   return _rcp={D,G:D.jobGroups,recs,per,repWhy,jix};}
 const qs=(a,p)=>{if(!a.length)return null;const b=a.slice().sort((x,y)=>x-y),i=(b.length-1)*p,lo=Math.floor(i),hi=Math.ceil(i);return b[lo]+(b[hi]-b[lo])*(i-lo);};
 const avg=a=>a.length?a.reduce((x,y)=>x+y,0)/a.length:null;
-const modeBox=()=>({n:0,s:[],b:[],lots:new Set(),ex:{ini:0,stale:0,range:0}});
-const rcpBox=()=>({w:0,lots:new Set(),s:[],f:[],b:[],days:new Set(),x5:0,occ:0,sub:{},M:modeBox(),S:modeBox(),U:modeBox(),ex:{ini:0,stale:0,range:0},bx:{err:0,mixed:0,time:0}});
+const modeBox=()=>({n:0,s:[],sI:[],rep:0,mr:0,mn:0,b:[],lots:new Set(),ex:{ini:0,stale:0,range:0},fx:{ini:0,stale:0,range:0}});
+const rcpBox=()=>({w:0,lots:new Set(),s:[],sI:[],rep:0,mr:0,mn:0,fx:{ini:0,stale:0,range:0},f:[],b:[],days:new Set(),x5:0,occ:0,sub:{},M:modeBox(),S:modeBox(),U:modeBox(),ex:{ini:0,stale:0,range:0},bx:{err:0,mixed:0,time:0}});
 /* 레시피 묶음 집합(그룹 번호) × 기간 → 모은 값. M/S/U = 멀티 · 단일 · 판정 못 함(장 수 · 장당 스캔 · 배치 기준 · 제외 사유) */
 function rcpAgg(gs,from,to){const X=rcpIndex(),devs={},all=rcpBox(),repMode=new Map();
   for(const q of X.recs){if(!gs.has(q.g)||q.day<from||q.day>to)continue;
     const d=devs[q.dev]||(devs[q.dev]=rcpBox());
-    for(const o of [all,d]){o.w++;o.lots.add(q.rk);o.days.add(q.day);if(q.s!=null)o.s.push(q.s);else o.ex[q.why]++;if(q.f!=null)o.f.push(q.f);
-      if(q.sub.split("|").some(t=>/^x5$/i.test(t.trim())))o.x5++;const k=o[q.m||"U"];k.n++;k.lots.add(q.rk);if(q.s!=null)k.s.push(q.s);else k.ex[q.why]++;}
+    for(const o of [all,d]){const k=o[q.m||"U"];o.w++;o.lots.add(q.rk);o.days.add(q.day);if(q.f!=null)o.f.push(q.f);
+      if(q.sub.split("|").some(t=>/^x5$/i.test(t.trim())))o.x5++;k.n++;k.lots.add(q.rk);
+      for(const x of [o,k]){if(q.s!=null)x.s.push(q.s);else x.ex[q.why]++;if(q.src==="ini")x.sI.push(q.s);if(q.src==="rep"){x.rep++;x.fx[q.why]++;}if(q.ms==="rep")x.mr++;if(q.ms==="near")x.mn++;}}
     if(q.s!=null)all.occ+=q.s;d.sub[q.sub||"(없음)"]=(d.sub[q.sub||"(없음)"]||0)+1;if(!repMode.has(q.rk))repMode.set(q.rk,q.m||"U");}
   for(const rk of all.lots){const dev=rk.split("\u0001")[0],d=devs[dev],v=X.per.get(rk),mk=repMode.get(rk)||"U";
     if(v==null){const w=X.repWhy.get(rk);if(w)all.bx[w]++;continue;}
@@ -1813,10 +1837,11 @@ function rcpHtml(){
     const mM=qs(a.M.s,.5),mS=qs(a.S.s,.5),known=a.M.n+a.S.n;
     const tile=(k,o)=>{const m=qs(o.s,.5),b=qs(o.b,.5);return `<div class="mtile"><p class="k"><i class="sw" style="background-color:${MODE_C[k]}"></i>${MODE_NM[k]}${k==="M"?" <span class='muted' style='font-weight:500'>(x20 + x5)</span>":""}</p>
       <p class="v num">${f1(m)}<small>분/장</small></p><p class="s">${m?"시간당 <b>"+(60/m).toFixed(1)+"장</b> · ":""}${f0(o.n)}장 중 ${f0(o.s.length)}장으로 계산</p>
+      <p class="s">${o.rep?`INI ${f0(o.sI.length)}장 + <b>Report 로 채운 ${f0(o.rep)}장</b> · INI 만 ${f1(qs(o.sI,.5))}분`:`모두 INI 시각`}</p>
       <p class="s">배치 기준 <b class="num">${f1(b)}</b>분/장 <span class="muted">· Lot ${o.b.length}개</span></p></div>`;};
     let verdict="";
     if(mM!=null&&mS!=null){const d=mS-mM,fast=d<0?"단일":"멀티",p=Math.abs(d)/Math.max(mM,mS)*100;
-      verdict=`<div class="mtile verdict"><p class="k">차이 (INI 장당 중앙)</p><p class="v num">${fast} ${f1(Math.abs(d))}<small>분 빠름</small></p><p class="s">${fast==="단일"?"단일이":"멀티가"} 장당 ${p.toFixed(0)}% 짧음 · 전체 장끼리</p>
+      verdict=`<div class="mtile verdict"><p class="k">차이 (장당 중앙)</p><p class="v num">${fast} ${f1(Math.abs(d))}<small>분 빠름</small></p><p class="s">${fast==="단일"?"단일이":"멀티가"} 장당 ${p.toFixed(0)}% 짧음 · 전체 장끼리</p>
         <p class="s">${A.paired?`같은 장비끼리(${A.paired.n}대): <b>${A.paired.d<0?"단일":"멀티"} ${f1(Math.abs(A.paired.d))}분</b> 빠름`:"두 방식을 다 돌린 장비가 없어 장비 차이가 섞여 있을 수 있습니다"}</p></div>`;}
     else verdict=`<div class="mtile verdict"><p class="k">차이</p><p class="v" style="font-size:15px;line-height:1.4">${known?(a.M.n?"이 기간에는 멀티만 돌았습니다":"이 기간에는 단일만 돌았습니다"):"멀티 · 단일을 가릴 근거가 없습니다"}</p><p class="s">${known?"다른 기간과는 아래 '전후 비교' 로":"수집기의 'RDL 영역 INI 패치' 를 돌리면 가려집니다"}</p></div>`;
     const mx=Math.max(1,...[a.M.s,a.S.s,a.U.s].map(x=>qs(x,.9)||0))*1.08;
@@ -1847,10 +1872,12 @@ function rcpHtml(){
     const how=`<div class="panel how" data-key="rcp:how" style="margin-top:14px"><div class="ph"><h2>어떻게 셌나</h2><span class="muted" style="font-size:12px">${esc(FN)} · ${md(from)} ~ ${md(to)} 의 실제 숫자</span></div>
       <div class="howgrid">
         <div><p class="hk"><span class="tag">장</span>Wafer 한 장</p><p>PASS 로 끝난 Wafer 만 셉니다(Test Lot · Error · 건너뜀 제외). 같은 장비에서 같은 Wafer 를 같은 시각에 두 번 세지 않습니다.</p><p class="hn">이 레시피 <b>${f0(a.w)}장</b> = 멀티 ${f0(a.M.n)} · 단일 ${f0(a.S.n)}${a.U.n?" · 판정 못 함 "+f0(a.U.n):""}</p></div>
-        <div><p class="hk"><span class="tag">INI</span>장당 스캔(INI)</p><p>Wafer 폴더의 <code>WaferInfo.ini</code> 에 적힌 <b>WaferStartTime → WaferEndTime</b>. 장비가 그 장을 스캔한 순수 시간이라 레시피 속도를 가장 잘 보여 줍니다. 위의 큰 숫자 · 띠 · 장비별 점이 모두 이것입니다.</p><p class="hn"><b>${f0(a.s.length)}장</b>으로 계산 · 뺀 장: ${exT(a.ex)}</p></div>
+        <div><p class="hk"><span class="tag">INI</span>장당 스캔(INI)</p><p>Wafer 폴더의 <code>WaferInfo.ini</code> 에 적힌 <b>WaferStartTime → WaferEndTime</b>. 장비가 그 장을 스캔한 순수 시간이라 레시피 속도를 가장 잘 보여 줍니다. 위의 큰 숫자 · 띠 · 장비별 점이 모두 이것입니다.</p><p><b>INI 시각이 없는 장</b>(다른 검사가 같은 폴더에 덮어씀 · INI 없음)은 <b>Report 로 채웁니다</b> — 그 Report 의 Batch Start → End 에서 INI 로 잰 장들의 시간을 뺀 나머지를 INI 없는 장(과 시각 없는 Error 행)이 똑같이 나눠 가집니다(가동률 화면의 타임라인과 같은 규칙). 반송 · 대기가 섞여 INI 보다 조금 길 수 있어 타일에 'INI 만' 값도 함께 적습니다.</p>
+        <p class="hn"><b>${f0(a.s.length)}장</b>으로 계산 = INI ${f0(a.sI.length)}장 + Report 로 채운 ${f0(a.rep)}장${a.rep?` (덮어써진 INI ${f0(a.fx.stale)} · INI 없음 ${f0(a.fx.ini)}${a.fx.range?" · 시각 이상 "+f0(a.fx.range):""})`:""}${a.w-a.s.length?` · 못 채운 장: ${exT(a.ex)}`:""}</p></div>
         <div><p class="hk"><span class="tag">배치</span>배치 기준 장당</p><p>BatchReport 의 <b>Batch Start → Batch End</b> 를 그 Report 의 PASS 장수로 나눈 값. 반송 · 정렬 · 장 사이 대기까지 들어가 INI 보다 깁니다(실제로 장비를 차지한 시간).</p><p class="hn"><b>Lot ${f0(a.b.length)}개</b>로 계산 · 뺀 Lot: ${bxT(a.bx)}</p></div>
         <div><p class="hk"><span class="tag">Lot</span>Lot</p><p>BatchReport 한 장 = Lot 을 한 번 돌린 것(배치 한 번). 같은 Lot 을 다시 돌리면 Report 가 하나 더 생겨 따로 셉니다.</p><p class="hn">이 레시피 <b>${f0(a.lots.size)}개</b></p></div>
-        <div><p class="hk"><span class="tag">판정</span>멀티 / 단일</p><p>Wafer 폴더에 <code>RecipesInfo.ini</code> 가 있고 레시피가 둘 이상(x20 · x5)이면 <b>멀티</b>, 없으면 <b>단일</b>. INI 가 없거나 덮어써졌거나 업데이트 전에 모은 장은 <b>판정 못 함</b>으로 따로 둡니다(단일로 치지 않음).</p></div>
+        <div><p class="hk"><span class="tag">판정</span>멀티 / 단일</p><p>Wafer 폴더에 <code>RecipesInfo.ini</code> 가 있고 레시피가 둘 이상(x20 · x5)이면 <b>멀티</b>, 없으면 <b>단일</b>. INI 가 덮어써졌거나 없거나 업데이트 전에 모은 장은 <b>Report 로 채웁니다</b> — ① 같은 Report 의 다른 장 판정(한 Report 는 한 방식으로 돈다) ② Report 전체가 근거가 없으면 같은 장비 · 같은 Job 에서 시각이 가장 가까운 Report 의 방식(추정). 그래도 없으면 <b>판정 못 함</b>.</p>
+        <p class="hn">그 장 INI ${f0(a.w-a.mr-a.mn-a.U.n)} · 같은 Report ${f0(a.mr)} · 가까운 Report 추정 ${f0(a.mn)}${a.U.n?" · 판정 못 함 "+f0(a.U.n):""}</p></div>
         <div><p class="hk"><span class="tag">계산</span>중앙 · 시간당 · 차이</p><p>대표값은 <b>중앙값</b>(튀는 장에 덜 흔들림). 시간당 = 60 ÷ 장당 중앙. '같은 장비끼리' = 두 방식을 각 3장 이상 돌린 장비마다 (단일 − 멀티) 중앙 차이를 적은 쪽 장 수로 가중 평균.</p></div>
       </div></div>`;
     /* 상세 보기 — 고른 Job 하나(멀티 · 단일 · 판정 못 함 중) */

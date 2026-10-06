@@ -450,10 +450,10 @@ def test_multi_and_single_scans_are_different_jobs_but_the_same_material():
     J = "TB500_RDL4 - Multi"
     rows = [dict(w("AOI-1", "W1", "08:00", "08:20", lot="LOT-A", job=J), scan_mode="MULTI"),
             dict(w("AOI-1", "W1", "09:00", "09:10", lot="LOT-A", job=J, report="r2.htm"), scan_mode="SINGLE"),
-            dict(w("AOI-1", "W9", "10:00", "10:10", lot="LOT-C", job=J), scan_mode=""),
+            dict(w("AOI-2", "W9", "10:00", "10:10", lot="LOT-C", job=J, report="r9.htm"), scan_mode=""),   # 다른 장비 · 근거 없음 → 미구분
             dict(w("AOI-1", "P1", "11:00", "11:05", lot="LOT-P", job="R_TB500_LIVE_PI2"), scan_mode="SINGLE"),
             dict(w("AOI-1", "P2", "12:00", "12:05", lot="LOT-Q", job="R_TB500_LIVE_PI2"), recipe="PI|PI_Bubble")]
-    D = run(rows, meta("AOI-1"))
+    D = run(rows, meta("AOI-1", "AOI-2"))
     assert set(D["pool"]["job"]) >= {"TB500_RDL4-Multi", "TB500_RDL4-Single", "TB500_RDL4-미구분", "R_TB500_LIVE_PI2", "R_TB500_LIVE_PI2-Multi"}
     assert J not in D["pool"]["job"]
     t = at(D, "AOI-1")
@@ -489,3 +489,20 @@ def test_error_tab_leaves_kla_out():
     assert "dev:AOI-1" in html and "dev:K1" not in html and "전체 층" in html and "전체 장비" not in html
     kla_picked, = screen(rows, meta("AOI-1", "K1"), [["errorsHtml"]], state={"pickDay": None, "maker": "kla"})
     assert "dev:AOI-1" in kla_picked                                   # 가동률 탭에서 KLA 를 골라 두어도 Error 탭은 비지 않는다
+
+
+def test_unjudged_rows_take_the_mode_of_their_report_or_the_nearest_report():
+    """10/6(사용자): INI 가 덮어써져 판정 못 한 장을 '미구분' 으로 두지 않는다 — ① 같은 Report 의 다른 장 판정
+    ② Report 전체가 근거 없으면 같은 장비 · 같은 Job 에서 배치 시작이 가장 가까운 판정된 Report(추정). 다른 장비의 Report 는 쓰지 않는다."""
+    J = "TB500_RDL4 - Multi"
+    rows = [dict(w("AOI-1", "W1", "08:00", "08:20", lot="A", job=J), scan_mode="MULTI"),
+            dict(w("AOI-1", "W2", "08:20", "08:40", lot="A", job=J), scan_mode="", ini_match="STALE"),
+            dict(w("AOI-1", "W3", "12:00", "12:10", lot="B", job=J), scan_mode="SINGLE"),
+            dict(w("AOI-1", "W4", "13:00", "13:10", lot="C", job=J), scan_mode="", ini_match="STALE"),
+            dict(w("AOI-2", "W5", "13:00", "13:10", lot="D", job=J), scan_mode="", ini_match="STALE")]
+    D = run(rows, meta("AOI-1", "AOI-2"))
+    jobs = D["pool"]["job"]
+    lots = {D["pool"]["lot"][L[1]]: jobs[L[0]] for dv in ("AOI-1", "AOI-2") for L in at(D, dv)["lots"]}
+    assert lots["A"] == "TB500_RDL4-Multi"          # 같은 Report 의 W1 이 멀티
+    assert lots["C"] == "TB500_RDL4-Single"         # 가장 가까운 판정 Report(b, 12:00)가 단일
+    assert lots["D"] == "TB500_RDL4-미구분"          # AOI-2 에는 근거가 없다

@@ -123,7 +123,7 @@ Camtek AOI 장비의 BatchReport/WaferInfo.ini 를 읽어 장비별 가동률을
 - HTML 에 박는 JSON 은 `collect._embed_rows` 가 접는다 — `POOLED_COLS`(시각 두 열 빼고 전부)를 문자열 풀의
   번호로 바꾼다. 30대 × 90일이면 행이 십수만 개라 접지 않으면 HTML 이 수십 MB 가 된다. template 의 로더가 편다.
   CSV 는 사람이 읽는 파일이라 접지 않는다.
-- **결과 화면 모델은 template 의 `buildModel(rows, meta, rules)`** — 프로필이 둘이다(`RULES.profile`). **product(기본, `buildModelV3`, MODEL_VERSION 4 — 3 + D76 멀티/단일 Job 나눔)** 가 제품 규칙이고,
+- **결과 화면 모델은 template 의 `buildModel(rows, meta, rules)`** — 프로필이 둘이다(`RULES.profile`). **product(기본, `buildModelV3`, MODEL_VERSION 5 — 3 + D76 멀티/단일 Job 나눔 + D78 판정 채우기)** 가 제품 규칙이고,
   **legacy(`buildModelLegacy`)** 는 `docs/design/dashboard-redesign/scripts/make_aoi_data.js` [원본] 이식으로 네 스위치를 끄면 스크립트와 같은 출력(가드 `test_legacy_profile_equals_the_design_script…`) — 디자인 동일성 근거일 뿐 제품 정답이 아니다.
   공통 도우미(`P`·`lotName`·`jobKey`·`matKey`)는 두 프로필이 같이 쓴다. 규칙을 바꾸면 `MODEL_VERSION` 을 올린다. 열 때마다 원천 행에서 다시 계산한다(저장하지 않는다).
   - **product 알고리즘(D56 · 9/20)**: 장비마다 로드 첫날 00:00 기준 1분 축(`kind` Int8Array)에 ① INI 시각 구간을 Error > Scan > Rescan > Test 순으로 배타 배정(같은 Report 같은 종류의 3분 이하 틈은 이어 칠함)
@@ -135,6 +135,7 @@ Camtek AOI 장비의 BatchReport/WaferInfo.ini 를 읽어 장비별 가동률을
   - 종류: 원인 코드(`CAUSE_RULES` 첫 매치)가 있으면 Error, **Lot 원문에 `TEST` 가 있으면 그 Report 의 행은 전부 Test(D64 — 원인 Error 도 Error 로 세지 않음)**,
     같은 자재의 **앞선 시도의 결과가 PASS 였을 때만** Rescan(D63, 장비 무관), 아니면 Scan. 자재 키 = `jobKey(Job)|Lot 토큰(RE·RESCAN·REWORK·SRD·R 제외)|Wafer ID(영숫자)`.
     **Job 병합(`jobKey`)** 은 구분자·공백·대소문자 · `_Copy` · `LIVE` · 장비별 복사본 · `Test_` 접두 · 끝 4자리 날짜 · `AO`→`A0` 를 묶고 R접두어(RE·R2·R3…)와 단계 번호(PI2/PI3, RDL1~4)는 나눈다(D48-④). 통계에서만 묶고 **표기는 원문**, 표기명 21개는 `JOB_ALIAS`.
+  - **판정 채우기(D78, 10/6)**: `fillModes` 가 모델 전에 scan_mode 없는 행(INI 덮어써짐 · 없음 · 옛 행)의 방식을 ① 같은 Report 의 다른 장 판정(한 Report = 한 방식, 실데이터 섞임 0) ② 같은 장비 · 같은 Job 원문에서 배치 시작이 가장 가까운 판정된 Report(추정, 실데이터 맞힘 97.5%)로 채운다 — `MODE_FILL` WeakMap, `scanMode` 가 읽고 `modeSrc` 가 출처(own · rep · near). 근거 없으면 미구분. 레시피 탭의 INI 없는 장의 장당 스캔은 그 Report 배치 창 − INI 로 잰 시간을 INI 없는 PASS 장 · 시각 없는 Error 행이 나눈 값(D56 과 같은 규칙, `src` rep) — 타일에 'INI 만' 값도 적는다.
   - **멀티/단일은 다른 Job(D76, 10/5)**: `modeJob` 이 행의 `scan_mode` 로 Job 이름을 나눈다 — 멀티면 `<줄기>-Multi`, 원문에 낱말 Multi 가 있는 Job(RDL `… - Multi`)의 단일은 `<줄기>-Single`, 근거 없으면 `<줄기>-미구분`(멀티로 합치지 않음), 그 밖의 단일은 원문 그대로.
     줄기 = 원문에서 낱말 Multi 를 뗀 것(`jobStem`). 표기명은 `jobAlias`(줄기가 같은 JOB_ALIAS + 접미). **자재 키(matKey · Rescan)는 원문 Job** — 멀티로 PASS 한 Wafer 를 단일로 다시 보면 Rescan. 수집기·CSV 의 job 은 원문 그대로(화면 규칙).
     레시피 탭은 고른 Job 과 줄기가 같은 Job 들(-Multi · -Single · -미구분 · 원문)을 함께 놓고 멀티 vs 단일을 비교한다(상세는 고른 Job 만).
