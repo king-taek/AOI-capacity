@@ -323,8 +323,8 @@ main{max-width:1420px;margin:0 auto;padding:22px 24px 90px}
 .howgrid code{font-family:var(--mono);font-size:11.5px;background:#EEF2F6;padding:0 4px;border-radius:4px}
 /* 10/6 handoff C1 · C2 · C3 · C5 · C6 · C7 — 레시피 탭 */
 .mtile.verdict{container-type:inline-size}
-.scanhero .mtiles.one{grid-template-columns:minmax(0,440px)}
-.mtiles.pop{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:12px}.mtiles.pop.one{grid-template-columns:minmax(0,440px)}
+.mtiles.pop{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:12px}
+.mtile .bigrow{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin:6px 0 4px}.mtile .bigrow>div{min-width:0}.mtile .bigrow .v{margin:0;font-size:26px;white-space:nowrap}.mtile .bigrow .vl{margin:2px 0 0;font-size:11.5px;color:var(--ink-3)}.mtile .bigrow>div+div{border-left:1px solid #E6EBF0;padding-left:12px}
 .onote{margin:3px 0 0;font-size:11px;line-height:1.45;color:#8A5A12;word-break:keep-all;cursor:help}.onote b{font-weight:600}.onote .muted{color:#9A7A3A}
 .mtile .msec{margin-top:9px;padding-top:7px;border-top:1px solid #E6EBF0}.mtile .msec .s{margin-top:0}
 .dblegend .hlink{margin-left:auto}.howgrid{align-items:start}
@@ -1907,7 +1907,7 @@ function rcpIndex(){if(_rcp&&_rcp.D===D&&_rcp.G===D.jobGroups)return _rcp;
     const day=dk(t0);if(!dayset.has(day))continue;
     const test=r.scan_type==="TEST"||/(^|[^A-Z])TEST([^A-Z]|$)/i.test(r.lot||""),cause=causeOf(r.status),pass=isPass(r.status);
     let m=scanMode(r)||"",ms=modeSrc(r);
-    if(kind==="pi"){m="S";ms="own";}   /* PI 는 멀티·단일 구분이 없다 — 한 묶음('전체') */
+    if(kind==="pi"){m=/enhanced/i.test(r.job)?"S":"M";ms="own";}   /* PI 는 멀티 vs 단일이 아니라 기존(M) vs Enhanced(S) — PI 는 모두 멀티스캔으로 본다(사용자 10/6: 실수로 단일을 돌렸어도 편차 · 이상치로 흡수) */
     else if(m==="S"&&!singleOk(r)){if(pass&&!test)ign.push({g,day,dev:r.device});continue;}   /* 단일은 x20 만 — x5 · x10 만 쓴 단일은 통계에서 무시(사용자 10/6) */
     kindG.set(g,kind);
     const rk=r.device+"\u0001"+(r.report||"");let R=reps.get(rk);
@@ -1982,10 +1982,10 @@ const MODE_NM={M:"멀티",S:"단일",U:"판정 못 함"};
 const SFX_RE=/-(Multi|Single|미구분)$/;
 /* 레시피 = 멀티/단일로 나뉜 Job(D76) 들을 다시 한 줄로 — 같은 줄기(jobStem)면 한 레시피. 사용자 묶음(D67)은 그 묶음 하나가 한 레시피 */
 const famStem=raw=>jobStem(String(raw||"").replace(SFX_RE,"")).toUpperCase();
-/* 레시피(한 줄, 10/6) = **표기 레시피 이름** 하나 — TB500 RDL1~4(+ Swelling) · TB500 PI2/3/4(+ Enhanced 는 따로). Job 원문의 변형(-Multi · -Single · COPY · AOI-nn Copy · _날짜 · JJ …)은 한 줄로 합친다.
+/* 레시피(한 줄, 10/6) = **표기 레시피 이름** 하나 — TB500 RDL1~4(+ Swelling) · TB500 PI2/3/4(Enhanced 는 같은 줄 — 기존 vs Enhanced 로 비교). Job 원문의 변형(-Multi · -Single · COPY · AOI-nn Copy · _날짜 · JJ …)은 한 줄로 합친다.
    (예전엔 jobKey 묶음의 줄기로 한 줄을 만들어 'R_TB500_LIVE_PI3 AOI-13 Copy' 같은 복사본이 따로 한 줄이었다.) 이 탭의 이름은 레시피 묶음 편집기(D67)와 무관하다 */
 function rcpCanon(raw){raw=String(raw||"").replace(SFX_RE,"");let m=raw.match(/^TB500_RDL([1-4])/i);if(m)return "TB500 RDL"+m[1]+(/swelling/i.test(raw)?" Swelling":"");
-  m=raw.match(/^R_TB500_LIVE_PI([234])(?![0-9])(?!-x5)/i);if(m)return "TB500 PI"+m[1]+(/enhanced/i.test(raw)?" Enhanced":"");return null;}
+  m=raw.match(/^R_TB500_LIVE_PI([234])(?![0-9])(?!-x5)/i);if(m)return "TB500 PI"+m[1];return null;}
 let _fam=null;
 function famIndex(){if(_fam&&_fam.G===D.jobGroups)return _fam;
   return _fam={G:D.jobGroups,key:D.jobGroups.map(G=>{const raw=D.pool.job[G.l];return rcpCanon(raw)||famStem(raw);}),canon:D.jobGroups.map(G=>!!rcpCanon(D.pool.job[G.l]))};}
@@ -1997,10 +1997,10 @@ function scanRange(arr,mx,c,label){const p1=qs(arr,.1),p5=qs(arr,.5),p9=qs(arr,.
   const x=v=>(Math.min(v,mx)/mx*100).toFixed(1);
   return `<span class="srng" title="${esc(label)} · 하위 10% ${f1(p1)} · 중앙 ${f1(p5)} · 상위 10% ${f1(p9)} 분 · ${arr.length}장"><i style="left:${x(p1)}%;width:${Math.max(.8,x(p9)-x(p1))}%;background-color:${c}"></i><b style="left:${x(p5)}%;background-color:${c}"></b></span>`;}
 /* 모드 비율 막대(목록 · 머리글): 멀티 · 단일 · 판정 못 함 장 수를 한 줄 막대로 */
-function modeBar(c,h){const t=c.M+c.S+c.U||1;return `<span class="mbar" style="height:${h||6}px" title="멀티 ${c.M}장 · 단일 ${c.S}장 · 판정 못 함 ${c.U}장">${["M","S","U"].filter(k=>c[k]).map(k=>`<i style="width:${(c[k]/t*100).toFixed(1)}%;background-color:${MODE_C[k]}"></i>`).join("")}</span>`;}
+function modeBar(c,h,pi){const t=c.M+c.S+c.U||1;return `<span class="mbar" style="height:${h||6}px" title="${nmK("M",pi)} ${c.M}장 · ${nmK("S",pi)} ${c.S}장 · 판정 못 함 ${c.U}장">${["M","S","U"].filter(k=>c[k]).map(k=>`<i style="width:${(c[k]/t*100).toFixed(1)}%;background-color:${MODE_C[k]}"></i>`).join("")}</span>`;}
 let _rcpLast=null;   /* 마지막으로 오른쪽에 보인 레시피(검색 0개일 때 '이전 선택' 요약 — 화면 기억일 뿐 state 가 아니다) */
 const rcpPi=gs=>{const X=rcpIndex();for(const g of gs)if(X.kindG.get(g)==="pi")return true;return false;};
-const nmK=(k,pi)=>pi&&k==="S"?"전체":MODE_NM[k];   /* PI 는 멀티·단일 구분이 없어 '전체' 한 묶음(코드는 S) */
+const nmK=(k,pi)=>pi?(k==="M"?"기존":k==="S"?"Enhanced":MODE_NM[k]):MODE_NM[k];   /* PI 는 멀티 vs 단일 대신 기존(코드 M) vs Enhanced(코드 S) */
 function rcpHtml(){
   const X=rcpIndex(),days=D.days,from=days[0],to=days[days.length-1];   /* 기간은 헤더에서(10/5) */
   /* 레시피(줄기) 목록 — 이 기간 생산량 순. 한 줄 = 멀티 · 단일 · 판정 못 함 Job 을 합친 레시피 하나 */
@@ -2020,43 +2020,50 @@ function rcpHtml(){
   const listH=list.slice(0,40).map((F,i)=>{const on=SF&&F.k===SF.k,gi=titleG(F),nm=rcpFamName(gi),al=rcpAl(gi),t=F.c.M+F.c.S;
     return `<button class="rowbtn rcprow ${on?"on":""}" data-key="slot:${i}" data-row="rcp:${esc(F.k)}" data-h="${h(pickF(F))}" aria-pressed="${!!on}" title="${esc([...F.gs.keys()].map(g=>D.pool.job[D.jobGroups[g].l]).join("\n"))}">
       <span class="rn" style="${al?"":"font-family:"+MONO}">${esc(nm)}</span><span class="num rw">${F.w.toLocaleString("ko-KR")}</span>
-      <span class="rb">${F.pi?"":modeBar(F.c,6)}</span><span class="rp num">${F.pi?"구분 없음":(t?"멀티 "+Math.round(F.c.M/t*100)+"%":"판정 전")}</span></button>`;}).join("")||`<p class="empty">${Q?"검색 결과 0개":"이 기간에 맞는 레시피가 없습니다"}</p>`;
+      <span class="rb">${modeBar(F.c,6,F.pi)}</span><span class="rp num">${t?(F.pi?"Enhanced "+Math.round(F.c.S/t*100)+"%":"멀티 "+Math.round(F.c.M/t*100)+"%"):"판정 전"}</span></button>`;}).join("")||`<p class="empty">${Q?"검색 결과 0개":"이 기간에 맞는 레시피가 없습니다"}</p>`;
   let detail=`<div class="panel recipe-empty" data-key="rcp:empty-detail"><h3>${fam.size?"왼쪽에서 레시피를 고르세요":"이 기간에 맞는 레시피가 없습니다"}</h3></div>`,cmpSel=undefined;
   if(noMatch){const L=_rcpLast,there=L&&fam.has(L.k);
     const clr=lab=>`<button class="btn" data-fk="rcp:clear" data-h="${h(()=>{setState({rcpQ:""});const q=document.querySelector('[data-fk="rcp:q"]');if(q)q.focus();})}">${lab}</button>`;
     detail=`<div class="panel recipe-empty" data-key="rcp:empty-detail"><h3>검색 결과가 없습니다</h3>${L?(there?`<div class="recipe-retained"><span class="muted">이전 선택</span>
-      <p><b style="${L.al?"":"font-family:"+MONO}">${esc(L.name)}</b> · ${L.pi?`전체 <span class="num">${f1(L.mS)}</span>`:`멀티 <span class="num">${f1(L.mM)}</span> / 단일 <span class="num">${f1(L.mS)}</span>`}분/장</p>${clr("검색 지우고 이전 상세로")}</div>`
+      <p><b style="${L.al?"":"font-family:"+MONO}">${esc(L.name)}</b> · ${L.pi?"기존":"멀티"} <span class="num">${f1(L.mM)}</span> / ${L.pi?"Enhanced":"단일"} <span class="num">${f1(L.mS)}</span>분/장</p>${clr("검색 지우고 이전 상세로")}</div>`
       :`<p class="muted">이 기간에는 이전 선택의 기록이 없습니다</p>${clr("검색 지우기")}`):clr("검색 지우기")}</div>`;}
   if(SF){
     const famGs=new Set(SF.gs.keys()),A=rcpAgg(famGs,from,to),a=A.all,anyG=titleG(SF),FN=rcpFamName(anyG),al=rcpAl(anyG),PI=SF.pi;
-    const NMK=k=>nmK(k,PI),KS=PI?["S"]:["M","S"];
+    const NMK=k=>nmK(k,PI);
     const members=[...SF.gs.entries()].sort((x,y)=>y[1]-x[1]);
     _rcpLast={k:SF.k,name:FN,al,pi:PI,mM:qs(a.M.s,.5),mS:qs(a.S.s,.5)};
     let jobG=state.rcpJob!=null?[...rcpGroupsOf([state.rcpJob])][0]:undefined;if(jobG==null||!famGs.has(jobG))jobG=members[0][0];cmpSel=jobG;
-    const sfxC=gi=>{const s=rcpSuffix(gi);return s==="Multi"?MODE_C.M:s==="Single"?MODE_C.S:s==="미구분"?MODE_C.U:"#8A96A3";};
+    const sfxC=gi=>{if(PI)return /enhanced/i.test(String(D.pool.job[D.jobGroups[gi].l]))?MODE_C.S:MODE_C.M;const s=rcpSuffix(gi);return s==="Multi"?MODE_C.M:s==="Single"?MODE_C.S:s==="미구분"?MODE_C.U:"#8A96A3";};
     const chips=members.map(([gi,n])=>`<span class="jchip" title="${esc(D.pool.job[D.jobGroups[gi].l])}"><i class="sw" style="background-color:${sfxC(gi)}"></i>${esc(cut(String(D.pool.job[D.jobGroups[gi].l]),34))} <b class="num">${n.toLocaleString("ko-KR")}장</b></span>`).join("");
     const mM=qs(a.M.s,.5),mS=qs(a.S.s,.5);
-    const tile=(k,o)=>{const m=qs(o.s,.5),b=qs(o.b,.5);return `<div class="mtile"><p class="k"><i class="sw" style="background-color:${MODE_C[k]}"></i>${NMK(k)}${k==="M"?" <span class='muted' style='font-weight:500'>(x20 + x5)</span>":(k==="S"&&!PI?" <span class='muted' style='font-weight:500' title='x5 · x10 만 쓴 단일 스캔은 실수로 돌린 것이라 통계에서 뺍니다'>(x20)</span>":"")}</p>
-      <p class="v num">${f1(m)}<small>분/장</small></p><p class="s">${m?"시간당 <b>"+(60/m).toFixed(1)+"장</b> · ":""}${f0(o.n)}장 중 ${f0(o.s.length)}장으로 계산</p>${outNote(o.xs,labQ,"분",f1)}
-      <div class="scan-source-chips"><span class="scan-source-chip">INI <b class="num">${f0(o.sI.length)}장</b></span><span class="scan-source-chip">Report 보완 <b class="num">${f0(o.rep)}장</b></span></div>
-      ${o.rep?`<p class="s">INI만 <b class="num">${f1(qs(o.sI,.5))}</b>분/장</p>`:""}
-      <div class="msec"><p class="s">Report 1LOT당 <b class="num">${f1(b)}</b>분 <span class="muted">· Lot ${o.b.length}개 (25장 기준)</span></p>${outNote(o.xb,labP,"분",f1)}</div>
-      <div class="msec"><p class="s">Defect 장당 중앙 <b class="num">${fD(qs(o.f,.5))}</b> · 평균 <b class="num">${fD(avg(o.f))}</b> <span class="muted">· ${f0(o.f.length)}장</span></p>${outNote(o.xf,labQ,"개",fD)}</div></div>`;};
+    const W1=NMK("M"),W2=NMK("S");
+    const kNote=k=>PI?"":(k==="M"?" <span class='muted' style='font-weight:500'>(x20 + x5)</span>":k==="S"?" <span class='muted' style='font-weight:500' title='x5 · x10 만 쓴 단일 스캔은 실수로 돌린 것이라 통계에서 뺍니다'>(x20)</span>":"");
+    /* 타일 맨 위의 큰 숫자는 둘 — 장당 스캔 시간 | 장당 Defect(중앙)(사용자 10/6). 그 밑에 계산 근거 · 이상치 · Report 1LOT당 */
+    const tile=(k,o)=>{const m=qs(o.s,.5),b=qs(o.b,.5),fm=qs(o.f,.5);return `<div class="mtile"><p class="k"><i class="sw" style="background-color:${MODE_C[k]}"></i>${NMK(k)}${kNote(k)}</p>
+      <div class="bigrow"><div><p class="v num">${f1(m)}<small>분/장</small></p><p class="vl">장당 스캔 (중앙)</p></div><div><p class="v num">${fD(fm)}<small>개/장</small></p><p class="vl">장당 Defect (중앙)</p></div></div>
+      <div class="msec"><p class="s">${m?"시간당 <b>"+(60/m).toFixed(1)+"장</b> · ":""}${f0(o.n)}장 중 ${f0(o.s.length)}장으로 스캔 계산</p>${outNote(o.xs,labQ,"분",f1)}
+        <div class="scan-source-chips"><span class="scan-source-chip">INI <b class="num">${f0(o.sI.length)}장</b></span><span class="scan-source-chip">Report 보완 <b class="num">${f0(o.rep)}장</b></span></div>
+        ${o.rep?`<p class="s">INI만 <b class="num">${f1(qs(o.sI,.5))}</b>분/장</p>`:""}</div>
+      <div class="msec"><p class="s">Defect 평균 <b class="num">${fD(avg(o.f))}</b>개 <span class="muted">· ${f0(o.f.length)}장으로 계산</span></p>${outNote(o.xf,labQ,"개",fD)}</div>
+      <div class="msec"><p class="s">Report 1LOT당 <b class="num">${f1(b)}</b>분 <span class="muted">· Lot ${o.b.length}개 (25장 기준)</span></p>${outNote(o.xb,labP,"분",f1)}</div></div>`;};
     /* 차이(10/6 handoff C1): '전체 장' 과 '같은 장비' 두 비교를 같은 크기로 — 방향이 반대일 수 있어 한쪽만 크게 보이면 오해한다 */
-    const fastTxt=d=>{const v=Math.abs(d);if(v<0.05)return {t:"차이 0.0분",c:"var(--ink)"};const k=d<0?"S":"M";return {t:`${MODE_NM[k]} ${f1(v)}분 빠름`,c:MODE_C[k]};};
+    const fastTxt=d=>{const v=Math.abs(d);if(v<0.05)return {t:"차이 0.0분",c:"var(--ink)"};const k=d<0?"S":"M";return {t:`${NMK(k)} ${f1(v)}분 빠름`,c:MODE_C[k]};};
     let r1;
     if(mM!=null&&mS!=null)r1=fastTxt(mS-mM);
-    else if(!a.M.n&&!a.S.n)r1={t:"멀티 · 단일을 가릴 근거가 없습니다",msg:1};
-    else if(!a.M.n||!a.S.n)r1={t:`이 기간에는 ${a.M.n?"멀티":"단일"}만 돌았습니다`,msg:1};
+    else if(!a.M.n&&!a.S.n)r1={t:`${W1} · ${W2} 를 가릴 근거가 없습니다`,msg:1};
+    else if(!a.M.n||!a.S.n)r1={t:`이 기간에는 ${a.M.n?W1:W2}만 돌았습니다`,msg:1};
     else if(mM==null&&mS==null)r1={t:"계산 가능한 스캔 시간 없음",msg:1};
-    else r1={t:`${mM==null?"멀티":"단일"}의 계산 가능한 시간이 없습니다`,msg:1};
+    else r1={t:`${mM==null?W1:W2}의 계산 가능한 시간이 없습니다`,msg:1};
     const r2=A.paired?fastTxt(A.paired.d):{t:"비교 가능한 장비 없음",msg:1};
+    const dfM=qs(a.M.f,.5),dfS=qs(a.S.f,.5);
+    const rd=dfM==null||dfS==null?{t:"비교할 Defect 값이 없습니다",msg:1}:(Math.abs(dfS-dfM)<0.05?{t:"차이 0개",c:"var(--ink)"}:{t:`${dfS<dfM?W2:W1} ${fD(Math.abs(dfS-dfM))}개 적음`,c:dfS<dfM?MODE_C.S:MODE_C.M});
     const wTitle="장비별 차이를 합칠 때, 각 장비에서 표본이 적은 방식의 장 수를 가중치로 사용합니다.";
     const vcell=r=>`<div class="result num${r.msg?" msg":""}"${r.c?` style="color:${r.c}"`:""}>${esc(r.t)}</div>`;
     const verdict=`<div class="mtile verdict"><p class="k">차이 (장당 중앙)</p><div class="verdict-table">
         <div class="head">범위</div><div class="head">차이</div><div class="head basis">비교 근거</div>
-        <div class="scope">전체 장</div>${vcell(r1)}<div class="basis">장비 구분 없이 멀티·단일 장을 각각 모아 비교</div>
-        <div class="scope">같은 장비</div>${vcell(r2)}<div class="basis" title="${wTitle}">${A.paired?`장비마다 멀티·단일을 먼저 비교 → ${A.paired.n}대를 합침`:"두 방식 모두 계산 가능한 장이 3장 이상인 장비가 없습니다."}</div>
+        <div class="scope">전체 장</div>${vcell(r1)}<div class="basis">장비 구분 없이 ${W1} · ${W2} 장을 각각 모아 비교</div>
+        <div class="scope">같은 장비</div>${vcell(r2)}<div class="basis" title="${wTitle}">${A.paired?`장비마다 ${W1} · ${W2} 를 먼저 비교 → ${A.paired.n}대를 합침`:"두 방식 모두 계산 가능한 장이 3장 이상인 장비가 없습니다."}</div>
+        <div class="scope">Defect</div>${vcell(rd)}<div class="basis">전체 장의 장당 Defect 중앙을 비교 · 적을수록 좋음</div>
       </div></div>`;
     const mx=Math.max(1,...[a.M.s,a.S.s,a.U.s].map(x=>qs(x,.9)||0))*1.08;
     const rr=k=>`<div class="srow"><span class="sk"><i class="sw" style="background-color:${MODE_C[k]}"></i>${NMK(k)}</span>${scanRange(a[k].s,mx,MODE_C[k],NMK(k))}<span class="num r">${f1(qs(a[k].s,.5))}</span></div>`;
@@ -2064,8 +2071,8 @@ function rcpHtml(){
     /* 제목은 레시피를 바꾸면 글자가 넘어가지 않고 페이드로 바뀐다(사용자 10/6): 레시피마다 다른 키 → 새 노드가 CSS 페이드로 나타난다 · data-nr = 글자 넘김 제외 */
     const hero=`<div class="panel scanhero" data-key="rcp:hero"><div class="ph"><h2 class="tfade" data-nr data-key="rcp:t:${esc(SF.k)}" style="${al?"":"font-family:"+MONO}">${esc(FN)}</h2><span class="muted" style="font-size:12px">${md(from)} ~ ${md(to)}</span></div>
       <div class="jchips"><span class="muted" style="font-size:11.5px">이 레시피로 보는 Job</span>${chips}</div>
-      <div class="mtiles${PI?" one":""}">${PI?tile("S",a.S):tile("M",a.M)+tile("S",a.S)+verdict}</div>
-      <div class="srows">${PI?rr("S"):rr("M")+rr("S")+(a.U.s.length?rr("U"):"")}${scale}</div>
+      <div class="mtiles">${tile("M",a.M)+tile("S",a.S)+verdict}</div>
+      <div class="srows">${rr("M")+rr("S")+(a.U.s.length?rr("U"):"")}${scale}</div>
       <p class="hint">띠 = 장당 스캔 하위 10% ~ 상위 10% · 굵은 눈금 = 중앙</p>
       <p class="hint">이상치 = 평균 ± ${OUT_SIGMA}σ 밖의 값은 통계에서 뺍니다(표본 ${OUT_MIN_N}개 미만이면 빼지 않음) · Report 1LOT당은 Error 없는(Aborted 만 있는 것은 포함) PASS ${LOT_MIN}장 이상 Report 만, ${LOT_MIN}~${LOT_STD-1}장이면 ${LOT_STD}장 기준으로 환산</p></div>`;
     /* 장비별 — 같은 장비 안에서 멀티(●회색)와 단일(●파랑)을 한 줄에. 장비마다 속도가 달라 같은 장비끼리 보는 것이 공정하다.
@@ -2078,16 +2085,16 @@ function rcpHtml(){
     const devH=dv.map(([n,d],i)=>{const x=qs(d.M.s,.5),y=qs(d.S.s,.5),df=x!=null&&y!=null?y-x:null,on=n===devSel;
       const line=x!=null&&y!=null?`<i class="dl" style="left:${px(Math.min(x,y))}%;width:${(Math.abs(y-x)/dmx*100).toFixed(2)}%"></i>`:"";
       const dot=(v,k,o)=>v==null?"":`<b class="dd" style="left:${px(v)}%;background-color:${MODE_C[k]}" title="${esc(n)} · ${NMK(k)} ${f1(v)}분/장 · ${f0(o.s.length)}장으로 계산 · INI ${f0(o.sI.length)} + Report 보완 ${f0(o.rep)}"></b><em class="dlab ${k} num" data-p="${px(v)}" style="left:${px(v)}%">${f1(v)}</em>`;
-      return `<button type="button" class="dbrow${on?" on":""}" data-key="slot:${i}" data-row="dev:${esc(n)}" aria-pressed="${on}" data-h="${h(()=>setState({rcpDevSel:n}))}" data-dh="${h(()=>rcpDevOpen(n,SF.k))}" title="더블클릭하면 ${esc(n)} 상세 팝업"><span class="dn">${esc(n)}</span><span class="dtrack">${line}${PI?"":dot(x,"M",d.M)}${dot(y,"S",d.S)}${(PI?y==null:x==null&&y==null)?`<em class="dnone">스캔 시간 없음</em>`:""}</span>
-        <span class="r num dx" style="color:${df==null?"#8A96A3":df<0?MODE_C.S:df>0?MODE_C.M:"#4B5866"}">${PI?"":(df==null?(x!=null?"멀티만":y!=null?"단일만":"—"):(Math.abs(df)<0.05?"차이 0.0분":(df<0?"단일 ":"멀티 ")+f1(Math.abs(df))+"분↓"))}</span>
-        <span class="r num dc">${PI?d.S.n:d.M.n+"·"+d.S.n+(d.U.n?"·"+d.U.n:"")}</span></button>`;}).join("");
+      return `<button type="button" class="dbrow${on?" on":""}" data-key="slot:${i}" data-row="dev:${esc(n)}" aria-pressed="${on}" data-h="${h(()=>setState({rcpDevSel:n}))}" data-dh="${h(()=>rcpDevOpen(n,SF.k))}" title="더블클릭하면 ${esc(n)} 상세 팝업"><span class="dn">${esc(n)}</span><span class="dtrack">${line}${dot(x,"M",d.M)}${dot(y,"S",d.S)}${x==null&&y==null?`<em class="dnone">스캔 시간 없음</em>`:""}</span>
+        <span class="r num dx" style="color:${df==null?"#8A96A3":df<0?MODE_C.S:df>0?MODE_C.M:"#4B5866"}">${df==null?(x!=null?W1+"만":y!=null?W2+"만":"—"):(Math.abs(df)<0.05?"차이 0.0분":(df<0?W2+" ":W1+" ")+f1(Math.abs(df))+"분↓")}</span>
+        <span class="r num dc">${d.M.n+"·"+d.S.n+(d.U.n?"·"+d.U.n:"")}</span></button>`;}).join("");
     const daxis=`<div class="dbrow axis"><span></span><span class="dtrack ax">${[0,.25,.5,.75,1].map(t=>`<em style="left:${t*100}%">${Math.round(dmx*t)}분</em>`).join("")}</span><span></span><span></span></div>`;
     /* 근거 칸: 장비마다 한 덩어리를 그려 두고 고른 장비만 보인다(마우스 · 포커스는 hidden 만 잠깐 바꾼다 — 노드는 그대로) */
     const mline=(k,o)=>o.n?`<p><i class="sw" style="background-color:${MODE_C[k]}"></i><b>${NMK(k)}</b> <span class="num">${f1(qs(o.s,.5))}</span>분/장 · <span class="num">${f0(o.s.length)}</span>장으로 계산 / PASS <span class="num">${f0(o.n)}</span>장<span class="src num">INI ${f0(o.sI.length)} + Report 보완 ${f0(o.rep)}</span>${o.xs&&o.xs.out.length?` <span class="muted">· 이상치 ${o.xs.out.length}개 제외</span>`:""}</p>`:"";
     const mdet=dv.map(([n,d])=>`<div class="mdsel" data-key="md:${esc(n)}" data-dev="${esc(n)}"${n===devSel?"":" hidden"}><p class="mdh"><b>${esc(n)}</b> · 장당 스캔 근거</p>${mline("M",d.M)}${mline("S",d.S)}${mline("U",d.U)}</div>`).join("");
-    const devT=`<div class="panel" data-key="rcp:mdev" style="margin-top:14px"><div class="ph"><h2>장비별 장당 스캔</h2><span class="muted" style="font-size:12px">${PI?"장비마다 장당 스캔 중앙(분)":"같은 장비에서 멀티와 단일을 한 줄로 · 장당 스캔 중앙(분)"}</span><div class="spacer"></div><button class="btn sm" data-fk="rcp:devpop" ${devSel?"":"disabled"} data-h="${h(()=>{if(devSel)rcpDevOpen(devSel,SF.k);})}" title="고른 장비의 상세 팝업 — 행을 더블클릭해도 열립니다">상세 팝업</button></div>
-      <div class="dblegend">${PI?"":`<span><i class="sw" style="background-color:${MODE_C.M}"></i>멀티</span>`}<span><i class="sw" style="background-color:${MODE_C.S}"></i>${NMK("S")}</span><span class="muted">${PI?"":"선 길이 = 두 방식의 차이 · 오른쪽 = 빨라진 쪽 · "}장 수 = ${PI?"전체":"멀티·단일"+(a.U.n?"·판정 못 함":"")}</span><span class="muted hlink">행을 누르면 근거 · 더블클릭하면 상세 팝업</span></div>
-      <div class="dbrow head"><span>장비</span><span></span><span class="r">${PI?"":"차이"}</span><span class="r">장 수</span></div><div class="dbrows" data-key="rcp:mdev:rows">${devH||`<p class="empty">기록 없음</p>`}</div>${dv.length?daxis:""}
+    const devT=`<div class="panel" data-key="rcp:mdev" style="margin-top:14px"><div class="ph"><h2>장비별 장당 스캔</h2><span class="muted" style="font-size:12px">같은 장비에서 ${W1}와 ${W2}를 한 줄로 · 장당 스캔 중앙(분)</span><div class="spacer"></div><button class="btn sm" data-fk="rcp:devpop" ${devSel?"":"disabled"} data-h="${h(()=>{if(devSel)rcpDevOpen(devSel,SF.k);})}" title="고른 장비의 상세 팝업 — 행을 더블클릭해도 열립니다">상세 팝업</button></div>
+      <div class="dblegend"><span><i class="sw" style="background-color:${MODE_C.M}"></i>${W1}</span><span><i class="sw" style="background-color:${MODE_C.S}"></i>${W2}</span><span class="muted">선 길이 = 두 방식의 차이 · 오른쪽 = 빨라진 쪽 · 장 수 = ${W1}·${W2}${a.U.n?"·판정 못 함":""}</span><span class="muted hlink">행을 누르면 근거 · 더블클릭하면 상세 팝업</span></div>
+      <div class="dbrow head"><span>장비</span><span></span><span class="r">차이</span><span class="r">장 수</span></div><div class="dbrows" data-key="rcp:mdev:rows">${devH||`<p class="empty">기록 없음</p>`}</div>${dv.length?daxis:""}
       <div class="mdetail" data-key="rcp:mdev:detail" data-sel="${esc(devSel||"")}" aria-live="polite">${mdet||`<p class="muted">기록 없음</p>`}</div></div>`;
     /* 어떻게 셌나 — 이 레시피의 실제 숫자로. 10/6 handoff C5: 여섯 카드의 제목 · 핵심 값 · 요약은 늘 보이고(summary 안), 설명만 카드마다 따로 펼친다.
        펼침은 레시피(줄기)별 · 카드별 화면 상태(state.rcpHowOpen) — 다시 그려도 접히지 않는다 */
@@ -2101,7 +2108,7 @@ function rcpHtml(){
         <div class="how-explain">${body}</div></details>`;};
     const how=`<div class="panel how" data-key="rcp:how" style="margin-top:14px"><div class="ph"><h2>어떻게 셌나</h2><span class="muted" style="font-size:12px">${esc(FN)} · ${md(from)} ~ ${md(to)} 의 실제 숫자 · 카드를 누르면 설명</span></div>
       <div class="howgrid">
-        ${card("wafer","장","Wafer 한 장",`PASS ${f0(a.w)}장`,[PI?`전체 ${f0(a.S.n)}`:`멀티 ${f0(a.M.n)} · 단일 ${f0(a.S.n)}${a.U.n?" · 판정 못 함 "+f0(a.U.n):""}`].concat(a.ign?[`x5 · x10 단일 ${f0(a.ign)}장 제외`]:[]),
+        ${card("wafer","장","Wafer 한 장",`PASS ${f0(a.w)}장`,[`${W1} ${f0(a.M.n)} · ${W2} ${f0(a.S.n)}${a.U.n?" · 판정 못 함 "+f0(a.U.n):""}`].concat(a.ign?[`x5 · x10 단일 ${f0(a.ign)}장 제외`]:[]),
           `<p>PASS 로 끝난 Wafer 만 셉니다(Test Lot · Error · 건너뜀 제외). 같은 장비에서 같은 Wafer 를 같은 시각에 두 번 세지 않습니다.</p>${PI?"":`<p class="hn">단일은 <b>x20</b> 만 셉니다. x5 · x10 레시피만 쓴 단일 스캔(실수로 돌린 것)은 통계에서 뺍니다${a.ign?" — 이 기간 "+f0(a.ign)+"장":""}.</p>`}`)}
         ${card("time","INI · Report","장당 스캔",`${f0(a.s.length)}장으로 계산`,[`INI ${f0(a.sI.length)} + Report 보완 ${f0(a.rep)}`,`WaferStartTime → WaferEndTime`].concat(noT?[`${f0(noT)}장 시간 없음`]:[]).concat(a.nOut.s?[`이상치 ${f0(a.nOut.s)}장 제외`]:[]),
           `<p>Wafer 폴더의 <code>WaferInfo.ini</code> 에 적힌 <b>WaferStartTime → WaferEndTime</b> — 장비가 그 장을 스캔한 시간입니다.</p>
@@ -2116,10 +2123,10 @@ function rcpHtml(){
           `<p>Report 표의 <b>Faults</b> 열(결함 수)을 Wafer 한 장의 Defect 로 씁니다. 값이 있는 장만 셉니다(옛 캐시 행은 다시 읽어야 채워집니다).</p>`)}
         ${card("outlier","3σ","이상치 제외",`${f0(nOutAll)}개`,[`스캔 ${f0(a.nOut.s)} · Report 1LOT ${f0(a.nOut.b)} · Defect ${f0(a.nOut.f)}`],
           `<p>장당 스캔 · Report 1LOT당 · Defect 각각을 <b>평균 ± ${OUT_SIGMA}σ</b>(표본 표준편차) 밖의 값을 한 번 뺍니다. 표본이 ${OUT_MIN_N}개 미만이면 빼지 않습니다. 어떤 값이 왜 빠졌는지는 각 통계 밑에 작게 적습니다.</p><p>${OUT_SIGMA}σ 로 정한 이유: 표본이 보통 수십 개라 6σ 는 사실상 아무것도 걸러내지 못합니다. 전체 타일은 장비를 합친 표본, 장비 행과 팝업은 그 장비의 표본에서 잽니다.</p>`)}
-        ${PI?"":card("mode","판정","멀티 / 단일",`멀티 ${f0(a.M.n)} · 단일 ${f0(a.S.n)}${a.U.n?" · 판정 못 함 "+f0(a.U.n):""}`,[`그 장 INI ${f0(a.w-a.mr-a.mn-a.U.n)} · 같은 Report ${f0(a.mr)} · 가까운 Report ${f0(a.mn)}`],
-          `<p>Wafer 폴더에 <code>RecipesInfo.ini</code> 가 있고 레시피가 둘 이상(x20 · x5)이면 <b>멀티</b>, 없으면 <b>단일</b>(x20 만). INI 가 덮어써졌거나 없거나 업데이트 전에 모은 장은 Report 로 채웁니다 — ① 같은 Report 의 다른 장 판정(한 Report 는 한 방식으로 돈다) ② Report 전체가 근거가 없으면 같은 장비 · 같은 Job 에서 시각이 가장 가까운 Report 의 방식(추정). 그래도 없으면 <b>판정 못 함</b>.</p>`)}
-        ${PI?"":card("calc","계산","중앙 · 시간당 · 차이","중앙값 · 시간당 60 ÷ 중앙",[A.paired?`같은 장비 ${A.paired.n}대 비교`:"같은 장비 비교 근거 없음"],
-          `<p>대표값은 <b>중앙값</b>(튀는 장에 덜 흔들림). 시간당 = 60 ÷ 장당 중앙.</p><p>'같은 장비' 비교 = 두 방식을 각 3장 이상 계산할 수 있는 장비마다 (단일 − 멀티) 중앙 차이를 구한 뒤 합칩니다. ${wTitle}</p>`)}
+        ${card("mode","판정",PI?"기존 / Enhanced":"멀티 / 단일",`${W1} ${f0(a.M.n)} · ${W2} ${f0(a.S.n)}${a.U.n?" · 판정 못 함 "+f0(a.U.n):""}`,[PI?`Job 이름에 Enhanced 가 있으면 Enhanced`:`그 장 INI ${f0(a.w-a.mr-a.mn-a.U.n)} · 같은 Report ${f0(a.mr)} · 가까운 Report ${f0(a.mn)}`],
+          PI?`<p>PI 는 <b>모두 멀티스캔</b>으로 봅니다(실수로 단일을 돌린 장은 편차 · 이상치에 흡수). Job 이름에 <b>Enhanced</b> 가 있으면 Enhanced, 없으면 기존입니다.</p>`:`<p>Wafer 폴더에 <code>RecipesInfo.ini</code> 가 있고 레시피가 둘 이상(x20 · x5)이면 <b>멀티</b>, 없으면 <b>단일</b>(x20 만). INI 가 덮어써졌거나 없거나 업데이트 전에 모은 장은 Report 로 채웁니다 — ① 같은 Report 의 다른 장 판정(한 Report 는 한 방식으로 돈다) ② Report 전체가 근거가 없으면 같은 장비 · 같은 Job 에서 시각이 가장 가까운 Report 의 방식(추정). 그래도 없으면 <b>판정 못 함</b>.</p>`)}
+        ${card("calc","계산","중앙 · 시간당 · 차이","중앙값 · 시간당 60 ÷ 중앙",[A.paired?`같은 장비 ${A.paired.n}대 비교`:"같은 장비 비교 근거 없음"],
+          `<p>대표값은 <b>중앙값</b>(튀는 장에 덜 흔들림). 시간당 = 60 ÷ 장당 중앙.</p><p>'같은 장비' 비교 = 두 방식을 각 3장 이상 계산할 수 있는 장비마다 (${W2} − ${W1}) 중앙 차이를 구한 뒤 합칩니다. ${wTitle}</p>`)}
       </div></div>`;
     /* 상세 보기 — 고른 Job 하나(멀티 · 단일 · 판정 못 함 중) */
     let more="";
@@ -2148,7 +2155,7 @@ function rcpHtml(){
   return `<div class="bar-h"><h1>RDL 단일스캔</h1><span class="scope-badge" data-key="scope">${scopeBadge("recipe")}</span></div>
     <div class="rcpgrid"><div class="panel rcplist"><div style="padding:10px 12px;border-bottom:1px solid #EDF1F5"><input class="inp" type="search" data-in="rcpQ" data-fk="rcp:q" placeholder="레시피 · Job 이름 검색" value="${esc(state.rcpQ||"")}" style="width:100%"></div>
       <p class="rcpnote" data-key="rcp:note">${!Q?(list.length>40?`생산량 상위 40개 / 전체 ${fam.size}개 · 전체 검색 가능`:`전체 ${fam.size}개`):`검색 결과 ${list.length}개${list.length>40?` · ${shown}개 표시`:""}`}</p>
-      <div class="rcplegend">${list.some(F=>!F.pi)?`<span><i class="sw" style="background-color:${MODE_C.M}"></i>멀티</span><span><i class="sw" style="background-color:${MODE_C.S}"></i>단일</span><span><i class="sw" style="background-color:${MODE_C.U}"></i>판정 못 함</span>`:""}<span class="r">Wafer</span></div>
+      <div class="rcplegend"><span><i class="sw" style="background-color:${MODE_C.M}"></i>멀티·기존</span><span><i class="sw" style="background-color:${MODE_C.S}"></i>단일·Enhanced</span><span><i class="sw" style="background-color:${MODE_C.U}"></i>판정 못 함</span><span class="r">Wafer</span></div>
       <div class="rcpscroll">${listH}</div></div>
       <div style="min-width:0" data-key="rcp:detail">${detail}</div></div>
     <div style="margin-top:18px">${cmpBtn}</div>${state.cmpOpen?cmpHtml(cmpSel):""}`;}
@@ -2165,15 +2172,15 @@ function rcpDevPopupHtml(){const S0=state.rcpPop;if(!S0||!D||!D.days.length)retu
   const shell=(title,sub,body)=>`<div class="ov z55"><button class="scrim" data-h="${h(close)}" aria-label="닫기"></button><div class="dlg w960" role="dialog" aria-modal="true" aria-labelledby="dlg-rcpdev-title" data-dlg="rcpdev">
     <div class="dh"><h2 id="dlg-rcpdev-title" tabindex="-1" class="mid">${esc(title)}</h2><span class="sub">${esc(sub)}</span><div class="spacer"></div><button class="x" data-h="${h(close)}" data-fk="x:rcpdev" title="닫기 (Esc)">✕</button></div>${body}</div></div>`;
   if(!gs.size)return shell(S0.dev,"기록 없음",`<p class="empty">이 기간에는 이 레시피의 기록이 없습니다</p>`);
-  const A=rcpAgg(gs,from,to),d=A.devs[S0.dev],PI=rcpPi(gs),NMK=k=>nmK(k,PI),KS=PI?["S"]:["M","S"],anyG=[...gs].map(g=>[g,!!D.jobGroups[g].nm]).sort((x,y)=>y[1]-x[1])[0][0],FN=rcpFamName(anyG);
+  const A=rcpAgg(gs,from,to),d=A.devs[S0.dev],PI=rcpPi(gs),NMK=k=>nmK(k,PI),KS=["M","S"],anyG=[...gs].map(g=>[g,!!D.jobGroups[g].nm]).sort((x,y)=>y[1]-x[1])[0][0],FN=rcpFamName(anyG);
   if(!d)return shell(S0.dev+" · "+FN,md(from)+" ~ "+md(to),`<p class="empty">이 장비는 이 기간에 이 레시피를 돌린 기록이 없습니다</p>`);
   const kinds0=KS.concat(d.U.n?["U"]:[]),kinds=kinds0.filter(k=>d[k].n).length?kinds0.filter(k=>d[k].n):KS.slice(0,1);   /* 이 장비가 돌린 방식만 */
   const stat=(k,o)=>{const sd=o.xs&&o.xs.sd!=null?o.xs.sd:null,m=avg(o.s);
     return `<div class="mtile"><p class="k"><i class="sw" style="background-color:${MODE_C[k]}"></i>${NMK(k)}</p>
-      <p class="v num">${f1(qs(o.s,.5))}<small>분/장 (중앙)</small></p>
-      <p class="s">평균 <b class="num">${f1(m)}</b> · σ <b class="num">${f1(sd)}</b> · ${f0(o.n)}장 중 ${f0(o.s.length)}장으로 계산 (INI ${f0(o.sI.length)} + Report 보완 ${f0(o.rep)})</p>${outNote(o.xs,labQ,"분",f1)}
-      <div class="msec"><p class="s">Report 1LOT당 중앙 <b class="num">${f1(qs(o.b,.5))}</b> · 평균 <b class="num">${f1(avg(o.b))}</b>분 <span class="muted">· Lot ${o.b.length}개 (${LOT_STD}장 기준)</span></p>${outNote(o.xb,labP,"분",f1)}</div>
-      <div class="msec"><p class="s">Defect 장당 중앙 <b class="num">${fD(qs(o.f,.5))}</b> · 평균 <b class="num">${fD(avg(o.f))}</b> <span class="muted">· ${f0(o.f.length)}장</span></p>${outNote(o.xf,labQ,"개",fD)}</div></div>`;};
+      <div class="bigrow"><div><p class="v num">${f1(qs(o.s,.5))}<small>분/장</small></p><p class="vl">장당 스캔 (중앙)</p></div><div><p class="v num">${fD(qs(o.f,.5))}<small>개/장</small></p><p class="vl">장당 Defect (중앙)</p></div></div>
+      <div class="msec"><p class="s">스캔 평균 <b class="num">${f1(m)}</b> · σ <b class="num">${f1(sd)}</b> · ${f0(o.n)}장 중 ${f0(o.s.length)}장으로 계산 (INI ${f0(o.sI.length)} + Report 보완 ${f0(o.rep)})</p>${outNote(o.xs,labQ,"분",f1)}</div>
+      <div class="msec"><p class="s">Defect 평균 <b class="num">${fD(avg(o.f))}</b>개 <span class="muted">· ${f0(o.f.length)}장으로 계산</span></p>${outNote(o.xf,labQ,"개",fD)}</div>
+      <div class="msec"><p class="s">Report 1LOT당 중앙 <b class="num">${f1(qs(o.b,.5))}</b> · 평균 <b class="num">${f1(avg(o.b))}</b>분 <span class="muted">· Lot ${o.b.length}개 (${LOT_STD}장 기준)</span></p>${outNote(o.xb,labP,"분",f1)}</div></div>`;};
   /* 분포: 이 장비의 장당 스캔(남긴 것 + 이상치) — 이상치는 붉은 칸 */
   const allV=[].concat(...kinds.map(k=>d[k].sq.map(q=>q.s))),mxv=Math.max(1,...allV)*1.02;
   const dist=kinds.map(k=>`<div class="hrow"><span class="sk"><i class="sw" style="background-color:${MODE_C[k]}"></i>${NMK(k)}</span><div>${histHtml(d[k].s,d[k].xs.out.map(q=>q.s),MODE_C[k],mxv)}</div></div>`).join("");
@@ -2191,7 +2198,7 @@ function rcpDevPopupHtml(){const S0=state.rcpPop;if(!S0||!D||!D.days.length)retu
     return `<div class="rawrow" data-key="rw:${i}"><span class="num">${md(q.day)} ${hhmm(q.t)}</span><span class="mono" title="${esc(q.lot)}">${esc(q.lot)}</span><span class="mono">${esc(q.wid)}</span><span>${NMK(q.m||"U")}</span><span class="num r">${q.s==null?"—":f1(q.s)}</span><span>${q.src==="ini"?"INI":q.src==="rep"?"Report 보완":"—"}</span><span class="num r${outF.has(q)?" bad":""}">${q.f==null?"—":q.f}</span><span>${st}</span></div>`;}).join("");
   const sec=(t,sub,inner)=>`<section style="padding:0 22px 18px"><h3 class="s" style="margin:0 0 8px">${t}${sub?` <span style="font-weight:400;color:#5A6673;font-size:12px">${sub}</span>`:""}</h3>${inner}</section>`;
   return shell(S0.dev+" · "+FN,md(from)+" ~ "+md(to)+" · "+f0(d.w)+"장 · Lot "+d.lots.size+"개",
-    `<div style="padding:16px 22px 0"><div class="mtiles pop${PI?" one":""}" style="padding:0 0 16px">${kinds.map(k=>stat(k,d[k])).join("")}</div></div>
+    `<div style="padding:16px 22px 0"><div class="mtiles pop" style="padding:0 0 16px">${kinds.map(k=>stat(k,d[k])).join("")}</div></div>
     ${sec("장당 스캔 분포","붉은 칸 = 이상치로 뺀 장",dist||`<p class="empty">기록 없음</p>`)}
     ${sec("날짜별 장당 스캔 중앙","이 장비 · 중앙(분) · 점 뒤는 장 수",`<div class="dayrows"><div class="drow head" style="grid-template-columns:58px repeat(${kinds.length},minmax(0,1fr) 78px)"><span></span>${kinds.map(k=>`<span class="hk2"><i class="sw" style="background-color:${MODE_C[k]}"></i>${NMK(k)}</span><span></span>`).join("")}</div>${dayRows||`<p class="empty">기록 없음</p>`}</div>`)}
     ${sec("장비 간 비교","같은 레시피 · 장당 스캔 중앙(분) · 이 장비는 진하게",`<div class="cmprows"><div class="crow head" style="grid-template-columns:88px repeat(${KS.length},minmax(0,1fr) 52px)"><span></span>${KS.map(k=>`<span class="hk2"><i class="sw" style="background-color:${MODE_C[k]}"></i>${NMK(k)}</span><span></span>`).join("")}</div>${cmpRows}</div>`)}

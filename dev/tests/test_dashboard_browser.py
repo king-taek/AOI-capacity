@@ -818,7 +818,8 @@ def test_rdl_tab_lot_stat_outlier_x5_rule_and_wording(rdl_page):
     single = [t for t in tiles if t.startswith("단일")][0]
     assert "(x20)" in single
     assert "Report 1LOT당 409.1분" in single.replace("\n", " ") and "Lot 1개" in single      # 22장 → 360분 × 25 ÷ 22(20~24장은 25장 기준으로 환산) · Error/19장 Report 는 제외
-    assert "이상치 1개 제외" in single and "150.0분" in single and "3σ" in single               # 어떤 값이 왜 빠졌는지
+    assert "이상치 1개 제외" in single and "150.0분" in single and "3σ" in single
+    assert "장당 스캔 (중앙)" in single and "장당 Defect (중앙)" in single               # 타일 맨 위 큰 숫자 둘 — 시간 | Defect(사용자 10/6)               # 어떤 값이 왜 빠졌는지
     how = pg.locator(".how").inner_text()
     assert "x5 · x10 단일 6장 제외" in how and "PASS 4" not in how                           # x5 만 쓴 단일은 통계에서 무시
     assert "제외 Lot 2개" in how and "이상치" in how

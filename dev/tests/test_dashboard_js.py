@@ -547,9 +547,9 @@ def test_recipe_list_is_limited_to_tb500_rdl_and_pi_and_the_count_line_is_short(
     rows = [w("AOI-1", f"W{i}", f"{8 + i // 6:02d}:{(i % 6) * 10:02d}", f"{8 + i // 6:02d}:{(i % 6) * 10 + 5:02d}", lot=f"L{i}", job=j) for i, j in enumerate(jobs)]
     html, = screen(rows, meta("AOI-1"), [["rcpHtml"]])
     names = re.findall(r'data-row="rcp:[^"]*"[^>]*>\s*<span class="rn"[^>]*>([^<]*)</span>', html)
-    assert sorted(names) == ["TB500 PI3", "TB500 PI3 Enhanced", "TB500 RDL1", "TB500 RDL2"]   # PI4-x5 · Kendall · ROOT-… · ALPHA 는 이 탭에 없다, 복사본은 한 줄로
+    assert sorted(names) == ["TB500 PI3", "TB500 RDL1", "TB500 RDL2"]   # PI4-x5 · Kendall · ROOT-… · ALPHA 는 이 탭에 없다, 복사본은 한 줄로 · PI3 Enhanced 는 PI3 와 같은 줄(기존 vs Enhanced)
     note = lambda h: re.search(r'data-key="rcp:note">([^<]*)<', h).group(1)
-    assert note(html) == "전체 4개" and "레시피 4개" not in html.split('class="rcpgrid"')[0]
+    assert note(html) == "전체 3개" and "레시피 4개" not in html.split('class="rcpgrid"')[0]
     found, = screen(rows, meta("AOI-1"), [["rcpHtml"]], state={"rcpQ": "rdl1"})
     assert note(found) == "검색 결과 1개"
     none, = screen(rows, meta("AOI-1"), [["rcpHtml"]], state={"rcpQ": "zzz"})
@@ -588,19 +588,23 @@ def test_outliers_beyond_3_sigma_are_dropped_once_and_listed_but_not_for_tiny_sa
     rows = [_rdl("AOI-1", f"W{i}", f"08:{i * 2:02d}", f"08:{i * 2 + 1:02d}", "LOT-A", "SINGLE") for i in range(21)]
     rows.append(_rdl("AOI-1", "BIG", "11:00", "13:30", "LOT-A", "SINGLE"))
     html, = screen(rows, meta("AOI-1"), [["rcpHtml"]])
-    assert "이상치 1개 제외" in html and "150.0분" in html and "3σ" in html and "22장 중 21장으로 계산" in html
+    assert "이상치 1개 제외" in html and "150.0분" in html and "3σ" in html and "22장 중 21장으로 스캔 계산" in html
     tiny = [_rdl("AOI-1", f"T{i}", f"08:{i * 3:02d}", f"08:{i * 3 + 1:02d}", "LOT-A", "SINGLE") for i in range(3)] + [_rdl("AOI-1", "BIG", "11:00", "13:30", "LOT-A", "SINGLE")]
     html, = screen(tiny, meta("AOI-1"), [["rcpHtml"]])
-    assert "개 제외" not in html and "4장 중 4장으로 계산" in html
+    assert "개 제외" not in html and "4장 중 4장으로 스캔 계산" in html
 
 
-def test_single_scan_counts_x20_only_and_pi_has_no_multi_single_split():
-    """단일은 x20 만 — x5 · x10 만 쓴 단일은 무시(실수로 돌린 것). PI 는 멀티·단일 구분이 없다('전체' 한 묶음, 레시피 칸의 '|' 도 멀티가 아니다)."""
+def test_single_scan_counts_x20_only_and_pi_compares_existing_vs_enhanced():
+    """단일은 x20 만 — x5 · x10 만 쓴 단일은 무시(실수로 돌린 것). PI 는 멀티 vs 단일이 아니라 **기존 vs Enhanced**(PI 는 모두 멀티스캔으로 본다 —
+    scan_mode 가 비어 있고 레시피 칸의 '|' 도 믿지 않는다). Enhanced Job 은 같은 PI 줄에 합쳐지고 이름에 Enhanced 가 있으면 Enhanced."""
     rows = [_rdl("AOI-1", f"S{i}", f"08:{i * 2:02d}", f"08:{i * 2 + 1:02d}", "A", "SINGLE") for i in range(3)]
     rows += [dict(_rdl("AOI-1", f"X{i}", f"09:{i * 2:02d}", f"09:{i * 2 + 1:02d}", "B", "SINGLE"), recipe="x5") for i in range(2)]
     html, = screen(rows, meta("AOI-1"), [["rcpHtml"]])
-    assert "3장 중 3장으로 계산" in html and "x5 · x10 단일 2장 제외" in html
-    pi = [dict(w("AOI-1", f"P{i}", f"08:{i * 2:02d}", f"08:{i * 2 + 1:02d}", job="R_TB500_LIVE_PI3"), recipe="PI BUBBLE|PI3") for i in range(3)]
+    assert "3장 중 3장으로 스캔 계산" in html and "x5 · x10 단일 2장 제외" in html
+    pi = [dict(w("AOI-1", f"P{i}", f"08:{i * 2:02d}", f"08:{i * 2 + 1:02d}", job="R_TB500_LIVE_PI3"), recipe="PI") for i in range(3)]
+    pi += [dict(w("AOI-1", f"E{i}", f"10:{i * 2:02d}", f"10:{i * 2 + 1:02d}", job="R_TB500_LIVE_PI3 - Enhanced"), recipe="PI") for i in range(2)]
     html, = screen(pi, meta("AOI-1"), [["rcpHtml"]])
-    assert ">전체</span>" in html or "전체</p>" in html or "</i>전체" in html
-    assert "(x20 + x5)" not in html and 'class="mtile verdict"' not in html and "멀티 · 단일을 가릴" not in html
+    assert html.count('class="rowbtn rcprow') == 1 and "Enhanced 40%" in html                  # 한 줄(PI3) · Enhanced 비율
+    assert "</i>기존" in html and "</i>Enhanced" in html and "(x20 + x5)" not in html and "멀티 · 단일을 가릴" not in html
+    assert "3장 중 3장으로 스캔 계산" in html and "2장 중 2장으로 스캔 계산" in html
+    assert "<p class=\"vl\">장당 Defect (중앙)</p>" in html and "장당 스캔 (중앙)" in html     # 타일 맨 위 큰 숫자 둘: 스캔 시간 | Defect
