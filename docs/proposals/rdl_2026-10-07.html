@@ -1,0 +1,191 @@
+<!doctype html>
+<html lang="ko" data-theme="light" translate="no">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="google" content="notranslate">
+<title>RDL 단일스캔 개선 제안</title>
+<style>
+:root{--bg:#F5F7FA;--surface:#fff;--line:#E3E8EE;--line2:#EDF1F5;--ink:#16202A;--ink-2:#4B5866;--ink-3:#7B8794;--accent:#2E6BA8;--accent-soft:#E8F0F8;--multi:#5A6673;--single:#2E6BA8;--undec:#C3CCD6;--err:#C5453C;--good:#1F7A4D;--warn:#8A5A12;--warn-soft:#FFF4E0;
+  --sans:"Pretendard","Segoe UI","Malgun Gothic","Apple SD Gothic Neo",system-ui,sans-serif;--mono:"JetBrains Mono","Cascadia Mono",Consolas,ui-monospace,monospace;--ease:cubic-bezier(.16,1,.3,1)}
+*{box-sizing:border-box}html,body{margin:0}body{background:var(--bg);color:var(--ink);font:14px/1.6 var(--sans);-webkit-font-smoothing:antialiased}
+.wrap{max-width:1180px;margin:0 auto;padding:28px 24px 120px}
+header.top{display:flex;align-items:flex-end;gap:16px;flex-wrap:wrap;margin-bottom:18px}header.top h1{margin:0;font-size:24px;letter-spacing:-.01em}header.top .sub{color:var(--ink-3);font-size:13px}
+.prog{margin-left:auto;display:flex;align-items:center;gap:10px;font-size:12.5px;color:var(--ink-2)}.prog .bar{width:160px;height:6px;border-radius:3px;background:#E4E9EF;overflow:hidden}.prog .bar i{display:block;height:100%;background:var(--accent);width:0;transition:width .3s var(--ease)}
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:18px 20px;margin-bottom:14px}
+.intro h2{margin:0 0 8px;font-size:15px}.intro p,.intro li{margin:0 0 4px;color:var(--ink-2);font-size:13px}.intro ul{margin:0;padding-left:18px}
+.answer{border-left:3px solid var(--accent);background:var(--accent-soft);border-radius:0 10px 10px 0;padding:12px 16px;margin-top:12px}.answer h3{margin:0 0 6px;font-size:13.5px}.answer p{margin:0 0 4px;font-size:13px;color:var(--ink)}
+table.mini{border-collapse:collapse;font-size:12.5px;margin-top:6px}table.mini th,table.mini td{padding:3px 10px;text-align:right;border-bottom:1px solid #D5E2EF}table.mini th:first-child,table.mini td:first-child{text-align:left}table.mini th{font-weight:600;color:var(--ink-2)}
+nav.toc{display:flex;flex-wrap:wrap;gap:6px;margin:4px 0 18px}nav.toc a{font-size:12px;text-decoration:none;color:var(--ink-2);background:#fff;border:1px solid var(--line);border-radius:14px;padding:3px 10px;display:inline-flex;gap:6px;align-items:center}nav.toc a.done{border-color:var(--accent);color:var(--accent)}nav.toc a.done::before{content:"✓";font-weight:700}
+.grp{margin:26px 0 10px;font-size:12px;font-weight:700;letter-spacing:.06em;color:var(--ink-3)}
+.q{scroll-margin-top:16px}.q .qh{display:flex;gap:10px;align-items:baseline;margin-bottom:4px}.q .qid{font:700 12px var(--mono);color:var(--accent);background:var(--accent-soft);border-radius:6px;padding:1px 7px}.q h3{margin:0;font-size:16px}
+.q .why{margin:0 0 12px;color:var(--ink-2);font-size:13px}
+.opts{display:grid;gap:12px;grid-template-columns:repeat(var(--n,3),minmax(0,1fr))}
+.opt{position:relative;display:flex;flex-direction:column;border:1.5px solid var(--line);border-radius:12px;padding:12px 14px 12px;background:#FBFCFD;cursor:pointer;transition:border-color .16s,box-shadow .16s,background-color .16s}
+.opt:hover{border-color:#B9C6D3}.opt.on{border-color:var(--accent);background:#fff;box-shadow:0 0 0 3px rgba(46,107,168,.14)}
+.opt input{position:absolute;opacity:0;pointer-events:none}.opt .oh{display:flex;align-items:center;gap:8px;margin-bottom:6px}.opt .ok{width:18px;height:18px;border-radius:50%;border:1.5px solid #B9C6D3;flex:none;display:grid;place-items:center}.opt.on .ok{border-color:var(--accent);background:var(--accent)}.opt.on .ok::after{content:"";width:6px;height:6px;border-radius:50%;background:#fff}
+.opt .ol{font-weight:800;font-size:13px;white-space:nowrap}.opt .ot{font-weight:700;font-size:13.5px}.opt .rec{margin-left:auto;font-size:10.5px;font-weight:700;color:var(--good);background:#E6F3EC;border-radius:9px;padding:1px 7px;white-space:nowrap}.opt .now{margin-left:auto;font-size:10.5px;font-weight:700;color:var(--ink-3);background:#EEF1F4;border-radius:9px;padding:1px 7px;white-space:nowrap}
+.opt .od{font-size:12.5px;color:var(--ink-2);margin:0 0 10px}.opt .pc{font-size:11.5px;color:var(--ink-3);margin:8px 0 0;border-top:1px dashed var(--line);padding-top:6px}.opt .pc b{color:var(--ink-2);font-weight:600}
+.mock{border:1px solid var(--line2);border-radius:9px;background:#fff;padding:10px 12px;font-size:12px;min-height:118px;flex:1;display:flex;flex-direction:column;justify-content:center;gap:4px;overflow:hidden}
+.memo{margin-top:10px;display:flex;gap:8px;align-items:flex-start}.memo label{font-size:12px;color:var(--ink-3);padding-top:7px;white-space:nowrap}.memo textarea{flex:1;min-height:36px;resize:vertical;border:1px solid var(--line);border-radius:8px;padding:7px 10px;font:13px/1.5 var(--sans);color:var(--ink);background:#fff}.memo textarea:focus{outline:2px solid var(--accent);outline-offset:-1px}
+.foot{position:fixed;left:0;right:0;bottom:0;background:rgba(255,255,255,.96);border-top:1px solid var(--line);backdrop-filter:blur(6px);z-index:5}
+.foot .in{max-width:1180px;margin:0 auto;padding:10px 24px;display:flex;align-items:center;gap:12px}.foot .s{font-size:12.5px;color:var(--ink-2)}
+.btn{font:600 13px var(--sans);border-radius:9px;padding:8px 16px;border:1px solid var(--line);background:#fff;color:var(--ink);cursor:pointer}.btn.pri{background:var(--accent);border-color:var(--accent);color:#fff}.btn:hover{filter:brightness(.97)}.btn:focus-visible,.opt:focus-within{outline:2px solid var(--accent);outline-offset:2px}
+.out{margin-top:16px}.out textarea{width:100%;min-height:200px;border:1px solid var(--line);border-radius:10px;padding:12px;font:12.5px/1.6 var(--mono);background:#fff;color:var(--ink)}
+.toast{position:fixed;left:50%;bottom:70px;transform:translateX(-50%);background:var(--ink);color:#fff;font-size:13px;padding:8px 14px;border-radius:8px;opacity:0;transition:opacity .2s;pointer-events:none;z-index:9}.toast.show{opacity:1}
+/* ── mock 부품 ── */
+.sw{display:inline-block;width:9px;height:9px;border-radius:2px;vertical-align:-1px;margin-right:4px}.swM{background:var(--multi)}.swS{background:var(--single)}
+.num{font-variant-numeric:tabular-nums}.mu{color:var(--ink-3)}.big{font-size:22px;font-weight:800;line-height:1.1}.big small{font-size:11px;color:var(--ink-3);font-weight:600;margin-left:2px}.b2{font-size:15px;font-weight:700}
+.row{display:flex;align-items:center;gap:8px}.sp{flex:1}.tiny{font-size:10.5px;color:var(--ink-3)}
+.trk{position:relative;height:16px;flex:1;background:#F4F6F8;border-radius:4px}.trk i,.trk b,.trk em{position:absolute}.trk .band{top:5px;height:6px;border-radius:3px}.trk .tick{top:1px;width:2.5px;height:14px;margin-left:-1px;border-radius:1px}.trk .dot{top:50%;width:8px;height:8px;margin:-4px 0 0 -4px;border-radius:50%}
+.trk .fl{top:0;bottom:0;border-left:1.5px dashed #9AA6B2}
+.lab{width:62px;font-size:11.5px;font-weight:600;white-space:nowrap}.val{width:40px;text-align:right;font-size:11.5px;font-weight:700}
+.hm{display:grid;gap:2px;font-size:10px}.hm span{display:grid;place-items:center;height:18px;border-radius:3px;color:#fff;font-weight:700}.hm .h{background:transparent;color:var(--ink-3);font-weight:600}
+.chip{display:inline-flex;align-items:center;gap:4px;font-size:10.5px;border:1px solid var(--line);border-radius:10px;padding:0 7px;background:#fff}
+.rl{display:grid;grid-template-columns:1fr auto auto;gap:2px 10px;align-items:center;font-size:11.5px}.rl .n{font-weight:600}.rl .on{background:var(--accent-soft);border-radius:4px}
+.kv{display:grid;grid-template-columns:auto 1fr 1fr;gap:2px 10px;font-size:11.5px;align-items:baseline}.kv .h{font-weight:700;color:var(--ink-2);text-align:right}.kv .r{text-align:right}.kv .w{font-weight:800;color:var(--ink)}
+.tip{display:inline-block;background:#16202A;color:#F4F7FA;border-radius:6px;padding:4px 8px;font-size:10.5px;line-height:1.45}
+.ul{text-decoration:underline dotted;text-underline-offset:3px;color:var(--warn)}
+@media (max-width:860px){.opts{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<div class="wrap">
+<header class="top"><div><h1>RDL 단일스캔 — 개선 제안</h1><div class="sub">2026-10-07 · 데이터 09/07~10/06(30일, 올려 주신 HTML) · 항목마다 하나를 고르고, 필요하면 메모를 남긴 뒤 맨 아래 <b>답변 복사</b>로 보내 주세요<br>모형 안에 적힌 숫자는 실제 값이고, 점이 놓인 자리·Lot 이름·wafer 막대는 모양을 보여 주려는 예시입니다</div></div>
+  <div class="prog"><span id="progTxt">0 / 0 선택</span><span class="bar"><i id="progBar"></i></span></div></header>
+
+<section class="panel intro">
+  <h2>이번에 바로 고친 것 (1 · 2 · 4 · 5번 요청)</h2>
+  <ul>
+    <li><b>무시할 레시피</b> 4개(RDL4 JJ_BU 멀티·단일 · RDL4 JJ - SZ - Approved Job · RDL3 _ORG)를 뺐고, 뺀 레시피 8개(Swelling 4 · PI4-x5 포함)는 목록 아래 <b>'제외된 레시피 8개'</b>로 작게 — 올리거나 누르면 펼쳐집니다.</li>
+    <li><b>이상치</b>: 장비는 보지 않고 <b>레시피(Layer) 전체에서 3σ</b>, <b>시간만</b> 뺍니다. 장비 행·팝업도 같은 판정을 따릅니다. <b>Defect 는 어디에서도 빼지 않습니다.</b> (멀티와 단일은 따로 잽니다 — 아래 A1 에서 확인 부탁드려요)</li>
+    <li>문구 삭제·간소화(근거 칸 · 상세 팝업 단추 · '낮을수록 좋음…' · 범례 설명 · 바닥글 전체), 단위는 <b>분/wafer · 개/wafer</b>. 장비 행은 <b>한 번 누르면</b> 상세 팝업이 열립니다.</li>
+    <li>팝업: 분포 막대 → <b>'이 장비 vs 전체'</b>(전체 25~75% 회색 띠 위에 이 장비 상자 · 중앙 숫자 · Lot 점). 점에 올리면 같은 Lot 이 두 그래프와 목록에서 같이 켜지고, 누르면 그 Lot 만 목록에 남습니다. 멀티만 돈 장비는 단일 칸이 사라지지 않고 <b>'멀티스캔만 진행'</b>으로 나옵니다.</li>
+  </ul>
+  <div class="answer">
+    <h3>3번 질문 — LOT당 시간은 Batch Report 의 Batch time 이 맞나요?</h3>
+    <p><b>네, 맞습니다.</b> LOT당 시간 = 그 BatchReport 의 <b>Batch End − Batch Start</b> 입니다. 장당 × 25 로 만든 값이 아니어서 앞·뒤·중간 대기가 모두 들어 있습니다. 대상은 Error 없는 Report 이고, PASS 20 wafer 이상인 것만 씁니다. 20~24 wafer 인 Lot 만 × 25 ÷ wafer 수로 맞춥니다.</p>
+    <p>데이터로도 확인됩니다. LOT당 중앙값이 <b>25 × 장당 중앙값보다 4~10% 깁니다</b>. 그 차이가 대기 시간입니다.</p>
+    <table class="mini"><tr><th>멀티</th><th>LOT당(Batch)</th><th>25 × 장당</th><th>차이(대기)</th></tr>
+      <tr><td>RDL4</td><td>413.3분</td><td>396.3분</td><td>+17.0</td></tr><tr><td>RDL3</td><td>359.6분</td><td>336.3분</td><td>+23.4</td></tr><tr><td>RDL2</td><td>361.9분</td><td>350.0분</td><td>+11.9</td></tr><tr><td>PI4</td><td>198.4분</td><td>180.0분</td><td>+18.4</td></tr></table>
+    <p class="mu" style="margin-top:6px;font-size:12px">남는 문제는 20~24 wafer Lot 을 ×25 로 맞출 때 <b>대기 시간까지 같이 늘어난다</b>는 점입니다. 그래서 A2 에 대안을 넣었습니다(지금 데이터에서는 그런 Lot 이 적어 중앙값은 거의 그대로입니다).</p>
+  </div>
+</section>
+
+<nav class="toc" id="toc"></nav>
+<div id="qs"></div>
+
+<section class="panel out" id="outbox"><h3 style="margin:0 0 8px;font-size:15px">답변</h3><p class="mu" style="margin:0 0 8px;font-size:12.5px">아래 글이 자동으로 채워집니다. '답변 복사' 를 누르거나 직접 복사해서 보내 주세요. 고른 내용은 이 브라우저에 저장돼서 다시 열어도 남아 있습니다.</p><textarea id="outTxt" readonly></textarea></section>
+</div>
+<div class="foot"><div class="in"><span class="s" id="footTxt"></span><span class="sp"></span><button class="btn" id="resetBtn" type="button">모두 지우기</button><button class="btn pri" id="copyBtn" type="button">답변 복사</button></div></div>
+<div class="toast" id="toast"></div>
+
+<script>
+/* ── 실제 숫자(09/07~10/06, TB500 RDL4 중심) ── */
+const DEV=[["AOI-17",15.4,33.7],["AOI-18",13.4,11.0],["AOI-19",16.8,null],["AOI-20",17.9,14.4],["AOI-23",13.0,12.4],["AOI-24",12.7,null],["4F-AOI-03",null,13.1],["4F-AOI-04",11.8,9.1],["4F-AOI-05",null,9.0]];
+const RCP=[["RDL4",15.8,12.0,413.3,292.4,56,28],["RDL3",13.4,9.2,359.6,252.2,28,16],["RDL2",14.0,11.4,361.9,314.4,85,28],["RDL1",15.7,15.1,419.7,410.5,60,17],["PI4",7.2,7.9,198.4,172.9,9,10],["PI3",8.0,6.6,213.1,182.5,25,8],["PI2",7.5,9.1,198.5,253.3,5,38]];
+const pct=(v,mx)=>(Math.max(0,Math.min(1,v/mx))*100).toFixed(1)+"%";
+const C={M:"#5A6673",S:"#2E6BA8",E:"#C5453C",G:"#1F7A4D"};
+function dumbbell(rows,mx,opt={}){return rows.map(([n,m,s])=>{const L=m!=null&&s!=null?`<i style="left:${pct(Math.min(m,s),mx)};width:${pct(Math.abs(s-m),mx)};top:7px;height:2px;background:#C9D2DC"></i>`:"";
+  const hot=opt.flag&&((m!=null&&m>opt.flag)||(s!=null&&s>opt.flag));
+  return `<div class="row"><span class="lab" style="${hot?"color:"+C.E:""}">${n}</span><span class="trk">${opt.flag?`<i class="fl" style="left:${pct(opt.flag,mx)}"></i>`:""}${L}${m!=null?`<b class="dot" style="left:${pct(m,mx)};background:${C.M}"></b>`:""}${s!=null?`<b class="dot" style="left:${pct(s,mx)};background:${C.S}"></b>`:""}</span></div>`;}).join("");}
+function heat(v,lo,hi){const t=Math.max(0,Math.min(1,(v-lo)/(hi-lo)));const l=88-t*48;return `oklch(${l}% ${0.04+t*0.09} 250)`;}
+
+/* ── 항목들 ── 각 안: t 제목 · d 설명 · m 모형(HTML) · p 장단점 · rec 추천 · now 지금 */
+const Q=[
+{g:"계산 규칙",id:"A1",t:"이상치를 어떤 묶음에서 판정할까",w:"요청하신 대로 '장비는 보지 않고 레시피만, 3σ' 로 바꿨습니다. 남은 선택은 멀티와 단일을 따로 잴지 합쳐서 잴지, 그리고 3σ 를 평균 기준으로 할지 중앙값 기준으로 할지입니다. 숫자는 RDL4 장당 스캔 기준으로 이상치로 빠지는 wafer 수입니다.",
+ o:[{t:"레시피 × 방식, 평균 ± 3σ",now:1,rec:1,d:"RDL4 멀티 안에서 한 번, RDL4 단일 안에서 한 번 잽니다. 멀티와 단일은 시간 분포가 달라서(15.8 vs 12.0분) 따로 재야 σ 가 부풀지 않습니다.",
+   m:`<div class="row"><span class="lab"><i class="sw swM"></i>멀티</span><span class="b2 num">42</span><span class="mu">/ 1,581 wafer 제외</span></div><div class="row"><span class="lab"><i class="sw swS"></i>단일</span><span class="b2 num">13</span><span class="mu">/ 680 wafer 제외</span></div><div class="tiny" style="margin-top:6px">합계 55 wafer (2.4%)</div>`,p:"<b>+</b> 지금 구현된 방식이고 설명도 쉽습니다 · <b>−</b> 평균과 σ 가 튀는 값 자체에 끌려서, 아주 긴 값이 여러 개면 덜 걸러집니다"},
+  {t:"레시피 통째로, 평균 ± 3σ",d:"멀티와 단일을 한 묶음으로 보고 한 번 잽니다. 'Layer 만' 이라는 말에 가장 가깝습니다.",
+   m:`<div class="row"><span class="lab">RDL4 전체</span><span class="b2 num">62</span><span class="mu">/ 2,261 wafer 제외</span></div><div class="tiny" style="margin-top:6px">멀티 쪽 긴 값과 단일 쪽 짧은 값이 섞여서 σ 가 커집니다.<br>단일이 거의 없는 PI2 는 이상치가 104 wafer 로 늘어납니다.</div>`,p:"<b>+</b> 규칙이 가장 단순합니다 · <b>−</b> 방식 차이가 '이상치' 처럼 보일 수 있습니다(PI2 104 wafer)"},
+  {t:"레시피 × 방식, 중앙값 ± 3×MAD",d:"평균 대신 중앙값, σ 대신 MAD(중앙값에서 떨어진 거리의 중앙값 × 1.48)를 씁니다. 튀는 값에 끌리지 않는 3σ 라고 보면 됩니다.",
+   m:`<div class="row"><span class="lab"><i class="sw swM"></i>멀티</span><span class="b2 num">99</span><span class="mu">/ 1,581 wafer 제외</span></div><div class="row"><span class="lab"><i class="sw swS"></i>단일</span><span class="b2 num">102</span><span class="mu">/ 680 wafer 제외</span></div><div class="tiny" style="margin-top:6px">합계 201 wafer (8.9%) — 더 많이 걸러집니다</div>`,p:"<b>+</b> 긴 대기가 여럿 섞여도 잘 걸러냅니다 · <b>−</b> 정상 범위가 좁게 잡혀서 단일은 15% 가 빠집니다"}]},
+{g:"계산 규칙",id:"A2",t:"20~24 wafer Lot 을 25 wafer 기준으로 맞추는 방법",w:"지금은 Batch 시간 × 25 ÷ wafer 수입니다. 이러면 앞·뒤 대기 시간까지 같이 늘어납니다. 아래 숫자는 멀티 LOT당 시간의 중앙값입니다.",
+ o:[{t:"Batch 시간 × 25 ÷ wafer 수",now:1,d:"지금 방식입니다. Lot 전체 시간을 그대로 늘립니다.",m:`<table class="mini"><tr><th></th><th>LOT당</th><th>Lot 수</th></tr><tr><td>RDL4</td><td>413.3</td><td>39</td></tr><tr><td>RDL3</td><td>359.6</td><td>59</td></tr><tr><td>RDL2</td><td>361.9</td><td>53</td></tr></table>`,p:"<b>+</b> 단순합니다 · <b>−</b> 대기 시간까지 25/n 배가 됩니다(20 wafer 면 1.25배)"},
+  {t:"대기는 그대로, 스캔만 25 wafer 로",rec:1,d:"LOT당 = (Batch 시간 − 그 Lot 의 스캔 합) + 25 × 그 Lot 의 장당 스캔. 대기는 실제 그대로 두고 스캔만 25 wafer 로 맞춥니다.",m:`<table class="mini"><tr><th></th><th>LOT당</th><th>Lot 수</th></tr><tr><td>RDL4</td><td>413.3</td><td>39</td></tr><tr><td>RDL3</td><td>359.6</td><td>59</td></tr><tr><td>RDL2</td><td>361.9</td><td>53</td></tr></table><div class="tiny">지금 데이터에서는 중앙값이 같고, 20~24 wafer Lot 하나하나만 짧아집니다</div>`,p:"<b>+</b> 질문하신 뜻(대기는 Lot 당 한 번)에 맞습니다 · <b>−</b> INI 시각이 없는 wafer 가 많은 Lot 은 Report 보완 값을 씁니다"},
+  {t:"25 wafer 이상 Lot 만 (환산 없음)",d:"맞추지 않고 25 wafer 이상 돈 Lot 만 셉니다.",m:`<table class="mini"><tr><th></th><th>LOT당</th><th>Lot 수</th></tr><tr><td>RDL4</td><td>413.3</td><td>37</td></tr><tr><td>RDL3</td><td>362.8</td><td>50</td></tr><tr><td>RDL2</td><td>362.8</td><td>43</td></tr></table>`,p:"<b>+</b> 계산이 전혀 없어 오해가 없습니다 · <b>−</b> 표본이 10~20% 줄고, RDL1 단일은 Lot 1개만 남습니다"}]},
+
+{g:"첫 화면",id:"B1",t:"맨 위 '멀티 vs 단일' 영역",w:"레시피를 고르면 가장 먼저 보이는 곳입니다. 팀장이 3초 안에 '어느 쪽이 얼마나 빠른가' 를 읽을 수 있어야 합니다.",
+ o:[{t:"타일 둘 + 비교 타일",now:1,d:"방식마다 큰 숫자 둘(시간 | Defect), 오른쪽에 두 값을 나란히 놓은 비교표.",m:`<div class="row" style="gap:10px;align-items:stretch"><div style="flex:1;border:1px solid #EDF1F5;border-radius:6px;padding:6px"><div class="tiny"><i class="sw swM"></i>멀티</div><div class="big num">15.8<small>분/wafer</small></div><div class="tiny">56 개/wafer</div></div><div style="flex:1;border:1px solid #EDF1F5;border-radius:6px;padding:6px"><div class="tiny"><i class="sw swS"></i>단일</div><div class="big num">12.0<small>분/wafer</small></div><div class="tiny">28 개/wafer</div></div><div style="flex:1.7;border:1px solid #EDF1F5;border-radius:6px;padding:6px;white-space:nowrap"><div class="kv"><span></span><span class="h">멀티</span><span class="h">단일</span><span>전체</span><span class="r">15.8</span><span class="r w">12.0</span><span>같은 장비</span><span class="r w">13.6</span><span class="r">14.9</span></div></div></div>`,p:"<b>+</b> 숫자가 많아 자세합니다 · <b>−</b> 같은 숫자가 두 번 나오고, 읽을 곳이 여섯 군데입니다"},
+  {t:"한 줄 비교 막대 (덤벨)",rec:1,d:"지표마다 한 줄. 왼쪽 점 멀티, 오른쪽 점 단일, 사이 선 위에 차이를 크게 씁니다. 같은 장비 비교는 옅은 점으로 겹칩니다.",m:`<div class="row"><span class="lab">장당 스캔</span><span class="trk"><i style="left:${pct(12,20)};width:${pct(3.8,20)};top:7px;height:2px;background:#C9D2DC"></i><b class="dot" style="left:${pct(15.8,20)};background:${C.M}"></b><b class="dot" style="left:${pct(12,20)};background:${C.S}"></b><b class="dot" style="left:${pct(13.6,20)};background:${C.M};opacity:.35"></b><b class="dot" style="left:${pct(14.9,20)};background:${C.S};opacity:.35"></b></span><span class="val" style="color:${C.S}">−3.8</span></div><div class="row"><span class="lab">Defect</span><span class="trk"><i style="left:${pct(28,70)};width:${pct(28,70)};top:7px;height:2px;background:#C9D2DC"></i><b class="dot" style="left:${pct(56,70)};background:${C.M}"></b><b class="dot" style="left:${pct(28,70)};background:${C.S}"></b></span><span class="val" style="color:${C.S}">−28</span></div><div class="tiny" style="margin-top:4px"><i class="sw swM"></i>멀티 15.8 · <i class="sw swS"></i>단일 12.0 분/wafer (옅은 점 = 같은 장비끼리)</div>`,p:"<b>+</b> 방향과 크기가 한눈에 보이고 숫자는 하나만 크게 · <b>−</b> 표본 수 같은 부가 정보는 툴팁으로 빠집니다"},
+  {t:"결론 문장 한 줄 + 작은 표",d:"'단일이 3.8분/wafer(24%) 빠르고 Defect 는 절반' 같은 문장을 크게, 그 밑에 작은 표.",m:`<div style="font-size:15px;font-weight:800;line-height:1.35"><span style="color:${C.S}">단일</span>이 <span class="num">3.8분/wafer</span> 빠름 <span class="mu" style="font-weight:600">(−24%)</span><br><span style="font-size:12.5px;font-weight:700">Defect 는 절반 (56 → 28 개/wafer)</span></div><table class="mini"><tr><th></th><th>멀티</th><th>단일</th></tr><tr><td>장당</td><td>15.8</td><td>12.0</td></tr><tr><td>같은 장비</td><td>13.6</td><td>14.9</td></tr></table>`,p:"<b>+</b> 보고용으로 바로 씁니다 · <b>−</b> '전체' 와 '같은 장비' 방향이 반대일 때 문장이 길어집니다(RDL4 가 그렇습니다)"}]},
+{g:"첫 화면",id:"B2",t:"왼쪽 레시피 목록",w:"지금은 이름 · wafer 수 · 멀티/단일 비율 막대만 있습니다. 7개 레시피를 서로 비교하려면 하나씩 눌러 봐야 합니다.",
+ o:[{t:"지금처럼 (비율 막대)",now:1,d:"이름 · wafer 수 · 비율 막대.",m:`<div class="rl">${[["RDL4","2,262",70],["RDL3","2,835",70],["RDL2","2,323",88],["RDL1","369",68]].map(r=>`<span class="n">TB500 ${r[0]}</span><span class="mu num">${r[1]}</span><span style="width:60px;height:5px;border-radius:3px;background:linear-gradient(90deg,${C.M} ${r[2]}%,${C.S} ${r[2]}%)"></span>`).join("")}</div>`,p:"<b>+</b> 가볍습니다 · <b>−</b> 레시피끼리 비교할 숫자가 없습니다"},
+  {t:"목록에 두 방식의 장당 중앙값",rec:1,d:"줄마다 멀티 · 단일 장당(또는 LOT당) 중앙값과 '단일 −24%' 같은 꼬리표. 보는 단위 단추를 따라갑니다.",m:`<div class="rl" style="grid-template-columns:1fr auto auto auto">${RCP.slice(0,5).map(r=>{const d=Math.round((r[2]-r[1])/r[1]*100);return `<span class="n">${r[0]}</span><span class="num" style="color:${C.M}">${r[1].toFixed(1)}</span><span class="num" style="color:${C.S}">${r[2].toFixed(1)}</span><span class="num tiny" style="color:${d<0?C.G:C.E};font-weight:700">${d>0?"+":""}${d}%</span>`;}).join("")}</div>`,p:"<b>+</b> 누르지 않고 7개를 한 번에 비교합니다 · <b>−</b> 목록 폭이 조금 넓어집니다"},
+  {t:"목록 대신 맨 위 요약 표",d:"왼쪽 목록을 없애고, 레시피 7줄 × (멀티 · 단일 · 차이 · Defect) 표를 맨 위에. 줄을 누르면 아래에 상세가 열립니다.",m:`<table class="mini" style="width:100%"><tr><th>레시피</th><th>멀티</th><th>단일</th><th>Defect M/S</th></tr>${RCP.slice(0,4).map(r=>`<tr><td>${r[0]}</td><td>${r[1].toFixed(1)}</td><td>${r[2].toFixed(1)}</td><td>${r[5]} / ${r[6]}</td></tr>`).join("")}</table>`,p:"<b>+</b> 화면이 넓어지고 보고서처럼 읽힙니다 · <b>−</b> 레이아웃을 크게 바꿔야 해서 익숙한 흐름이 달라집니다"}]},
+{g:"첫 화면",id:"B3",t:"장비별 그래프",w:"지금은 장비마다 멀티 · 단일 두 점과 그 사이 선(덤벨)입니다. 기준선이 없어서 '어느 장비가 문제인지' 는 눈으로 비교해야 합니다.",
+ o:[{t:"지금처럼 (덤벨)",now:1,d:"두 점 + 차이 + wafer · Lot 수.",m:dumbbell(DEV.slice(0,6),40),p:"<b>+</b> 익숙합니다 · <b>−</b> 기준이 없어 '느린 장비' 가 바로 안 보입니다"},
+  {t:"덤벨 + 전체 중앙 기준선 + 느린 장비 강조",rec:1,d:"전체 장비 중앙(13.4분)에 점선을 긋고, 그보다 20% 넘게 느린 장비의 이름을 붉게 표시합니다. 정렬 '느린 순' 이 기본입니다.",m:dumbbell([DEV[0],DEV[3],DEV[2],DEV[1],DEV[4],DEV[5]],40,{flag:16.1}),p:"<b>+</b> 문제 장비가 바로 보입니다(AOI-17 단일 · AOI-20 · AOI-19) · <b>−</b> '20%' 같은 기준을 정해야 합니다"},
+  {t:"장비 × 레시피 히트맵",d:"장비를 줄, 레시피(RDL4~PI2)를 칸으로 놓고 장당 중앙값을 색으로 봅니다(모형은 멀티). 칸을 누르면 그 장비 팝업이 열립니다.",m:`<div class="hm" style="grid-template-columns:62px repeat(4,1fr)"><span class="h"></span>${["RDL4","RDL3","RDL2","RDL1"].map(x=>`<span class="h">${x}</span>`).join("")}${[["AOI-17",15.4,27.4,34.9,null],["AOI-19",16.8,11.9,14.0,12.3],["AOI-20",17.9,13.5,14.5,null],["AOI-23",13.0,13.7,13.6,17.8]].map(r=>`<span class="h" style="justify-content:start;display:flex">${r[0]}</span>`+r.slice(1).map(v=>v==null?`<span style="background:#F4F6F8;color:var(--ink-3)">—</span>`:`<span style="background:${heat(v,11,30)};color:${v>20?"#fff":"#16202A"}">${v.toFixed(1)}</span>`).join("")).join("")}</div>`,p:"<b>+</b> 레시피를 넘나들며 장비 문제를 찾습니다 · <b>−</b> 멀티/단일을 같이 보려면 칸이 두 배가 됩니다"}]},
+{g:"첫 화면",id:"B4",t:"'어떻게 셌나' · '상세 보기' 아래 두 칸",w:"둘 다 기본 접힘입니다. 문구를 줄여 달라고 하셔서, 이 두 칸을 남길지 여쭙니다.",
+ o:[{t:"그대로 둔다 (접힘)",now:1,d:"필요할 때 펼칩니다.",m:`<div style="border:1px solid #EDF1F5;border-radius:6px;padding:6px 8px" class="row"><b>어떻게 셌나</b><span class="mu tiny">RDL4 · 실제 숫자</span><span class="sp"></span>▾</div><div style="border:1px solid #EDF1F5;border-radius:6px;padding:6px 8px;text-align:center" class="tiny">상세 보기 ▾ Job 하나씩</div>`,p:"<b>+</b> 설명이 화면 안에 남습니다 · <b>−</b> 화면이 길고, 잘 열지 않는 칸입니다"},
+  {t:"'어떻게 셌나' 는 ⓘ 도움말로, '상세 보기' 는 삭제",rec:1,d:"제목 옆 ⓘ 를 누르면 계산 규칙이 팝업으로 나옵니다. Job 하나씩 보기는 Job 칩 켜기/끄기와 겹쳐서 없앱니다.",m:`<div class="row"><b style="font-size:14px">TB500 RDL4</b><span style="display:inline-grid;place-items:center;width:18px;height:18px;border-radius:50%;border:1.5px solid var(--accent);color:var(--accent);font-weight:800;font-size:11px">i</span><span class="sp"></span></div><div class="tip">계산 규칙<br>장당 = INI WaferStart→End · LOT당 = Batch Start→End …</div>`,p:"<b>+</b> 화면이 짧아집니다 · <b>−</b> 규칙을 보려면 한 번 더 눌러야 합니다"},
+  {t:"둘 다 삭제",d:"규칙은 이 제안서와 CLAUDE 문서에만 남깁니다.",m:`<div class="mu tiny" style="text-align:center">(아래 두 칸 없음)</div>`,p:"<b>+</b> 가장 깔끔합니다 · <b>−</b> 다른 사람이 숫자의 근거를 물으면 화면에서 보여 줄 곳이 없습니다"}]},
+{g:"첫 화면",id:"B5",t:"'장당' 이라는 이름",w:"단위 글자는 wafer 로 바꿨습니다. 단추와 제목에 남은 '장당' 도 바꿀지 여쭙니다.",
+ o:[{t:"'장당' 그대로 (단위만 wafer)",now:1,d:"단추 [장당 | LOT당], 제목 '장당 스캔', 단위 '분/wafer'.",m:`<div class="row"><span class="chip" style="background:var(--accent-soft)">장당</span><span class="chip">LOT당</span></div><div class="b2">장당 스캔 <span class="num">15.8</span><small class="mu"> 분/wafer</small></div>`,p:"<b>+</b> 지금과 같습니다 · <b>−</b> 한 화면에 '장' 과 'wafer' 가 섞입니다"},
+  {t:"'Wafer당' 으로 통일",rec:1,d:"단추 [Wafer당 | LOT당], 제목 'Wafer당 스캔'.",m:`<div class="row"><span class="chip" style="background:var(--accent-soft)">Wafer당</span><span class="chip">LOT당</span></div><div class="b2">Wafer당 스캔 <span class="num">15.8</span><small class="mu"> 분/wafer</small></div>`,p:"<b>+</b> 말이 하나로 통일됩니다 · <b>−</b> 조금 깁니다"},
+  {t:"'Wafer 기준 | LOT 기준'",d:"단추 [Wafer 기준 | LOT 기준], 제목은 '스캔 시간'.",m:`<div class="row"><span class="chip" style="background:var(--accent-soft)">Wafer 기준</span><span class="chip">LOT 기준</span></div><div class="b2">스캔 시간 <span class="num">15.8</span><small class="mu"> 분/wafer</small></div>`,p:"<b>+</b> 제목이 짧아집니다 · <b>−</b> 기준이 단위 글자에만 남습니다"}]},
+
+{g:"장비 상세 팝업",id:"C1",t:"'이 장비 vs 전체' 에서 점 하나의 단위",w:"분포 막대를 바꾼 그래프입니다. Wafer당 보기에서 점을 무엇으로 찍을지 고릅니다. LOT당 보기에서는 어느 안이든 점 하나가 Lot 하나입니다.",
+ o:[{t:"점 = Lot (그 Lot wafer 들의 중앙)",now:1,rec:1,d:"점이 수십 개라 겹치지 않고, 누르면 그 Lot 으로 바로 연결됩니다. 이상치 wafer 만 따로 붉은 고리로 찍습니다.",m:`<div class="trk" style="height:46px;background:#FBFCFD;border:1px solid #EDF1F5"><i style="left:${pct(11.5,42)};width:${pct(4.5,42)};top:6px;bottom:6px;background:#E4E9EF;border-radius:3px"></i><i style="left:${pct(14,42)};width:${pct(3,42)};top:12px;bottom:12px;border:1.5px solid ${C.M};border-radius:3px"></i>${[13.2,14.5,15.1,15.4,15.6,16.2,17.0,18.5,22,24].map((v,i)=>`<b class="dot" style="left:${pct(v,42)};top:${50+((i%3)-1)*22}%;background:${C.M}"></b>`).join("")}${[38,39.5].map(v=>`<b class="dot" style="left:${pct(v,42)};background:none;border:1.5px solid ${C.E}"></b>`).join("")}</div><div class="tiny">AOI-17 멀티 · 17 Lot</div>`,p:"<b>+</b> 깔끔하고 Lot 과 바로 이어집니다 · <b>−</b> Lot 안에서 wafer 가 얼마나 흩어졌는지는 안 보입니다"},
+  {t:"점 = wafer (작게)",d:"wafer 수백 개를 작은 점으로 쌓습니다(벌떼 그림).",m:`<div class="trk" style="height:46px;background:#FBFCFD;border:1px solid #EDF1F5">${Array.from({length:70},(_,i)=>{const v=12+((i*37)%100)/100*8+(i%11===0?6:0);return `<b class="dot" style="left:${pct(v,42)};top:${20+(i*29%60)}%;width:4px;height:4px;margin:-2px 0 0 -2px;background:${C.M};opacity:.7"></b>`;}).join("")}</div><div class="tiny">AOI-17 멀티 · 211 wafer</div>`,p:"<b>+</b> 흩어진 정도가 그대로 보입니다 · <b>−</b> 가운데가 덩어리가 되고, 점 하나를 고르기 어렵습니다"},
+  {t:"점 없이 상자 + 숫자만",d:"전체 띠 · 이 장비 상자 · 중앙 숫자만 둡니다.",m:`<div class="trk" style="height:30px;background:#FBFCFD;border:1px solid #EDF1F5"><i style="left:${pct(11.5,42)};width:${pct(4.5,42)};top:4px;bottom:4px;background:#E4E9EF;border-radius:3px"></i><i style="left:${pct(14,42)};width:${pct(3,42)};top:8px;bottom:8px;border:1.5px solid ${C.M};border-radius:3px;background:rgba(90,102,115,.12)"></i><i style="left:${pct(15.4,42)};top:4px;bottom:4px;width:3px;background:${C.M}"></i></div><div class="row"><span class="b2 num">15.4</span><span class="mu">vs 전체 13.4 · <b style="color:${C.E}">▲15%</b></span></div>`,p:"<b>+</b> 가장 단순합니다 · <b>−</b> Lot 을 눌러 따라가는 interactive 가 사라집니다"}]},
+{g:"장비 상세 팝업",id:"C2",t:"Defect 축 (한쪽으로 크게 치우친 값)",w:"Defect 는 대부분 수십 개인데 가끔 수천 개가 나옵니다(RDL4 멀티 중앙 56, 최대 4,153). Defect 는 빼지 않기로 해서, 축을 어떻게 그릴지가 중요해졌습니다.",
+ o:[{t:"선형 축 + 축 밖은 ▸",now:1,d:"97% 지점까지를 축으로 쓰고, 그보다 큰 값은 오른쪽 끝에 ▸ 로 표시합니다(올리면 실제 값).",m:`<div class="trk" style="height:30px">${[20,35,50,56,60,80,110,140].map(v=>`<b class="dot" style="left:${pct(v,170)};background:${C.M}"></b>`).join("")}<b style="right:2px;top:7px;color:${C.M};font-size:12px">▸▸</b></div><div class="row tiny"><span>0</span><span class="sp"></span><span>85</span><span class="sp"></span><span>170개</span></div>`,p:"<b>+</b> 직관적입니다 · <b>−</b> 큰 값끼리의 차이(1,000 vs 4,000)는 안 보입니다"},
+  {t:"로그 축",rec:1,d:"10 · 100 · 1,000 눈금. 작은 값과 큰 값을 모두 축 안에 둡니다.",m:`<div class="trk" style="height:30px">${[20,35,50,56,60,80,110,140,1200,4153].map(v=>`<b class="dot" style="left:${((Math.log10(v)-1)/(Math.log10(5000)-1)*100).toFixed(1)}%;background:${C.M}"></b>`).join("")}</div><div class="row tiny"><span>10</span><span class="sp"></span><span>100</span><span class="sp"></span><span>1,000</span><span class="sp"></span><span>5,000개</span></div>`,p:"<b>+</b> 튀는 Defect 도 제자리에 보입니다 · <b>−</b> 눈금 간격이 같지 않아 처음엔 낯섭니다"},
+  {t:"전체 장비 중 순위(백분위) 축",d:"값 대신 '전체 wafer 중 몇 % 위치인가' 로 그립니다. 0~100%.",m:`<div class="trk" style="height:30px">${[12,25,40,52,58,70,82,90,97,99].map(v=>`<b class="dot" style="left:${v}%;background:${C.M}"></b>`).join("")}<i class="fl" style="left:50%"></i></div><div class="row tiny"><span>0%</span><span class="sp"></span><span>중앙</span><span class="sp"></span><span>100%</span></div>`,p:"<b>+</b> 장비끼리 비교가 공정합니다 · <b>−</b> 실제 개수가 축에서 사라집니다(툴팁에만)"}]},
+{g:"장비 상세 팝업",id:"C3",t:"팝업 interactive 를 더 키운다면",w:"'interactive 방향이 좋다' 고 하셔서 다음 단계를 세 가지 골랐습니다.",
+ o:[{t:"지금 수준에서 멈춤",d:"점에 올리면 같은 Lot 이 같이 켜지고, 누르면 목록 필터.",m:`<div class="row"><b class="dot" style="position:static;display:inline-block;width:10px;height:10px;border-radius:50%;background:${C.M};box-shadow:0 0 0 2px #fff,0 0 0 3px #16202A"></b><span class="tip">09/18 03:31 · YUT-RDL4<br>14.9 분/wafer · 25 wafer 의 중앙</span></div>`,p:"<b>+</b> 지금으로 충분하다면 · <b>−</b> —"},
+  {t:"점을 끌어서 범위 고르기 (brush)",rec:1,d:"그래프 위를 좌우로 끌면 그 범위의 Lot 들만 남기고, 그 Lot 들만의 중앙 · 개수를 바로 보여 줍니다. '느린 Lot 들은 무슨 Lot 인가' 를 한 번에 봅니다.",m:`<div class="trk" style="height:40px;background:#FBFCFD;border:1px solid #EDF1F5"><i style="left:60%;width:30%;top:0;bottom:0;background:rgba(46,107,168,.12);border-left:2px solid var(--accent);border-right:2px solid var(--accent)"></i>${[13,14.5,15.1,15.6,16.2,17,26,28,30,33].map((v,i)=>`<b class="dot" style="left:${pct(v,42)};top:${50+((i%3)-1)*20}%;background:${C.M};opacity:${v>24?1:.3}"></b>`).join("")}</div><div class="tiny"><b>4 Lot 선택</b> · 중앙 29.0분/wafer · YUT-RDL4, YUT-RE …</div>`,p:"<b>+</b> 원인 찾기가 빨라집니다 · <b>−</b> 끄는 동작을 처음엔 알려 줘야 합니다"},
+  {t:"Lot 에 올리면 미리보기 카드",d:"점이나 목록 줄에 올리면 옆에 그 Lot 의 wafer 별 막대(스캔 시간 · Defect)가 작게 뜹니다.",m:`<div class="row" style="align-items:flex-end;gap:2px;height:50px;border:1px solid #EDF1F5;border-radius:6px;padding:4px">${[14,15,14.5,15.2,16,15.1,22,14.8,15,15.3,14.9,15.6].map(v=>`<span style="flex:1;height:${(v/24*100).toFixed(0)}%;background:${v>20?C.E:C.M};border-radius:2px 2px 0 0"></span>`).join("")}</div><div class="tiny">YUT-RDL4 · 25 wafer · 7번 wafer 22분</div>`,p:"<b>+</b> Lot 안의 튀는 wafer 를 바로 봅니다 · <b>−</b> 카드가 다른 점을 가릴 수 있습니다"}]},
+
+{g:"화면 전체",id:"D1",t:"첫 화면에서도 '같이 켜지기'",w:"팝업에만 있는 교차 강조를 첫 화면까지 넓히는 안입니다.",
+ o:[{t:"지금처럼 (팝업 안에서만)",now:1,d:"첫 화면은 툴팁 · 정렬 · 켜기/끄기까지만.",m:`<div class="mu tiny" style="text-align:center">장비 행에 올리면 툴팁만</div>`,p:"<b>+</b> 단순합니다 · <b>−</b> 위 타일과 아래 장비 그래프가 따로 놉니다"},
+  {t:"장비 행에 올리면 위 띠에 그 장비 위치",rec:1,d:"장비별 행에 마우스를 올리면, 맨 위 10~90% 띠 위에 그 장비의 중앙이 점으로 나타나고 타일 숫자 옆에 '이 장비 17.9' 가 잠깐 뜹니다.",m:`<div class="row"><span class="lab"><i class="sw swM"></i>멀티</span><span class="trk"><i class="band" style="left:${pct(11,26)};width:${pct(9,26)};background:#9AA6B2"></i><i class="tick" style="left:${pct(15.8,26)};background:${C.M}"></i><b class="dot" style="left:${pct(17.9,26)};background:#fff;border:2.5px solid ${C.E};width:11px;height:11px;margin:-5.5px 0 0 -5.5px"></b></span></div><div class="tiny" style="text-align:right"><b style="color:${C.E}">AOI-20 17.9</b> · 전체 15.8</div>`,p:"<b>+</b> 장비가 전체 분포의 어디쯤인지 바로 봅니다 · <b>−</b> 위아래가 멀어서 스크롤 중에는 안 보입니다"},
+  {t:"레시피 목록에 올리면 오른쪽 미리보기",d:"왼쪽 레시피에 올리기만 해도 오른쪽 타일이 그 레시피 숫자로 바뀌고, 떼면 돌아옵니다.",m:`<div class="rl"><span class="n on">RDL3 ←</span><span></span><span></span></div><div class="big num" style="margin-top:4px">13.4<small>분/wafer</small> <span class="mu" style="font-size:12px">미리보기</span></div>`,p:"<b>+</b> 레시피 비교가 빨라집니다 · <b>−</b> 마우스가 지나가기만 해도 화면이 바뀌어 산만할 수 있습니다"}]},
+{g:"화면 전체",id:"D2",t:"수집기 버전 표시",w:"바닥글을 지우면서 버전 표시(v97e2e93)도 사라졌습니다. 문제가 생겼을 때 어느 버전인지 확인하는 데 씁니다.",
+ o:[{t:"수집 시각 칩에 올리면 보임",now:1,rec:1,d:"오른쪽 위 '2026-10-07 08:19 수집 기준' 에 마우스를 올리면 '수집기 v97e2e93'.",m:`<div class="row"><span class="chip num">2026-10-07 08:19 수집 기준</span></div><div class="tip" style="margin-top:4px">집계 기준시각 = 수집 시각 · 수집기 v97e2e93</div>`,p:"<b>+</b> 화면에는 안 보이고 필요할 때 찾을 수 있습니다 · <b>−</b> 숨어 있어서 모르는 사람은 못 찾습니다"},
+  {t:"완전히 삭제",d:"화면 어디에도 두지 않습니다(수집 로그 app.log 에는 남아 있습니다).",m:`<div class="row"><span class="chip num">2026-10-07 08:19 수집 기준</span></div>`,p:"<b>+</b> 가장 깔끔합니다 · <b>−</b> 화면만 보고는 버전을 알 수 없습니다"},
+  {t:"맨 아래 아주 작게 한 줄",d:"바닥에 회색 10px 로 'v97e2e93' 만.",m:`<div style="text-align:center;font-size:10px;color:#B0BAC5;margin-top:30px">v97e2e93</div>`,p:"<b>+</b> 눈에 띄지 않으면서 늘 보입니다 · <b>−</b> 지워 달라고 하신 바닥글이 조금 남습니다"}]},
+{g:"화면 전체",id:"D3",t:"제외된 레시피 표시 방식",w:"이번에 만든 '제외된 레시피 8개' 입니다. 올리거나 누르면 펼쳐집니다. 더 줄일지, 더 쓸모 있게 할지 고릅니다.",
+ o:[{t:"목록 아래 한 줄, 올리면 펼침",now:1,rec:1,d:"Job 원문 · 이유(Swelling · 사용자 제외 · x5 전용) · wafer 수.",m:`<div class="tiny" style="border-top:1px solid #EDF1F5;padding-top:4px">제외된 레시피 8개 ▾</div><div class="rl" style="grid-template-columns:1fr auto auto;font-size:10.5px"><span style="font-family:var(--mono)">TB500_RDL4 - Multi - JJ_BU</span><span class="chip" style="background:var(--warn-soft);color:var(--warn)">사용자 제외</span><span class="num">38</span><span style="font-family:var(--mono)">TB500_RDL1 - … Swelling</span><span class="chip">Swelling</span><span class="num">144</span></div>`,p:"<b>+</b> 공간을 거의 안 씁니다 · <b>−</b> 다시 넣으려면 코드를 고쳐야 합니다"},
+  {t:"펼친 목록에서 다시 넣기 단추",d:"줄마다 '다시 포함' 단추. 이 브라우저에만 기억합니다(다른 PC 에는 적용 안 됨).",m:`<div class="rl" style="grid-template-columns:1fr auto;font-size:10.5px"><span style="font-family:var(--mono)">TB500_RDL3 - Multi_ORG</span><span class="chip" style="color:var(--accent);border-color:var(--accent)">+ 다시 포함</span></div>`,p:"<b>+</b> 직접 켜고 끌 수 있습니다 · <b>−</b> PC 마다 결과가 달라질 수 있습니다"},
+  {t:"Job 칩 줄 끝에 작게",d:"목록이 아니라 그 레시피의 Job 칩 줄 끝에 '제외 2' 칩. 그 레시피에서 뺀 것만 보입니다.",m:`<div class="row" style="flex-wrap:wrap;gap:4px"><span class="chip">✓ RDL4-Multi</span><span class="chip">✓ RDL4-Single</span><span class="chip" style="border-style:dashed;color:var(--ink-3)">제외 2 ▾</span></div>`,p:"<b>+</b> 그 레시피 맥락에서 바로 보입니다 · <b>−</b> 전체 제외 목록은 레시피를 하나씩 눌러야 보입니다"}]}
+];
+
+/* ── 렌더 · 저장 ── */
+const KEY="aoi.rdl.proposal.2026-10-07";let ans={};
+try{ans=JSON.parse(localStorage.getItem(KEY)||"{}")||{};}catch(e){ans={};}
+const save=()=>{try{localStorage.setItem(KEY,JSON.stringify(ans));}catch(e){}};
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const L="ABC";
+function build(){let html="",g="";
+  for(const q of Q){if(q.g!==g){g=q.g;html+=`<div class="grp">${esc(g)}</div>`;}
+    html+=`<section class="panel q" id="q-${q.id}"><div class="qh"><span class="qid">${q.id}</span><h3>${esc(q.t)}</h3></div><p class="why">${q.w}</p>
+      <div class="opts" style="--n:${q.o.length}" role="radiogroup" aria-label="${esc(q.t)}">${q.o.map((o,i)=>`<label class="opt" data-q="${q.id}" data-i="${i}"><input type="radio" name="${q.id}" value="${i}">
+        <div class="oh"><span class="ok"></span><span class="ol">${L[i]}안</span><span class="ot">${esc(o.t)}</span>${o.rec?`<span class="rec">추천</span>`:o.now?`<span class="now">지금</span>`:""}${o.rec&&o.now?`<span class="now" style="margin-left:4px">지금</span>`:""}</div>
+        <p class="od">${o.d}</p><div class="mock">${o.m}</div><p class="pc">${o.p}</p></label>`).join("")}</div>
+      <div class="memo"><label for="m-${q.id}">메모</label><textarea id="m-${q.id}" data-memo="${q.id}" placeholder="바꾸고 싶은 점 · 섞고 싶은 안 (예: B안인데 기준선은 중앙 대신 평균)"></textarea></div></section>`;}
+  document.getElementById("qs").innerHTML=html;
+  document.getElementById("toc").innerHTML=Q.map(q=>`<a href="#q-${q.id}" data-toc="${q.id}">${q.id} ${esc(q.t.length>16?q.t.slice(0,16)+"…":q.t)}</a>`).join("");
+  for(const el of document.querySelectorAll(".opt"))el.addEventListener("change",()=>{const q=el.dataset.q;ans[q]={...(ans[q]||{}),pick:+el.dataset.i};save();sync();});
+  for(const t of document.querySelectorAll("textarea[data-memo]"))t.addEventListener("input",()=>{const q=t.dataset.memo;ans[q]={...(ans[q]||{}),memo:t.value};save();sync(true);});
+  sync();}
+function text(){const lines=["[RDL 단일스캔 개선 제안 답변 · 2026-10-07]"];
+  for(const q of Q){const a=ans[q.id]||{},o=a.pick!=null?q.o[a.pick]:null;lines.push(`${q.id} ${q.t}: ${o?L[a.pick]+"안 — "+o.t:"(선택 안 함)"}${a.memo&&a.memo.trim()?"\n   메모: "+a.memo.trim().replace(/\n/g,"\n   "):""}`);}
+  return lines.join("\n");}
+function sync(memoOnly){let n=0;
+  for(const q of Q){const a=ans[q.id]||{};if(a.pick!=null)n++;
+    if(!memoOnly){for(const el of document.querySelectorAll(`.opt[data-q="${q.id}"]`)){const on=a.pick===+el.dataset.i;el.classList.toggle("on",on);el.querySelector("input").checked=on;}
+      const t=document.querySelector(`textarea[data-memo="${q.id}"]`);if(t&&t.value!==(a.memo||""))t.value=a.memo||"";
+      const tc=document.querySelector(`[data-toc="${q.id}"]`);if(tc)tc.classList.toggle("done",a.pick!=null);}}
+  document.getElementById("progTxt").textContent=`${n} / ${Q.length} 선택`;document.getElementById("progBar").style.width=(n/Q.length*100)+"%";
+  document.getElementById("footTxt").textContent=n===Q.length?"모두 골랐습니다 — 답변 복사 후 보내 주세요":`${Q.length-n}개 남음 · 고르지 않은 항목은 '(선택 안 함)' 으로 보내집니다`;
+  document.getElementById("outTxt").value=text();}
+function toast(m){const t=document.getElementById("toast");t.textContent=m;t.classList.add("show");clearTimeout(toast._t);toast._t=setTimeout(()=>t.classList.remove("show"),1600);}
+document.getElementById("copyBtn").addEventListener("click",async()=>{const v=text();try{await navigator.clipboard.writeText(v);toast("복사했습니다 — 채팅에 붙여 넣어 주세요");}catch(e){const ta=document.getElementById("outTxt");ta.focus();ta.select();try{document.execCommand("copy");toast("복사했습니다");}catch(_){toast("아래 글을 직접 복사해 주세요");}document.getElementById("outbox").scrollIntoView({behavior:"smooth"});}});
+document.getElementById("resetBtn").addEventListener("click",()=>{if(!confirm("고른 것과 메모를 모두 지울까요?"))return;ans={};save();sync();});
+build();
+</script>
+</body>
+</html>

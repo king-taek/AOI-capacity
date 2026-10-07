@@ -515,14 +515,14 @@ def test_recipe_tab_shows_per_device_stats_and_compares_two_periods(page):
     pg.locator(".rcprow").first.click()
     # 첫 화면(10/5): 장당 스캔 멀티 vs 단일 — 9/18 W 6장 멀티 4분, 9/17 Q 3장 단일 3분 → 단일 1분 빠름(같은 장비 AOI-1)
     tiles = pg.locator(".scanhero .mtile").all_inner_texts()
-    assert "4.0" in tiles[0] and "표본 6 / 6장" in tiles[0] and "3.0" in tiles[1] and "표본 3 / 3장" in tiles[1]
+    assert "4.0" in tiles[0] and "표본 6 / 6 wafer" in tiles[0] and "3.0" in tiles[1] and "표본 3 / 3 wafer" in tiles[1]
     v = tiles[2].replace("\n", " ")                                                   # 10/6: 차이가 아니라 두 대상의 실제 값 + 밑에 어느 쪽이 빠른지
-    assert "전체 장 4.0분/장 3.0분/장 단일 1.0분/장 빠름" in v and "같은 장비 1대 4.0분/장 3.0분/장 단일 1.0분/장 빠름" in v and "Defect 3개/장 3개/장 차이 없음" in v
+    assert "전체 4.0분/wafer 3.0분/wafer 단일 1.0분/wafer 빠름" in v and "같은 장비 1대 4.0분/wafer 3.0분/wafer 단일 1.0분/wafer 빠름" in v and "Defect 3개/wafer 3개/wafer 차이 없음" in v
     assert pg.locator(".scanhero .jtog").count() == 2 and pg.locator(".scanhero .jtog[aria-pressed='true']").count() == 2   # 이 레시피로 보는 Job — 통계에 넣을지 고르는 단추
     assert [x.split("\n")[0] for x in pg.locator(".dbrow:not(.head):not(.axis)").all_inner_texts()] == ["AOI-1"]
     assert pg.locator(".dbrow .dd").count() == 2                        # 같은 장비에 멀티 · 단일 두 점
     row = pg.locator(".dbrow[data-row='dev:AOI-1']").inner_text().replace("\n", " ")
-    assert "6·3장" in row and "1·1Lot" in row                          # 몇 장 · 몇 Lot(멀티·단일 순)
+    assert "6·3wafer" in row and "1·1Lot" in row                       # 몇 wafer · 몇 Lot(멀티·단일 순)
     assert pg.locator(".how .how-item").count() == 0 and pg.locator('[data-fk="how:all"]').get_attribute("aria-expanded") == "false"   # 어떻게 셌나는 기본 접힘
     pg.locator('[data-fk="how:all"]').click()
     pg.wait_for_timeout(250)
@@ -538,7 +538,7 @@ def test_recipe_tab_shows_per_device_stats_and_compares_two_periods(page):
     pg.locator(".scanhero .jtog", has_text="RDL2-Multi").click()
     pg.wait_for_timeout(300)
     t2 = pg.locator(".scanhero .mtile").all_inner_texts()
-    assert "표본 0 / 0장" in t2[0] and "표본 3 / 3장" in t2[1] and pg.locator(".scanhero .jtog.off").count() == 1
+    assert "표본 0 / 0 wafer" in t2[0] and "표본 3 / 3 wafer" in t2[1] and pg.locator(".scanhero .jtog.off").count() == 1
     pg.locator('[data-fk="rcp:more"]').click()
     pg.wait_for_timeout(200)
     cards = pg.locator("main section.cards > div").all_inner_texts()
@@ -624,20 +624,22 @@ def test_recipe_close_point_labels_do_not_overlap(page):
     assert errors == []
 
 
-def test_recipe_device_row_selection_shows_matching_provenance(page):
-    """10/6 handoff C3: 장비 행을 누르면(Enter · Space 도) 아래 고정 칸에 그 장비의 중앙 · 계산 장 수 · INI/Report 보완 — 행은 같은 노드로 남는다."""
+def test_recipe_device_row_opens_popup_with_keyboard_and_row_stays_same_node(page):
+    """10/7 사용자: 근거 칸 · '상세 팝업' 단추는 없앴다 — 장비 행을 누르면(Enter · Space 도) 곧 그 장비의 상세 팝업. 닫으면 그 행이 켜진 채 같은 노드로 남는다."""
     pg, errors, _ = page
     _open_recipe(pg)
+    assert pg.locator('[data-key="rcp:mdev:detail"]').count() == 0 and pg.locator('[data-fk="rcp:devpop"]').count() == 0
+    main = pg.locator("main").inner_text()
+    assert "근거" not in main and "더블클릭" not in main and "선 길이" not in main
     row = pg.locator('[data-key="rcp:mdev"] button.dbrow[data-row="dev:AOI-1"]')
     pg.evaluate("window.__row = document.querySelector('[data-key=\"rcp:mdev\"] button.dbrow[data-row=\"dev:AOI-1\"]')")
     row.focus()
     pg.keyboard.press("Enter")
-    pg.wait_for_timeout(200)
+    pg.wait_for_selector('.dlg[data-dlg="rcpdev"]')
+    assert "AOI-1" in pg.locator("#dlg-rcpdev-title").inner_text()
+    pg.keyboard.press("Escape")
+    pg.wait_for_timeout(500)
     assert row.get_attribute("aria-pressed") == "true"
-    det = pg.locator('[data-key="rcp:mdev:detail"] .mdsel:not([hidden])')
-    assert det.count() == 1 and det.get_attribute("data-dev") == "AOI-1"
-    txt = det.inner_text()
-    assert "멀티" in txt and "6장 · 1 Lot" in txt and "INI 6 + Report 보완 0" in txt and "단일" in txt
     assert pg.evaluate("window.__row === document.querySelector('[data-key=\"rcp:mdev\"] button.dbrow[data-row=\"dev:AOI-1\"]')")
     assert errors == []
 
@@ -832,7 +834,7 @@ def test_rdl_tab_lot_stat_outlier_x5_rule_and_wording(rdl_page):
     single = [t for t in tiles if t.startswith("단일")][0]
     assert "(x20)" in single
     assert "LOT당 409.1분" in single.replace("\n", " ")                                    # 22장 → 360분 × 25 ÷ 22(20~24장은 25장 기준으로 환산) · Error/19장 Report 는 제외
-    assert "이상치 1개 제외" in single and "표본 60 / 61장" in single                         # 한 줄로 짧게
+    assert "이상치 1개 제외" in single and "표본 60 / 61 wafer" in single                         # 한 줄로 짧게
     tip = pg.locator(".scanhero .otag").first.get_attribute("title")                          # 어떤 값이 왜 빠졌는지는 마우스를 올리면
     assert "150.0분" in tip and "3σ" in tip
     assert "장당 스캔 (중앙)" in single and "장당 Defect (중앙)" in single               # 타일 맨 위 큰 숫자 둘 — 시간 | Defect(사용자 10/6)               # 어떤 값이 왜 빠졌는지
@@ -849,16 +851,19 @@ def test_rdl_tab_lot_stat_outlier_x5_rule_and_wording(rdl_page):
     assert errors == []
 
 
-def test_rdl_device_row_double_click_opens_detail_popup(rdl_page):
+def test_rdl_device_row_click_opens_detail_popup(rdl_page):
     pg, errors = rdl_page
     pg.locator('button[data-fk="nav:recipe"]').click()
     pg.wait_for_selector('main[data-key="view:recipe"]')
-    pg.locator(".dbrow[data-row='dev:AOI-5']").dblclick()
+    pg.locator(".dbrow[data-row='dev:AOI-5']").click()
     pg.wait_for_selector('.dlg[data-dlg="rcpdev"]')
     dlg = pg.locator('.dlg[data-dlg="rcpdev"]')
     txt = dlg.inner_text()
-    assert "AOI-5" in txt and "TB500 RDL4" in txt and "전체 장비 속 위치" in txt and "값의 분포" in txt and "날짜별" not in txt and "이상치 1개 제외" in txt   # 한눈에: KPI · 위치 · 추이
-    assert dlg.locator(".kpi").count() == 1 and dlg.locator(".strip").count() >= 2 and dlg.locator(".rawrow").count() == 0   # 자세히는 접혀 있다
+    assert "AOI-5" in txt and "TB500 RDL4" in txt and "전체 장비 속 위치" in txt and "이 장비 vs 전체" in txt and "날짜별" not in txt and "이상치 1개 제외" in txt   # 한눈에: KPI · 위치 · 비교
+    assert "값의 분포" not in txt and "점선 = 전체 중앙" not in txt and "점을 누르면 그 장비로" not in txt     # 10/7: 분포 막대 · 설명 문구는 없앴다
+    # 10/7: 단일만 돈 장비도 멀티 칸을 지우지 않고 '단일스캔만 진행' 으로 — KPI 둘(하나는 비어 있음) · 위치 줄 · 비교 줄도 둘씩
+    assert dlg.locator(".kpi").count() == 2 and dlg.locator(".kpi.none").count() == 1 and "단일스캔만 진행" in dlg.locator(".kpi.none").inner_text()
+    assert dlg.locator(".strip").count() >= 2 and dlg.locator(".bsrow").count() == 4 and dlg.locator(".rawrow").count() == 0   # 자세히는 접혀 있다
     assert pg.evaluate("document.activeElement && document.activeElement.id") == "dlg-rcpdev-title"
     dlg.locator('[data-fk="pd:lots"]').click()
     pg.wait_for_timeout(300)
@@ -866,8 +871,6 @@ def test_rdl_device_row_double_click_opens_detail_popup(rdl_page):
     pg.keyboard.press("Escape")
     pg.wait_for_timeout(500)
     assert pg.locator('.dlg[data-dlg="rcpdev"]').count() == 0
-    pg.locator('[data-fk="rcp:devpop"]').click()                        # 키보드 · 터치용 단추도 같은 팝업
-    pg.wait_for_selector('.dlg[data-dlg="rcpdev"]')
     assert errors == []
 
 
@@ -942,7 +945,7 @@ def test_popup_dots_switch_device_bins_filter_lots_and_hover_highlights(rdl2_pag
     pg, errors = rdl2_page
     pg.locator('button[data-fk="nav:recipe"]').click()
     pg.wait_for_selector('main[data-key="view:recipe"]')
-    pg.locator(".dbrow[data-row='dev:AOI-6']").dblclick()
+    pg.locator(".dbrow[data-row='dev:AOI-6']").click()
     pg.wait_for_selector('.dlg[data-dlg="rcpdev"]')
     dlg = pg.locator('.dlg[data-dlg="rcpdev"]')
     other = dlg.locator(".sd:not(.me)").first
@@ -950,11 +953,16 @@ def test_popup_dots_switch_device_bins_filter_lots_and_hover_highlights(rdl2_pag
     pg.wait_for_timeout(200)
     assert dlg.evaluate("e => e.classList.contains('xh')") and dlg.locator(".sd.hl").count() >= 1
     assert "AOI-5" in pg.locator(".tip:not([hidden])").inner_text()
-    bins = dlg.locator("button.hb:not(:disabled)")
-    assert bins.count() >= 1 and dlg.locator(".rawrow").count() == 0
-    bins.first.click()                                                                      # 분포 칸 → 그 칸의 값이 든 Lot 만 목록에
+    pg.mouse.move(2, 2)
+    pg.wait_for_timeout(150)
+    dots = dlg.locator(".bsw button.bd")                                                    # 10/7: 분포 막대 대신 '이 장비 vs 전체' — 점 하나 = Lot 하나
+    assert dots.count() == 2 and dlg.locator(".bsw .bfb").count() >= 1 and dlg.locator(".rawrow").count() == 0   # 시간 · Defect 각 한 점(LOT-D)
+    dots.first.hover()                                                                      # 올리면 같은 Lot 이 두 그래프에서 함께 켜진다
+    pg.wait_for_timeout(200)
+    assert dlg.evaluate("e => e.classList.contains('lh')") and dlg.locator(".bd.hl").count() == 2 and "LOT-D" in pg.locator(".tip:not([hidden])").inner_text()
+    dots.first.click()                                                                      # 점 → 그 Lot 만 목록에
     pg.wait_for_timeout(400)
-    assert dlg.locator(".binchip").count() == 1 and dlg.locator(".rawrow").count() == 1 and "LOT-D" in dlg.inner_text()
+    assert dlg.locator(".binchip").count() == 1 and dlg.locator(".rawrow").count() == 1 and "LOT-D" in dlg.locator(".binchip").inner_text()
     dlg.locator(".binchip .btn").click()
     pg.wait_for_timeout(300)
     assert dlg.locator(".binchip").count() == 0 and dlg.locator(".rawrow").count() == 1       # AOI-6 은 Lot 하나(LOT-D)

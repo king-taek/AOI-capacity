@@ -328,10 +328,11 @@ def test_home_lists_devices_in_device_order_with_collect_chips_and_the_no_record
         assert term in home, term
 
 
-def test_foot_shows_scope_and_out_of_scope_devices_from_meta():
+def test_foot_shows_only_out_of_scope_devices_from_meta():
+    """10/7 사용자: 바닥글의 수집 범위 목록 · 장비/일수/버전 줄 · 가동률 설명 문구는 지웠다 — 수집 안 함(범위 밖 장비)만 남는다."""
     mt = meta("AOI-1", more=[{"name": "AOI-26", "note": "X:\\AOI-26", "report_dir": "Report", "scope": "out"}])
     (foot,) = screen([w("AOI-1", "W1", "08:00", "08:10")], mt, [["footHtml"]])
-    assert "수집 범위" in foot and "AOI-1, AOI-2" in foot
+    assert "수집 범위" not in foot and "정확 경로만 확인" not in foot and "가동률 = (Scan + Rescan)" not in foot
     assert "수집 안 함" in foot and "AOI-26" in foot
 
 
@@ -521,8 +522,9 @@ def test_recipe_verdict_labels_both_comparison_scopes():
     html, = screen(rows, meta("AOI-1", "AOI-2"), [["rcpHtml"]])
     assert 'class="vtab"' in html and 'class="verdict-table"' not in html
     # 10/6: 차이가 아니라 두 대상의 실제 값(멀티 중앙 · 단일 중앙)을 보이고 그 밑에 작게 어느 쪽이 빠른지
-    assert re.search(r'전체 장</div><div class="vv num">10\.0<small>분/장</small></div><div class="vv num win">8\.5<small>분/장</small></div><div class="vn"><span[^>]*>단일 1\.5분/장 빠름', html)
-    assert re.search(r'같은 장비 <span class="muted">1대</span></div><div class="vv num win">10\.0<small>분/장</small></div><div class="vv num">12\.0<small>분/장</small></div><div class="vn"><span[^>]*>멀티 2\.0분/장 빠름', html)
+    assert re.search(r'전체</div><div class="vv num">10\.0<small>분/wafer</small></div><div class="vv num win">8\.5<small>분/wafer</small></div><div class="vn"><span[^>]*>단일 1\.5분/wafer 빠름', html)
+    assert re.search(r'같은 장비 <span class="muted">1대</span></span></div><div class="vv num win">10\.0<small>분/wafer</small></div><div class="vv num">12\.0<small>분/wafer</small></div><div class="vn"><span[^>]*>멀티 2\.0분/wafer 빠름', html)
+    assert "낮을수록 좋음" not in html                                                   # 10/7: 설명 문구는 지웠다
     only_multi, = screen(rows[:3], meta("AOI-1"), [["rcpHtml"]])
     assert "단일 값이 없어 비교할 수 없습니다" in only_multi and "비교할 값이 없습니다" in only_multi
 
@@ -533,7 +535,7 @@ def test_recipe_wording_distinguishes_ini_and_report_time():
     rows = [_rdl("AOI-1", "W1", "08:00", "08:10", "A", "MULTI", bs="08:00", be="08:30"),
             dict(_rdl("AOI-1", "W2", None, None, "A", "", bs="08:00", be="08:30"), ini_match="STALE")]
     html, = screen(rows, meta("AOI-1"), [["rcpHtml"]])
-    assert "· INI 1 · Report 보완 1" in html and '표본 <b class="num">2</b> / 2장' in html
+    assert "· INI 1 · Report 보완 1" in html and '표본 <b class="num">2</b> / 2 wafer' in html
     for old in ("장당 스캔(INI)", "INI 장당 중앙", "INI 시각 있는 장 없음", "이 칩은 스캔 시간의 출처입니다"):
         assert old not in html
 
@@ -569,7 +571,7 @@ def test_report_lot_time_is_scaled_to_25_wafers_only_for_20_to_24():
         html, = screen(_lot_rows(n), meta("AOI-1"), [["rcpHtml"]])
         assert f"LOT당 {want}분" in html, (n, want)
         lot, = screen(_lot_rows(n), meta("AOI-1"), [["rcpHtml"]], state={"rcpUnit": "lot"})     # LOT당 보기: 같은 값이 큰 숫자
-        assert f'<p class="v num">{want}<small>분/Lot</small></p>' in lot and '표본 <b class="num">1</b> / 1Lot' in lot
+        assert f'<p class="v num">{want}<small>분/Lot</small></p>' in lot and '표본 <b class="num">1</b> / 1 Lot' in lot
     html, = screen(_lot_rows(19), meta("AOI-1"), [["rcpHtml"]], state={"rcpHowAll": True})
     assert "LOT당 —분" in html and "PASS 20장 미만 Lot 1개" in html
 
@@ -585,14 +587,14 @@ def test_report_lot_time_skips_reports_with_an_error_but_keeps_abort_only_ones()
 
 
 def test_outliers_beyond_3_sigma_are_dropped_once_and_listed_but_not_for_tiny_samples():
-    """3σ 한 번 · 표본 5개 미만이면 제거 안 함 · 제거했으면 값과 이유(평균 ± 3σ 범위)를 통계 밑에 적는다."""
+    """3σ 한 번 · 표본 5개 미만이면 제거 안 함 · 제거했으면 값과 이유(평균 ± 3σ 범위)를 ⓘ 에 적는다(시간만 — Defect 는 10/7 부터 빼지 않는다)."""
     rows = [_rdl("AOI-1", f"W{i}", f"08:{i * 2:02d}", f"08:{i * 2 + 1:02d}", "LOT-A", "SINGLE") for i in range(21)]
     rows.append(_rdl("AOI-1", "BIG", "11:00", "13:30", "LOT-A", "SINGLE"))
     html, = screen(rows, meta("AOI-1"), [["rcpHtml"]])
-    assert "이상치 1개 제외" in html and "150.0분" in html and "3σ" in html and "표본 <b class=\"num\">21</b> / 22장" in html
+    assert "이상치 1개 제외" in html and "150.0분" in html and "3σ" in html and "표본 <b class=\"num\">21</b> / 22 wafer" in html
     tiny = [_rdl("AOI-1", f"T{i}", f"08:{i * 3:02d}", f"08:{i * 3 + 1:02d}", "LOT-A", "SINGLE") for i in range(3)] + [_rdl("AOI-1", "BIG", "11:00", "13:30", "LOT-A", "SINGLE")]
     html, = screen(tiny, meta("AOI-1"), [["rcpHtml"]])
-    assert "개 제외" not in html and "표본 <b class=\"num\">4</b> / 4장" in html
+    assert "개 제외" not in html and "표본 <b class=\"num\">4</b> / 4 wafer" in html
 
 
 def test_single_scan_counts_x20_only_and_pi_compares_existing_vs_enhanced():
@@ -602,11 +604,43 @@ def test_single_scan_counts_x20_only_and_pi_compares_existing_vs_enhanced():
     rows += [dict(_rdl("AOI-1", f"X{i}", f"09:{i * 2:02d}", f"09:{i * 2 + 1:02d}", "B", "SINGLE"), recipe="x5") for i in range(2)]
     html, = screen(rows, meta("AOI-1"), [["rcpHtml"]])
     html, = screen(rows, meta("AOI-1"), [["rcpHtml"]], state={"rcpHowAll": True})
-    assert "표본 <b class=\"num\">3</b> / 3장" in html and "x5 · x10 단일 2장 제외" in html
+    assert "표본 <b class=\"num\">3</b> / 3 wafer" in html and "x5 · x10 단일 2장 제외" in html
     pi = [dict(w("AOI-1", f"P{i}", f"08:{i * 2:02d}", f"08:{i * 2 + 1:02d}", job="R_TB500_LIVE_PI3"), recipe="PI") for i in range(3)]
     pi += [dict(w("AOI-1", f"E{i}", f"10:{i * 2:02d}", f"10:{i * 2 + 1:02d}", job="R_TB500_LIVE_PI3 - Enhanced"), recipe="PI") for i in range(2)]
     html, = screen(pi, meta("AOI-1"), [["rcpHtml"]])
     assert html.count('class="rowbtn rcprow') == 1 and "Enhanced 40%" in html                  # 한 줄(PI3) · Enhanced 비율
     assert "</i>기존" in html and "</i>Enhanced" in html and "(x20 + x5)" not in html and "멀티 · 단일을 가릴" not in html
-    assert "표본 <b class=\"num\">3</b> / 3장" in html and "표본 <b class=\"num\">2</b> / 2장" in html
+    assert "표본 <b class=\"num\">3</b> / 3 wafer" in html and "표본 <b class=\"num\">2</b> / 2 wafer" in html
     assert "<p class=\"vl\">장당 Defect (중앙)</p>" in html and "장당 스캔 (중앙)" in html     # 타일 맨 위 큰 숫자 둘: 스캔 시간 | Defect
+
+
+def test_outliers_are_judged_per_layer_not_per_device_and_defect_is_never_cut():
+    """10/7 사용자: 이상치는 장비를 보지 않고 레이어(레시피)만 — 장비 표본은 작다. 시간만 3σ 로 빼고 Defect 는 빼지 않는다(튀는 Defect 도 필요한 데이터).
+    AOI-1 은 1분 장 20개 + 150분 한 장, AOI-2 는 1분 장 3개 + 150분 한 장 — AOI-2 표본(4개)은 5개 미만이어도 레이어 판정으로 150분을 뺀다.
+    Defect 는 AOI-2 의 한 장만 9000 이어도 그대로 남는다."""
+    f = lambda r, v="10": dict(r, faults=v)
+    rows = [f(_rdl("AOI-1", f"W{i}", f"08:{i * 2:02d}", f"08:{i * 2 + 1:02d}", "LOT-A", "SINGLE")) for i in range(20)]
+    rows.append(f(_rdl("AOI-1", "BIG", "11:00", "13:30", "LOT-A", "SINGLE")))
+    rows += [f(_rdl("AOI-2", f"V{i}", f"08:{i * 2:02d}", f"08:{i * 2 + 1:02d}", "LOT-B", "SINGLE"), "9000" if i == 0 else "10") for i in range(3)]
+    rows.append(f(_rdl("AOI-2", "BIG2", "12:00", "14:30", "LOT-B", "SINGLE")))
+    (agg,) = screen(rows, meta("AOI-1", "AOI-2"), [["""(()=>{const X=rcpIndex(),gs=new Set(X.recs.map(q=>q.g)),A=rcpAgg(gs,D.days[0],D.days[D.days.length-1]);
+        return {all:A.all.S.xs.out.length,d1:A.devs["AOI-1"].S.xs.out.length,d2:A.devs["AOI-2"].S.xs.out.length,d2n:A.devs["AOI-2"].S.s.length,
+                f:A.all.S.f.length,fo:A.all.nOut.f,d2f:Math.max(...A.devs["AOI-2"].S.f)};})()"""]])
+    assert agg["all"] == 2 and agg["d1"] == 1 and agg["d2"] == 1 and agg["d2n"] == 3   # AOI-2 는 장비 표본으로 재면 (4개 < 5) 못 뺀다 — 레이어 판정을 따른다
+    assert agg["f"] == 25 and agg["fo"] == 0 and agg["d2f"] == 9000                      # Defect 는 하나도 빼지 않는다
+
+
+def test_rdl_tab_excludes_user_listed_jobs_and_lists_excluded_recipes_small():
+    """10/7 사용자: RDL4 JJ_BU(멀티 · 단일) · RDL4 JJ - SZ - Approved Job · RDL3 _ORG 는 이 탭에서 무시 —
+    Swelling · PI4-x5 처럼 뺀 레시피와 함께 목록 아래 '제외된 레시피 n개' 로 작게 남긴다(올리거나 누르면 펼침)."""
+    jobs = ["TB500_RDL4 - Multi", "TB500_RDL4 - Multi - JJ_BU", "TB500_RDL4 - Multi - JJ - SZ - Approved Job - Do Not Touch",
+            "TB500_RDL3 - Multi_ORG", "TB500_RDL3 - Multi", "TB500_RDL1 - Multi - Swelling", "R_TB500_LIVE_PI4-x5", "TB500_RDL4 - Multi - JJ - SZ"]
+    rows = [w("AOI-1", f"W{i}", f"{8 + i // 6:02d}:{(i % 6) * 10:02d}", f"{8 + i // 6:02d}:{(i % 6) * 10 + 5:02d}", lot=f"L{i}", job=j) for i, j in enumerate(jobs)]
+    html, = screen(rows, meta("AOI-1"), [["rcpHtml"]])
+    tab, excl = html.split('data-key="rcp:excl"')
+    assert "JJ_BU" not in tab and "Approved Job" not in tab and "Multi_ORG" not in tab and "Swelling" not in tab
+    assert "제외된 레시피 5개" in excl
+    for j in jobs[1:4]:
+        assert j in excl
+    assert excl.count("사용자 제외") == 3 and "TB500_RDL1 - Multi - Swelling" in excl and "R_TB500_LIVE_PI4-x5" in excl
+    assert "TB500_RDL4 - Multi - JJ - SZ<" not in excl                                  # 'Approved Job' 이 없는 JJ - SZ 는 그대로 쓴다
