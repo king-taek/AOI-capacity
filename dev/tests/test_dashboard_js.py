@@ -608,10 +608,10 @@ def test_single_scan_counts_x20_only_and_pi_compares_existing_vs_enhanced():
     pi = [dict(w("AOI-1", f"P{i}", f"08:{i * 2:02d}", f"08:{i * 2 + 1:02d}", job="R_TB500_LIVE_PI3"), recipe="PI") for i in range(3)]
     pi += [dict(w("AOI-1", f"E{i}", f"10:{i * 2:02d}", f"10:{i * 2 + 1:02d}", job="R_TB500_LIVE_PI3 - Enhanced"), recipe="PI") for i in range(2)]
     html, = screen(pi, meta("AOI-1"), [["rcpHtml"]])
-    assert html.count('class="rowbtn rcprow') == 1 and "Enhanced 40%" in html                  # 한 줄(PI3) · Enhanced 비율
+    assert html.count('class="rowbtn rcprow') == 1 and ">40%</b>" in html and 'Enhanced <b class="num">2</b>' in html   # 한 줄(PI3) · 막대 안 Enhanced 비율 · 밑 줄 wafer 수
     assert "</i>기존" in html and "</i>Enhanced" in html and "(x20 + x5)" not in html and "멀티 · 단일을 가릴" not in html
     assert "표본 <b class=\"num\">3</b> / 3 wafer" in html and "표본 <b class=\"num\">2</b> / 2 wafer" in html
-    assert "<p class=\"vl\">장당 Defect (중앙)</p>" in html and "장당 스캔 (중앙)" in html     # 타일 맨 위 큰 숫자 둘: 스캔 시간 | Defect
+    assert "<p class=\"vl\">Wafer당 Defect (중앙)</p>" in html and "Wafer당 스캔 (중앙)" in html     # 타일 맨 위 큰 숫자 둘: 스캔 시간 | Defect('장당' → Wafer당, 10/7)
 
 
 def test_outliers_are_judged_per_layer_not_per_device_and_defect_is_never_cut():
@@ -632,15 +632,16 @@ def test_outliers_are_judged_per_layer_not_per_device_and_defect_is_never_cut():
 
 def test_rdl_tab_excludes_user_listed_jobs_and_lists_excluded_recipes_small():
     """10/7 사용자: RDL4 JJ_BU(멀티 · 단일) · RDL4 JJ - SZ - Approved Job · RDL3 _ORG 는 이 탭에서 무시 —
-    Swelling · PI4-x5 처럼 뺀 레시피와 함께 목록 아래 '제외된 레시피 n개' 로 작게 남긴다(올리거나 누르면 펼침)."""
+    Swelling · PI4-x5 처럼 뺀 레시피와 함께 **그 레시피의 Job 칩 줄 끝에 '제외 n ▾'** 로 작게 남긴다(제안 D3-C — 올리거나 누르면 펼침)."""
     jobs = ["TB500_RDL4 - Multi", "TB500_RDL4 - Multi - JJ_BU", "TB500_RDL4 - Multi - JJ - SZ - Approved Job - Do Not Touch",
             "TB500_RDL3 - Multi_ORG", "TB500_RDL3 - Multi", "TB500_RDL1 - Multi - Swelling", "R_TB500_LIVE_PI4-x5", "TB500_RDL4 - Multi - JJ - SZ"]
     rows = [w("AOI-1", f"W{i}", f"{8 + i // 6:02d}:{(i % 6) * 10:02d}", f"{8 + i // 6:02d}:{(i % 6) * 10 + 5:02d}", lot=f"L{i}", job=j) for i, j in enumerate(jobs)]
-    html, = screen(rows, meta("AOI-1"), [["rcpHtml"]])
-    tab, excl = html.split('data-key="rcp:excl"')
+    html, c3, c1, c4 = screen(rows, meta("AOI-1"), [["rcpHtml"], ["rcpExclChip", "TB500 RDL3", DAY, DAY], ["rcpExclChip", "TB500 RDL1", DAY, DAY], ["rcpExclChip", "TB500 PI4", DAY, DAY]])
+    tab, excl = html.split('data-key="rcp:excl"')                                           # 첫 화면은 RDL4 — 그 Job 칩 줄 끝
     assert "JJ_BU" not in tab and "Approved Job" not in tab and "Multi_ORG" not in tab and "Swelling" not in tab
-    assert "제외된 레시피 5개" in excl
-    for j in jobs[1:4]:
-        assert j in excl
-    assert excl.count("사용자 제외") == 3 and "TB500_RDL1 - Multi - Swelling" in excl and "R_TB500_LIVE_PI4-x5" in excl
+    assert 'class="jchip rexh"' in excl and "제외 2" in excl and "제외된 레시피" not in html
+    assert jobs[1] in excl and jobs[2] in excl and excl.count("사용자 제외") == 2
     assert "TB500_RDL4 - Multi - JJ - SZ<" not in excl                                  # 'Approved Job' 이 없는 JJ - SZ 는 그대로 쓴다
+    assert "제외 1" in c3 and jobs[3] in c3 and "사용자 제외" in c3
+    assert "제외 1" in c1 and jobs[5] in c1 and "Swelling" in c1
+    assert "제외 1" in c4 and jobs[6] in c4 and "x5 전용" in c4

@@ -511,7 +511,8 @@ def test_recipe_tab_shows_per_device_stats_and_compares_two_periods(page):
     assert pg.evaluate("document.activeElement.dataset.fk") == "rcp:q"
     pg.wait_for_timeout(450)                                                    # 바뀐 글자는 0.24초 동안 한 글자씩 넘어간다
     assert [x.split("\n")[0] for x in pg.locator(".rcprow").all_inner_texts()] == ["TB500 RDL2"]   # 10/6: 멀티 · 단일 Job(D76)은 한 레시피 줄로
-    assert "멀티 67%" in pg.locator(".rcprow").first.inner_text()
+    row0 = " ".join(pg.locator(".rcprow").first.inner_text().split())                                 # 10/7: 막대 안 % · 밑 줄 방식별 wafer 수 · Lot 수
+    assert "67%" in row0 and "33%" in row0 and "멀티 6" in row0 and "단일 3" in row0 and "Lot" in row0
     pg.locator(".rcprow").first.click()
     # 첫 화면(10/5): 장당 스캔 멀티 vs 단일 — 9/18 W 6장 멀티 4분, 9/17 Q 3장 단일 3분 → 단일 1분 빠름(같은 장비 AOI-1)
     tiles = pg.locator(".scanhero .mtile").all_inner_texts()
@@ -533,7 +534,7 @@ def test_recipe_tab_shows_per_device_stats_and_compares_two_periods(page):
     pg.locator(".scanhero .seg button", has_text="LOT당").click()
     pg.wait_for_timeout(300)
     assert "분/Lot" in pg.locator(".scanhero .mtile").first.inner_text() and "장비별 LOT당 시간" in pg.locator('[data-key="rcp:mdev"]').inner_text()
-    pg.locator(".scanhero .seg button", has_text="장당").click()
+    pg.locator(".scanhero .seg button", has_text="Wafer당").click()
     # Job 단추로 멀티 Job 을 빼면 단일만 남는다
     pg.locator(".scanhero .jtog", has_text="RDL2-Multi").click()
     pg.wait_for_timeout(300)
@@ -837,7 +838,7 @@ def test_rdl_tab_lot_stat_outlier_x5_rule_and_wording(rdl_page):
     assert "이상치 1개 제외" in single and "표본 60 / 61 wafer" in single                         # 한 줄로 짧게
     tip = pg.locator(".scanhero .otag").first.get_attribute("title")                          # 어떤 값이 왜 빠졌는지는 마우스를 올리면
     assert "150.0분" in tip and "3σ" in tip
-    assert "장당 스캔 (중앙)" in single and "장당 Defect (중앙)" in single               # 타일 맨 위 큰 숫자 둘 — 시간 | Defect(사용자 10/6)               # 어떤 값이 왜 빠졌는지
+    assert "Wafer당 스캔 (중앙)" in single and "Wafer당 Defect (중앙)" in single              # 타일 맨 위 큰 숫자 둘 — 시간 | Defect(사용자 10/6)               # 어떤 값이 왜 빠졌는지
     pg.locator('[data-fk="how:all"]').click()
     pg.wait_for_timeout(300)
     how = pg.locator(".how").inner_text()
@@ -864,6 +865,9 @@ def test_rdl_device_row_click_opens_detail_popup(rdl_page):
     # 10/7: 단일만 돈 장비도 멀티 칸을 지우지 않고 '단일스캔만 진행' 으로 — KPI 둘(하나는 비어 있음) · 위치 줄 · 비교 줄도 둘씩
     assert dlg.locator(".kpi").count() == 2 and dlg.locator(".kpi.none").count() == 1 and "단일스캔만 진행" in dlg.locator(".kpi.none").inner_text()
     assert dlg.locator(".strip").count() >= 2 and dlg.locator(".bsrow").count() == 4 and dlg.locator(".rawrow").count() == 0   # 자세히는 접혀 있다
+    # 10/7(제안 C2-B): x축은 맨 아래가 아니라 두 줄(멀티 · 단일) 사이, Defect 는 로그 축
+    assert dlg.evaluate("e=>[...e.querySelectorAll('.dblock')].every(b=>{const k=[...b.children].map(c=>c.className);return k.indexOf('bax num')===k.indexOf('bsrow')+1&&k.lastIndexOf('bsrow')>k.indexOf('bax num')})")
+    assert "로그 축" in dlg.locator(".dblock h4").nth(1).inner_text() and "로그 축" not in dlg.locator(".dblock h4").nth(0).inner_text()
     assert pg.evaluate("document.activeElement && document.activeElement.id") == "dlg-rcpdev-title"
     dlg.locator('[data-fk="pd:lots"]').click()
     pg.wait_for_timeout(300)
@@ -910,7 +914,7 @@ def test_graph_tooltips_appear_at_once_and_replace_native_titles(page):
     dot.hover()
     pg.wait_for_timeout(200)
     tip = pg.locator(".tip:not([hidden])").inner_text()
-    assert "AOI-1" in tip and "장당 스캔" in tip and "Lot" in tip                          # 값 · 장 수 · Lot 수가 줄마다
+    assert "AOI-1" in tip and "Wafer당 스캔" in tip and "Lot" in tip                         # 값 · 장 수 · Lot 수가 줄마다
     assert dot.get_attribute("title") is None and dot.get_attribute("data-tip")            # 느린 기본 title 은 tip 으로 옮겨졌다
     assert errors == []
 
@@ -921,6 +925,14 @@ def test_chart_series_toggle_sort_and_metric_buttons(rdl2_page):
     pg.wait_for_selector('main[data-key="view:recipe"]')
     rows = lambda: [x.split("\n")[0] for x in pg.locator(".dbrow:not(.head):not(.axis)").all_inner_texts()]
     assert rows() == ["AOI-5", "AOI-6"]
+    # 10/7(제안 D1-B · B3 심플): 행마다 옅은 전체 중앙선, 행에 올리면 맨 위 띠에 그 장비의 중앙을 짚는다 — 떠나면 지운다
+    assert pg.locator(".dbrow .dfl").count() >= 2 and "전체" in pg.locator(".dbrow.head .dflab").first.inner_text()
+    pg.locator(".dbrow[data-row='dev:AOI-6']").hover()
+    pg.wait_for_timeout(200)
+    assert pg.locator(".scanhero .srng .hmk").count() == 1 and "AOI-6 2.0" in pg.locator(".scanhero .srng .hmk").inner_text()   # AOI-6 은 2분/wafer
+    pg.mouse.move(2, 2)
+    pg.wait_for_timeout(150)
+    assert pg.locator(".hmk").count() == 0
     pg.locator(".seg button", has_text="큰 값 순").click()
     pg.wait_for_timeout(300)
     assert rows() == ["AOI-6", "AOI-5"]                                                     # 3분/장 > 1분/장
