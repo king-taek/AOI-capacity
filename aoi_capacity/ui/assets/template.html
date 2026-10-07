@@ -2169,7 +2169,7 @@ function rcpHtml(){
       <div class="srows">${rr("M")+rr("S")+(U.T(a.U).length?rr("U"):"")}${scale}</div>
       <p class="hint">띠 10~90% · 눈금 = 중앙${U.lot?` · PASS ${LOT_MIN} wafer 이상 Report, ${LOT_STD} wafer 기준`:""}</p></div>`;}
     /* 장비별 — 같은 장비 안에서 두 방식을 한 줄에. 지표(시간 | Defect)는 단추로. 행을 누르면 그 장비의 상세 팝업(10/7 — 근거 칸 · '상세 팝업' 단추는 없앴다) */
-    const MET=state.rcpMetric==="defect"?"defect":"time",mu=MET==="defect"?(U.lot?"개/Lot":"개/장"):U.tu,mpu=MET==="defect"?"개":"분",mfm=MET==="defect"?fD:f1;
+    const MET=state.rcpMetric==="defect"?"defect":"time",mu=MET==="defect"?U.fu:U.tu,mpu=MET==="defect"?"개":"분",mfm=MET==="defect"?fD:f1;
     const sel=o=>MET==="defect"?U.F(o):U.T(o),MET_L=MET==="defect"?U.fl:U.tl;
     const SORT=state.rcpDevSort==="big"||state.rcpDevSort==="small"?state.rcpDevSort:"name";
     const sortKey=d=>{for(const k of ["M","S"])if(rcpShow(k)){const m=qs(sel(d[k]),.5);if(m!=null)return m;}return null;};   /* 보이는 방식의 중앙값 — 없으면 맨 뒤 */
