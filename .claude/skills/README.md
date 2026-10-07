@@ -9,6 +9,7 @@
 | `animate-css/` | https://github.com/animate-css/animate.css `source/` · `docsSource/sections` @ `3f8ab233` (4.1.1) | Hippocratic-2.1 (`LICENSE`) | 키프레임 원문 · 문서 + 인라인 부분집합 규칙(10/7 추가) |
 | `lottie-web/` | https://github.com/airbnb/lottie-web `index.d.ts` · `docs/json` @ `bede03d2` (5.13.0) | MIT (`LICENSE.md`) | loadAnimation API · Bodymovin JSON 스키마 + 인라인 자산 규칙(10/7 추가) |
 | `design-motion-principles/` | https://github.com/kylezantos/design-motion-principles `skills/design-motion-principles` @ `4a9ca879` | MIT (`LICENSE`) | 모션 설계 · 감사(Emil Kowalski · Jakub Krehel · Jhey Tompkins 세 관점, 안티-슬롭 체크리스트) — 원본 그대로(10/7 추가) |
+| `react-bits/` | https://github.com/DavidHDev/react-bits `public/llms.txt` · `LICENSE.md` @ `63a008de` | MIT + **Commons Clause**(`LICENSE.md`) | React 애니메이션 · 컴포넌트 **목록**과 포팅 규칙만(10/7 추가) — 컴포넌트 소스는 넣지 않았다(라이선스가 묶음 · 포팅본 재배포를 금지). 필요할 때 고정 커밋에서 한 개만 받아 template 안에 포팅 |
 
 - 원본을 고치지 않고 그대로 복사했다(awesome-design-md · gsap · animate-css · lottie-web 의 `SKILL.md` 와 이 README 만 새로 씀 — 세 라이브러리는 저장소에 스킬 파일이 없어 이 저장소 규칙을 담아 직접 썼다. 라이브러리 코드 자체는 이미 `template.html` 에 인라인돼 있다). 갱신은 같은 경로로 다시 복사한다.
 - `.claude/` 는 업데이트 payload(`updater._UPDATE_TOP_ALLOW`) 밖이라 현장 PC 로 배포되지 않는다.
