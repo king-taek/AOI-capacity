@@ -392,3 +392,23 @@ CLI_HTML_ONLY_BAD_DATE_FMT = "날짜 형식이 틀립니다(YYYY-MM-DD): {value}
 RETENTION_FOREVER_TEXT = "기한 없음 — 전부"
 RETENTION_DAYS_FMT = "{days}일"
 COLLECT_PHASE_KLA = "KLA 결과 파일 읽는 중"
+
+# ── Wafer 폴더 로그 모으기(10/9) ─────────────────────────────────────────────
+WAFER_LOGS_TITLE = "Wafer 폴더 로그 모으기"
+WAFER_LOGS_WHEN = ("개발자에게 보낼 조사 자료 — 최근 Report 로 여러 장비 · Job 의 Lot 을 고루 골라(최소 10 Lot), 그 Wafer 폴더의 "
+                   "INI · 로그 파일을 zip 으로 모읍니다. .dat · 이미지는 빼고, 한 Lot 안에서 같은 내용은 한 번만 담습니다. "
+                   "zip 은 한 장에 25~29.9MB 로 나누고 마지막 장이 25MB 가 될 때까지 Lot 을 더 담습니다(최대 2시간). "
+                   "NAS 는 읽기만 합니다. 가동률 수집과는 상관없습니다.")
+WAFER_LOGS_OUT = "저장 위치"
+WAFER_LOGS_RUN = "로그 모으기"
+WAFER_LOGS_STOP = "멈추고 마무리"
+WAFER_LOGS_OPEN = "폴더 열기"
+WAFER_LOGS_RUNNING = "모으는 중… (멈추면 지금까지 담은 것으로 zip 을 마무리합니다)"
+WAFER_LOGS_STOPPING = "멈추는 중 — 지금 읽던 것만 끝내고 마무리합니다"
+WAFER_LOGS_DONE_FMT = "끝났습니다 — zip {n}장 · Lot {lots}개 · {path}"
+WAFER_LOGS_STOPPED = "멈췄습니다 — 만든 zip 이 없습니다"
+WAFER_LOGS_NO_ZIP = "zip 을 만들지 못했습니다 — 로그를 확인하세요(고를 Lot 이 없었을 수 있습니다)"
+WAFER_LOGS_FAIL_FMT = "로그를 모으지 못했습니다: {error}"
+WAFER_LOGS_NO_TOOL_FMT = "도구 파일이 없습니다: {path} (업데이트가 끝났는지 확인하세요)"
+WAFER_LOGS_NO_DEVICES = "읽을 수 있는 Camtek 장비가 없습니다 — 장비 목록 · 드라이브 연결을 확인하세요"
+WAFER_LOGS_BUSY = "가동률 수집 중에는 로그를 모을 수 없습니다(NAS 를 함께 읽지 않게)"

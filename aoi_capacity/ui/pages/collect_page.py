@@ -22,6 +22,7 @@ from PyQt6.QtWidgets import (QCheckBox, QDateEdit, QFileDialog, QFrame, QGridLay
 
 from ... import collect, i18n, nas_guard
 from ...utils import paths, prefs, results
+from ...workers import wafer_logs
 from ..widgets.buttons import make_button
 
 MAX_LOG_LINES = 1000
@@ -371,6 +372,31 @@ class CollectPage(QWidget):
         self._days_worker: Optional[_DaysWorker] = None
         self._html_worker: Optional[_HtmlOnlyWorker] = None
 
+        # Wafer 폴더 로그 모으기(10/9) — 개발자 조사용. 가동률 수집과 따로 돌고, 둘이 동시에 NAS 를 읽지 않게 서로 막는다.
+        wcard, wl = _card(body, K.WAFER_LOGS_TITLE)
+        wl.addWidget(_label(K.WAFER_LOGS_WHEN, "help", wcard, wrap=True))
+        wrow = QHBoxLayout()
+        self._wl_out = QLineEdit(wafer_logs.default_out_dir(), wcard)
+        self._wl_out.setProperty("role", "mono")
+        self._b_wl_browse = make_button(K.BTN_BROWSE, parent=wcard)
+        wrow.addWidget(QLabel(K.WAFER_LOGS_OUT, wcard))
+        wrow.addWidget(self._wl_out, 1)
+        wrow.addWidget(self._b_wl_browse)
+        wl.addLayout(wrow)
+        wact = QHBoxLayout()
+        self._wl_status = _label("", "muted", wcard, wrap=True)
+        self._b_wl_run = make_button(K.WAFER_LOGS_RUN, "default", wcard)
+        self._b_wl_stop = make_button(K.WAFER_LOGS_STOP, "default", wcard)
+        self._b_wl_stop.hide()
+        self._b_wl_open = make_button(K.WAFER_LOGS_OPEN, "default", wcard)
+        wact.addWidget(self._b_wl_run)
+        wact.addWidget(self._b_wl_stop)
+        wact.addWidget(self._b_wl_open)
+        wact.addWidget(self._wl_status, 1)
+        wl.addLayout(wact)
+        lay.addWidget(wcard)
+        self._wl_worker: Optional[wafer_logs.WaferLogsWorker] = None
+
         # 저장 위치
         scard, sl = _card(body, K.COLLECT_SAVE_TITLE)
         g = QGridLayout()
@@ -415,6 +441,10 @@ class CollectPage(QWidget):
             w.dateChanged.connect(lambda _d: self._mode == "range" and self.refresh_plan())
         self._csv.toggled.connect(lambda on: prefs.patch(write_csv=bool(on)))
         self._out.editingFinished.connect(self._apply_out)
+        self._b_wl_run.clicked.connect(self._on_wafer_logs)
+        self._b_wl_stop.clicked.connect(self._stop_wafer_logs)
+        self._b_wl_open.clicked.connect(lambda: QDesktopServices.openUrl(QUrl.fromLocalFile(self._wl_out.text().strip())))
+        self._b_wl_browse.clicked.connect(self._browse_wl_out)
         self._pick("normal")
         self.refresh_result()
 
@@ -621,9 +651,74 @@ class CollectPage(QWidget):
             self._cards["rdl"].set_badges([(K.MODE_RDL_TARGET_FMT.format(n=plan.rdl_reports, devs=plan.rdl_devices), "warn")
                                            if plan.rdl_reports else (K.MODE_BADGE_NONE, "slow")])
 
+    # ── Wafer 폴더 로그 모으기(10/9) ──
+    def wafer_logs_running(self) -> bool:
+        return self._wl_worker is not None
+
+    def _on_wafer_logs(self) -> None:
+        if self._wl_worker is not None:
+            return
+        if self._running:
+            self.error.emit(K.WAFER_LOGS_TITLE, K.WAFER_LOGS_BUSY)
+            return
+        out = self._wl_out.text().strip() or wafer_logs.default_out_dir()
+        self._wl_out.setText(out)
+        w = wafer_logs.WaferLogsWorker(prefs.to_collect_cfg(prefs.load()), out, self)
+        w.log.connect(self.append_log)
+        w.done.connect(self._on_wafer_logs_done)
+        w.finished.connect(lambda w=w: self._worker_done("_wl_worker", w))
+        self._wl_worker = w
+        self._set_wafer_logs_running(True)
+        self._wl_status.setText(K.WAFER_LOGS_RUNNING)
+        w.start()
+
+    def _stop_wafer_logs(self) -> None:
+        if self._wl_worker is not None:
+            self._wl_worker.stop()
+            self._b_wl_stop.setEnabled(False)
+            self._wl_status.setText(K.WAFER_LOGS_STOPPING)
+
+    def _on_wafer_logs_done(self, result, err: str) -> None:
+        self._set_wafer_logs_running(False)
+        if result:
+            text = K.WAFER_LOGS_DONE_FMT.format(n=len(result.get("parts") or []), lots=result.get("lots", 0),
+                                                path=result.get("out_dir", ""))
+            self._wl_status.setText(text)
+            self.append_log(text)
+        else:
+            self._wl_status.setText(err)
+            self.append_log(err)
+            if err != K.WAFER_LOGS_STOPPED:
+                self.error.emit(K.WAFER_LOGS_TITLE, err)
+
+    def _set_wafer_logs_running(self, on: bool) -> None:
+        self._b_wl_run.setEnabled(not on)
+        self._b_wl_stop.setVisible(on)
+        self._b_wl_stop.setEnabled(on)
+        self._wl_out.setEnabled(not on)
+        self._b_wl_browse.setEnabled(not on)
+        self._b_run.setEnabled(not on and not self._running)     # 가동률 수집과 동시에 NAS 를 읽지 않는다
+
+    def _browse_wl_out(self) -> None:
+        chosen = QFileDialog.getExistingDirectory(self, K.WAFER_LOGS_OUT, self._wl_out.text())
+        if chosen:
+            self._wl_out.setText(chosen)
+
+    def shutdown(self, ms: int = 15_000) -> None:
+        """창을 닫을 때 — 로그 모으기를 멈추고(지금까지 담은 것으로 zip 마무리) 기다린다."""
+        w = self._wl_worker
+        if w is None:
+            return
+        try:
+            w.stop()
+            w.wait(ms)
+        except RuntimeError:
+            self._wl_worker = None
+
     def set_running(self, running: bool) -> None:
         self._running = running
-        self._b_run.setEnabled(not running)
+        self._b_run.setEnabled(not running and self._wl_worker is None)
+        self._b_wl_run.setEnabled(not running and self._wl_worker is None)
         self._b_stop.setVisible(running)
         self._b_stop.setEnabled(running)
         for w in (*self._cards.values(), self._refresh_days, self._r_from, self._r_to, self._out, self._b_out, self._csv, self._b_html, self._b_all):

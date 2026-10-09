@@ -231,7 +231,7 @@ def scan_dirs(root: Path):
     return primary + [n for n in names if n not in primary]
 
 
-def survey_device(root: Path, days: int, n_read: int) -> dict:
+def survey_device(root: Path, days: int, n_read: int, should_stop=None) -> dict:
     """한 대: Report 폴더를 한 번 나열하고 최근 Report 를 n_read 개만 연다. 읽기 전용."""
     dev = {"root": str(root), "name": root.name or str(root), "ok": False, "error": "", "reports": []}
     rep = find_subdir(root, REPORT_DIR_NAMES)
@@ -255,6 +255,8 @@ def survey_device(root: Path, days: int, n_read: int) -> dict:
         return dev
     files.sort(reverse=True)
     for t, name, path in files[:n_read]:
+        if should_stop and should_stop():
+            break
         try:
             text = read_bytes(path).decode("utf-8", errors="replace")
         except OSError:
@@ -341,10 +343,12 @@ def lot_dir_of(c: dict, scan_names) -> tuple:
     return None, "", ""
 
 
-def walk_wafer(wdir: Path):
+def walk_wafer(wdir: Path, should_stop=None):
     """Wafer 폴더 **안**만 본다(이 폴더 밖으로 나가지 않는다). [(상대경로, 크기, 수정시각, 내용 또는 None, 건너뛴 이유)]"""
     out, stack = [], [(wdir, "", 0)]
     while stack:
+        if should_stop and should_stop():
+            return out                                  # 멈춤 — 부르는 쪽이 이 Lot 을 버린다
         d, rel, depth = stack.pop()
         try:
             entries = sorted(os.scandir(d), key=lambda e: e.name.lower())
@@ -372,6 +376,8 @@ def walk_wafer(wdir: Path):
             elif st.st_size > MAX_RAW:
                 why = "너무 큼"
             data = None
+            if should_stop and should_stop():
+                return out
             if not why:
                 try:
                     data = read_bytes(e.path)
@@ -392,7 +398,7 @@ def recipe_mode(files) -> str:
     return "단일" if "WaferInfo.ini" in by else "모름"
 
 
-def collect_lot(idx: int, c: dict, scan_names, pool, packer: Packer) -> dict:
+def collect_lot(idx: int, c: dict, scan_names, pool, packer: Packer, should_stop=None) -> dict:
     lot_id = f"{idx:02d}_{safe(c['device'])}_{safe(c['lot'])}"
     info = {k: c[k] for k in ("device", "report", "job", "setup", "lot", "batch_start", "batch_end", "error", "cats")}
     info.update({"lot_id": lot_id, "wafers_in_report": len(c["wafers"]), "why": c.get("why", "")})
@@ -409,7 +415,10 @@ def collect_lot(idx: int, c: dict, scan_names, pool, packer: Packer) -> dict:
     if not wafers:
         info["skip"] = "Wafer 폴더 없음"
         return info
-    results = list(pool.map(lambda e: walk_wafer(Path(e.path)), wafers))
+    results = list(pool.map(lambda e: walk_wafer(Path(e.path), should_stop), wafers))
+    if should_stop and should_stop():
+        info["skip"] = "멈춤 요청(이 Lot 은 담지 않음)"
+        return info
 
     try:
         rep = IMG_B64.sub('src=""', read_bytes(c["report_path"]).decode("utf-8", errors="replace")).encode("utf-8")
@@ -458,7 +467,11 @@ def pick(cands, cat: str, chosen_keys: set, dev_count: dict, tried: set):
     return pool[0]
 
 
-def run(args) -> int:
+def run(args, log=None, should_stop=None, result=None) -> int:
+    """수집 본체 — 명령줄(`main`)과 수집 창 버튼(`aoi_capacity/workers/wafer_logs.py`)이 같이 쓴다.
+    log: 한 줄씩 받는 함수(기본 print) · should_stop: 참이면 담던 Lot 까지만 하고 마무리 · result: 끝에 zip 목록 등을 채울 dict."""
+    log = log or say
+    should_stop = should_stop or (lambda: False)
     t0 = time.time()
     out_dir = Path(args.out or OUT_DIR)
     roots = [norm_root(r) for r in (args.roots or DEVICE_ROOTS)]
@@ -466,16 +479,19 @@ def run(args) -> int:
     out_abs = os.path.normcase(os.path.abspath(out_dir))
     if os.path.splitdrive(str(out_dir))[0].upper() in drives or any(
             out_abs.startswith(os.path.normcase(os.path.abspath(r))) for r in roots):
-        say(f"[오류] 저장 위치가 NAS 쪽입니다: {out_dir}. 로컬 폴더를 --out 으로 지정하세요.")
+        log(f"[오류] 저장 위치가 NAS 쪽입니다: {out_dir}. 로컬 폴더를 --out 으로 지정하세요.")
         return 2
 
-    say(f"1/3 둘러보기 — 장비 {len(roots)}대, 최근 {args.days}일 Report 를 장비마다 {args.survey}개까지 엽니다")
+    log(f"1/3 둘러보기 — 장비 {len(roots)}대, 최근 {args.days}일 Report 를 장비마다 {args.survey}개까지 엽니다")
     with ThreadPoolExecutor(max_workers=args.workers) as pool:
-        devs = list(pool.map(lambda r: survey_device(r, args.days, args.survey), roots))
+        devs = list(pool.map(lambda r: survey_device(r, args.days, args.survey, should_stop), roots))
+    if should_stop():
+        log("멈춤 요청 — 둘러보기까지만 하고 끝냅니다(파일은 만들지 않았습니다)")
+        return 1
     cands, scan_of = [], {}
     for d in devs:
         state = f"Report {len(d['reports'])}개 읽음" if d["ok"] else f"건너뜀 — {d['error']}"
-        say(f"   {d['name']:<12} {state}")
+        log(f"   {d['name']:<12} {state}")
         if d["ok"]:
             scan_of[d["name"]] = d["scan_dirs"]
             cands.extend(d["reports"])
@@ -484,13 +500,13 @@ def run(args) -> int:
         c["key"] = (c["device"], c["job"], c["setup"], c["lot"])
     cands = [c for c in cands if not (c["key"] in seen or seen.add(c["key"]))]   # 같은 Lot 폴더는 한 번
     if not cands:
-        say("[오류] 읽은 Report 가 없습니다. 드라이브 연결과 DEVICE_ROOTS 를 확인하세요.")
+        log("[오류] 읽은 Report 가 없습니다. 드라이브 연결과 DEVICE_ROOTS 를 확인하세요.")
         return 2
     counts = {}
     for c in cands:
         for k in c["cats"]:
             counts[k] = counts.get(k, 0) + 1
-    say("   후보 Lot: " + " · ".join(f"{k} {v}" for k, v in sorted(counts.items(), key=lambda x: -x[1])))
+    log("   후보 Lot: " + " · ".join(f"{k} {v}" for k, v in sorted(counts.items(), key=lambda x: -x[1])))
 
     if args.plan:
         chosen, dev_count, keys = [], {}, set()
@@ -501,9 +517,9 @@ def run(args) -> int:
                     keys.add(c["key"])
                     dev_count[c["device"]] = dev_count.get(c["device"], 0) + 1
                     chosen.append((cat, c))
-        say("\n고를 Lot(첫 바퀴):")
+        log("\n고를 Lot(첫 바퀴):")
         for cat, c in chosen:
-            say(f"   [{cat}] {c['device']} · {c['job']} / {c['lot']} · {len(c['wafers'])}장 · {c['report']}")
+            log(f"   [{cat}] {c['device']} · {c['job']} / {c['lot']} · {len(c['wafers'])}장 · {c['report']}")
         return 0
 
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -518,32 +534,34 @@ def run(args) -> int:
 
     def take(cat: str, pool) -> bool:
         for _ in range(6):                                  # 폴더가 없으면 같은 갈래의 다음 후보
+            if should_stop():
+                return False
             c = pick(cands, cat, keys, dev_count, tried)
             if c is None:
                 return False
             tried.add(c["key"])
             c["why"] = cat
-            say(f"   [{len(lots) + 1:>2}] {cat:<10} {c['device']} · {c['job']} / {c['lot']} ({len(c['wafers'])}장)")
-            info = collect_lot(len(lots) + 1, c, scan_of.get(c["device"], []), pool, packer)
+            log(f"   [{len(lots) + 1:>2}] {cat:<10} {c['device']} · {c['job']} / {c['lot']} ({len(c['wafers'])}장)")
+            info = collect_lot(len(lots) + 1, c, scan_of.get(c["device"], []), pool, packer, should_stop)
             lots.append(info)
             if info.get("skip"):
-                say(f"        건너뜀 — {info['skip']}")
+                log(f"        건너뜀 — {info['skip']}")
                 continue
             keys.add(c["key"])
             dev_count[c["device"]] = dev_count.get(c["device"], 0) + 1
-            say(f"        Wafer {info['wafer_dirs']} · 파일 {info['files']} → 담음 {info['stored']} · 같은 내용 {info['same']}"
+            log(f"        Wafer {info['wafer_dirs']} · 파일 {info['files']} → 담음 {info['stored']} · 같은 내용 {info['same']}"
                 f" · 건너뜀 {info['skipped']} · {info['mode']}")
-            say(f"        zip {len(packer.parts)}장 · 합계 {packer.total() / 1e6:.1f}MB · 지금 장 {packer.size() / 1e6:.1f}MB"
+            log(f"        zip {len(packer.parts)}장 · 합계 {packer.total() / 1e6:.1f}MB · 지금 장 {packer.size() / 1e6:.1f}MB"
                 f" · {(time.time() - t0) / 60:.0f}분 지남")
             return True
         return False
 
-    say(f"\n2/3 Lot 담기 — 저장 위치 {out_dir}")
+    log(f"\n2/3 Lot 담기 — 저장 위치 {out_dir}")
     try:
         with ThreadPoolExecutor(max_workers=args.workers) as pool:
             for cat, n in QUOTAS:
                 for _ in range(n):
-                    if time.time() > deadline:
+                    if time.time() > deadline or should_stop():
                         break
                     take(cat, pool)
             i = 0
@@ -551,6 +569,9 @@ def run(args) -> int:
                 rdl_single = any(x.get("mode") == "단일" and x.get("cats", [""])[0].startswith("RDL") for x in lots)
                 if done_ok() >= args.min_lots and packer.size() >= args.part_min and (rdl_single or i >= 12):
                     break                                   # RDL 단일을 12번 더 찾아도 없으면 그만(요약에 방식이 보인다)
+                if should_stop():
+                    stop_why = "멈춤 요청"
+                    break
                 if time.time() > deadline:
                     stop_why = f"시간 상한({args.max_minutes}분)"
                     break
@@ -564,10 +585,10 @@ def run(args) -> int:
                 i += 1
     except KeyboardInterrupt:
         stop_why = "중간에 멈춤(Ctrl+C)"
-        say("\n멈춤 — 지금까지 담은 것으로 마무리합니다")
+        log("\n멈춤 — 지금까지 담은 것으로 마무리합니다")
 
     # ── 요약 ──
-    say("\n3/3 요약 쓰는 중…")
+    log("\n3/3 요약 쓰는 중…")
     ok = [x for x in lots if not x.get("skip")]
     lines = [f"AOI Wafer 폴더 로그 · {stamp(time.time())} · 걸린 시간 {(time.time() - t0) / 60:.1f}분",
              f"담은 Lot {len(ok)}개 (시도 {len(lots)}) · 파일 {sum(x['files'] for x in ok)}개 중 "
@@ -590,14 +611,18 @@ def run(args) -> int:
     packer.add("요약.txt", summary.encode("utf-8"), final=True)
     packer.add("lots.json", json.dumps(lots, ensure_ascii=False, indent=1).encode("utf-8"), final=True)
     packer.close()
-    (out_dir / f"{base}_요약.txt").write_text(summary, encoding="utf-8")
+    summary_path = out_dir / f"{base}_요약.txt"
+    summary_path.write_text(summary, encoding="utf-8")
+    if result is not None:
+        result.update(out_dir=str(out_dir), parts=[str(p) for p in packer.parts], summary=str(summary_path),
+                      lots=len(ok), stop_why=stop_why)
 
-    say(summary)
-    say("\n보낼 파일:")
+    log(summary)
+    log("\n보낼 파일:")
     for p in packer.parts:
         mb = p.stat().st_size
         note = "" if args.part_min <= mb <= args.part_max else ("  ← 마지막 장이라 25MB 에 못 미침" if p == packer.parts[-1] else "  ← 크기 범위 밖")
-        say(f"   {p.name}  {mb / 1e6:.2f}MB{note}")
+        log(f"   {p.name}  {mb / 1e6:.2f}MB{note}")
     return 0
 
 
@@ -607,6 +632,10 @@ def main(argv=None) -> int:
             stream.reconfigure(encoding="utf-8", errors="replace")
         except Exception:  # noqa: BLE001
             pass
+    return run(parse_args(argv))
+
+
+def parse_args(argv=None):
     ap = argparse.ArgumentParser(description="Wafer 폴더 로그 모으기(NAS 읽기 전용)")
     ap.add_argument("--roots", nargs="+", help="장비 폴더(비우면 DEVICE_ROOTS 전부)")
     ap.add_argument("--out", default="", help="저장 위치(비우면 OUT_DIR)")
@@ -619,7 +648,7 @@ def main(argv=None) -> int:
     ap.add_argument("--part-max", type=int, default=PART_MAX, help=argparse.SUPPRESS)
     ap.add_argument("--part-min", type=int, default=PART_MIN, help=argparse.SUPPRESS)
     ap.add_argument("--plan", action="store_true", help="고를 Lot 만 보여 주고 끝낸다")
-    return run(ap.parse_args(argv))
+    return ap.parse_args(argv)
 
 
 if __name__ == "__main__":

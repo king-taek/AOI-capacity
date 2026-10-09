@@ -195,6 +195,9 @@ class MainWindow(QMainWindow):
         if self.is_collecting():
             sheets.warn(self, i18n.KO.COLLECT_BUSY_TITLE, i18n.KO.COLLECT_BUSY_BODY)
             return
+        if self.collect_page.wafer_logs_running():          # Wafer 로그 모으기와 동시에 NAS 를 읽지 않는다(10/9)
+            sheets.warn(self, i18n.KO.WAFER_LOGS_TITLE, i18n.KO.WAFER_LOGS_BUSY)
+            return
         self._confirm_devices_dirty()
         p = prefs.load()
         cfg = prefs.to_collect_cfg(p)
@@ -419,6 +422,7 @@ class MainWindow(QMainWindow):
         self._collect_token += 1
         self._update_token += 1
         self.collect_page.wait_for_plan(3000)
+        self.collect_page.shutdown()
         for tok, w in list(_LIVE_COLLECTORS.items()):
             w.stop()
             w.wait(3000)
