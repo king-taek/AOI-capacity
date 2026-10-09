@@ -39,7 +39,7 @@ def _make_nas(base: Path, rnd: random.Random):
         root = base / dev
         (root / "Report").mkdir(parents=True, exist_ok=True)
         wafers = [f"W{i}{k:02d}" for k in range(n)]
-        name = f"{job.replace(' ', '')}_6321_{lot.replace(' ', '_')}_15-Sep-26_(18.{i:02d}.00)_BatchReport.htm"
+        name = f"{job.replace(' ', '')}_6321_{lot.replace(' ', '_')}_26-Sep-15_(18.{i:02d}.00)_BatchReport.htm"
         (root / "Report" / name).write_text(_report(job, "Setup1", lot, wafers), encoding="utf-8")
         common = rnd.randbytes(30_000)                           # 같은 Lot 안에서 Wafer 마다 같은 파일
         for w in wafers:
@@ -187,9 +187,19 @@ def test_wide_survey_spreads_over_the_window(tmp_path):
     root = tmp_path / "nas" / "AOI-1"
     (root / "Report").mkdir(parents=True)
     for d in range(1, 29):
-        name = f"J_6321_L{d:02d}_{d:02d}-Sep-26_(10.00.00)_BatchReport.htm"
+        name = f"J_6321_L{d:02d}_26-Sep-{d:02d}_(10.00.00)_BatchReport.htm"
         (root / "Report" / name).write_text(_report("J", "Setup1", f"L{d:02d}", ["W1"]), encoding="utf-8")
     dev = tool.survey_device(root, 100000, 4, spread=True)
     lots = sorted(r["lot"] for r in dev["reports"])
     assert lots == ["L01", "L10", "L19", "L28"]                                    # 최근 4개가 아니라 기간 전체에
     assert sorted(r["lot"] for r in tool.survey_device(root, 100000, 4)["reports"]) == ["L25", "L26", "L27", "L28"]
+
+
+def test_report_name_date_is_year_month_day():
+    """10/10 현장: `26-Aug-31` 을 31일이 아니라 2031년으로 읽어 '최근 며칠' 이 걸리지 않았다 — 이름의 날짜는 YY-Mon-DD."""
+    import time as _t
+    got = tool.name_day("2D@RE-X_6321_MDG_26-Aug-31_(10.13.58)_BatchReport.htm")
+    assert _t.localtime(got)[:3] == (2026, 8, 31)
+    old = tool.name_day("J_6321_L_26-Aug-01_(10.00.00)_BatchReport.htm")
+    new = tool.name_day("J_6321_L_26-Sep-30_(10.00.00)_BatchReport.htm")
+    assert old < new

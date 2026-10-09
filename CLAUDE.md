@@ -97,6 +97,7 @@ Camtek AOI 장비의 BatchReport/WaferInfo.ini 를 읽어 장비별 가동률을
   zip 은 `PART_MIN`~`PART_MAX`(25MB~29.9MB)로 나눈다 — 파일 하나의 압축 크기를 `MAX_COMPRESSED` 로 막아야 앞 장이 25MB 아래로 끝나지 않는다(가드 `test_collect_wafer_logs.py`).
   `--wide`(2차 수집, 10/10, `TOOL_API` 3)는 Wafer 폴더 **맨 위 한 번 나열**에서 `WIDE_FILES`(ScanLog · ProductionInfo · ProductInfo · WaferInfo · Recipe.ini · RecipesInfo · ExtendedScanMetaData_* · 보정 · 얼라인 · 결함 이미지 목록)만 읽고 나머지는 Wafer 마다 개수 한 줄,
   **파라미터 표본**(10/10): Lot 마다 첫 · 마지막 Wafer 는 `walk_wafer_params` 로 그 Wafer 폴더 **안에서만** 하위 폴더(`Zones/` · `Recipe2-Zones/` · `TrainData/` …)까지 `PARAM_EXT` 텍스트를 전부 읽는다(`WaferInfo.org` 바이너리 · 이미지 · .dat 는 개수만, lots.json `param_wafers`).
+  Report 이름의 날짜는 **YY-Mon-DD**(`name_day` — 10/10 까지 DD-Mon-YY 로 읽어 '최근 며칠' 이 걸리지 않았다, 가드 `test_report_name_date_is_year_month_day`).
   Report 는 장비마다 기간 전체에 고르게(`survey_device(spread)`) 열고 Lot 은 장비를 돌아가며 하나씩 · 장비 안에서는 `spread_order`(양 끝 → 가운데 → 사분점) — 기본 30일 · 300 Lot · 상한 600.
   수집 창 카드('Wafer 로그 2차 수집' — 10/10 1차 버튼을 대체, 1차는 bat 로만)는 `workers/wafer_logs.py` 가 이 스크립트를 **파일 경로로 불러** `--wide` 로 `run(args, log, should_stop, result)` 을 부른다 — 장비는 수집과 같은 `devices.resolve_devices` 게이트를 지난 Camtek 만,
   저장 위치는 `nas_guard.assert_local`, 가동률 수집과는 동시에 돌지 않는다(서로 막음). 스크립트는 단독 실행도 되어야 하므로 앱 패키지를 import 하지 않는다(가드 `test_wafer_logs_ui.py`).

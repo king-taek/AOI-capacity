@@ -197,7 +197,9 @@ def job_folder_variants(job: str):
 
 
 def name_day(name: str):
-    """Report 이름의 날짜(배치 종료일) → epoch(그날 0시). 못 읽으면 None."""
+    """Report 이름의 날짜(배치 종료일) → epoch(그날 0시). 못 읽으면 None.
+    이름의 날짜는 **YY-Mon-DD**(`…_26-Aug-31_(03.23.59)_BatchReport.htm` = 2026-08-31) — 10/10 까지 DD-Mon-YY 로 잘못 읽어
+    2031년 같은 미래 날짜가 되어 '최근 며칠' 이 걸리지 않았다(2차 수집 Lot 이 2~10월에 퍼진 까닭)."""
     m = REPORT_RE.match(name)
     if not m:
         return None
@@ -205,7 +207,7 @@ def name_day(name: str):
     if not mon:
         return None
     try:
-        return time.mktime((2000 + int(m.group(6)), mon, int(m.group(4)), 0, 0, 0, 0, 0, -1))
+        return time.mktime((2000 + int(m.group(4)), mon, int(m.group(6)), 0, 0, 0, 0, 0, -1))
     except (OverflowError, ValueError):
         return None
 
