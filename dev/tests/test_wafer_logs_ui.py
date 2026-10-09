@@ -50,7 +50,7 @@ def test_worker_collects_through_the_scope_gate(tmp_path, fake_nas):
     for p in got["result"]["parts"]:
         with zipfile.ZipFile(p) as z:
             names += z.namelist()
-    assert any(n.endswith("/WaferInfo.ini") for n in names) and "요약.txt" in names
+    assert any(n.endswith("/_묶음/WaferInfo.ini.txt") for n in names) and "요약.txt" in names   # 버튼 = 30일 전체(--all) — Lot 묶음
     from aoi_capacity import devices
     gate = {os.path.basename(str(d["path"]).rstrip("/\\")) for d in devices.resolve_devices(cfg)}
     lot_devs = {n.split("/")[0].split("_", 1)[1].rsplit("_", 1)[0] for n in names if "/" in n}

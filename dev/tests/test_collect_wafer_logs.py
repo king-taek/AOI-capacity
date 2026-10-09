@@ -8,6 +8,7 @@
 from __future__ import annotations
 
 import importlib.util
+import json
 import os
 import random
 import sys
@@ -203,3 +204,46 @@ def test_report_name_date_is_year_month_day():
     old = tool.name_day("J_6321_L_26-Aug-01_(10.00.00)_BatchReport.htm")
     new = tool.name_day("J_6321_L_26-Sep-30_(10.00.00)_BatchReport.htm")
     assert old < new
+
+
+# ── 30일 전체(--all, 10/10) ─────────────────────────────────────────────────────
+def test_all_reads_every_lot_in_window_bundles_results_and_dedups_params_across_lots(tmp_path):
+    """기간 안 Report 는 전부 · 기간 밖은 0, Wafer 결과 파일은 Lot 묶음, 첫 Wafer 파라미터는 Lot 끼리도 같은 내용 한 번, NAS 불변."""
+    import time as _t
+    nas, out = tmp_path / "nas", tmp_path / "out"
+    roots = _make_nas(nas, random.Random(11))
+    today = _t.localtime()
+    stamp_ = _t.strftime("%y-%b-%d", today)
+    for root in roots:                                           # 기간 안으로 옮기고, 기간 밖 Report 하나를 더한다
+        for f in (root / "Report").iterdir():
+            f.rename(f.with_name(f.name.replace("26-Sep-15", stamp_)))
+    old = roots[0] / "Report" / "Old_6321_OLDLOT_20-Jan-05_(10.00.00)_BatchReport.htm"
+    old.write_text(_report("Old", "Setup1", "OLDLOT", ["W1"]), encoding="utf-8")
+    for root in roots:                                           # 같은 장비 · 같은 레시피 파라미터는 Lot 이 달라도 같은 내용
+        for d in (root / "Scanresult").rglob("Zones"):
+            (d.parent / "GlobalRTP.ini").write_text("[GLOBAL_RTP]\nMaxFaultsPerWafer=3000\n", encoding="utf-8")
+    before = _snapshot(nas)
+    rc = tool.main(["--all", "--roots", *map(str, roots), "--out", str(out), "--workers", "3"])
+    assert rc == 0 and _snapshot(nas) == before
+    names, blobs = [], {}
+    for p in sorted(out.glob("AOI_wafer_logs30_*_part*.zip")):
+        with zipfile.ZipFile(p) as z:
+            for n in z.namelist():
+                names.append(n)
+                blobs[n] = z.read(n)
+    lots_ = [l for l in json.loads(blobs["lots.json"]) if not l.get("skip")]
+    assert sorted(l["lot"] for l in lots_) == ["LOTA", "LOTB", "LOTC", "LOTD", "LOTE RESCAN"]   # 기간 밖 OLDLOT 없음
+    lotc = next(l for l in lots_ if l["lot"] == "LOTC")
+    sl = blobs[f"{lotc['lot_id']}/_묶음/ScanLog.ini.txt"]          # 가짜 ScanLog 는 임의 바이트라 바이트로 센다
+    assert sl.count(b"### W2") == 3                               # Wafer 셋 전부 한 묶음에
+    assert not [n for n in names if n.endswith(("/ScanLog.ini", "/WaferInfo.ini"))]          # 낱개로는 담지 않는다
+    assert sum(n.endswith("/GlobalRTP.ini") for n in names) == 1  # Lot 다섯 개 · 같은 내용 → 한 번
+    assert not [n for n in names if n.endswith((".dat", ".jpeg"))]
+    man = blobs[f"{lotc['lot_id']}/_목록.tsv"].decode("utf-8")
+    assert "W201\t(묶음)" in man and "MoveResultFlag" in man and "이미지 1 · .dat 1" in man
+
+
+def test_all_mode_is_the_collector_button_api():
+    assert tool.TOOL_API >= 4
+    a = tool.parse_args(["--wide", "--all"])
+    assert a.all and a.days is None and a.max_minutes is None        # 기본값은 run 이 모드에 맞게(30일 · 24시간)

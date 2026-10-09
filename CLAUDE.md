@@ -99,7 +99,10 @@ Camtek AOI 장비의 BatchReport/WaferInfo.ini 를 읽어 장비별 가동률을
   **파라미터 표본**(10/10): Lot 마다 첫 · 마지막 Wafer 는 `walk_wafer_params` 로 그 Wafer 폴더 **안에서만** 하위 폴더(`Zones/` · `Recipe2-Zones/` · `TrainData/` …)까지 `PARAM_EXT` 텍스트를 전부 읽는다(`WaferInfo.org` 바이너리 · 이미지 · .dat 는 개수만, lots.json `param_wafers`).
   Report 이름의 날짜는 **YY-Mon-DD**(`name_day` — 10/10 까지 DD-Mon-YY 로 읽어 '최근 며칠' 이 걸리지 않았다, 가드 `test_report_name_date_is_year_month_day`).
   Report 는 장비마다 기간 전체에 고르게(`survey_device(spread)`) 열고 Lot 은 장비를 돌아가며 하나씩 · 장비 안에서는 `spread_order`(양 끝 → 가운데 → 사분점) — 기본 30일 · 300 Lot · 상한 600.
-  수집 창 카드('Wafer 로그 2차 수집' — 10/10 1차 버튼을 대체, 1차는 bat 로만)는 `workers/wafer_logs.py` 가 이 스크립트를 **파일 경로로 불러** `--wide` 로 `run(args, log, should_stop, result)` 을 부른다 — 장비는 수집과 같은 `devices.resolve_devices` 게이트를 지난 Camtek 만,
+  **`--all`(30일 전체, 10/10, `TOOL_API` 4)**: 기간 안 Report 를 **전부** 열고(둘러볼 때 읽은 Report 는 로고를 떼고 압축해 두어 다시 읽지 않음) 같은 Lot 폴더를 가리키는 Report 는 한 Lot 으로 묶어 Lot · Wafer 를 전부 본다.
+  Wafer 마다 `ALL_FILES`(WaferInfo · ScanLog · ProductionInfo · Wafer2Table · RecipesInfo) + ExtendedScanMetaData_* 만 읽어 **Lot 마다 종류별 한 파일**(`_묶음/<파일>.txt`, `### <Wafer>\t<크기>\t<시각>` 줄로 구분)에, MoveResultFlag 는 열지 않고 있는지만,
+  Lot 의 첫 Wafer 는 파라미터 표본(`PARAM_SKIP_RE` 결과 파일 제외) — **같은 내용은 모든 Lot 에 걸쳐 한 번**(`gseen`). Lot 은 `LOT_INFLIGHT` 개씩 동시에 읽고(`read_lot_all`, 스레드는 읽기만) 메인 스레드가 순서대로 담는다(`pack_lot_all`). 기본 30일 · 상한 24시간.
+  수집 창 카드('Wafer 로그 30일 전체 수집' — 10/10 2차 표본 버튼을 대체, 1차 · 2차 표본은 bat 로만)는 `workers/wafer_logs.py` 가 이 스크립트를 **파일 경로로 불러** `--wide --all` 로 `run(args, log, should_stop, result)` 을 부른다 — 장비는 수집과 같은 `devices.resolve_devices` 게이트를 지난 Camtek 만,
   저장 위치는 `nas_guard.assert_local`, 가동률 수집과는 동시에 돌지 않는다(서로 막음). 스크립트는 단독 실행도 되어야 하므로 앱 패키지를 import 하지 않는다(가드 `test_wafer_logs_ui.py`).
 - Lot 이름의 작업 표기는 `collect.scan_type` 이 읽는다: `RE`·`RESCAN` → RESCAN(노랑), `REWORK` → REWORK(보라).
   `TEST` → TEST(회색). 토큰이 통째로 맞을 때만 걸린다(`RETURN`·`REX`·`TESTER` 제외).

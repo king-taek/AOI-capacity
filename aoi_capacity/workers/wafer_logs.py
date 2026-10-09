@@ -1,7 +1,7 @@
 """Wafer 로그 2차 수집 워커 — `scripts/collect_wafer_logs.py --wide` 의 `run()` 을 QThread 에서 부른다(10/9 · 10/10 2차로 교체).
 
-- 수집 창 버튼은 **2차 수집(넓게)** 만 한다: Wafer 폴더 맨 위의 핵심 파일만, 장비마다 기간 전체에 고르게 많은 Lot.
-  1차(깊게 · 갈래별 10 Lot)는 `make_wafer_logs.bat` 로만 돈다.
+- 수집 창 버튼은 **30일 전체 수집**(`--all`, 10/10 사용자 요청)만 한다: 최근 30일 Report · Lot · Wafer 전부, Wafer 마다 결과 파일만(Lot 묶음),
+  Lot 마다 첫 Wafer 는 파라미터까지. 몇 시간 걸릴 수 있다. 1차(깊게 · 갈래별 10 Lot) · 2차 표본(`--wide`)은 `make_wafer_logs.bat` 로만 돈다.
 
 - 도구 본체는 표준 라이브러리 단독 스크립트 하나다(현장에서 `make_wafer_logs.bat` 로도 돈다). 같은 코드를 **파일 경로로 불러** 쓴다 —
   배포 payload 에 들어 있다(`updater._UPDATE_KEEP_ONLY`).
@@ -22,7 +22,7 @@ from .. import devices, i18n, nas_guard
 K = i18n.KO
 TOOL_PATH = Path(__file__).resolve().parents[2] / "scripts" / "collect_wafer_logs.py"
 #: 이 워커가 부르는 도구의 호출 방식 판(스크립트의 TOOL_API 와 같아야 한다).
-TOOL_API = 3
+TOOL_API = 4
 
 
 class ToolOutdated(RuntimeError):
@@ -81,7 +81,7 @@ class WaferLogsWorker(QThread):
                 self.done.emit(None, K.WAFER_LOGS_NO_DEVICES)
                 return
             result: dict = {}
-            args = tool.parse_args(["--wide", "--roots", *roots, "--out", self.out_dir, *self.extra_args])
+            args = tool.parse_args(["--wide", "--all", "--roots", *roots, "--out", self.out_dir, *self.extra_args])
             tool.run(args, log=self.log.emit, should_stop=self._stop.is_set, result=result)
             if result.get("parts"):
                 self.done.emit(result, "")
