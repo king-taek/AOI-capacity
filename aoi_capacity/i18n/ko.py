@@ -394,13 +394,13 @@ RETENTION_DAYS_FMT = "{days}일"
 COLLECT_PHASE_KLA = "KLA 결과 파일 읽는 중"
 
 # ── Wafer 폴더 로그 모으기(10/9) ─────────────────────────────────────────────
-WAFER_LOGS_TITLE = "Wafer 폴더 로그 모으기"
-WAFER_LOGS_WHEN = ("개발자에게 보낼 조사 자료 — 최근 Report 로 여러 장비 · Job 의 Lot 을 고루 골라(최소 10 Lot), 그 Wafer 폴더의 "
-                   "INI · 로그 파일을 zip 으로 모읍니다. .dat · 이미지는 빼고, 한 Lot 안에서 같은 내용은 한 번만 담습니다. "
-                   "zip 은 한 장에 25~29.9MB 로 나누고 마지막 장이 25MB 가 될 때까지 Lot 을 더 담습니다(최대 2시간). "
-                   "NAS 는 읽기만 합니다. 가동률 수집과는 상관없습니다.")
+WAFER_LOGS_TITLE = "Wafer 로그 2차 수집"
+WAFER_LOGS_WHEN = ("개발자에게 보낼 조사 자료(2차) — 최근 30일, 장비마다 기간 전체에 고르게 Lot 을 골라(300 Lot 안팎) "
+                   "Wafer 폴더 맨 위의 핵심 파일만 zip 으로 모읍니다(ScanLog · ProductionInfo · ProductInfo · WaferInfo · Recipe.ini · "
+                   "RecipesInfo · ExtendedScanMetaData · 보정 · 얼라인 · 결함 이미지 목록). 이미지 · .dat · 하위 폴더는 읽지 않고 개수만 셉니다. "
+                   "zip 은 한 장에 25~29.9MB, 최대 2시간. NAS 는 읽기만 합니다. 가동률 수집과는 상관없습니다.")
 WAFER_LOGS_OUT = "저장 위치"
-WAFER_LOGS_RUN = "로그 모으기"
+WAFER_LOGS_RUN = "2차 수집 시작"
 WAFER_LOGS_STOP = "멈추고 마무리"
 WAFER_LOGS_OPEN = "폴더 열기"
 WAFER_LOGS_RUNNING = "모으는 중… (멈추면 지금까지 담은 것으로 zip 을 마무리합니다)"

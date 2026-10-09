@@ -372,7 +372,7 @@ class CollectPage(QWidget):
         self._days_worker: Optional[_DaysWorker] = None
         self._html_worker: Optional[_HtmlOnlyWorker] = None
 
-        # Wafer 폴더 로그 모으기(10/9) — 개발자 조사용. 가동률 수집과 따로 돌고, 둘이 동시에 NAS 를 읽지 않게 서로 막는다.
+        # Wafer 로그 2차 수집(10/9 → 10/10 2차로 교체) — 개발자 조사용. 가동률 수집과 따로 돌고, 둘이 동시에 NAS 를 읽지 않게 서로 막는다.
         wcard, wl = _card(body, K.WAFER_LOGS_TITLE)
         wl.addWidget(_label(K.WAFER_LOGS_WHEN, "help", wcard, wrap=True))
         wrow = QHBoxLayout()

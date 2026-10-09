@@ -95,7 +95,9 @@ Camtek AOI 장비의 BatchReport/WaferInfo.ini 를 읽어 장비별 가동률을
 - Wafer 폴더 로그 모으기 도구는 `scripts/collect_wafer_logs.py`(+`make_wafer_logs.bat`, 10/9) — collect_sample 과 같은 원칙(표준 라이브러리 단독 · NAS 읽기만 · 저장 위치가 NAS 드라이브면 거부 · 배포본 포함).
   최근 Report 로 Lot 을 갈래별로 고르고, Report 로 계산한 **정확한 Lot 폴더** 아래 Wafer 폴더 **안만** 읽는다(Scanresult 재귀 검색 아님). `.dat`·이미지는 담지 않고 목록에만, Lot 안 같은 내용은 한 번,
   zip 은 `PART_MIN`~`PART_MAX`(25MB~29.9MB)로 나눈다 — 파일 하나의 압축 크기를 `MAX_COMPRESSED` 로 막아야 앞 장이 25MB 아래로 끝나지 않는다(가드 `test_collect_wafer_logs.py`).
-  수집 창 카드('Wafer 폴더 로그 모으기')는 `workers/wafer_logs.py` 가 이 스크립트를 **파일 경로로 불러** `run(args, log, should_stop, result)` 을 부른다 — 장비는 수집과 같은 `devices.resolve_devices` 게이트를 지난 Camtek 만,
+  `--wide`(2차 수집, 10/10, `TOOL_API` 3)는 Wafer 폴더 **맨 위 한 번 나열**에서 `WIDE_FILES`(ScanLog · ProductionInfo · ProductInfo · WaferInfo · Recipe.ini · RecipesInfo · ExtendedScanMetaData_* · 보정 · 얼라인 · 결함 이미지 목록)만 읽고 나머지는 Wafer 마다 개수 한 줄,
+  Report 는 장비마다 기간 전체에 고르게(`survey_device(spread)`) 열고 Lot 은 장비를 돌아가며 하나씩 · 장비 안에서는 `spread_order`(양 끝 → 가운데 → 사분점) — 기본 30일 · 300 Lot · 상한 600.
+  수집 창 카드('Wafer 로그 2차 수집' — 10/10 1차 버튼을 대체, 1차는 bat 로만)는 `workers/wafer_logs.py` 가 이 스크립트를 **파일 경로로 불러** `--wide` 로 `run(args, log, should_stop, result)` 을 부른다 — 장비는 수집과 같은 `devices.resolve_devices` 게이트를 지난 Camtek 만,
   저장 위치는 `nas_guard.assert_local`, 가동률 수집과는 동시에 돌지 않는다(서로 막음). 스크립트는 단독 실행도 되어야 하므로 앱 패키지를 import 하지 않는다(가드 `test_wafer_logs_ui.py`).
 - Lot 이름의 작업 표기는 `collect.scan_type` 이 읽는다: `RE`·`RESCAN` → RESCAN(노랑), `REWORK` → REWORK(보라).
   `TEST` → TEST(회색). 토큰이 통째로 맞을 때만 걸린다(`RETURN`·`REX`·`TESTER` 제외).

@@ -141,3 +141,48 @@ def test_categories():
     assert c("R_TB500_LIVE_PI3 Enhanced", "L", "AOI-3", False) == ["PI Enhanced"]
     assert c("TB500_RDL1 Swelling", "L", "AOI-3", False) == ["그 밖의 Job"]
     assert c("Kendall_A", "L TEST", "AOI-3", False) == ["Kendall", "TEST"]
+
+
+# ── 2차 수집(--wide, 10/10) ─────────────────────────────────────────────────────
+def test_wide_reads_only_key_files_at_the_wafer_top(tmp_path):
+    """맨 위의 핵심 파일만 읽고(하위 폴더 · 이미지 · .dat · 그 밖 파일은 개수만), NAS 는 그대로, 장비를 돌아가며 고른다."""
+    nas, out = tmp_path / "nas", tmp_path / "out"
+    roots = _make_nas(nas, random.Random(5))
+    before = _snapshot(nas)
+    rc = tool.main(["--wide", "--roots", *map(str, roots), "--out", str(out), "--days", "100000",
+                    "--part-max", "200000", "--part-min", "150000", "--workers", "2"])
+    assert rc == 0 and _snapshot(nas) == before
+    parts = sorted(out.glob("AOI_wafer_logs2_*_part*.zip"))
+    assert parts
+    names, manifest = [], ""
+    for p in parts:
+        with zipfile.ZipFile(p) as z:
+            names += z.namelist()
+            manifest += "".join(z.read(n).decode("utf-8") for n in z.namelist() if n.endswith("_목록.tsv"))
+    files = {n.rsplit("/", 1)[-1] for n in names if n.count("/") >= 2 and "/report/" not in n}
+    assert {"WaferInfo.ini", "ScanLog.ini", "MoveResultFlag", "RecipesInfo.ini"} <= files
+    assert not files & {"RTP.txt", "ScanArea.ini", "s_FrameData.dat", "x.jpeg"}       # 핵심 밖 · 하위 폴더 · 이미지 · .dat
+    assert "(안 읽음)" in manifest and "이미지 1 · .dat 1 · 그 밖 1 · 하위 폴더 1" in manifest
+    lot_ids = sorted({n.split("/")[0] for n in names if "/" in n})
+    assert [i.split("_")[1] for i in lot_ids[:2]] == ["AOI-1", "AOI-2"]            # 장비를 돌아가며 하나씩
+
+
+def test_spread_order_covers_ends_first_and_every_index():
+    assert tool.spread_order(0) == [] and tool.spread_order(1) == [0]
+    for n in (2, 3, 7, 25, 100):
+        order = tool.spread_order(n)
+        assert sorted(order) == list(range(n)) and order[:2] == [0, n - 1]
+        if n >= 3:
+            assert order[2] == (n - 1) // 2
+
+
+def test_wide_survey_spreads_over_the_window(tmp_path):
+    root = tmp_path / "nas" / "AOI-1"
+    (root / "Report").mkdir(parents=True)
+    for d in range(1, 29):
+        name = f"J_6321_L{d:02d}_{d:02d}-Sep-26_(10.00.00)_BatchReport.htm"
+        (root / "Report" / name).write_text(_report("J", "Setup1", f"L{d:02d}", ["W1"]), encoding="utf-8")
+    dev = tool.survey_device(root, 100000, 4, spread=True)
+    lots = sorted(r["lot"] for r in dev["reports"])
+    assert lots == ["L01", "L10", "L19", "L28"]                                    # 최근 4개가 아니라 기간 전체에
+    assert sorted(r["lot"] for r in tool.survey_device(root, 100000, 4)["reports"]) == ["L25", "L26", "L27", "L28"]
