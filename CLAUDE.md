@@ -92,6 +92,9 @@ Camtek AOI 장비의 BatchReport/WaferInfo.ini 를 읽어 장비별 가동률을
   한 대가 막혀도 계속하고, 맨 위 `요약.json`/`요약.txt` 에 장비별 점검 사실(폴더 이름·Job/Setup 유무·시각 표기·
   읽지 못한 시각 수·Lot 표기·INI 유무)을 남긴다. 이 도구는 사용자가 경로를 직접 지정하는 조사용이라
   `scope.py` 의 수집 범위와는 별개다 — **앱의 수집 경로는 여전히 범위 안 장비만 읽는다**.
+- Wafer 폴더 로그 모으기 도구는 `scripts/collect_wafer_logs.py`(+`make_wafer_logs.bat`, 10/9) — collect_sample 과 같은 원칙(표준 라이브러리 단독 · NAS 읽기만 · 저장 위치가 NAS 드라이브면 거부 · 배포본 포함).
+  최근 Report 로 Lot 을 갈래별로 고르고, Report 로 계산한 **정확한 Lot 폴더** 아래 Wafer 폴더 **안만** 읽는다(Scanresult 재귀 검색 아님). `.dat`·이미지는 담지 않고 목록에만, Lot 안 같은 내용은 한 번,
+  zip 은 `PART_MIN`~`PART_MAX`(25MB~29.9MB)로 나눈다 — 파일 하나의 압축 크기를 `MAX_COMPRESSED` 로 막아야 앞 장이 25MB 아래로 끝나지 않는다(가드 `test_collect_wafer_logs.py`).
 - Lot 이름의 작업 표기는 `collect.scan_type` 이 읽는다: `RE`·`RESCAN` → RESCAN(노랑), `REWORK` → REWORK(보라).
   `TEST` → TEST(회색). 토큰이 통째로 맞을 때만 걸린다(`RETURN`·`REX`·`TESTER` 제외).
   **`SRD`·`DIA`·`3D`·`EDGE`·`BUMP`·`PIDS3/5/7/9`·`RDL2/3/4`·`TPST6`·`TPDV`·`WBG`·`STRIP`·`DUMMY`·`RW` 는
