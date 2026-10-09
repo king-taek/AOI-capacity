@@ -75,6 +75,12 @@ WIDE_FILES = frozenset(n.lower() for n in (
     "MultiRecipe.ini", "Params_SystemInfo.ini", "Wafer2Table.ini", "WLUP.txt", "ColorImageGrabingInfo.ini",
     "UniqueResultTypeIds.ini", "DiceLocationStat.txt", "EquipmentInfo.ini", "ScanOverlapLog.txt", "MoveResultFlag"))
 WIDE_RE = re.compile(r"^ExtendedScanMetaData_.+\.json$", re.I)
+#: 2차 수집의 **파라미터 표본**(10/10 사용자 요청 — 장비별 파라미터 상태 분석): Lot 마다 첫 · 마지막 Wafer 는 하위 폴더
+#: (`Zones/` · `Recipe2-Zones/` · `TrainData/` · `FocusMapping/` …)까지 들어가 이 확장자의 텍스트 파일을 전부 읽는다(RTP.txt · GlobalRTP · OpticPreset ·
+#: AlignRtp · WaferType · 분류표 …). 1차 56 Lot 실측: 같은 장비 · 같은 레시피는 Lot 사이 2~12 키만 다르고(측정값), 장비가 다르면 540~2,165 키가 다르다.
+#: Lot 당 압축 중앙 46KB(최대 315KB). 바이너리(.dat · .flt · .zip · .grd · .dcm · 이미지)와 `WaferInfo.org`(바이너리)는 읽지 않는다.
+PARAM_EXT = frozenset({".ini", ".txt", ".json", ".xml", ".csv", ".log", ".org", ""})
+PARAM_SKIP_NAMES = frozenset({"waferinfo.org"})
 #: 모드마다 기본값 — (1차 깊게, 2차 넓게)
 DEFAULTS = {"days": (14, 30), "survey": (15, 24), "min_lots": (10, 300), "max_lots": (150, 600)}
 
@@ -443,6 +449,55 @@ def walk_wafer_top(wdir: Path, should_stop=None):
     return out, rest
 
 
+def walk_wafer_params(wdir: Path, should_stop=None):
+    """2차 수집의 파라미터 표본 Wafer: 이 Wafer 폴더 **안에서만** 하위 폴더까지 내려가 PARAM_EXT 텍스트 파일을 전부 읽는다.
+    돌려줌은 walk_wafer_top 과 같은 (줄 목록, 안 읽은 것) — 하위 폴더는 들어가므로 dirs 는 세지 않는다."""
+    out, rest = [], {"files": 0, "bytes": 0, "image": 0, "dat": 0, "other": 0, "dirs": 0}
+    stack = [(wdir, "", 0)]
+    while stack:
+        if should_stop and should_stop():
+            return out, rest
+        d, rel, depth = stack.pop()
+        try:
+            entries = sorted(os.scandir(d), key=lambda e: e.name.lower())
+        except OSError as ex:
+            out.append((rel or ".", 0, 0.0, None, f"나열 실패: {ex}"))
+            continue
+        for e in entries:
+            if should_stop and should_stop():
+                return out, rest
+            r = f"{rel}/{e.name}" if rel else e.name
+            if e.is_symlink():
+                continue
+            if e.is_dir():
+                if depth < MAX_DEPTH:
+                    stack.append((Path(e.path), r, depth + 1))
+                else:
+                    rest["dirs"] += 1
+                continue
+            try:
+                st = e.stat()
+            except OSError:
+                continue
+            ext = os.path.splitext(e.name)[1].lower()
+            if ext not in PARAM_EXT or e.name.lower() in PARAM_SKIP_NAMES:
+                rest["files"] += 1
+                rest["bytes"] += st.st_size
+                rest["image" if ext in IMAGE_EXT else "dat" if ext in SKIP_EXT else "other"] += 1
+                continue
+            data, why = None, ""
+            if st.st_size > MAX_RAW:
+                why = "너무 큼"
+            else:
+                try:
+                    data = read_bytes(e.path)
+                except OSError as ex:
+                    why = f"읽기 실패: {ex}"
+            out.append((r, st.st_size, st.st_mtime, data, why))
+    out.sort(key=lambda x: x[0].lower())
+    return out, rest
+
+
 def spread_order(n: int):
     """0 · 끝 · 가운데 · 사분점 … 순서 — 앞에서 몇 개만 써도 기간 전체를 고르게 덮는다."""
     if n <= 0:
@@ -487,7 +542,10 @@ def collect_lot(idx: int, c: dict, scan_names, pool, packer: Packer, should_stop
         info["skip"] = "Wafer 폴더 없음"
         return info
     if wide:
-        got = list(pool.map(lambda e: walk_wafer_top(Path(e.path), should_stop), wafers))
+        sample = {0, len(wafers) - 1}                   # 파라미터 표본: 첫 · 마지막 Wafer 는 하위 폴더까지
+        info["param_wafers"] = [wafers[i].name for i in sorted(sample)]
+        got = list(pool.map(lambda ie: (walk_wafer_params if ie[0] in sample else walk_wafer_top)(Path(ie[1].path), should_stop),
+                            enumerate(wafers)))
         results, rests = [g[0] for g in got], [g[1] for g in got]
     else:
         results = list(pool.map(lambda e: walk_wafer(Path(e.path), should_stop), wafers))
@@ -572,7 +630,8 @@ def run(args, log=None, should_stop=None, result=None) -> int:
         return 2
 
     if wide:
-        log("2차 수집(넓게) — Wafer 폴더 맨 위의 핵심 파일만 읽고, 장비마다 기간 전체에 고르게 Lot 을 고릅니다")
+        log("2차 수집(넓게) — Wafer 폴더 맨 위의 핵심 파일만 읽고(Lot 마다 첫 · 마지막 Wafer 는 Zones 등 하위 폴더의 파라미터까지), "
+            "장비마다 기간 전체에 고르게 Lot 을 고릅니다")
     log(f"1/3 둘러보기 — 장비 {len(roots)}대, 최근 {args.days}일 Report 를 장비마다 {args.survey}개까지 엽니다"
         + (" (기간 전체에 고르게)" if wide else ""))
     with ThreadPoolExecutor(max_workers=args.workers) as pool:
@@ -737,6 +796,8 @@ def run(args, log=None, should_stop=None, result=None) -> int:
     lines += ["", "■ 폴더 구조: <번호_장비_Lot>/<Wafer>/<파일> · <번호_장비_Lot>/report/<Report> · <번호_장비_Lot>/_목록.tsv",
               "  _목록.tsv 의 '저장' 칸: zip 이름(담음) · '= 이름'(앞의 파일과 내용이 같아 생략) · '건너뜀: 이유'"
               + (" · '(안 읽음)' 줄 = 그 Wafer 폴더에서 읽지 않은 파일 수" if wide else ""),
+              *(["  파라미터 표본: Lot 마다 첫 · 마지막 Wafer 는 하위 폴더(Zones · Recipe2-Zones · TrainData …)까지 텍스트 파일 전부"
+                 " — lots.json 의 param_wafers"] if wide else []),
               "※ NAS 에서 읽기만 했습니다. 원본은 아무것도 바꾸지 않았습니다."]
     if stop_why:
         lines.append(f"※ 멈춘 이유: {stop_why}")

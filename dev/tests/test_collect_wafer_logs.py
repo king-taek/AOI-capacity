@@ -161,8 +161,15 @@ def test_wide_reads_only_key_files_at_the_wafer_top(tmp_path):
             manifest += "".join(z.read(n).decode("utf-8") for n in z.namelist() if n.endswith("_목록.tsv"))
     files = {n.rsplit("/", 1)[-1] for n in names if n.count("/") >= 2 and "/report/" not in n}
     assert {"WaferInfo.ini", "ScanLog.ini", "MoveResultFlag", "RecipesInfo.ini"} <= files
-    assert not files & {"RTP.txt", "ScanArea.ini", "s_FrameData.dat", "x.jpeg"}       # 핵심 밖 · 하위 폴더 · 이미지 · .dat
-    assert "(안 읽음)" in manifest and "이미지 1 · .dat 1 · 그 밖 1 · 하위 폴더 1" in manifest
+    assert "RTP.txt" in files                       # 파라미터 표본(첫 · 마지막 Wafer)은 맨 위 밖 파일 · 하위 폴더까지(아래 목록에서 확인)
+    assert not files & {"s_FrameData.dat", "x.jpeg"}                                  # 이미지 · .dat 는 어디서도 읽지 않는다
+    rows = [l.split("\t") for l in manifest.splitlines() if l and not l.startswith("wafer\t")]
+    lotc = {(r[0], r[1]): r[5] for r in rows if r[0].startswith("W2")}                 # LOTC = Wafer 셋(W200 · W201 · W202)
+    assert ("W200", "Zones/ScanArea.ini") in lotc and ("W202", "Zones/ScanArea.ini") in lotc
+    assert lotc[("W202", "Zones/ScanArea.ini")].startswith("= ")                       # 같은 Lot 안 같은 내용은 한 번
+    assert ("W201", "RTP.txt") not in lotc and ("W201", "Zones/ScanArea.ini") not in lotc   # 가운데 Wafer 는 맨 위 핵심 파일만
+    assert lotc[("W201", "(안 읽음)")].endswith("이미지 1 · .dat 1 · 그 밖 1 · 하위 폴더 1")
+    assert lotc[("W200", "(안 읽음)")].endswith("이미지 1 · .dat 1 · 그 밖 0 · 하위 폴더 0")
     lot_ids = sorted({n.split("/")[0] for n in names if "/" in n})
     assert [i.split("_")[1] for i in lot_ids[:2]] == ["AOI-1", "AOI-2"]            # 장비를 돌아가며 하나씩
 
