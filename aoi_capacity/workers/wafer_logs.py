@@ -18,6 +18,12 @@ from .. import devices, i18n, nas_guard
 
 K = i18n.KO
 TOOL_PATH = Path(__file__).resolve().parents[2] / "scripts" / "collect_wafer_logs.py"
+#: 이 워커가 부르는 도구의 호출 방식 판(스크립트의 TOOL_API 와 같아야 한다).
+TOOL_API = 2
+
+
+class ToolOutdated(RuntimeError):
+    """도구 파일이 옛 판이다 — 손으로 넣은 옛 사본이 업데이트된 파일을 덮었을 때(10/9 현장: parse_args 없음)."""
 
 
 def load_tool(path: Path = TOOL_PATH):
@@ -27,6 +33,8 @@ def load_tool(path: Path = TOOL_PATH):
     spec = importlib.util.spec_from_file_location("aoi_collect_wafer_logs", str(path))
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
+    if getattr(mod, "TOOL_API", 0) < TOOL_API or not callable(getattr(mod, "parse_args", None)):
+        raise ToolOutdated(str(path))
     return mod
 
 
@@ -57,6 +65,9 @@ class WaferLogsWorker(QThread):
                 tool = load_tool(self.tool_path)
             except FileNotFoundError:
                 self.done.emit(None, K.WAFER_LOGS_NO_TOOL_FMT.format(path=self.tool_path))
+                return
+            except ToolOutdated:
+                self.done.emit(None, K.WAFER_LOGS_OLD_TOOL_FMT.format(path=self.tool_path))
                 return
             devs = devices.resolve_devices(self.cfg, log=self.log.emit, should_stop=self._stop.is_set)
             roots = [str(d["path"]) for d in devs if d.get("kind") != "kla"]

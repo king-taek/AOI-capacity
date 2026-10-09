@@ -89,6 +89,18 @@ def test_worker_reports_missing_tool(tmp_path, fake_nas):
     assert got["result"] is None and "없음.py" in got["error"]
 
 
+def test_worker_names_an_outdated_tool_file(tmp_path, fake_nas):
+    """10/9 현장: 손으로 넣은 첫 판(parse_args 없음)이 새 파일을 덮어 'AttributeError' 만 보였다 — 이제 옛 판이라고 경로와 함께 말한다."""
+    from aoi_capacity.workers import wafer_logs
+
+    _nas, csv_path = fake_nas
+    old = tmp_path / "collect_wafer_logs.py"
+    old.write_text("def run(args):\n    return 0\n\n\ndef main(argv=None):\n    return 0\n", encoding="utf-8")
+    got, _ = _run(wafer_logs.WaferLogsWorker(make_cfg(tmp_path, csv_path), str(tmp_path / "wl"), tool_path=old))
+    assert got["result"] is None and got["error"] == wafer_logs.K.WAFER_LOGS_OLD_TOOL_FMT.format(path=old)
+    assert wafer_logs.load_tool().TOOL_API == wafer_logs.TOOL_API     # 저장소의 도구와 워커는 같은 판
+
+
 def test_tool_is_shipped_with_updates():
     from aoi_capacity.utils import updater
     from aoi_capacity.workers import wafer_logs

@@ -410,5 +410,7 @@ WAFER_LOGS_STOPPED = "멈췄습니다 — 만든 zip 이 없습니다"
 WAFER_LOGS_NO_ZIP = "zip 을 만들지 못했습니다 — 로그를 확인하세요(고를 Lot 이 없었을 수 있습니다)"
 WAFER_LOGS_FAIL_FMT = "로그를 모으지 못했습니다: {error}"
 WAFER_LOGS_NO_TOOL_FMT = "도구 파일이 없습니다: {path} (업데이트가 끝났는지 확인하세요)"
+WAFER_LOGS_OLD_TOOL_FMT = ("도구 파일이 옛 판입니다: {path}\n예전에 직접 넣은 collect_wafer_logs.py 가 새 파일을 덮은 것 같습니다. "
+                           "그 파일을 지우고 수집기를 다시 실행해 업데이트를 받으면(또는 최신 파일로 바꾸면) 됩니다.")
 WAFER_LOGS_NO_DEVICES = "읽을 수 있는 Camtek 장비가 없습니다 — 장비 목록 · 드라이브 연결을 확인하세요"
 WAFER_LOGS_BUSY = "가동률 수집 중에는 로그를 모을 수 없습니다(NAS 를 함께 읽지 않게)"
