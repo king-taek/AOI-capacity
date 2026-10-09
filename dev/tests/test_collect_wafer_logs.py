@@ -7,6 +7,7 @@
 """
 from __future__ import annotations
 
+import collections
 import importlib.util
 import json
 import os
@@ -223,7 +224,7 @@ def test_all_reads_every_lot_in_window_bundles_results_and_dedups_params_across_
         for d in (root / "Scanresult").rglob("Zones"):
             (d.parent / "GlobalRTP.ini").write_text("[GLOBAL_RTP]\nMaxFaultsPerWafer=3000\n", encoding="utf-8")
     before = _snapshot(nas)
-    rc = tool.main(["--all", "--roots", *map(str, roots), "--out", str(out), "--workers", "3"])
+    rc = tool.main(["--all", "--no-encrypt", "--roots", *map(str, roots), "--out", str(out), "--workers", "3"])
     assert rc == 0 and _snapshot(nas) == before
     names, blobs = [], {}
     for p in sorted(out.glob("AOI_wafer_logs30_*_part*.zip")):
@@ -247,3 +248,69 @@ def test_all_mode_is_the_collector_button_api():
     assert tool.TOOL_API >= 4
     a = tool.parse_args(["--wide", "--all"])
     assert a.all and a.days is None and a.max_minutes is None        # 기본값은 run 이 모드에 맞게(30일 · 24시간)
+
+
+# ── Job별 최소 · 10장 상한 · 암호화(10/10) ──────────────────────────────────────
+def test_all_tops_up_sparse_jobs_from_older_lots(tmp_path):
+    """최근 30일은 전부 담고, Lot 이 모자란 Job 은 그 Job 만 30일 밖 옛 Lot 으로 per-job-min 까지 채운다."""
+    import time as _t
+    nas = tmp_path / "nas"; root = nas / "AOI-1"; (root / "Report").mkdir(parents=True)
+    now = _t.time()
+    def put(job, lot, days_ago, i):
+        d = _t.localtime(now - days_ago * 86400)
+        name = f"{job}_6321_{lot}_{_t.strftime('%y-%b-%d', d)}_({10+i:02d}.00.00)_BatchReport.htm"
+        (root / "Report" / name).write_text(_report(job, "Setup1", lot, ["W1"]), encoding="utf-8")
+        wd = root / "Scanresult" / job / "Setup1" / lot / "W1"; wd.mkdir(parents=True)
+        (wd / "WaferInfo.ini").write_text(f"[AutoCycleInfo]\nUseWaferID=W1\n[Recipe]\nName=x\n", encoding="utf-8")
+    for i in range(20): put("BUSY", f"B{i:02d}", 2, i)       # 최근 30일 20개
+    for i in range(6):  put("RARE", f"R{i:02d}", 2, i)       # 최근 30일 6개 (< 15)
+    for i in range(20): put("RARE", f"RO{i:02d}", 50, i)     # 50일 전 20개 — 9개만 채워져야
+    out = tmp_path / "out"
+    assert tool.main(["--all", "--roots", str(root), "--out", str(out), "--no-encrypt", "--workers", "3"]) == 0
+    lots_ = []
+    for p in out.glob("*_part*.zip"):
+        with zipfile.ZipFile(p) as z:
+            lots_ = [l for l in json.loads(z.read("lots.json")) if not l.get("skip")] or lots_
+    jobs = collections.Counter(l["job"] for l in lots_)
+    assert jobs["BUSY"] == 20                                 # 최근 30일 전부(15 로 자르지 않음)
+    assert jobs["RARE"] == 15                                 # 6 + 옛 9
+
+
+def test_all_never_exceeds_ten_zip_parts(tmp_path):
+    nas = tmp_path / "nas"
+    roots = _make_nas(nas, random.Random(2))
+    out = tmp_path / "out"
+    assert tool.main(["--all", "--roots", *map(str, roots), "--out", str(out), "--no-encrypt",
+                      "--part-max", "40000", "--days", "100000"]) == 0     # 아주 작은 장으로 쪼개도
+    assert len(list(out.glob("*_part*.zip"))) <= 10
+
+
+def test_encrypt_default_and_decode_round_trips(tmp_path):
+    nas = tmp_path / "nas"
+    roots = _make_nas(nas, random.Random(4))
+    out = tmp_path / "out"
+    assert tool.main(["--all", "--roots", *map(str, roots), "--out", str(out), "--days", "100000"]) == 0
+    encs = sorted(out.glob("*_part*.zip.enc"))
+    assert encs and not list(out.glob("*_part*.zip"))         # 암호화가 기본 · 평문 zip 은 남기지 않는다
+    assert not list(out.glob("*_요약.txt"))                    # 평문 요약도 밖에 두지 않는다
+    with open(encs[0], "rb") as f:
+        assert f.read(8) == tool.ENC_MAGIC
+    dec = tmp_path / "dec"
+    assert tool.main(["--decode", *map(str, encs), "--out", str(dec)]) == 0
+    zips = sorted(dec.glob("*_part*.zip"))
+    assert len(zips) == len(encs)
+    names = []
+    for z in zips:
+        with zipfile.ZipFile(z) as zf:                        # 풀린 zip 이 정상이고 묶음·요약이 들어 있다
+            assert zf.testzip() is None
+            names += zf.namelist()
+    assert "요약.txt" in names and any(n.endswith("/_묶음/WaferInfo.ini.txt") for n in names)
+
+
+def test_decode_rejects_wrong_key(tmp_path):
+    blob = tool.encrypt_bytes(b"hello aoi", tool._enc_secret("right-pass"))
+    assert tool.decrypt_bytes(blob, tool._enc_secret("right-pass")) == b"hello aoi"
+    try:
+        tool.decrypt_bytes(blob, tool._enc_secret("wrong-pass")); assert False
+    except ValueError:
+        pass

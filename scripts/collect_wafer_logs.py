@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import hmac
 import json
 import os
 import re
@@ -51,7 +52,7 @@ DEVICE_ROOTS = [
 
 #: 수집 창 버튼(`aoi_capacity/workers/wafer_logs.py`)이 기대하는 이 파일의 호출 방식 판 — `parse_args` · `run(args, log, should_stop, result)`.
 #: 앱이 옛 사본(예: 손으로 넣은 첫 판)을 불러 엉뚱한 오류를 내지 않도록 판을 확인한다. 호출 방식을 바꾸면 둘 다 올린다.
-TOOL_API = 4                       # 3: --wide(2차 수집, 10/10) · 4: --all(30일 전체, 10/10)
+TOOL_API = 5                       # 3: --wide · 4: --all · 5: --all 이 Job별 최소 · 10장 상한 · 암호화(.enc)
 #: zip 한 장의 크기 — MB(10^6) 로 보든 MiB(2^20) 로 보든 '25MB 이상 · 29.9MB 이하' 가 되게 잡았다.
 PART_MAX = 29_900_000
 PART_MIN = 25 * 1024 * 1024
@@ -96,6 +97,47 @@ PARAM_SKIP_RE = re.compile(
     r"ScanOverlapLog.*|.*\.md|FocusMapping/DieReferenceLocation\.json|FocusMapping/FocusPointsForScan\.xml|"
     r"TrainData/ScanAreaVectorInfo.*|DieAlignment\.dat_block\.ini|ExternalCoordSystems\.ini|AFBestIm.*)$", re.I)
 LOT_INFLIGHT = 3
+MAX_PARTS = 10                        #: zip 은 최대 10장(사용자 요청). 넘으면 거기서 멈추고 요약에 적는다.
+PER_JOB_MIN = 15                      #: Job(원문)마다 최소 이만큼 Lot — 30일 안에 모자라면 그 Job 만 옛 Lot 으로 채운다(사용자 요청).
+LOOK_BACK_DAYS = 90                   #: Job별 최소를 채우려고 되돌아보는 최대 기간. 30일 밖은 모자란 Job 에만 쓴다.
+#: 암호화(사용자 요청 10/10) — 전송 중 노출·실수 공유를 막는 수준의 대칭 암호(SHA-256 키스트림 + HMAC, 표준 라이브러리). 강한 비밀이 아니다:
+#: 키가 저장소에 있어 저장소를 가진 사람은 푼다. 더 세게 막으려면 환경변수 `AOI_LOG_KEY` 에 암호를 두면 그 값으로 바뀐다(그 값을 알아야 푼다).
+#: 해독은 같은 도구 `--decode <파일>.enc`(또는 workers 가 부르는 쪽에서) — XOR 한 번이라 빠르다. zip 크기와 거의 같다(머리말 64바이트).
+ENC_MAGIC = b"AOIXLOG1"
+ENC_KEY = b"aoi-capacity/wafer-logs"
+
+
+def _enc_secret(passphrase=None) -> bytes:
+    if passphrase:
+        return passphrase.encode("utf-8")
+    return os.environ.get("AOI_LOG_KEY", "").encode("utf-8") or ENC_KEY
+
+
+def _keystream(key: bytes, nonce: bytes, n: int) -> bytes:
+    out = bytearray()
+    ctr = 0
+    while len(out) < n:
+        out += hashlib.sha256(key + nonce + ctr.to_bytes(8, "big")).digest()
+        ctr += 1
+    return bytes(out[:n])
+
+
+def encrypt_bytes(data: bytes, secret: bytes) -> bytes:
+    salt, nonce = os.urandom(16), os.urandom(8)
+    key = hashlib.sha256(secret + salt).digest()
+    ct = (int.from_bytes(data, "big") ^ int.from_bytes(_keystream(key, nonce, len(data)), "big")).to_bytes(len(data), "big") if data else b""
+    mac = hmac.new(key, nonce + ct, hashlib.sha256).digest()
+    return ENC_MAGIC + salt + nonce + mac + ct
+
+
+def decrypt_bytes(blob: bytes, secret: bytes) -> bytes:
+    if blob[:8] != ENC_MAGIC:
+        raise ValueError("암호 파일 형식이 아닙니다(.enc 가 맞는지 확인하세요)")
+    salt, nonce, mac, ct = blob[8:24], blob[24:32], blob[32:64], blob[64:]
+    key = hashlib.sha256(secret + salt).digest()
+    if not hmac.compare_digest(mac, hmac.new(key, nonce + ct, hashlib.sha256).digest()):
+        raise ValueError("암호가 다르거나 파일이 손상됐습니다")
+    return (int.from_bytes(ct, "big") ^ int.from_bytes(_keystream(key, nonce, len(ct)), "big")).to_bytes(len(ct), "big") if ct else b""
 #: 모드마다 기본값 — (1차 깊게, 2차 넓게)
 DEFAULTS = {"days": (14, 30), "survey": (15, 24), "min_lots": (10, 300), "max_lots": (150, 600)}
 
@@ -328,14 +370,21 @@ def survey_device(root: Path, days: int, n_read, should_stop=None, spread: bool 
 
 
 # ── zip 나누기 ──────────────────────────────────────────────────────────────────
+class _Full(Exception):
+    """zip 장수 상한(MAX_PARTS)에 도달 — 더 담지 않고 멈춘다."""
+
+
 class Packer:
     """zip 을 차례로 채운다. 항목을 넣기 전에 압축 크기를 미리 재서 PART_MAX 를 넘기 전에 다음 장으로 넘긴다."""
 
-    def __init__(self, out_dir: Path, base: str, part_max: int = PART_MAX, reserve: int = RESERVE):
+    def __init__(self, out_dir: Path, base: str, part_max: int = PART_MAX, reserve: int = RESERVE, max_parts: int = 0):
         self.out_dir, self.base, self.part_max, self.reserve = out_dir, base, part_max, reserve
+        self.max_parts = max_parts
         self.parts, self.z, self.cd = [], None, 0
 
     def _open(self):
+        if self.max_parts and len(self.parts) >= self.max_parts:
+            raise _Full()
         path = self.out_dir / f"{self.base}_part{len(self.parts) + 1:02d}.zip"
         self.z = zipfile.ZipFile(path, "w", zipfile.ZIP_DEFLATED, allowZip64=False)
         self.cd = 0
@@ -673,7 +722,8 @@ def read_lot_all(c: dict, scan_names, wpool, should_stop=None) -> dict:
         return {"skip": f"Lot 폴더 나열 실패: {ex}"}
     if not wafers:
         return {"skip": "Wafer 폴더 없음"}
-    got = list(wpool.map(lambda ie: (walk_wafer_params if ie[0] == 0 else walk_wafer_all)(Path(ie[1].path), should_stop),
+    psample = {0, len(wafers) - 1}                                # 첫 · 마지막 Wafer 는 파라미터까지(꼼꼼히 — Lot 중간 변경도 잡게)
+    got = list(wpool.map(lambda ie: (walk_wafer_params if ie[0] in psample else walk_wafer_all)(Path(ie[1].path), should_stop),
                          enumerate(wafers)))
     if should_stop and should_stop():
         return {"skip": "멈춤 요청(이 Lot 은 담지 않음)"}
@@ -691,7 +741,7 @@ def pack_lot_all(idx: int, c: dict, data: dict, packer: Packer, gseen: dict) -> 
         return info
     info.update({k: data[k] for k in ("scan_dir", "job_folder", "lot_dir")})
     wafers, got = data["wafers"], data["got"]
-    info["param_wafers"] = wafers[:1]
+    info["param_wafers"] = sorted({wafers[0], wafers[-1]})
     for name, t, rz in c.get("reports", []):
         if rz:
             packer.add(f"{lot_id}/report/{name}", zlib.decompress(rz), t)
@@ -767,8 +817,9 @@ def run(args, log=None, should_stop=None, result=None) -> int:
     t0 = time.time()
     all_mode = bool(getattr(args, "all", False))
     wide = bool(getattr(args, "wide", False)) or all_mode
-    if all_mode:                                        # 30일 전체: 기간 안 Report 전부 · Lot 전부 · 상한은 사실상 없음
-        for k, v in (("days", 30), ("max_lots", 100000), ("min_lots", 10 ** 9), ("max_minutes", 24 * 60)):
+    if all_mode:                                        # 30일 전체: 기간 안 Report 전부 · Lot 전부 · Job별 최소 · zip 10장 상한
+        for k, v in (("days", 30), ("max_lots", 10 ** 9), ("min_lots", 10 ** 9), ("max_minutes", 24 * 60),
+                     ("per_job_min", PER_JOB_MIN), ("look_back", LOOK_BACK_DAYS)):
             if getattr(args, k, None) is None:
                 setattr(args, k, v)
     else:
@@ -794,8 +845,9 @@ def run(args, log=None, should_stop=None, result=None) -> int:
             "장비마다 기간 전체에 고르게 Lot 을 고릅니다")
     log(f"1/3 둘러보기 — 장비 {len(roots)}대, 최근 {args.days}일 Report 를 "
         + ("전부 엽니다" if all_mode else f"장비마다 {args.survey}개까지 엽니다" + (" (기간 전체에 고르게)" if wide else "")))
+    survey_days = args.look_back if all_mode else args.days
     with ThreadPoolExecutor(max_workers=args.workers) as pool:
-        devs = list(pool.map(lambda r: survey_device(r, args.days, args.survey, should_stop, spread=wide and not all_mode,
+        devs = list(pool.map(lambda r: survey_device(r, survey_days, args.survey, should_stop, spread=wide and not all_mode,
                                                      keep_report=all_mode), roots))
     if should_stop():
         log("멈춤 요청 — 둘러보기까지만 하고 끝냅니다(파일은 만들지 않았습니다)")
@@ -813,12 +865,29 @@ def run(args, log=None, should_stop=None, result=None) -> int:
         groups = {}
         for c in sorted(cands, key=lambda c: c["t"]):
             groups.setdefault(c["key"], []).append(c)
-        cands = []
+        merged = []
         for cs in groups.values():
             c = dict(cs[-1])
             c["reports"] = [(x["report"], x["t"], x.get("rep_z")) for x in cs]
-            cands.append(c)
-        log(f"   Report {sum(len(d['reports']) for d in devs if d['ok']):,}개 · Lot 폴더 {len(cands):,}개")
+            c["t"] = max(x["t"] for x in cs)
+            merged.append(c)
+        win = time.time() - args.days * 86400
+        chosen = [c for c in merged if c["t"] >= win]       # 최근 30일 Lot 은 전부
+        have = {c["key"] for c in chosen}
+        byjob = {}
+        for c in merged:
+            byjob.setdefault(c["job"], []).append(c)
+        topup = 0
+        for job, cs in byjob.items():                       # Job별 최소 — 모자라면 그 Job 의 옛 Lot(30일 밖)으로 채운다
+            n = sum(1 for c in cs if c["key"] in have)
+            if n >= args.per_job_min:
+                continue
+            for c in sorted((c for c in cs if c["key"] not in have), key=lambda c: -c["t"])[:args.per_job_min - n]:
+                chosen.append(c); have.add(c["key"]); topup += 1
+        cands = chosen
+        jobs = len(byjob)
+        log(f"   Report {sum(len(d['reports']) for d in devs if d['ok']):,}개 · Lot 폴더 {len(merged):,}개 · Job {jobs}종 · "
+            f"담을 Lot {len(cands):,}개(최근 {args.days}일 전부 + Job별 {args.per_job_min}개 채우기 {topup}개)")
     else:
         seen = set()
         cands = [c for c in cands if not (c["key"] in seen or seen.add(c["key"]))]   # 같은 Lot 폴더는 한 번
@@ -863,7 +932,7 @@ def run(args, log=None, should_stop=None, result=None) -> int:
 
     out_dir.mkdir(parents=True, exist_ok=True)
     base = ("AOI_wafer_logs30_" if all_mode else "AOI_wafer_logs2_" if wide else "AOI_wafer_logs_") + time.strftime("%Y%m%d_%H%M")
-    packer = Packer(out_dir, base, args.part_max, min(RESERVE, args.part_max // 10))
+    packer = Packer(out_dir, base, args.part_max, min(RESERVE, args.part_max // 10), max_parts=MAX_PARTS if all_mode else 0)
     lots, dev_count, keys, tried = [], {}, set(), set()
     deadline = t0 + args.max_minutes * 60
     stop_why = ""
@@ -952,7 +1021,12 @@ def run(args, log=None, should_stop=None, result=None) -> int:
                 for c2, f2 in inflight:
                     f2.cancel()
                 return why
-            info = pack_lot_all(len(lots) + 1, c, data, packer, gseen)
+            try:
+                info = pack_lot_all(len(lots) + 1, c, data, packer, gseen)
+            except _Full:
+                for c2, f2 in inflight:
+                    f2.cancel()
+                return f"zip {MAX_PARTS}장 상한 — 더 담지 못해 여기서 멈춥니다(데이터가 예상보다 큽니다)"
             lots.append(info)
             n = len(lots)
             el = time.time() - t_start
@@ -1027,21 +1101,58 @@ def run(args, log=None, should_stop=None, result=None) -> int:
     if stop_why:
         lines.append(f"※ 멈춘 이유: {stop_why}")
     summary = "\n".join(lines)
-    packer.add("요약.txt", summary.encode("utf-8"), final=True)
-    packer.add("lots.json", json.dumps(lots, ensure_ascii=False, indent=1).encode("utf-8"), final=True)
+    try:
+        packer.add("요약.txt", summary.encode("utf-8"), final=True)
+        packer.add("lots.json", json.dumps(lots, ensure_ascii=False, indent=1).encode("utf-8"), final=True)
+    except _Full:
+        pass
     packer.close()
+    parts = packer.parts
+    encrypt = all_mode and not getattr(args, "no_encrypt", False)
+    if encrypt and parts:
+        log("\n암호화하는 중… (보낼 파일은 .enc, 저는 같은 도구로 바로 풉니다)")
+        secret = _enc_secret(getattr(args, "key", None))
+        enc = []
+        for pp in parts:
+            e = pp.with_name(pp.name + ".enc")
+            e.write_bytes(encrypt_bytes(pp.read_bytes(), secret))
+            pp.unlink()
+            enc.append(e)
+        parts = enc
     summary_path = out_dir / f"{base}_요약.txt"
-    summary_path.write_text(summary, encoding="utf-8")
+    if not encrypt:                                         # 암호화하면 Job·Lot 이름이 든 요약을 평문으로 밖에 두지 않는다(zip 안에 있다)
+        summary_path.write_text(summary, encoding="utf-8")
     if result is not None:
-        result.update(out_dir=str(out_dir), parts=[str(p) for p in packer.parts], summary=str(summary_path),
-                      lots=len(ok), stop_why=stop_why)
+        result.update(out_dir=str(out_dir), parts=[str(p) for p in parts], summary=(None if encrypt else str(summary_path)),
+                      lots=len(ok), stop_why=stop_why, encrypted=encrypt)
 
-    log(summary if len(lines) < 400 else "\n".join(lines[:6] + ["   … Lot 목록은 요약 파일에(" + str(summary_path) + ")"] + lines[-6:]))
-    log("\n보낼 파일:")
-    for p in packer.parts:
+    log(summary if len(lines) < 400 else "\n".join(lines[:6] + ["   … Lot 목록은 zip 안 요약.txt 에"] + lines[-6:]))
+    log("\n보낼 파일:" + ("  (암호화됨 · .enc)" if encrypt else ""))
+    for p in parts:
         mb = p.stat().st_size
-        note = "" if args.part_min <= mb <= args.part_max else ("  ← 마지막 장이라 25MB 에 못 미침" if p == packer.parts[-1] else "  ← 크기 범위 밖")
-        log(f"   {p.name}  {mb / 1e6:.2f}MB{note}")
+        log(f"   {p.name}  {mb / 1e6:.2f}MB")
+    if encrypt:
+        log("※ 암호화된 .enc 파일입니다. 받는 사람이 열 수는 없고, 개발자(Claude)가 같은 도구로 바로 풉니다.")
+    return 0
+
+
+def decode(args) -> int:
+    """암호화된 .enc 를 푼다 — 같은 도구, XOR 한 번이라 빠르다. 결과는 원래 zip."""
+    secret = _enc_secret(getattr(args, "key", None))
+    out_dir = Path(args.out) if args.out else None
+    for f in args.decode:
+        src = Path(f)
+        try:
+            data = decrypt_bytes(src.read_bytes(), secret)
+        except (OSError, ValueError) as ex:
+            say(f"[오류] {src.name}: {ex}")
+            return 2
+        name = src.name[:-4] if src.name.lower().endswith(".enc") else src.name + ".zip"
+        dst = (out_dir or src.parent) / name
+        if out_dir:
+            out_dir.mkdir(parents=True, exist_ok=True)
+        dst.write_bytes(data)
+        say(f"풀었습니다: {dst}  ({len(data) / 1e6:.1f}MB)")
     return 0
 
 
@@ -1051,7 +1162,10 @@ def main(argv=None) -> int:
             stream.reconfigure(encoding="utf-8", errors="replace")
         except Exception:  # noqa: BLE001
             pass
-    return run(parse_args(argv))
+    args = parse_args(argv)
+    if getattr(args, "decode", None):
+        return decode(args)
+    return run(args)
 
 
 def parse_args(argv=None):
@@ -1066,6 +1180,11 @@ def parse_args(argv=None):
     ap.add_argument("--survey", type=int, default=None, help="장비마다 열어 볼 Report 수(기본 15 · --wide 24)")
     ap.add_argument("--min-lots", type=int, default=None, help="최소 Lot 수(기본 10 · --wide 300)")
     ap.add_argument("--max-lots", type=int, default=None, help="최대 Lot 수(기본 150 · --wide 600)")
+    ap.add_argument("--per-job-min", type=int, default=None, help="Job(원문)마다 최소 Lot 수 — --all 에서 30일에 모자라면 옛 Lot 으로 채운다(기본 15)")
+    ap.add_argument("--look-back", type=int, default=None, help="Job별 최소를 채우려고 되돌아보는 최대 기간(일, --all 기본 90)")
+    ap.add_argument("--no-encrypt", action="store_true", help="--all 의 출력을 암호화하지 않는다(기본은 암호화 .enc)")
+    ap.add_argument("--decode", nargs="+", metavar="FILE", help="암호화된 .enc 를 풀어 원래 zip 으로(다른 옵션 없이)")
+    ap.add_argument("--key", default=None, help="암호(비우면 환경변수 AOI_LOG_KEY, 그것도 없으면 저장소 기본 키)")
     ap.add_argument("--max-minutes", type=float, default=None, help="이 시간이 지나면 담던 Lot 까지만 하고 마무리(기본 120분 · --all 24시간)")
     ap.add_argument("--workers", type=int, default=8, help="동시에 읽는 수")
     ap.add_argument("--part-max", type=int, default=PART_MAX, help=argparse.SUPPRESS)

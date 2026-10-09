@@ -102,6 +102,8 @@ Camtek AOI 장비의 BatchReport/WaferInfo.ini 를 읽어 장비별 가동률을
   **`--all`(30일 전체, 10/10, `TOOL_API` 4)**: 기간 안 Report 를 **전부** 열고(둘러볼 때 읽은 Report 는 로고를 떼고 압축해 두어 다시 읽지 않음) 같은 Lot 폴더를 가리키는 Report 는 한 Lot 으로 묶어 Lot · Wafer 를 전부 본다.
   Wafer 마다 `ALL_FILES`(WaferInfo · ScanLog · ProductionInfo · Wafer2Table · RecipesInfo) + ExtendedScanMetaData_* 만 읽어 **Lot 마다 종류별 한 파일**(`_묶음/<파일>.txt`, `### <Wafer>\t<크기>\t<시각>` 줄로 구분)에, MoveResultFlag 는 열지 않고 있는지만,
   Lot 의 첫 Wafer 는 파라미터 표본(`PARAM_SKIP_RE` 결과 파일 제외) — **같은 내용은 모든 Lot 에 걸쳐 한 번**(`gseen`). Lot 은 `LOT_INFLIGHT` 개씩 동시에 읽고(`read_lot_all`, 스레드는 읽기만) 메인 스레드가 순서대로 담는다(`pack_lot_all`). 기본 30일 · 상한 24시간.
+  **Job별 최소**(`--per-job-min` 15 · `--look-back` 90): 최근 30일은 전부 담고, 30일 안에 Lot 이 모자란 Job(원문)만 그 Job 의 옛 Lot 으로 15개까지 채운다. **zip 최대 10장**(`MAX_PARTS` · Packer `_Full`), 첫 · 마지막 Wafer 파라미터 표본.
+  **암호화**(`encrypt_bytes`/`decrypt_bytes` — SHA-256 키스트림 XOR + HMAC, 표준 라이브러리): `--all` 출력은 `.enc`(`--no-encrypt` 로 끔), 키는 `_enc_secret`(env `AOI_LOG_KEY` → 없으면 `ENC_KEY` 저장소 상수 — 전송·공유 노출을 막는 수준, 강한 비밀 아님). 해독은 `--decode <파일>.enc`(XOR 한 번, 토큰 안 듦 — 샌드박스에서 zip 으로 풂, 머리말 64바이트).
   수집 창 카드('Wafer 로그 30일 전체 수집' — 10/10 2차 표본 버튼을 대체, 1차 · 2차 표본은 bat 로만)는 `workers/wafer_logs.py` 가 이 스크립트를 **파일 경로로 불러** `--wide --all` 로 `run(args, log, should_stop, result)` 을 부른다 — 장비는 수집과 같은 `devices.resolve_devices` 게이트를 지난 Camtek 만,
   저장 위치는 `nas_guard.assert_local`, 가동률 수집과는 동시에 돌지 않는다(서로 막음). 스크립트는 단독 실행도 되어야 하므로 앱 패키지를 import 하지 않는다(가드 `test_wafer_logs_ui.py`).
 - Lot 이름의 작업 표기는 `collect.scan_type` 이 읽는다: `RE`·`RESCAN` → RESCAN(노랑), `REWORK` → REWORK(보라).

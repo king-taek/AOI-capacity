@@ -395,11 +395,11 @@ COLLECT_PHASE_KLA = "KLA 결과 파일 읽는 중"
 
 # ── Wafer 폴더 로그 모으기(10/9) ─────────────────────────────────────────────
 WAFER_LOGS_TITLE = "Wafer 로그 30일 전체 수집"
-WAFER_LOGS_WHEN = ("개발자에게 보낼 조사 자료 — 최근 30일 Report · Lot · Wafer 를 전부 모읍니다. Wafer 마다 결과 파일(WaferInfo · ScanLog · "
-                   "ProductionInfo · ExtendedScanMetaData · Wafer2Table · RecipesInfo)만 읽어 Lot 마다 묶고, Lot 의 첫 Wafer 는 장비 파라미터를 보려고 "
-                   "Zones · Recipe2-Zones 등 하위 폴더의 설정 파일까지 읽습니다(같은 내용은 한 번만). 이미지 · .dat 는 읽지 않습니다. "
-                   "30대면 몇 시간 걸릴 수 있습니다(최대 24시간) — 로그 창에 남은 예상 시간이 나오고, 멈추면 지금까지 담은 것으로 zip 을 마무리합니다. "
-                   "zip 은 한 장에 25~29.9MB. NAS 는 읽기만 합니다. 가동률 수집과는 상관없습니다.")
+WAFER_LOGS_WHEN = ("개발자에게 보낼 조사 자료 — 최근 30일 Report · Lot · Wafer 를 전부 모으고, Lot 이 적은 Job 은 그 Job 만 옛 Lot 으로 15개까지 채웁니다. "
+                   "Wafer 마다 결과 파일(WaferInfo · ScanLog · ProductionInfo · ExtendedScanMetaData · Wafer2Table · RecipesInfo)만 읽어 Lot 마다 묶고, "
+                   "Lot 의 첫 · 마지막 Wafer 는 Zones 등 하위 폴더의 설정까지 읽습니다(같은 내용은 한 번만). 이미지 · .dat 는 읽지 않습니다. "
+                   "zip 은 최대 10장(한 장 25~29.9MB)이고 **암호화(.enc)** 되어 받는 사람이 열 수 없습니다 — 개발자만 풉니다. "
+                   "30대면 몇 시간 걸릴 수 있습니다(최대 24시간) — 로그 창에 남은 예상 시간이 나오고, 멈추면 지금까지 담은 것으로 마무리합니다. NAS 는 읽기만 합니다.")
 WAFER_LOGS_OUT = "저장 위치"
 WAFER_LOGS_RUN = "30일 전체 수집 시작"
 WAFER_LOGS_STOP = "멈추고 마무리"

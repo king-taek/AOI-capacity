@@ -1,7 +1,8 @@
 """Wafer 로그 2차 수집 워커 — `scripts/collect_wafer_logs.py --wide` 의 `run()` 을 QThread 에서 부른다(10/9 · 10/10 2차로 교체).
 
-- 수집 창 버튼은 **30일 전체 수집**(`--all`, 10/10 사용자 요청)만 한다: 최근 30일 Report · Lot · Wafer 전부, Wafer 마다 결과 파일만(Lot 묶음),
-  Lot 마다 첫 Wafer 는 파라미터까지. 몇 시간 걸릴 수 있다. 1차(깊게 · 갈래별 10 Lot) · 2차 표본(`--wide`)은 `make_wafer_logs.bat` 로만 돈다.
+- 수집 창 버튼은 **30일 전체 수집**(`--all`, 10/10 사용자 요청)만 한다: 최근 30일 Report · Lot · Wafer 전부(Job별 최소 15개 — 모자라면 옛 Lot 으로 채움),
+  Wafer 마다 결과 파일만(Lot 묶음) · Lot 마다 첫 · 마지막 Wafer 는 파라미터까지 · zip 최대 10장 · **출력은 암호화(.enc)**. 몇 시간 걸릴 수 있다.
+  1차(깊게) · 2차 표본(`--wide`)은 `make_wafer_logs.bat` 로만. 받은 .enc 는 `collect_wafer_logs.py --decode <파일>` 으로 푼다(개발자가 샌드박스 안에서).
 
 - 도구 본체는 표준 라이브러리 단독 스크립트 하나다(현장에서 `make_wafer_logs.bat` 로도 돈다). 같은 코드를 **파일 경로로 불러** 쓴다 —
   배포 payload 에 들어 있다(`updater._UPDATE_KEEP_ONLY`).
@@ -22,7 +23,7 @@ from .. import devices, i18n, nas_guard
 K = i18n.KO
 TOOL_PATH = Path(__file__).resolve().parents[2] / "scripts" / "collect_wafer_logs.py"
 #: 이 워커가 부르는 도구의 호출 방식 판(스크립트의 TOOL_API 와 같아야 한다).
-TOOL_API = 4
+TOOL_API = 5
 
 
 class ToolOutdated(RuntimeError):

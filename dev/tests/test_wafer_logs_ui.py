@@ -43,7 +43,7 @@ def test_worker_collects_through_the_scope_gate(tmp_path, fake_nas):
     cfg = make_cfg(tmp_path, csv_path)
     before = _snapshot(nas)
     out = tmp_path / "wl"
-    got, lines = _run(wafer_logs.WaferLogsWorker(cfg, str(out), extra_args=["--days", "100000", "--min-lots", "1"]))
+    got, lines = _run(wafer_logs.WaferLogsWorker(cfg, str(out), extra_args=["--no-encrypt", "--days", "100000", "--min-lots", "1"]))
     assert got["error"] == "" and got["result"]["parts"]
     assert _snapshot(nas) == before
     names = []
@@ -128,7 +128,7 @@ def test_card_runs_and_blocks_collect_meanwhile(styled_qapp, fake_nas, tmp_path,
 
     class Worker(wafer_logs.WaferLogsWorker):          # 가짜 NAS 의 Report 는 9/13 — 기간을 넓혀 준다
         def __init__(self, cfg, out_dir, parent=None):
-            super().__init__(cfg, out_dir, parent, extra_args=["--days", "100000", "--min-lots", "1"])
+            super().__init__(cfg, out_dir, parent, extra_args=["--no-encrypt", "--days", "100000", "--min-lots", "1"])
     monkeypatch.setattr(wafer_logs, "WaferLogsWorker", Worker)
 
     w = MainWindow()
