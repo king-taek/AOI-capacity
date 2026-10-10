@@ -72,7 +72,7 @@ Camtek AOI 장비의 BatchReport/WaferInfo.ini 를 읽어 장비별 가동률을
    장비 확인(Report/Scanresult 폴더 · 백업 나열 · 연결 확인)도 `devices._pmap` 으로 `read_workers` 개씩 동시에 하되 **범위 게이트를 지난 장비만**, 결과·로그는 입력 순서,
    취소는 새 작업 제출만 멈춘다(SMB 호출을 중간에 끊는다고 주장하지 않는다). 동시성 예산은 하나 — Report 읽기 단계 안에 풀을 겹치지 않는다(C08, 가드 `test_parallel_device_check_stays_in_scope_and_matches_serial`).
 10. `requirements.txt` 변경은 업데이트가 통째로 실패할 수 있는 지점 — 작업 요약에 반드시 표시하고 `--upgrade` 는 쓰지 않는다. 테스트는 실제 pip 을 절대 실행하지 않는다.
-11. **단순 작업은 Haiku 5.5 서브에이전트에 맡긴다**(사용자 지시 10/10): 파일 찾기 · 반복 치환 · 로그/표 정리 · 테스트 실행 · 수치 집계처럼 판단이 적은 일은 `Agent(model="haiku")` 로 병렬로 돌리고, 메인은 설계 · 규칙 결정 · 검증만 한다.
+11. **일은 추론 난이도로 모델을 나눠 맡긴다**(사용자 지시 10/10, 기본은 Opus): 정말 단순한 일(파일 찾기 · 반복 치환 · 표 정리 · 테스트 실행 · 값 조회)은 `Agent(model="haiku")`, 가벼운 일(집계 · 예시 고르기 · 스크립트 정리)은 `sonnet`, 추론이 필요한 일(설계 · 통합 · 규칙 결정 · 결과 검증)은 메인(Opus), 어려운 데이터 분석 · 새 분석 방법 탐색처럼 넓은 시야와 날카로운 추론이 필요한 일은 `fable`. 서로 기다리지 않는 일은 백그라운드로 병렬로 돌린다.
 
 ## 레이아웃
 - `main.py`(진입), `aoi_capacity/`(앱: `collect.py`, `cli.py`, `devices.py`, `scope.py`, `nas_guard.py`, `i18n/`, `utils/`, `workers/`,
