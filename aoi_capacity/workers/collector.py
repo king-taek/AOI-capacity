@@ -1,7 +1,7 @@
 """수집 워커 — `collect.collect()` + `collect.write_html()` 을 QThread 에서 돌린다.
 
 - 모든 시그널은 생성 시 받은 `token` 을 같이 보낸다. MainWindow 는 자기 토큰과 다르면(늦게 온 옛 실행) 무시한다.
-- 취소는 `stop()`(threading.Event). 코어가 Report 사이마다 확인해 `CollectCancelled` 로 빠져나오며, 캐시·HTML 은 그대로다.
+- 취소는 `stop()`(threading.Event). 코어가 바로 `CollectCancelled` 로 빠져나오며 읽은 것까지 캐시에 저장하고(10/11, 이어하기), HTML 은 만들지 않는다.
 - 테스트는 스레드를 띄우지 않고 `run()` 을 직접 부른다(dev/tests/test_collector_worker.py).
 - 수집 상태와 산출물 상태는 다르다(C06): HTML 을 썼는데 CSV 만 못 썼으면 `done` 으로 끝내되 `CollectResult.state` 가
   `completed_with_warnings` 이고 `warnings` 에 사유가 있다. 사용자 문구는 `warning_lines`(ko.py) 로 만든다.
@@ -115,6 +115,9 @@ class CollectorWorker(QThread):
                                       log=lambda m: self.signals.log.emit(tok, str(m)),
                                       progress=lambda d, t, p: self.signals.progress.emit(tok, int(d), int(t), str(p)))
         except collect.CollectCancelled:
+            saved = stats.get("cancel_saved")
+            if saved:
+                self.signals.log.emit(tok, i18n.KO.COLLECT_CANCELLED_SAVED_FMT.format(n=saved))
             self.signals.cancelled.emit(tok)
             return
         except Exception as exc:  # noqa: BLE001

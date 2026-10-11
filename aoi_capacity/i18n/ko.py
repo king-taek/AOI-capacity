@@ -168,7 +168,11 @@ COLLECT_DONE_SEE_LOG = "자세한 내용은 로그를 보세요."
 COLLECT_DONE_CSV_FAILED_FMT = ("CSV 는 저장하지 못했습니다(HTML 결과 화면은 정상 저장됨): {path}\n{error}\n"
                                "Excel 등에서 열려 있으면 닫고 다시 수집하세요. 이전 CSV 는 그대로 남아 있습니다.")
 COLLECT_CACHE_CORRUPT_FMT = ("캐시 파일을 읽을 수 없어 처음부터 다시 수집했습니다. 손상된 원본은 지우지 않고 보존했습니다: {path}")
-COLLECT_CANCELLED_TOAST = "수집을 중지했습니다. 이전 결과가 그대로 남아 있습니다."
+COLLECT_CANCELLED_TOAST = "중지했습니다 · 읽은 것은 저장됨"
+COLLECT_CANCELLED_SAVED_FMT = "중지: Report {n}개까지 저장했습니다. 다시 수집하면 남은 것부터 이어서 읽습니다."
+COLLECT_PLAN_RESUME_REBUILD = "▶ 지난 '전체 다시 만들기' 가 중간에 멈췄습니다. 같은 설정으로 다시 누르면 이어서 합니다."
+COLLECT_PLAN_RESUME_REFRESH = "▶ 지난 '다시 읽기' 가 중간에 멈췄습니다. 같은 설정으로 다시 누르면 이미 읽은 것은 건너뜁니다."
+CLI_CANCELLED = "중지했습니다 — 읽은 것까지 저장했습니다. 같은 명령을 다시 실행하면 이어서 합니다."
 COLLECT_FAILED_TITLE = "수집 실패"
 COLLECT_FAILED_FMT = "수집 중 오류가 났습니다.\n\n{detail}"
 COLLECT_NO_DEVICES_TITLE = "장비가 없습니다"

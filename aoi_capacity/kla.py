@@ -170,10 +170,14 @@ def read_wafer(path: str) -> Optional[dict]:
 def collect_kla(cfg: dict, devs: List[dict], cache: dict, *, run: Callable, now: dt.datetime,
                 backfill: bool, refresh_days: int, rebuild: bool, log: Callable[[str], None],
                 progress: Callable[[int, int, str], None], phase: str,
-                refresh_from: Optional[dt.datetime] = None, refresh_until: Optional[dt.datetime] = None) -> Tuple[List[dict], List[dict], bool, dict]:
+                refresh_from: Optional[dt.datetime] = None, refresh_until: Optional[dt.datetime] = None,
+                resume_after: Optional[float] = None, on_change: Optional[Callable[[], None]] = None,
+                tick: Optional[Callable[[], None]] = None) -> Tuple[List[dict], List[dict], bool, dict]:
     """KLA 장비들을 모은다 → (dev_meta, errors, 바뀐 것 있음, stats).
 
-    `run(items, fn, path_of)` 는 collect 의 `_run` 을 NAS 별로 감싼 것(같은 동시성 예산). 나열은 매번 하고(전부 나열이 장비당 2~6초,
+    `run(items, fn, path_of, on_result=None, tick=None)` 는 collect 의 `_run` 을 NAS 별로 감싼 것(같은 동시성 예산).
+    10/11 — 중단과 이어하기: 결과 파일은 읽는 대로 `store` 에 합치고(`on_change` 로 알림 · `tick` 으로 중간 저장), `seen_to` 는 **다 읽은 뒤에만** 옮긴다
+    (중간에 멈췄는데 앞질러 옮기면 다음 증분 수집이 못 읽은 날을 건너뛴다). `resume_after` 는 멈춘 다시 읽기를 이어갈 때 — 그 뒤에 이미 읽은 Wafer(`rd`)는 건너뛴다. 나열은 매번 하고(전부 나열이 장비당 2~6초,
     10/5 실측), 읽기는 캐시에 없는 Wafer 만 — 처음 보는 장비는 `backfill_days` 창 안만(그 앞은 `since` 로 남겨 다시 읽지 않는다)."""
     store = cache.setdefault("kla", {})
     changed = False
@@ -194,6 +198,8 @@ def collect_kla(cfg: dict, devs: List[dict], cache: dict, *, run: Callable, now:
             changed = True
         metas[k] = {"name": d["name"], "id": str(d["id"]), "key": k, "note": d["path"], "report_dir": "", "kind": "kla",
                     "reports": 0, "found": 0, "error": "", "read_errors": 0, "recovered": 0, "refreshed": 0, "retried": 0, "kept": 0}
+
+    new_seen: Dict[str, str] = {}
 
     # ① 날짜 폴더 나열(장비마다)
     def p1(d):
@@ -219,8 +225,7 @@ def collect_kla(cfg: dict, devs: List[dict], cache: dict, *, run: Callable, now:
         lo = (dt.date.fromisoformat(lo) - dt.timedelta(days=LIST_BACK_DAYS)).isoformat()
         jobs += [(d, dd) for dd in dates if dd >= lo]
         if dates and dates[-1] != e.get("seen_to"):
-            e["seen_to"] = dates[-1]
-            changed = True
+            new_seen[k] = dates[-1]                           # 다 읽은 뒤에 옮긴다(아래)
         m["listing"] = "full" if full else "recent"
         m["pattern_days"] = sum(1 for dd in dates if dd >= lo)
     progress(0, 0, phase)
@@ -252,7 +257,11 @@ def collect_kla(cfg: dict, devs: List[dict], cache: dict, *, run: Callable, now:
                 seen.add((k, lot, w))                          # 자정 넘긴 Lot 이 두 날짜 폴더에 겹쳐도 한 번만(D71)
                 m["found"] += 1
                 old = have.get(w)
-                if old is not None and not rebuild and not (refresh_since and t >= refresh_since and (refresh_until is None or t < refresh_until)):
+                again = (refresh_since and t >= refresh_since and (refresh_until is None or t < refresh_until))
+                if old is not None and resume_after and float(old.get("rd") or 0) >= resume_after:
+                    m["kept"] += 1                             # 멈춘 같은 다시 읽기에서 이미 읽었다 — 이어하기
+                    continue
+                if old is not None and not rebuild and not again:
                     m["kept"] += 1
                     continue
                 if old is not None:
@@ -277,10 +286,12 @@ def collect_kla(cfg: dict, devs: List[dict], cache: dict, *, run: Callable, now:
             n = done[0]
         progress(n, total, phase)
         return out
-    r3 = run(want, p3p, lambda j: str(j[0]["path"]))
     errors: List[dict] = []
     pending = 0
-    for (d, dd, lot, w), (rec, err, sec) in zip(want, r3):
+
+    def merge(_i, res) -> None:
+        nonlocal pending, changed
+        (d, dd, lot, w), (rec, err, sec) = want[_i], res
         k = str(d["key"])
         m, e = metas[k], store[k]
         m["read_n"] = m.get("read_n", 0) + 1
@@ -288,13 +299,20 @@ def collect_kla(cfg: dict, devs: List[dict], cache: dict, *, run: Callable, now:
         if err:
             m["read_errors"] += 1
             errors.append({"device": d["name"], "path": os.path.join(str(d["path"]), dd, lot, w), "tries": 1, "error": err})
-            continue
+            return
         if rec is None:
             pending += 1                                       # 결과 파일이 아직 없다 — 다음 수집에서 다시 본다
-            continue
+            return
         t, slot = wafer_time(w)
-        rec.update({"t": t.isoformat(timespec="minutes"), "dir_slot": slot, "dd": dd})
+        rec.update({"t": t.isoformat(timespec="minutes"), "dir_slot": slot, "dd": dd, "rd": int(time.time())})
         e["lots"].setdefault(lot, {})[w] = rec
+        changed = True
+        if on_change is not None:
+            on_change()
+
+    run(want, p3p, lambda j: str(j[0]["path"]), on_result=merge, tick=tick)
+    for k, v in new_seen.items():                              # 다 읽었다 — 이제 다음 증분 수집의 시작점을 옮긴다
+        store[k]["seen_to"] = v
         changed = True
     retention = int(cfg.get("retention_days") or 0)
     if retention > 0:                                          # 0 = 기한 없음(기본, D69)
