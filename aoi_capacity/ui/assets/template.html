@@ -521,7 +521,7 @@ button.dbrow:focus-visible{outline:2px solid var(--nav-on);outline-offset:-2px}
       legacy(buildModelLegacy)는 디자인 세션의 make_aoi_data.js [원본] 이식이라 네 스위치를 끄면 그 스크립트와 같은 출력이 나온다(가드 test_dashboard_js).
    ④ 화면: 가동률 · Error · 추이 · 리포트 + 장비/Error/유형·Job 팝업 (docs/design/dashboard-redesign/app/AOI-Dashboard.dc.html 의 로직).
    ============================================================================ */
-const MODEL_VERSION=5;
+const MODEL_VERSION=6;
 const $=s=>document.querySelector(s);
 const esc=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const p2=n=>String(n).padStart(2,"0");
@@ -664,6 +664,13 @@ const modeSrc=r=>ownMode(r)?"own":(MODE_FILL.get(r)||[,""])[1];   /* own · rep 
 function modeJob(job,r){job=String(job||"");const m=scanMode(r),mj=HAS_MULTI.test(job);
   if(m==="M")return jobStem(job)+"-Multi";if(!mj)return job;return jobStem(job)+(m==="S"?"-Single":"-미구분");}
 const RT=new Set(['RE','RESCAN','REWORK','SRD','R']);
+/* 10/11(D87): Lot 이름이 바뀐 재검사도 Rescan — 두 번째 자재 키 = jobKey(Job) | 검사 단계 낱말(DIA · SRD · 3D …, 다른 단계는 다른 검사) | Wafer ID.
+   Wafer ID 가 짧은 숫자(슬롯 번호 따위)면 같은 실물이라 볼 수 없어 이 키를 만들지 않는다(그때는 matKey 만). 앞 시도가 PASS 이고 레시피가 같을 때만. */
+const STEP_TOK=new Set(['DIA','SRD','3D','EDGE','BUMP','CENTER','PCM','SPT','2D']);
+const matKey2=(j,l,w)=>{const id=String(w||'').toUpperCase().replace(/[^A-Z0-9]/g,'');if(id.length<6||/^\d+$/.test(id))return null;
+  const st=String(l||'').toUpperCase().split(/[-_ #+,'%.~]+/).filter(x=>STEP_TOK.has(x)).sort().join('+');return jobKey(j)+'|'+st+'|'+id;};
+/* 10/11(D87): 모니터 웨이퍼 Job — Lot 이름에 TEST 가 없어도 Test(D64 와 같이 가동에서 뺌). 'No Pattern' 이 무엇인지는 현장 확인 전이라 목록으로 둔다(확인되면 여기만 고친다). */
+const MONITOR_JOB_RE=/^\s*No\s*Pattern/i;
 const matKey=(j,l,w)=>jobKey(j)+'|'+String(l||'').toUpperCase().split(/[-_ #+,'%.~]+/).filter(x=>x&&!RT.has(x)).join('')+'|'+String(w||'').toUpperCase().replace(/[^A-Z0-9]/g,'');
 /* ── 레시피 묶음(D67) — 사용자가 묶은 Job 원문은 그 묶음 이름 하나로, 나머지는 jobKey 자동 묶음. 통계·표시에만 쓰고 자재 키(matKey · Rescan)에는 쓰지 않는다. ── */
 function recipeMap(rg){const m=new Map();if(!rg||!Array.isArray(rg.groups))return m;
@@ -702,11 +709,11 @@ for(let i=0;i<rowsIn.length;i++){const r=rowsIn[i];
   const ws=P(val(r,'wafer_start_time')), we=P(val(r,'wafer_end_time')), bs=P(val(r,'batch_start')), be=P(val(r,'batch_end'));
   const an=ws||bs; if(!an){bad++;continue;}
   const st=String(val(r,'status')||'').trim(), rl=String(val(r,'lot')||''), wid=String(val(r,'wafer_id')||''), rp=String(val(r,'report')||'');
-  const job0=String(val(r,'job')||''), job=modeJob(job0,r), lot=lotName(rp,rl,true), test=/TEST/i.test(rl);
+  const job0=String(val(r,'job')||''), job=modeJob(job0,r), lot=lotName(rp,rl,true), test=/TEST/i.test(rl)||MONITOR_JOB_RE.test(job0);
   const fv=String(val(r,'faults')??'').replace(/,/g,'').trim(), f=/^\d+$/.test(fv)?+fv:null;   /* Report 표 Faults 원문 — 숫자일 때만(옛 캐시 행은 빈 값) */
   all.push({idx:i,f,dev:val(r,'device'),t:an.getTime(),s:ws?ws.getTime():null,e:(ws&&we&&we.getTime()>ws.getTime())?we.getTime():null,timed:!!ws,
     bs:bs?bs.getTime():null, bend:be?be.getTime():(bs?bs.getTime():null),
-    c:test?null:causeOf(st),status:st,report:rp,job,lot,test,key:matKey(job0,lot,wid),day:dk(an),pass:isPass(st),
+    c:test?null:causeOf(st),status:st,report:rp,job,lot,test,key:matKey(job0,lot,wid),key2:matKey2(job0,rl,wid),rcp:String(val(r,'recipe')||''),day:dk(an),pass:isPass(st),
     im:String(val(r,'ini_match')||''),wid,ik:job0+'\u0001'+rl+'\u0001'+wid,wsc:String(val(r,'wafers_scanned')??'').trim(),ast:String(val(r,'avg_scan_time')??'').trim()});
 }
 /* D52: PASS 도 원인 Error 도 없는 Report 의 중단은 그 Report 의 Error(ABORTED). Test Lot 은 제외(D64). */
@@ -715,7 +722,9 @@ for(let i=0;i<rowsIn.length;i++){const r=rowsIn[i];
   for(const w of all){if(w.c||w.test||!/abort/i.test(w.status))continue;const g=rg.get(w.dev+'\u0001'+(w.report||w.job+'\u0001'+w.lot));if(!g.pass&&!g.cause)w.c='ABORTED';}}
 all.sort((a,b)=>a.t-b.t||a.idx-b.idx);
 /* D63: 앞선 시도의 결과가 PASS 일 때만 Rescan */
-{const seen=new Map(); for(const w of all){const p=seen.get(w.key); w.rel=(p&&p.pass)?1:0; seen.set(w.key,w);}}
+{const seen=new Map(),seen2=new Map(); for(const w of all){const p=seen.get(w.key); w.rel=(p&&p.pass)?1:0;
+  if(!w.rel&&w.key2){const q=seen2.get(w.key2); if(q&&q.pass&&q.key!==w.key&&q.rcp===w.rcp)w.rel=2;}   /* D87: Lot 이름이 바뀐 재검사(2 = 두 번째 키로 찾음) */
+  seen.set(w.key,w); if(w.key2)seen2.set(w.key2,w);}}
 let obsEnd=0; for(const w of all){ obsEnd=Math.max(obsEnd,w.e||w.t,w.bend||0); }
 const genIso=metaIn&&metaIn.generated_iso?String(metaIn.generated_iso):"";
 const today=/^\d{4}-\d{2}-\d{2}/.test(genIso)?genIso.slice(0,10):null;
@@ -1827,7 +1836,7 @@ function devPopupHtml(){
   const selH=sel?(()=>{const a=LA(sel),b=Math.max(LB(sel),a+1);const types=Object.entries(sel[9]).sort((x,y)=>y[1][1]-x[1][1]);const rep=P.rep[sel[8]]||"";
     return `<div class="sel animate__animated animate__fadeIn" data-key="sel"><div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:10px"><b style="font-size:14.5px">${esc(P.lot[sel[1]]||"(Lot 확인 불가)")}</b>
       ${types.map(([k,v])=>`<span class="pill err mono">${esc(k)} ${hm(v[1])}</span>`).join("")}${types.length?"":`<span class="pill ok">Error 없음</span>`}<div class="spacer"></div><button class="link" style="color:#5A6673;text-decoration:none" data-h="${h(()=>setState({selLot:null}))}">선택 해제</button></div>
-      <div class="kv"><span class="k">시간</span><span class="num">${clock(a)} – ${clock(b)} (${hm(b-a)})</span><span class="k">Wafer</span><span>${sel[4]?sel[4]+"장":"전날 시작한 배치(장수는 전날에)"}${sel[6]?" · Rescan "+sel[6]+"장":""}${sel[7]?" · Test "+sel[7]+"장":""}</span>
+      <div class="kv"><span class="k">시간</span><span class="num">${clock(a)} – ${clock(b)} (${hm(b-a)})</span><span class="k">Wafer</span><span>${sel[4]?sel[4]+"장":"전날 시작한 배치(장수는 전날에)"}${sel[6]?" · Rescan "+sel[6]+"장":""}${sel[7]?" · Test "+sel[7]+"장"+(MONITOR_JOB_RE.test(P.job[sel[0]]||"")?" (No Pattern Job — 모니터 웨이퍼로 보고 Test 처리, 현장 확인 전)":""):""}</span>
       ${sel[15]?`<span class="k">INI</span><span>덮어씀 ${sel[15]}장 — 같은 자리를 나중 시도가 다시 썼습니다${sel[16]>=0?`: <b class="mono">${esc(P.st[sel[16]])}</b>`:""} · 이 장들의 시간은 Report 배치 창으로 추정</span>`:""}
       <span class="k">Job</span><span class="mono" style="word-break:break-all">${esc(P.job[sel[0]]||"(Job 없음)")}</span>${sel[17]>=0&&sel[17]!=null?`<span class="k">Report 요약</span><span class="mono" style="color:#4B5866" title="Wafers Scanned = 스캔이 끝난 장 수 · Avg. Scan Time = 첫 레시피 스캔 평균(로드 · 둘째 레시피 제외) — 시간 계산에는 쓰지 않습니다">${esc(P.st[sel[17]])}</span>`:""}${sel[10]>=0?`<span class="k">원문</span><span class="mono" style="color:#4B5866;word-break:break-all">${esc(P.st[sel[10]])}</span>`:""}
       <span class="k">Report</span><span class="mono" style="color:#4B5866;word-break:break-all">${esc(rep||"—")}${rep&&reportUrl({device:mDev,report:rep})?` <button class="link" data-h="${h(()=>openReport({device:mDev,report:rep}))}" title="이 BatchReport 를 새 탭으로 엽니다(NAS 경로)">Report 열기</button>`:""}</span></div></div>`;})():"";

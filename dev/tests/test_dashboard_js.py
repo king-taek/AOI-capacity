@@ -666,3 +666,26 @@ def test_overwritten_and_unscanned_rows_are_split_for_the_popup_without_moving_m
     lot_a = next(L for L in t["lots"] if D["pool"]["rep"][L[8]] == rep1)
     assert lot_a[15] == 1 and lot_a[16] >= 0 and D["pool"]["st"][lot_a[16]].startswith("LOT-A · 09/18 11:00")   # 나중 시도
     assert "Avg. Scan Time 00:13:00" in D["pool"]["st"][lot_a[17]]
+
+
+# ── D87(10/11): Lot 이름이 바뀐 재검사 · 모니터 Job ─────────────────────────
+def test_renamed_lot_reinspection_is_rescan_only_with_same_step_and_recipe():
+    A = "J1_6321_0909-XKS_18-Sep-26_(01.00.00)_BatchReport.htm"
+    B = "J1_6321_XKS-161_18-Sep-26_(03.00.00)_BatchReport.htm"
+    C = "J1_6321_XKS-DIA_18-Sep-26_(05.00.00)_BatchReport.htm"
+    WID = "38135F75EWB5"
+    rows = [w("AOI-1", WID, "00:10", "00:20", lot="0909-XKS", report=A) | {"recipe": "x20"},
+            w("AOI-1", WID, "02:10", "02:30", lot="XKS-161", report=B) | {"recipe": "x20"},     # 이름만 바뀜 → Rescan
+            w("AOI-1", WID, "04:10", "04:25", lot="XKS-DIA", report=C) | {"recipe": "x20"}]     # DIA 단계 → 다른 검사
+    t = at(run(rows), "AOI-1")
+    assert (t["r"], t["d"]) == (10 + 15, 20)
+    other_recipe = [rows[0], rows[1] | {"recipe": "x5"}]
+    assert at(run(other_recipe), "AOI-1")["d"] == 0                       # 레시피가 다르면 다른 검사
+    slot_ids = [r | {"wafer_id": "12"} for r in rows[:2]]
+    assert at(run(slot_ids), "AOI-1")["d"] == 0                           # 슬롯 번호 같은 짧은 ID 는 같은 실물로 보지 않는다
+
+
+def test_no_pattern_jobs_are_test_and_leave_utilization():
+    rows = [w("AOI-1", "W1", "08:00", "09:00", job="No Pattern Mon_0901"), w("AOI-1", "W2", "10:00", "10:30")]
+    t = at(run(rows), "AOI-1")
+    assert (t["t"], t["r"]) == (60, 30)
