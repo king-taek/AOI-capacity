@@ -332,6 +332,10 @@ class CollectPage(QWidget):
         rule.setProperty("role", "rule")
         pl.addSpacing(4)
         pl.addWidget(rule)
+        self._resume = _label("", "help", pick, wrap=True)      # 멈춘 수집이 있을 때만 — 계획 줄과 따로 한 줄(10/11)
+        self._resume.setStyleSheet("font-weight:600;")
+        self._resume.hide()
+        pl.addWidget(self._resume)
         act = QHBoxLayout()
         act.setSpacing(10)
         self._plan = _label("", "help", pick, wrap=True)
@@ -681,6 +685,7 @@ class CollectPage(QWidget):
             return                                      # 늦게 온 옛 조회
         if plan is None:
             self._plan.setText("")
+            self._resume.hide()
             return
         self._update_cards(plan, n_recover)
         if self._mode == "rebuild":
@@ -702,10 +707,9 @@ class CollectPage(QWidget):
                     else K.COLLECT_PLAN_RECOVER_NONE)
         else:
             text = K.COLLECT_PLAN_INCR_FMT.format(n=plan.known_devices)
-        if getattr(plan, "resumable", "") == "rebuild":
-            text = K.COLLECT_PLAN_RESUME_REBUILD + text
-        elif getattr(plan, "resumable", "") == "refresh":
-            text = K.COLLECT_PLAN_RESUME_REFRESH + text
+        note = {"rebuild": K.COLLECT_PLAN_RESUME_REBUILD, "refresh": K.COLLECT_PLAN_RESUME_REFRESH}.get(getattr(plan, "resumable", ""), "")
+        self._resume.setText(note)
+        self._resume.setVisible(bool(note))
         self._plan.setText(text)
 
     def _update_cards(self, plan, n_recover) -> None:

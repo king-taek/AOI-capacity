@@ -1009,3 +1009,19 @@ def test_run_stops_fast_without_waiting_for_slow_reads():
         collect._run({"read_workers": 4}, [0, 1, 2, 3], slow, lambda: stopped["v"], on_result=on_result)
     assert time.time() - t0 < 3 and got == [(0, "quick")]                       # 끝난 결과는 받고, 느린 것은 기다리지 않는다
     gate.set()
+
+
+def test_plan_run_tells_when_a_rebuild_or_refresh_was_left_half_done(tmp_path, fake_nas, monkeypatch):
+    nas, csv_path = fake_nas
+    cfg = make_cfg(tmp_path, csv_path, read_workers=1)
+    collect.collect(cfg)
+    assert collect.plan_run(cfg, rebuild_all=True).resumable == "" and collect.plan_run(cfg, refresh_window_days=30).resumable == ""
+    _state, stop = _stop_after_reads(monkeypatch, 1)
+    with pytest.raises(collect.CollectCancelled):
+        collect.collect(cfg, rebuild_all=True, should_stop=stop)
+    assert collect.plan_run(cfg, rebuild_all=True).resumable == "rebuild"
+    _state, stop = _stop_after_reads(monkeypatch, 1)
+    with pytest.raises(collect.CollectCancelled):
+        collect.collect(cfg, refresh_window_days=30, should_stop=stop)
+    assert collect.plan_run(cfg, refresh_window_days=30).resumable == "refresh"
+    assert collect.plan_run(cfg, refresh_window_days=7).resumable == ""        # 다른 설정이면 이어하지 않는다
