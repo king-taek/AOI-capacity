@@ -46,8 +46,7 @@ def test_startup_update_check_is_suppressed_in_tests(window, styled_qapp):
 def test_nav_switches_pages_and_remembers_last_view(window, styled_qapp):
     from aoi_capacity.utils import prefs
 
-    for key, page in (("devices", window.devices_page), ("settings", window.settings_page),
-                      ("collect", window.collect_page)):
+    for key, page in (("devices", window.devices_page), ("collect", window.collect_page)):
         window.nav.set_current(key)
         _pump(styled_qapp)
         assert window.stack.currentWidget() is page
@@ -57,8 +56,8 @@ def test_nav_switches_pages_and_remembers_last_view(window, styled_qapp):
 def test_no_embedded_dashboard_viewer(window):
     """★ 결과 화면은 앱 안에 없다 — 생성된 HTML 파일을 사용자가 직접 연다."""
     assert not hasattr(window, "dashboard")
-    assert set(window._pages) == {"collect", "devices", "settings"}
-    assert [k for k in window.nav.keys()] == ["collect", "devices", "settings"]
+    assert set(window._pages) == {"collect", "devices"}
+    assert [k for k in window.nav.keys()] == ["collect", "devices"]
 
 
 def test_collect_flow_writes_html_and_updates_status(window, styled_qapp):
@@ -251,3 +250,18 @@ def test_mode_cards_pick_one_situation_and_map_to_worker_options(window, styled_
     page.set_running(False)
     assert page.mode() == "normal"
     page.wait_for_plan()
+
+
+def test_number_boxes_ignore_the_mouse_wheel(window):
+    """10/11: 스크롤하다 숫자·날짜가 바뀌지 않는다 — 휠은 받지 않고 부모로 넘긴다."""
+    from PyQt6.QtWidgets import QAbstractSpinBox
+
+    boxes = window.collect_page.findChildren(QAbstractSpinBox)
+    assert len(boxes) >= 8
+    for b in boxes:
+        assert type(b).wheelEvent is not QAbstractSpinBox.wheelEvent, type(b)
+
+
+def test_settings_live_inside_the_collect_page(window):
+    assert window.settings_page.parent() is not None
+    assert window.collect_page.isAncestorOf(window.settings_page)

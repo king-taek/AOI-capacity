@@ -26,7 +26,6 @@ from ..workers.collector import CollectorWorker, CollectResult
 from . import theme
 from .pages.collect_page import CollectPage
 from .pages.devices_page import DevicesPage
-from .pages.settings_page import SettingsPage
 from .widgets import sheets
 from .widgets.loading_overlay import LoadingOverlay
 from .widgets.nav_bar import NavBar
@@ -116,9 +115,8 @@ class MainWindow(QMainWindow):
 
         self.devices_page = DevicesPage(self.stack)
         self.collect_page = CollectPage(self.stack)
-        self.settings_page = SettingsPage(self.stack)
-        self._pages = {"devices": self.devices_page, "collect": self.collect_page,
-                       "settings": self.settings_page}
+        self.settings_page = self.collect_page.settings_page      # 10/11: 설정은 수집 탭 맨 아래
+        self._pages = {"devices": self.devices_page, "collect": self.collect_page}
         for w in self._pages.values():
             self.stack.addWidget(w)
 
@@ -131,7 +129,7 @@ class MainWindow(QMainWindow):
         self._wire()
         self._refresh_last_collect()
         p = prefs.load()
-        start = p.last_view if p.last_view in self.nav.keys() else "collect"
+        start = p.last_view if p.last_view in self.nav.keys() else "collect"   # 옛 "settings" 는 수집으로
         self.nav.set_current(start)
         self._on_nav(start)
         QTimer.singleShot(400, self._check_for_update_async)

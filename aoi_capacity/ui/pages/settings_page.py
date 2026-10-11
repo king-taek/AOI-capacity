@@ -1,4 +1,4 @@
-"""설정 · 정보 — 표시(테마), 주의 기준, 데이터 폴더, 버전·업데이트, NAS 안내.
+"""설정 · 정보(수집 탭 맨 아래에 들어간다) — 표시(테마), 주의 기준, 데이터 폴더, 버전·업데이트, NAS 안내.
 
 주의 기준은 결과 HTML 을 만들 때 함께 들어간다(화면에서도 바꿀 수 있다)."""
 from __future__ import annotations
@@ -7,11 +7,12 @@ from typing import Optional
 
 from PyQt6.QtCore import QUrl, pyqtSignal
 from PyQt6.QtGui import QDesktopServices
-from PyQt6.QtWidgets import QCheckBox, QFrame, QGridLayout, QHBoxLayout, QLabel, QScrollArea, QSpinBox, QVBoxLayout, QWidget
+from PyQt6.QtWidgets import QCheckBox, QFrame, QGridLayout, QHBoxLayout, QLabel, QVBoxLayout, QWidget
 
 from ... import i18n
 from ...utils import paths, prefs
 from ..widgets.buttons import make_button
+from ..widgets.inputs import NoWheelSpinBox as QSpinBox
 
 
 def _card(parent: QWidget, title: str) -> tuple:
@@ -34,21 +35,10 @@ class SettingsPage(QWidget):
     def __init__(self, parent: Optional[QWidget] = None):
         super().__init__(parent)
         p = prefs.load()
-        # 10/5: 창이 낮으면 카드가 세로로 눌려 '수집 기간' 칸이 잘렸다(사용자 보고) — 수집 페이지처럼 스크롤 안에 둔다
-        outer = QVBoxLayout(self)
-        outer.setContentsMargins(0, 0, 0, 0)
-        scroll = QScrollArea(self)
-        scroll.setWidgetResizable(True)
-        scroll.setFrameShape(QFrame.Shape.NoFrame)
-        body = QWidget(scroll)
-        scroll.setWidget(body)
-        outer.addWidget(scroll)
-        lay = QVBoxLayout(body)
-        lay.setContentsMargins(0, 0, 6, 0)
+        # 10/11: 설정은 수집 탭 맨 아래 접이식 구역에 들어간다 — 스크롤은 수집 페이지가 맡으므로 여기엔 없다
+        lay = QVBoxLayout(self)
+        lay.setContentsMargins(0, 0, 0, 0)
         lay.setSpacing(12)
-        h = QLabel(i18n.KO.SET_PAGE_TITLE, self)
-        h.setProperty("role", "h1")
-        lay.addWidget(h)
 
         # 표시
         card, cl = _card(self, i18n.KO.SET_DISPLAY_TITLE)
@@ -152,7 +142,6 @@ class SettingsPage(QWidget):
         cl.addWidget(n)
         cl.addWidget(d)
         lay.addWidget(card)
-        lay.addStretch(1)
 
         self._dark.toggled.connect(self._on_theme)
         self._th_util.valueChanged.connect(self._on_th)

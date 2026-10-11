@@ -17,13 +17,16 @@ from typing import Dict, Optional
 
 from PyQt6.QtCore import QDate, QThread, Qt, QUrl, pyqtSignal
 from PyQt6.QtGui import QDesktopServices
-from PyQt6.QtWidgets import (QCheckBox, QDateEdit, QFileDialog, QFrame, QGridLayout, QHBoxLayout, QLabel, QLineEdit,
-                             QPlainTextEdit, QScrollArea, QSizePolicy, QSpinBox, QVBoxLayout, QWidget)
+from PyQt6.QtWidgets import (QCheckBox, QFileDialog, QFrame, QGridLayout, QHBoxLayout, QLabel, QLineEdit,
+                             QPlainTextEdit, QScrollArea, QSizePolicy, QVBoxLayout, QWidget)
 
 from ... import collect, i18n, nas_guard
 from ...utils import paths, prefs, results
 from ...workers import wafer_logs
 from ..widgets.buttons import make_button
+from ..widgets.collapsible import Collapsible
+from ..widgets.inputs import NoWheelDateEdit as QDateEdit, NoWheelSpinBox as QSpinBox
+from .settings_page import SettingsPage
 
 MAX_LOG_LINES = 1000
 K = i18n.KO
@@ -268,11 +271,14 @@ class CollectPage(QWidget):
         self._cards: Dict[str, ModeCard] = {}
         self._cards["normal"] = ModeCard("normal", K.MODE_NORMAL_TITLE, K.MODE_NORMAL_WHEN, K.MODE_NORMAL_WHAT, pick)
         pl.addWidget(self._cards["normal"])
-        # 10/5: 평소 수집 옆의 두 번째 버튼 — 업데이트 전에 읽은 RDL Report 의 멀티/단일 판정을 채운다(RDL 이 있는 장비만)
+        # 10/11: 매일 쓰는 건 '평소 수집' 하나 — 나머지 복구 카드는 접이식 구역 안으로(사용자: 버튼이 너무 중구난방)
+        trouble = QWidget(pick)
+        tl = QVBoxLayout(trouble)
+        tl.setContentsMargins(0, 0, 0, 0)
+        tl.setSpacing(10)
+        # 10/5: 업데이트 전에 읽은 RDL Report 의 멀티/단일 판정을 채운다(RDL 이 있는 장비만)
         self._cards["rdl"] = ModeCard("rdl", K.MODE_RDL_TITLE, K.MODE_RDL_WHEN, K.MODE_RDL_WHAT, pick)
-        pl.addWidget(self._cards["rdl"])
-        pl.addSpacing(2)
-        pl.addWidget(_label(K.COLLECT_TROUBLE_EYEBROW, "eyebrow", pick))
+        tl.addWidget(self._cards["rdl"])
         grid = QGridLayout()
         grid.setHorizontalSpacing(10)
         grid.setVerticalSpacing(10)
@@ -301,7 +307,9 @@ class CollectPage(QWidget):
         rx.addStretch(1)
         grid.setColumnStretch(0, 1)
         grid.setColumnStretch(1, 1)
-        pl.addLayout(grid)
+        tl.addLayout(grid)
+        self._trouble = Collapsible(K.COLLECT_SEC_TROUBLE, trouble, pick)
+        pl.addWidget(self._trouble)
         # '최근 며칠' 의 며칠 — 카드 안에서 바로 고른다(예전엔 '처음 수집 기간' 30일을 그대로 써서 무거웠다)
         self._refresh_days = QSpinBox(self._cards["refresh"])
         self._refresh_days.setRange(1, 90)
@@ -385,7 +393,8 @@ class CollectPage(QWidget):
         arow.addWidget(self._b_all)
         arow.addWidget(_label(K.HTML_ONLY_ALL_HELP, "muted", hcard, wrap=True), 1)
         hl.addLayout(arow)
-        lay.addWidget(hcard)
+        self._sec_html = Collapsible(K.COLLECT_SEC_HTML, hcard, body)
+        lay.addWidget(self._sec_html)
         self._days_worker: Optional[_DaysWorker] = None
         self._html_worker: Optional[_HtmlOnlyWorker] = None
 
@@ -398,7 +407,11 @@ class CollectPage(QWidget):
         prow.addWidget(self._b_pzip)
         prow.addStretch(1)
         pl.addLayout(prow)
-        lay.addWidget(pcard)
+        dev = QWidget(body)
+        dl = QVBoxLayout(dev)
+        dl.setContentsMargins(0, 0, 0, 0)
+        dl.setSpacing(12)
+        dl.addWidget(pcard)
         self._pz_worker: Optional[_ParamZipWorker] = None
 
         # Wafer 로그 30일 전체 수집(10/9 1차 → 10/10 2차 → 10/10 30일 전체로 교체) — 개발자 조사용. 가동률 수집과 따로 돌고, 둘이 동시에 NAS 를 읽지 않게 서로 막는다.
@@ -423,7 +436,9 @@ class CollectPage(QWidget):
         wact.addWidget(self._b_wl_open)
         wact.addWidget(self._wl_status, 1)
         wl.addLayout(wact)
-        lay.addWidget(wcard)
+        dl.addWidget(wcard)
+        self._sec_dev = Collapsible(K.COLLECT_SEC_DEV, dev, body)
+        lay.addWidget(self._sec_dev)
         self._wl_worker: Optional[wafer_logs.WaferLogsWorker] = None
 
         # 저장 위치
@@ -444,7 +459,15 @@ class CollectPage(QWidget):
         g.addWidget(self._csv, 2, 1, 1, 2)
         g.setColumnStretch(1, 1)
         sl.addLayout(g)
-        lay.addWidget(scard)
+        sec = QWidget(body)
+        sv = QVBoxLayout(sec)
+        sv.setContentsMargins(0, 0, 0, 0)
+        sv.setSpacing(12)
+        sv.addWidget(scard)
+        self.settings_page = SettingsPage(sec)           # 10/11: 설정 탭을 없애고 수집 탭 맨 아래로
+        sv.addWidget(self.settings_page)
+        self._sec_settings = Collapsible(K.COLLECT_SEC_SETTINGS, sec, body)
+        lay.addWidget(self._sec_settings)
 
         # 로그
         lay.addWidget(_label(K.COLLECT_LOG_TITLE, "eyebrow", body))
@@ -748,6 +771,8 @@ class CollectPage(QWidget):
                 self.error.emit(K.WAFER_LOGS_TITLE, err)
 
     def _set_wafer_logs_running(self, on: bool) -> None:
+        if on:
+            self._sec_dev.set_open(True)                # 도는 동안은 '중지' 버튼이 보여야 한다
         self._b_wl_run.setEnabled(not on)
         self._b_wl_stop.setVisible(on)
         self._b_wl_stop.setEnabled(on)

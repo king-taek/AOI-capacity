@@ -21,7 +21,6 @@ def _repolish(w: QWidget) -> None:
 NAV_ITEMS: Tuple[Tuple[str, str, str], ...] = (
     ("collect", i18n.KO.NAV_COLLECT, i18n.KO.NAV_COLLECT_SUB),
     ("devices", i18n.KO.NAV_DEVICES, i18n.KO.NAV_DEVICES_SUB),
-    ("settings", i18n.KO.NAV_SETTINGS, i18n.KO.NAV_SETTINGS_SUB),
 )
 
 
