@@ -32,7 +32,7 @@ from . import collect, i18n
 from .utils import config as config_mod
 from .utils import paths, prefs
 
-EXIT_OK, EXIT_FAILED, EXIT_PARTIAL = 0, 1, 3
+EXIT_OK, EXIT_FAILED, EXIT_PARTIAL, EXIT_CANCELLED = 0, 1, 3, 130
 
 
 def load_config(path: str, problems: Optional[List[config_mod.Problem]] = None) -> Dict[str, object]:
@@ -181,6 +181,9 @@ def main(argv=None) -> int:
     except collect.RebuildRejected as ex:
         _print(K.CLI_REBUILD_REJECTED_FMT.format(error=ex))
         return EXIT_FAILED
+    except (collect.CollectCancelled, KeyboardInterrupt):      # Ctrl+C — 읽은 것은 collect 가 저장했다(10/11)
+        _print(K.CLI_CANCELLED)
+        return EXIT_CANCELLED
     warnings: list = []
     collect.write_html(cfg, rows, dev_meta, errors, started, mode="auto", log=_print, timing=stats, warnings=warnings)
     if stats.get("cache_status") == collect.CACHE_CORRUPT:

@@ -702,6 +702,10 @@ class CollectPage(QWidget):
                     else K.COLLECT_PLAN_RECOVER_NONE)
         else:
             text = K.COLLECT_PLAN_INCR_FMT.format(n=plan.known_devices)
+        if getattr(plan, "resumable", "") == "rebuild":
+            text = K.COLLECT_PLAN_RESUME_REBUILD + text
+        elif getattr(plan, "resumable", "") == "refresh":
+            text = K.COLLECT_PLAN_RESUME_REFRESH + text
         self._plan.setText(text)
 
     def _update_cards(self, plan, n_recover) -> None:

@@ -80,7 +80,7 @@ def test_retention_drops_old_reports(tmp_path, fake_nas):
     assert len(rows_drop) <= len(rows_keep)
 
 
-def test_cancel_leaves_cache_and_output_untouched(tmp_path, fake_nas):
+def test_cancel_before_any_read_leaves_cache_and_output_untouched(tmp_path, fake_nas):
     nas, csv_path = fake_nas
     cfg = make_cfg(tmp_path, csv_path)
     calls = {"n": 0}
@@ -891,3 +891,121 @@ def test_cli_help_describes_what_backfill_really_does(monkeypatch, capsys):
     assert "이전 행" in helps["--refresh-window"] and "기존 캐시를 그대로" in helps["--rebuild-all"]
     from aoi_capacity import i18n
     assert "건너뜁니다" in i18n.KO.COLLECT_PLAN_BACKFILL_FMT and "다시 읽습니다" not in i18n.KO.COLLECT_PLAN_BACKFILL_FMT.split("건너뜁니다")[0]
+
+
+# ── 중단과 이어하기(10/11) ─────────────────────────────────────────────────
+def _stop_after_reads(monkeypatch, n):
+    """Report 를 n개 읽은 뒤부터 should_stop 이 True 가 되게 한다(읽기는 collect.rows_for_report 로 센다)."""
+    state = {"n": 0}
+    real = collect.rows_for_report
+
+    def counting(*a, **k):
+        state["n"] += 1
+        return real(*a, **k)
+    monkeypatch.setattr(collect, "rows_for_report", counting)
+    return state, (lambda: state["n"] >= n)
+
+
+def _cache_of(cfg):
+    return json.loads(open(cfg["cache_file"], encoding="utf-8").read())
+
+
+@pytest.mark.parametrize("workers", [1, 8])
+def test_stop_keeps_what_was_read_and_next_run_continues(tmp_path, fake_nas, monkeypatch, workers):
+    nas, csv_path = fake_nas
+    base_rows, _, _ = collect.collect(make_cfg(tmp_path / "base", csv_path, read_workers=1))
+    total = len(_cache_of(make_cfg(tmp_path / "base", csv_path))["reports"])
+    assert total >= 3
+    cfg = make_cfg(tmp_path / "cut", csv_path, read_workers=workers)
+    state, stop = _stop_after_reads(monkeypatch, 2)
+    stats = {}
+    with pytest.raises(collect.CollectCancelled):
+        collect.collect(cfg, should_stop=stop, stats=stats)
+    cache = _cache_of(cfg)
+    assert 1 <= len(cache["reports"]) < total and stats["cancel_saved"] == len(cache["reports"])
+    assert not (tmp_path / "cut" / "out" / "AOI_capacity.html").exists()        # 결과 화면은 만들지 않는다
+    done_devices = {e["device_key"] for e in cache["reports"].values()}
+    stats2 = {}
+    rows, _, errs = collect.collect(cfg, stats=stats2)                         # 같은 버튼을 다시 — 이어서
+    assert _fingerprint(rows) == _fingerprint(base_rows) and not errs
+    assert stats2["reports_read"] == total - len(cache["reports"])             # 이미 읽은 것은 다시 읽지 않았다
+    assert done_devices
+
+
+def test_stop_never_moves_the_cursor_past_unread_files(tmp_path, fake_nas, monkeypatch):
+    nas, csv_path = fake_nas
+    cfg = make_cfg(tmp_path, csv_path, read_workers=1)
+    state, stop = _stop_after_reads(monkeypatch, 1)
+    with pytest.raises(collect.CollectCancelled):
+        collect.collect(cfg, should_stop=stop)
+    cache = _cache_of(cfg)
+    for dk, cur in cache["last_mtime"].items():
+        left = [e for e in cache["reports"].values() if e["device_key"] == dk]
+        assert not left or cur == 0 or all(e["mtime"] <= cur for e in left)      # 커서가 있다면 합친 파일 뒤로만 간다
+
+
+def test_rebuild_stop_saves_candidate_aside_and_resumes(tmp_path, fake_nas, monkeypatch):
+    nas, csv_path = fake_nas
+    cfg = make_cfg(tmp_path, csv_path, read_workers=1)
+    collect.collect(cfg)
+    before = open(cfg["cache_file"], "rb").read()
+    resume = cfg["cache_file"] + collect.RESUME_SUFFIX
+    state, stop = _stop_after_reads(monkeypatch, 2)
+    with pytest.raises(collect.CollectCancelled):
+        collect.collect(cfg, rebuild_all=True, should_stop=stop)
+    assert open(cfg["cache_file"], "rb").read() == before                      # 원 캐시는 그대로
+    part = json.loads(open(resume, encoding="utf-8").read())
+    assert len(part["reports"]) == 2 and part["resume"]["sig"].startswith("rebuild|")
+    n0 = state["n"]
+    rows, _, errs = collect.collect(cfg, rebuild_all=True)
+    total = len(_cache_of(cfg)["reports"])
+    assert state["n"] - n0 == total - 2 and not errs                           # 앞서 읽은 2개는 다시 읽지 않았다
+    assert not os.path.exists(resume) and "resume" not in _cache_of(cfg)
+
+
+def test_rebuild_with_different_settings_does_not_resume(tmp_path, fake_nas, monkeypatch):
+    nas, csv_path = fake_nas
+    cfg = make_cfg(tmp_path, csv_path, read_workers=1)
+    collect.collect(cfg)
+    state, stop = _stop_after_reads(monkeypatch, 1)
+    with pytest.raises(collect.CollectCancelled):
+        collect.collect(cfg, rebuild_all=True, should_stop=stop)
+    cfg2 = dict(cfg, retention_days=999)
+    assert collect._load_resume(cfg2, collect._resume_sig(cfg2, True, 0, None)) is None
+
+
+def test_refresh_stop_then_same_refresh_skips_what_was_reread(tmp_path, fake_nas, monkeypatch):
+    nas, csv_path = fake_nas
+    cfg = make_cfg(tmp_path, csv_path, read_workers=1)
+    collect.collect(cfg)
+    total = len(_cache_of(cfg)["reports"])
+    state, stop = _stop_after_reads(monkeypatch, 1)
+    with pytest.raises(collect.CollectCancelled):
+        collect.collect(cfg, refresh_window_days=36500, should_stop=stop)
+    assert _cache_of(cfg)["resume"]["sig"] == "refresh|36500"
+    n0 = state["n"]
+    collect.collect(cfg, refresh_window_days=36500)
+    assert 0 < state["n"] - n0 < total                                          # 앞서 다시 읽은 것은 건너뛰었다
+    assert "resume" not in _cache_of(cfg)
+
+
+def test_run_stops_fast_without_waiting_for_slow_reads():
+    import threading
+    gate = threading.Event()
+    got = []
+
+    def slow(t):
+        if t == 0:
+            return "quick"
+        gate.wait(10)                                   # 느린 NAS 호출 흉내
+        return "late"
+    stopped = {"v": False}
+
+    def on_result(i, r):
+        got.append((i, r))
+        stopped["v"] = True
+    t0 = time.time()
+    with pytest.raises(collect.CollectCancelled):
+        collect._run({"read_workers": 4}, [0, 1, 2, 3], slow, lambda: stopped["v"], on_result=on_result)
+    assert time.time() - t0 < 3 and got == [(0, "quick")]                       # 끝난 결과는 받고, 느린 것은 기다리지 않는다
+    gate.set()

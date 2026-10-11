@@ -10,7 +10,7 @@
   * 필요한 INI 키만 읽는다. Report 하나가 깨져도 기록만 남기고 계속 간다.
   * 진행 보고: `progress(done, total, phase)` — 총량을 모르는 단계는 `total<=0`(busy).
     장비별 상태는 `on_device(name, state, detail)` — state ∈ {"listing","parsing","done","error","skipped"}.
-  * 취소: `should_stop()` 이 True 면 `CollectCancelled`. 캐시·HTML 은 손대지 않아 이전 상태가 그대로 남는다.
+  * 취소: `should_stop()` 이 True 면 `CollectCancelled`(10/11: 진행 중인 읽기는 기다리지 않는다). 이미 합친 Report · KLA Wafer 는 캐시에 저장하고(전체 다시 만들기는 `<캐시>.rebuild`), 같은 일을 다시 하면 이어서 한다. HTML 은 만들지 않는다.
 
 수집 기간·모드(D60)
   * 처음(캐시 없음) 또는 `backfill=True`: 수정시각이 최근 `backfill_days` 안인 Report 를 **찾는다** — 이미 캐시에 있고
@@ -46,6 +46,7 @@ import json
 import logging
 import ntpath
 import os
+import queue
 import re
 import threading
 import time
@@ -294,6 +295,7 @@ class RunPlan:
     keep_reports: int = 0      # 손대지 않는 캐시 Report 수(refresh 창 밖)
     rdl_reports: int = 0       # 'RDL 영역 INI 패치' 대상 Report 수(멀티/단일 판정이 빠진 RDL Report, 캐시만 보고 센다)
     rdl_devices: int = 0       # 그 Report 가 있는 장비 수 — 패치는 이 장비들만 본다
+    resumable: str = ""        # 중간에 멈춘 같은 일이 있으면 "rebuild" · "refresh"(10/11) — 다시 누르면 이어서 한다
     # 새로 생긴 Report 수는 NAS 를 봐야 알 수 있어 여기 없다(계획 조회는 NAS 에 접근하지 않는다).
 
 
@@ -654,7 +656,7 @@ def _rdl_wafer_dir(r: dict, scan_root: str, backups) -> Optional[str]:
     return os.path.join(root, *parts)
 
 
-def _patch_rdl_modes(cfg, cache, devs, should_stop, log, progress, stats, dirty) -> None:
+def _patch_rdl_modes(cfg, cache, devs, should_stop, log, progress, stats, dirty, tick=None) -> None:
     """'RDL 영역 INI 패치'(10/5) — 판정이 빠진 RDL 행(`_needs_rdl_patch`)마다 처음 읽은 그 Wafer 폴더의 WaferInfo.ini 와 RecipesInfo.ini 만 연다.
     Report 폴더 나열 · Report 읽기 · 다른 장비 · KLA 는 없다. WaferInfo 의 시작 시각이 행과 다르면(그 뒤 같은 Lot 이름으로 다시 검사해
     폴더가 새로 쓰였다) 판정하지 않는다 — 다른 검사의 레시피를 붙이지 않는다. 스레드는 읽기만, 행 고치기는 메인 스레드가 입력 순서로."""
@@ -690,13 +692,17 @@ def _patch_rdl_modes(cfg, cache, devs, should_stop, log, progress, stats, dirty)
                 out = (got.get("Recipe", {}).get("Name", "") or r.get("recipe", ""), "SINGLE")
         progress(done.bump(), total, i18n.KO.COLLECT_PHASE_RDL_FMT.format(device=name))
         return out
-    results = _run(cfg, tasks, one, should_stop, group=lambda t: nas_group(t[2]))
     n_ok = 0
-    for (e, r, _w, _n), out in zip(tasks, results):   # 메인 스레드가 입력 순서로 고친다
+
+    def patch(i, out) -> None:                       # 메인 스레드가 끝나는 대로 고친다 — 중지해도 확인한 것은 저장되고 다음엔 건너뛴다(10/11)
+        nonlocal n_ok
+        e, r, _w, _n = tasks[i]
         e["rdl_checked"] = True
+        dirty.add(DIRTY_UPDATED)
         if out:
             r["recipe"], r["scan_mode"] = out
             n_ok += 1
+    _run(cfg, tasks, one, should_stop, group=lambda t: nas_group(t[2]), on_result=patch, tick=tick)
     if tasks:
         dirty.add(DIRTY_UPDATED)
     stats.update({"rdl_rows": len(tasks), "rdl_patched": n_ok, "rdl_devices": len(devs_hit)})
@@ -1217,6 +1223,10 @@ DIRTY_CURSOR, DIRTY_IDENTITY, DIRTY_MAPPING = "cursor", "identity", "device_mapp
 DIRTY_REPORTS, DIRTY_UPDATED, DIRTY_FAILED, DIRTY_RETENTION, DIRTY_REBUILD = "reports", "reports_updated", "failed", "retention", "rebuild"
 DIRTY_DEVICE_INFO = "device_info"
 DIRTY_KLA = "kla"                                            # D73: KLA 기록(cache["kla"])이 바뀜
+DIRTY_RESUME = "resume"                                      # 10/11: 중간에 멈춘 다시 읽기 · 재구축을 이어가기 위한 표시(cache["resume"])
+RESUME_MAX_AGE_SEC = 86400.0                                 # 멈춘 지 이만큼 지나면 이어하지 않고 새로 시작한다(그사이 NAS 가 바뀌었을 수 있다)
+RESUME_SUFFIX = ".rebuild"                                   # 전체 다시 만들기 중간 저장 파일 = <캐시 파일>.rebuild
+CHECKPOINT_MIN_SEC = 60.0                                    # 읽는 동안 이 간격(저장이 느리면 저장 시간의 10배)마다 캐시를 저장해 둔다
 DIRTY_PARAMS = "params"                                      # D89: 레시피 파라미터 스냅숏(cache["params"])이 바뀜
 UNLIMITED_DAYS = 36500                                       # retention_days 0(기한 없음)일 때 rebuild 가 읽는 창
 DIRTY_LISTING = "listing"      # 장비의 마지막 전체 나열 시각(`full_listed`) — 패턴 나열을 쓸 수 있는 PC(Windows)에서만 적는다
@@ -1245,6 +1255,36 @@ class _Dirty:
 
 def _empty_cache() -> dict:
     return {"reports": {}, "last_mtime": {}, "failed": {}, "devices": {}}
+
+
+def _resume_sig(cfg: dict, rebuild: bool, refresh_days: int, rng) -> str:
+    """이어하기가 같은 일인지 가르는 표식 — 다시 읽기 · 재구축만 쓴다(그 밖의 모드는 캐시에 읽은 것이 남는 것으로 이어진다)."""
+    if rebuild:
+        return f"rebuild|{cfg.get('retention_days')}"
+    if rng is not None:
+        return f"range|{rng[0]}|{rng[1]}"
+    if refresh_days > 0:
+        return f"refresh|{refresh_days}"
+    return ""
+
+
+def _load_resume(cfg: dict, sig: str) -> Optional[dict]:
+    """멈춘 '전체 다시 만들기' 의 후보 캐시(`<캐시>.rebuild`)를 읽는다 — 같은 일(표식 · 파서 · 형식)일 때만, 아니면 None."""
+    path = str(cfg["cache_file"]) + RESUME_SUFFIX
+    try:
+        with open(path, encoding="utf-8") as f:
+            data = json.load(f)
+    except (OSError, ValueError):
+        return None
+    rs = data.get("resume") if isinstance(data, dict) else None
+    if not isinstance(rs, dict) or rs.get("sig") != sig or time.time() - float(rs.get("started") or 0) >= RESUME_MAX_AGE_SEC:
+        return None
+    if data.get("parser_version") != PARSER_VERSION or data.get("cache_format") != CACHE_FORMAT:
+        return None
+    if not all(isinstance(data.get(k), dict) for k in ("reports", "last_mtime", "failed")):
+        return None
+    data.setdefault("devices", {})
+    return data
 
 
 def cache_status(cache: dict) -> str:
@@ -1675,20 +1715,27 @@ def _validate_cache_file(tmp: str, cache: dict) -> None:
         raise ValueError(f"캐시 JSON 의 Report 수가 다릅니다({len(check['reports'])} ≠ {len(cache['reports'])})")
 
 
-def _save_cache(cfg: dict, cache: dict) -> dict:
+def _save_cache(cfg: dict, cache: dict, *, resume_file: bool = False, drop_resume: bool = False) -> dict:
     """캐시를 **트랜잭션**으로 쓴다(C15): 고유 임시 파일 → flush+fsync → 다시 읽어 검증 → `os.replace`.
     어느 단계가 실패해도 원본은 그대로고 자기 임시 파일만 지운다.
+
+    `resume_file=True`(10/11, 전체 다시 만들기 중간 저장): 후보 캐시를 `<캐시>.rebuild` 에 쓴다 — 원본 캐시는 건드리지 않고, 손상 원본 보존도 하지 않는다.
+    `drop_resume=True`: 쓰기를 마친 뒤 그 이어하기 파일을 지운다(재구축이 끝나 후보가 캐시가 되었다).
 
     `_load_cache` 가 손상을 표시해 두었으면(`_CORRUPT_KEY`) 교체 **직전에** 원본을 `<캐시>.bad-<시각>` 으로 옮겨 보존한다 —
     쓰기는 이 함수 안에서만 허용되므로 보존도 여기서 한다. 돌려주는 값: {"path", "preserved"(보존한 경로 또는 "")}."""
     nas_guard.check_cfg(cfg)  # ★ NAS 아래에는 절대 쓰지 않는다
-    path = str(cfg["cache_file"])
+    main_path = str(cfg["cache_file"])
+    path = main_path + RESUME_SUFFIX if resume_file else main_path
     os.makedirs(os.path.dirname(os.path.abspath(path)), exist_ok=True)
+    if resume_file:
+        cache = dict(cache)                              # 이어하기 파일은 사본으로 — 본 실행의 상태(손상 표시 등)를 건드리지 않는다
     cache["parser_version"] = PARSER_VERSION
     cache["cache_format"] = CACHE_FORMAT
     cache.setdefault("devices", {})
-    corrupt = cache.pop(_CORRUPT_KEY, None)
+    corrupt = None if resume_file else cache.pop(_CORRUPT_KEY, None)
     cache.pop("_status", None)
+    cache.pop(_CORRUPT_KEY, None)
     tmp = _unique_tmp(path)
     preserved = ""
     try:
@@ -1701,6 +1748,11 @@ def _save_cache(cfg: dict, cache: dict) -> dict:
             preserved = f"{path}.bad-{time.strftime('%Y%m%d-%H%M%S')}-{time.time_ns() % 1000000:06d}"
             os.replace(path, preserved)                 # 손상 원본 보존(지우지 않는다)
         os.replace(tmp, path)
+        if drop_resume and not resume_file and os.path.isfile(main_path + RESUME_SUFFIX):
+            try:
+                os.remove(main_path + RESUME_SUFFIX)
+            except OSError:
+                pass
     finally:
         if os.path.isfile(tmp):                     # 자기가 만든 임시 파일만 지운다(원본에는 손대지 않는다)
             try:
@@ -1718,7 +1770,7 @@ _PLAN_MEMO: Dict[str, tuple] = {}
 def _cache_summary(path: str) -> dict:
     """계획 조회에 필요한 것만 — Report 수 · 장비 커서 수 · 누락 복구 대상 수 · Report 수정시각 목록(refresh 창 계산용).
     행은 재분류하지 않는다(수집 워커가 한다)."""
-    empty = {"n_reports": 0, "known_devices": 0, "n_recover": 0, "n_rdl": 0, "rdl_devices": 0, "mtimes": []}
+    empty = {"n_reports": 0, "known_devices": 0, "n_recover": 0, "n_rdl": 0, "rdl_devices": 0, "mtimes": [], "resume_sig": ""}
     if not path or not os.path.isfile(path):
         return empty
     try:
@@ -1734,7 +1786,8 @@ def _cache_summary(path: str) -> dict:
                "n_recover": sum(1 for e in cache.get("reports", {}).values() if _needs_recovery(e)),
                "n_rdl": sum(1 for e in cache.get("reports", {}).values() if _needs_rdl_patch(e)),
                "rdl_devices": len({k.split("|", 1)[0] for k, e in cache.get("reports", {}).items() if _needs_rdl_patch(e)}),
-               "mtimes": [float(e.get("mtime") or 0) for e in cache.get("reports", {}).values()]}
+               "mtimes": [float(e.get("mtime") or 0) for e in cache.get("reports", {}).values()],
+               "resume_sig": str((cache.get("resume") or {}).get("sig") or "") if (time.time() - float((cache.get("resume") or {}).get("started") or 0)) < RESUME_MAX_AGE_SEC else ""}
     _PLAN_MEMO[path] = (key, summary)
     return summary
 
@@ -1772,7 +1825,17 @@ def plan_run(cfg: dict, full: bool = False, backfill: bool = False, recover: boo
         reread = sum(1 for m in s["mtimes"] if m >= since)
     mode = ("rebuild" if rebuild else "first" if not n else "refresh" if refresh_days > 0
             else "backfill" if backfill else "recover" if recover else "incremental")
-    return RunPlan(first_run=first, known_devices=s["known_devices"], backfill_days=int(cfg["backfill_days"]),
+    resumable = ""
+    if rebuild:
+        rp = str(cfg.get("cache_file") or "") + RESUME_SUFFIX
+        try:
+            if os.path.isfile(rp) and time.time() - os.stat(rp).st_mtime < RESUME_MAX_AGE_SEC:
+                resumable = "rebuild"
+        except OSError:
+            pass
+    elif refresh_days > 0 and s.get("resume_sig") == f"refresh|{refresh_days}":
+        resumable = "refresh"
+    return RunPlan(resumable=resumable, first_run=first, known_devices=s["known_devices"], backfill_days=int(cfg["backfill_days"]),
                    recover_reports=s["n_recover"] if recover and not rebuild else 0,
                    mode=mode, refresh_days=refresh_days, retention_days=int(cfg.get("retention_days") or 0),
                    total_reports=n, reread_reports=reread, keep_reports=max(0, n - reread) if not rebuild else 0,
@@ -1825,7 +1888,8 @@ def _drive_host(drive: str) -> str:
     return hit
 
 
-def _run(cfg: dict, tasks, fn, should_stop, group: Optional[Callable[[object], str]] = None) -> list:
+def _run(cfg: dict, tasks, fn, should_stop, group: Optional[Callable[[object], str]] = None,
+         on_result: Optional[Callable[[int, object], None]] = None, tick: Optional[Callable[[], None]] = None) -> list:
     """작업들을 동시에(또는 한 줄로) 돌리고 **입력 순서 그대로** 결과를 돌려준다.
 
     `group` 을 주면 작업을 NAS 별로 나눠(`nas_group`) **NAS 마다 `read_workers` 개씩** 번갈아 돌린다 — 한 NAS 에 스레드가 몰려
@@ -1834,20 +1898,33 @@ def _run(cfg: dict, tasks, fn, should_stop, group: Optional[Callable[[object], s
 
     ★ 여기서 하는 일은 NAS **읽기**뿐이다. 캐시·행을 합치는 일은 부르는 쪽(메인 스레드)이 한다 —
       스레드가 공유 dict 를 고치지 않으니 순서가 바뀌어도 결과가 달라지지 않는다.
-      작업 하나가 예외(취소 포함)를 내면 새 작업을 꺼내지 않고, 입력 순서로 가장 앞선 예외를 다시 던진다."""
+      작업 하나가 예외(취소 포함)를 내면 새 작업을 꺼내지 않고, 입력 순서로 가장 앞선 예외를 다시 던진다.
+
+    10/11 — 중단과 이어하기: `on_result(i, 결과)` 를 주면 결과가 **끝나는 대로 메인 스레드에서** 불리고(그러면 반환 목록은 비어 있다),
+    `tick()` 은 틈틈이 불린다(중간 저장). 중지(`should_stop`)가 보이면 **진행 중인 읽기를 기다리지 않고** 이미 끝난 결과만
+    `on_result` 로 넘긴 뒤 곧바로 `CollectCancelled` 를 던진다 — 중단이 느린 NAS 호출 하나에 붙잡히지 않는다."""
     tasks = list(tasks)
     if not tasks:
         return []
     n = _workers(cfg, len(tasks))
+    results: list = [None] * len(tasks)
     if n == 1:
-        return [fn(t) for t in tasks]
+        for i, t in enumerate(tasks):
+            _check(should_stop)
+            r = fn(t)
+            if on_result is not None:
+                on_result(i, r)
+            else:
+                results[i] = r
+            if tick is not None:
+                tick()
+        return results
     queues: "collections.OrderedDict[str, collections.deque]" = collections.OrderedDict()
     for i, t in enumerate(tasks):
         queues.setdefault(group(t) if group else "", collections.deque()).append(i)
     per = max(1, min(n, MAX_READ_THREADS // len(queues)))
     lanes = [(q, min(per, len(q))) for q in queues.values()]
-    results: list = [None] * len(tasks)
-    failed: List[Tuple[int, BaseException]] = []
+    out: "queue.Queue" = queue.Queue()
     lock, stop = threading.Lock(), threading.Event()
 
     def lane(q):
@@ -1857,16 +1934,57 @@ def _run(cfg: dict, tasks, fn, should_stop, group: Optional[Callable[[object], s
                     return
                 i = q.popleft()
             try:
-                results[i] = fn(tasks[i])
+                r = fn(tasks[i])
             except BaseException as e:  # noqa: BLE001 — 취소·예외는 모아서 메인 스레드가 다시 던진다
-                with lock:
-                    failed.append((i, e))
+                out.put((i, None, e))
                 stop.set()
                 return
+            out.put((i, r, None))
 
-    with ThreadPoolExecutor(max_workers=sum(k for _, k in lanes), thread_name_prefix="aoi-read") as pool:
-        for f in [pool.submit(lane, q) for q, k in lanes for _ in range(k)]:
-            f.result()
+    failed: List[Tuple[int, BaseException]] = []
+
+    def take(item) -> None:
+        i, r, exc = item
+        if exc is not None:
+            failed.append((i, exc))
+        elif on_result is not None:
+            on_result(i, r)
+        else:
+            results[i] = r
+
+    pool = ThreadPoolExecutor(max_workers=sum(k for _, k in lanes), thread_name_prefix="aoi-read")
+    futs = [pool.submit(lane, q) for q, k in lanes for _ in range(k)]
+    try:
+        while True:
+            try:
+                item = out.get(timeout=0.25)
+            except queue.Empty:
+                if tick is not None:
+                    tick()
+                if should_stop and should_stop():
+                    raise CollectCancelled()
+                if all(f.done() for f in futs) and out.empty():
+                    break
+                continue
+            take(item)
+            if tick is not None:
+                tick()
+            if should_stop and should_stop():
+                raise CollectCancelled()
+    except BaseException:
+        stop.set()
+        pool.shutdown(wait=False, cancel_futures=True)     # 진행 중인 읽기는 기다리지 않는다(읽기만 하는 스레드라 버려도 안전하다)
+        while True:                                        # 이미 끝난 결과는 잃지 않는다
+            try:
+                item = out.get_nowait()
+            except queue.Empty:
+                break
+            try:
+                take(item)
+            except Exception:  # noqa: BLE001
+                break
+        raise
+    pool.shutdown(wait=True)
     if failed:
         raise min(failed, key=lambda x: x[0])[1]
     _check(should_stop)                      # 취소는 각 작업 안에서도 보지만, 끝나고 한 번 더 본다
@@ -1895,7 +2013,8 @@ def _list_all(rep_dir: str, name: str) -> list:
 
 
 def _list_new_reports(devs, cache, cfg, backfill, log, progress, on_device, should_stop, recover=False,
-                      refresh_days: int = 0, window_days=None, refresh_since_ts=None, refresh_until_ts=None):
+                      refresh_days: int = 0, window_days=None, refresh_since_ts=None, refresh_until_ts=None,
+                      resume_after: Optional[float] = None):
     """1차 패스: 장비마다 Report 폴더를 한 번 나열(scandir+stat 만)해 읽을 파일을 고른다. NAS 읽기 전용.
 
     장비 30대를 한 줄로 나열하면 SMB 왕복 지연이 30번 더해진다 — 동시에 나열한다(`read_workers`).
@@ -1906,6 +2025,7 @@ def _list_new_reports(devs, cache, cfg, backfill, log, progress, on_device, shou
       * `recover`: INI 를 못 찾았던 Report 만 다시 읽는다(`dm["recovered"]`).
       * 지난번 다시 읽다 실패해 이전 행을 그대로 둔 Report(`failed` 에 재시도가 남은 것)는 다시 읽는다(`dm["retried"]`).
     `window_days` 는 backfill 창 길이(기본 `backfill_days`; rebuild 는 `retention_days`).
+    `resume_after`(10/11): 멈춘 다시 읽기를 이어가는 중이면 그 시작 시각 — 그 뒤에 이미 다시 읽은 Report(`seen` ≥ 이 값)는 건너뛴다.
 
     돌려주는 `known` 은 '이미 캐시에 잘 들어 있는 파일들의 수정시각' — 커서를 어디까지 밀어도 되는지
     계산할 때 쓴다(읽기에 실패한 파일을 커서가 넘어가 버리지 않게).
@@ -1979,7 +2099,8 @@ def _list_new_reports(devs, cache, cfg, backfill, log, progress, on_device, shou
                 cached = reports.get(key)
                 if cached and abs(float(cached.get("mtime", 0)) - m) < 1:
                     pending = failed.get(key) or {}
-                    if refresh_since is not None and m >= refresh_since and (refresh_until_ts is None or m < float(refresh_until_ts)):
+                    if (refresh_since is not None and m >= refresh_since and (refresh_until_ts is None or m < float(refresh_until_ts))
+                            and not (resume_after and float(cached.get("seen") or 0) >= resume_after)):
                         dm["refreshed"] += 1
                         pick.append((e, key))
                     elif recover and _needs_recovery(cached):
@@ -2073,6 +2194,29 @@ def collect(cfg: dict, full: bool = False, backfill: bool = False, *, recover: b
             progress: Optional[ProgressFn] = None, log: Optional[LogFn] = None,
             should_stop: Optional[Callable[[], bool]] = None,
             on_device: Optional[DeviceFn] = None, stats: Optional[dict] = None) -> Tuple[List[dict], List[dict], List[dict]]:
+    """수집 한 번(`_collect`). **중지(`CollectCancelled`)해도 읽은 것은 잃지 않는다**(10/11) — 이미 캐시에 합친 Report · KLA Wafer 를 저장하고
+    (전체 다시 만들기는 후보 캐시를 `<캐시>.rebuild` 에) 같은 일을 다시 하면 거기서 이어간다. 저장한 Report 수는 `stats["cancel_saved"]`.
+    결과 HTML 은 만들지 않으므로 이전 화면은 그대로 남는다."""
+    stats = stats if stats is not None else {}
+    ctx: dict = {}
+    try:
+        return _collect(cfg, full, backfill, recover=recover, refresh_window_days=refresh_window_days, rebuild_all=rebuild_all,
+                        refresh_range=refresh_range, rdl_patch=rdl_patch, progress=progress, log=log, should_stop=should_stop,
+                        on_device=on_device, stats=stats, ctx=ctx)
+    except (CollectCancelled, KeyboardInterrupt):
+        flush = ctx.get("flush")
+        if flush is not None:
+            try:
+                stats["cancel_saved"] = flush()
+            except Exception as ex:  # noqa: BLE001 — 저장이 안 돼도 중지는 중지다(다음에 처음부터 읽을 뿐)
+                _LOG.warning("중지 중 캐시 저장 실패: %s", ex)
+                _say(log, f"중지하며 읽은 것을 저장하지 못했습니다 — {ex}")
+        raise
+
+
+def _collect(cfg: dict, full: bool, backfill: bool, *, recover: bool, refresh_window_days, rebuild_all, refresh_range, rdl_patch: bool,
+             progress: Optional[ProgressFn], log: Optional[LogFn], should_stop: Optional[Callable[[], bool]],
+             on_device: Optional[DeviceFn], stats: dict, ctx: dict) -> Tuple[List[dict], List[dict], List[dict]]:
     """NAS 를 읽어 (rows, dev_meta, errors) 를 돌려주고 캐시를 갱신한다. HTML 은 `write_html` 이 따로 쓴다.
 
     `stats` 에 dict 를 주면 단계별 경과(ms)·읽은 수·INI 왕복 수를 채워 준다(`write_html` 이 `meta.timing` 으로 박는다).
@@ -2091,7 +2235,6 @@ def collect(cfg: dict, full: bool = False, backfill: bool = False, *, recover: b
         미접근 장비·지금 목록에 없는 장비·다시 읽다 실패한 Report 의 이전 이력은 후보로 옮긴다. 실패면 `RebuildRejected`(원 캐시 그대로)."""
     progress = progress or (lambda d, t, p: None)
     on_device = on_device or (lambda n, s, d: None)
-    stats = stats if stats is not None else {}
     clock = time.perf_counter
     t0 = clock()
     started_at = dt.datetime.now().isoformat(timespec="seconds")
@@ -2106,15 +2249,63 @@ def collect(cfg: dict, full: bool = False, backfill: bool = False, *, recover: b
     progress(0, 0, i18n.KO.COLLECT_PHASE_DEVICES)
     old_cache: Optional[dict] = None
     dirty = _Dirty()                                          # C04: 저장 이유 — 비어 있으면 캐시 파일을 건드리지 않는다
+    sig = _resume_sig(cfg, rebuild, refresh_days, rng)
+    resume_after: Optional[float] = None
+    resumed_n = 0
     if rebuild:
         old_cache = _load_cache(cfg, log=log, dirty=dirty)   # 원 캐시는 검증 뒤 교체할 때까지 그대로 둔다
-        cache = _empty_cache()
+        cache = _load_resume(cfg, sig) or _empty_cache()      # 멈춘 재구축이 있으면 그 후보에서 이어간다(10/11)
+        resumed_n = len(cache["reports"])
+        if resumed_n:
+            _say(log, f"이어하기: 멈춘 '전체 다시 만들기' 의 후보 캐시(Report {resumed_n}개)에서 이어서 읽습니다")
         cache["_status"] = old_cache.get("_status")
         if old_cache.get(_CORRUPT_KEY):
             cache[_CORRUPT_KEY] = old_cache[_CORRUPT_KEY]      # 손상 원본 보존은 _save_cache 가 한다
         dirty.add(DIRTY_REBUILD)
     else:
         cache = _load_cache(cfg, log=log, dirty=dirty)
+    if sig:                                                    # 다시 읽기 · 재구축: 같은 일을 다시 하면 이미 한 것은 건너뛴다
+        rs = cache.get("resume") if isinstance(cache.get("resume"), dict) else {}
+        if rs.get("sig") == sig and rs.get("started") and time.time() - float(rs["started"]) < RESUME_MAX_AGE_SEC:
+            resume_after = float(rs["started"])
+            if not rebuild:
+                _say(log, "이어하기: 멈춘 같은 다시 읽기에서 이미 다시 읽은 Report 는 건너뜁니다")
+        else:
+            cache["resume"] = {"sig": sig, "started": time.time()}
+            dirty.add(DIRTY_RESUME)
+
+    def save_partial() -> bool:
+        """지금까지 합친 것을 저장한다 — 재구축은 후보를 `.rebuild` 에, 그 밖에는 캐시에. 저장했으면 True."""
+        if not (cache["reports"] or cache.get("kla")):
+            return False                                       # 읽은 것이 없으면 저장할 것도 없다(빈 캐시를 만들지 않는다)
+        if rebuild:
+            _save_cache(cfg, cache, resume_file=True)
+            return True
+        if dirty:
+            sv = _save_cache(cfg, cache)
+            if sv.get("preserved"):
+                stats["cache_preserved"] = sv["preserved"]
+            return True
+        return False
+
+    ctx["flush"] = lambda: (save_partial(), len(cache["reports"]))[1]
+    ckpt = {"at": time.monotonic(), "every": CHECKPOINT_MIN_SEC}
+
+    def checkpoint() -> None:
+        """읽는 동안 가끔 캐시를 저장해 둔다 — 중지해도 잃는 것이 마지막 저장 뒤 몇십 초 분량뿐이게(10/11)."""
+        if time.monotonic() - ckpt["at"] < ckpt["every"]:
+            return
+        t_s = time.monotonic()
+        try:
+            if ctx.get("advance"):
+                ctx["advance"]()
+            save_partial()
+        except Exception as ex:  # noqa: BLE001 — 중간 저장이 안 돼도 수집은 계속한다(끝에서 다시 저장한다)
+            _LOG.warning("중간 저장 실패: %s", ex)
+        took = time.monotonic() - t_s
+        ckpt["at"] = time.monotonic()
+        ckpt["every"] = max(CHECKPOINT_MIN_SEC, took * 10)          # 캐시가 커서 저장이 오래 걸리면 그만큼 드물게(읽기 시간의 10% 이하)
+
     stats["cache_status"] = cache_status(cache)
     backfill = backfill or rebuild or not cache["reports"]
     devs = devices_mod.resolve_devices(cfg, log, should_stop=should_stop)   # 장비 확인도 read_workers 개씩(C08) — 같은 예산, 중첩 풀 없음
@@ -2148,10 +2339,10 @@ def collect(cfg: dict, full: bool = False, backfill: bool = False, *, recover: b
     if rdl_patch:
         # 10/5 'RDL 영역 INI 패치': Report 폴더 나열도 Report 읽기도 없이, 캐시에 있는 RDL 행의 Wafer 폴더 INI 만 정확 경로로 읽는다.
         cam_devs, kla_devs = [], []
-        _patch_rdl_modes(cfg, cache, devs, should_stop, log, progress, stats, dirty)
+        _patch_rdl_modes(cfg, cache, devs, should_stop, log, progress, stats, dirty, tick=checkpoint)
     plan = _list_new_reports(cam_devs, cache, cfg, backfill, log, progress, on_device, should_stop, recover=recover,
                              refresh_days=0 if rebuild else refresh_days, window_days=window_days,
-                             refresh_since_ts=rng_ts[0], refresh_until_ts=rng_ts[1])
+                             refresh_since_ts=rng_ts[0], refresh_until_ts=rng_ts[1], resume_after=resume_after)
     stats["list_ms"] = int((clock() - t1) * 1000)
     stats["list_pattern"] = sum(1 for _d, dm, _p, _k in plan if dm.get("listing") == "pattern")
     if PATTERN_LISTER is not None:                            # 패턴 나열을 쓰는 PC 에서만 — 다음 전체 나열 시각을 정하는 근거
@@ -2224,9 +2415,17 @@ def collect(cfg: dict, full: bool = False, backfill: bool = False, *, recover: b
     slow: List[Tuple[int, str, str]] = []
     by_dev: Dict[str, dict] = {str(d["key"]): {"ok": list(known), "blocked": []}
                                for d, dm, _pick, known in plan if not dm["error"]}
-    for (d, _dm, e, key, _scan, _bk), mtime, rows_of, err, sec, sha, pout in _run(cfg, jobs, read_one, should_stop,
-                                                                                group=lambda j: nas_group(j[0]["path"])):
+    pending_m = {str(d["key"]): len(pick) for d, dm, pick, _known in plan if not dm["error"]}     # 메인 스레드가 아직 합치지 못한 Report 수
+    plan_by = {str(d["key"]): (d, dm) for d, dm, _pick, _known in plan}
+    ins_reports: List[Tuple[int, str]] = []                   # 입력 순서로 되돌리기 위한 기록 — 합치는 순서는 끝나는 대로라 달라진다
+    ins_failed: List[Tuple[int, str]] = []
+    err_at: List[Tuple[int, dict]] = []
+
+    def merge(idx, res) -> None:
+        nonlocal n_new
+        (d, _dm, e, key, _scan, _bk), mtime, rows_of, err, sec, sha, pout = res
         dk, did = str(d["key"]), str(d["id"])
+        pending_m[dk] = pending_m.get(dk, 1) - 1
         _dm["read_sum_ms"] = _dm.get("read_sum_ms", 0) + int(sec * 1000)   # 병렬로 겹치는 시간의 **합**(경과시간 아님)
         _dm["read_n"] = _dm.get("read_n", 0) + 1
         slow.append((int(sec * 1000), d["name"], e.name))                # 숨긴 수집 로그 — 가장 오래 걸린 Report
@@ -2239,6 +2438,7 @@ def collect(cfg: dict, full: bool = False, backfill: bool = False, *, recover: b
                 dirty.add(DIRTY_UPDATED)
             else:
                 dirty.add(DIRTY_REPORTS)
+                ins_reports.append((idx, key))
             reports[key] = {"mtime": mtime, "device": d["name"], "device_id": did, "device_key": dk,
                             "rel": _rel_key(e.name), "path": e.path, "sha256": sha, "revision": revision,
                             "rows": rows_of, "seen": time.time(), "parser_version": PARSER_VERSION}
@@ -2253,16 +2453,19 @@ def collect(cfg: dict, full: bool = False, backfill: bool = False, *, recover: b
                                   t=bst.strftime("%Y-%m-%d %H:%M") if bst else "", report=e.name, files=pout["files"]):
                     dirty.add(DIRTY_PARAMS)
                     stats["params_snaps"] = stats.get("params_snaps", 0) + 1
-            continue
+            return
         tries = int(failed.get(key, {}).get("tries", 0)) + 1
         prev = reports.get(key)                                      # 다시 읽기(refresh·recover·재시도)였다면 이전 행이 있다
         if prev is None and old_cache is not None and key in old_cache["reports"]:
             prev = reports[key] = old_cache["reports"][key]          # rebuild: 실패한 Report 는 이전 이력을 후보로 옮긴다
+            ins_reports.append((idx, key))
+        if key not in failed:
+            ins_failed.append((idx, key))
         failed[key] = {"mtime": mtime, "tries": tries, "device_id": did, "device_key": dk, "path": e.path, "error": err,
                        "kept_rows": len(prev.get("rows") or ()) if prev else 0}
         dirty.add(DIRTY_FAILED)
-        errors.append({"device": d["name"], "path": e.path, "tries": tries, "error": err,
-                       "kept_rows": failed[key]["kept_rows"]})
+        err_at.append((idx, {"device": d["name"], "path": e.path, "tries": tries, "error": err,
+                             "kept_rows": failed[key]["kept_rows"]}))
         _dm["read_errors"] += 1
         if prev is not None:
             _say(log, f"[{d['name']}] {e.name}: 다시 읽기 실패 — 이전 행 {failed[key]['kept_rows']}개를 그대로 두고 다음에 재시도합니다")
@@ -2270,16 +2473,34 @@ def collect(cfg: dict, full: bool = False, backfill: bool = False, *, recover: b
         by_dev[dk]["blocked" if tries < MAX_READ_RETRY else "ok"].append(mtime)
         if tries >= MAX_READ_RETRY:
             _say(log, f"[{d['name']}] {e.name}: {tries}번 실패해 더는 붙잡지 않습니다(오류 목록에는 남습니다)")
+
+    def advance_finished() -> None:
+        # 커서는 이 장비의 파싱이 **다 합쳐진** 뒤에만 전진 — 중간에 멈추면 다음에 같은 파일을 다시 본다(이미 합친 것은 캐시에 있어 건너뛴다)
+        for dk, cur in by_dev.items():
+            if pending_m.get(dk, 0) <= 0 and _advance_cursor(last, dk, cur["ok"], cur["blocked"]):
+                dirty.add(DIRTY_CURSOR)
+
+    def flush_read() -> int:
+        advance_finished()
+        save_partial()
+        return len(reports)
+
+    ctx["flush"] = flush_read
+    ctx["advance"] = advance_finished
+    _run(cfg, jobs, read_one, should_stop, group=lambda j: nas_group(j[0]["path"]), on_result=merge, tick=checkpoint)
+    # 끝나는 대로 합쳤으므로 dict 순서를 입력 순서로 되돌린다 — 읽는 스레드 수와 상관없이 결과가 같다(예전 규칙)
+    for _i, k in sorted(ins_reports):
+        reports[k] = reports.pop(k)
+    for _i, k in sorted(ins_failed):
+        failed[k] = failed.pop(k)
+    errors.extend(e for _i, e in sorted(err_at, key=lambda x: x[0]))
     for d, dm, _pick, _known in plan:
         if dm["error"]:
             dev_meta.append(dm)
             continue
-        # 커서는 이 장비의 파싱이 끝난 뒤에만 전진 — 중간에 취소되면 다음에 같은 파일을 다시 본다
-        cur = by_dev[str(d["key"])]
-        if _advance_cursor(last, str(d["key"]), cur["ok"], cur["blocked"]):
-            dirty.add(DIRTY_CURSOR)
         on_device(d["name"], "partial" if dm["read_errors"] else "done", "")
         dev_meta.append(dm)
+    advance_finished()
     _check(should_stop)
     stats["read_ms"] = int((clock() - t2) * 1000)
     if old_cache is not None and "kla" not in cache:          # rebuild 후보 캐시에도 KLA 이력은 그대로 옮긴다(아래에서 창 안만 다시 읽는다)
@@ -2287,8 +2508,12 @@ def collect(cfg: dict, full: bool = False, backfill: bool = False, *, recover: b
     if kla_devs:
         for d in kla_devs:
             on_device(d["name"], "listing", "")
+        ctx["flush"] = lambda: (dirty.add(DIRTY_KLA), flush_read())[1]        # 중지해도 읽은 KLA Wafer 는 저장한다
         k_meta, k_err, k_changed, k_stats = kla_mod.collect_kla(
-            cfg, kla_devs, cache, run=lambda items, fn, path_of: _run(cfg, items, fn, should_stop, group=lambda x: nas_group(path_of(x))),
+            cfg, kla_devs, cache,
+            run=lambda items, fn, path_of, on_result=None, tick=None: _run(
+                cfg, items, fn, should_stop, group=lambda x: nas_group(path_of(x)), on_result=on_result, tick=tick),
+            resume_after=resume_after, on_change=lambda: dirty.add(DIRTY_KLA), tick=checkpoint,
             now=dt.datetime.now(), backfill=backfill, refresh_days=0 if rebuild else refresh_days, rebuild=rebuild,
             log=lambda m: _say(log, m), progress=progress, phase=i18n.KO.COLLECT_PHASE_KLA,
             refresh_from=dt.datetime.combine(rng[0], dt.time()) if rng else None,
@@ -2328,7 +2553,7 @@ def collect(cfg: dict, full: bool = False, backfill: bool = False, *, recover: b
         dirty.add(DIRTY_RETENTION)
     if old_cache is not None:
         carried = _carry_over(old_cache, cache, index, plan, cutoff)
-        reasons = _validate_rebuild(old_cache, cache, plan, n_new)
+        reasons = _validate_rebuild(old_cache, cache, plan, n_new + resumed_n)   # 이어하기: 앞서 읽어 둔 후보도 읽은 것으로 센다
         if reasons:
             raise RebuildRejected("전체 재구축 후보를 버리고 기존 캐시를 그대로 둡니다 — " + " / ".join(reasons))
         _say(log, f"전체 재구축: 새로 읽은 Report {n_new}개 · 이전 이력 이관 {carried['reports']}개"
@@ -2338,9 +2563,11 @@ def collect(cfg: dict, full: bool = False, backfill: bool = False, *, recover: b
     if devinfo and devinfo != cache.get("last_devices"):
         cache["last_devices"] = devinfo
         dirty.add(DIRTY_DEVICE_INFO)
+    if cache.pop("resume", None) is not None:                    # 끝까지 갔다 — 이어하기 표시는 거둔다
+        dirty.add(DIRTY_RESUME)
     stats["cache_dirty"] = dict(sorted(dirty.reasons.items()))
     if dirty:
-        saved = _save_cache(cfg, cache)
+        saved = _save_cache(cfg, cache, drop_resume=rebuild)
         stats["cache_saved"] = True
         if saved.get("preserved"):
             stats["cache_preserved"] = saved["preserved"]
