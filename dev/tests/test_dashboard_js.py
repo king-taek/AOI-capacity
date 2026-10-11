@@ -692,19 +692,37 @@ def test_no_pattern_jobs_are_test_and_leave_utilization():
 
 
 def test_lot_tab_follows_wafer_ids_across_renamed_lots_and_devices():
-    """LOT 추적(10/11): Lot 이름이 바뀌어도 Wafer ID 로 같은 실물을 묶어 모든 검사를 시간 순으로 보인다."""
-    A = "J1_6321_0909-XKS_18-Sep-26_(01.00.00)_BatchReport.htm"
-    B = "J1_6321_XKS-161_18-Sep-26_(03.00.00)_BatchReport.htm"
-    rows = [w("AOI-1", "38135F75EWB5", "00:10", "00:20", lot="0909-XKS", report=A) | {"recipe": "x20", "faults": "7"},
-            w("AOI-1", "38135F75EWB6", "00:20", "00:30", lot="0909-XKS", report=A, status="Failed to align. Wafer rejected."),
-            w("AOI-2", "38135F75EWB5", "02:10", "02:30", lot="XKS-161", report=B) | {"recipe": "x20", "faults": "5"},
+    """LOT 추적(10/11): 앞 세 글자가 같은 이름은 한 Lot 으로 묶고, Wafer ID 로 모든 검사를 시간 순으로 보인다."""
+    A = "J1_6321_LPT-PIDS5_18-Sep-26_(01.00.00)_BatchReport.htm"
+    B = "J1_6321_LPT-RDL3_18-Sep-26_(03.00.00)_BatchReport.htm"
+    rows = [w("AOI-1", "38135F75EWB5", "00:10", "00:20", lot="LPT-PIDS5", report=A) | {"recipe": "x20", "faults": "7"},
+            w("AOI-1", "38135F75EWB6", "00:20", "00:30", lot="LPT-PIDS5 RESCAN", report=A, status="Failed to align. Wafer rejected."),
+            w("AOI-2", "38135F75EWB5", "02:10", "02:30", lot="LPT-RDL3", report=B) | {"recipe": "x20", "faults": "5"},
             w("AOI-2", "OTHER0WAFER1", "05:00", "05:10", lot="ZZZ-1")]
-    (out,) = screen(rows, meta("AOI-1", "AOI-2"), [["lotHtml"]], state={"view": "lot", "lotPick": {"k": "lot", "v": "0909-XKS"}})
-    assert out.count('class="lotatt"') == 2                        # 두 Report, 장비·이름 달라도
-    assert "XKS-161" in out and "ZZZ-1" not in out.split("검사 순서")[1]
-    assert "이름 바뀐 재검사 1" in out
+    (lst,) = screen(rows, meta("AOI-1", "AOI-2"), [["lotHtml"]], state={"view": "lot"})
+    assert lst.count('data-key="lp:lot:LPT"') == 1 and "LPT-RDL3</span>" not in lst.split("lotscroll")[1]
+    (out,) = screen(rows, meta("AOI-1", "AOI-2"), [["lotHtml"]], state={"view": "lot", "lotPick": {"k": "lot", "v": "LPT"}})
+    assert out.count('class="lotatt"') == 2 and "ZZZ-1" not in out.split("검사 순서")[1]
+    assert "LPT-RDL3" in out and "확인 필요" not in out
     (q,) = screen(rows, meta("AOI-1", "AOI-2"), [["lotHtml"]], state={"view": "lot", "lotQ": "ewb6"})
     assert "Wafer 38135F75EWB6" in q
+
+
+def test_lot_tab_groups_test_and_dbm_names_and_flags_prefix_conflicts():
+    """10/11: 'DBM-FS DIA' → DBM, 코드가 아닌 'TEST' 는 Wafer ID 가 한 그룹뿐이면 그 그룹을 따라간다. 같은 Wafer 인데 코드가 다르면 합치지 않고 확인 필요."""
+    rows = [w("AOI-1", "AAAA00000001", "00:10", "00:20", lot="DBM-FS DIA", report="r1.htm"),
+            w("AOI-1", "AAAA00000001", "01:10", "01:20", lot="TEST", report="r2.htm"),
+            w("AOI-1", "BBBB00000001", "02:10", "02:20", lot="WUP", report="r3.htm"),
+            w("AOI-1", "BBBB00000001", "03:10", "03:20", lot="WUS", report="r4.htm"),
+            w("AOI-1", "CCCC00000001", "04:10", "04:20", lot="0901", report="r5.htm")]
+    (lst,) = screen(rows, meta("AOI-1"), [["lotHtml"]], state={"view": "lot"})
+    keys = re.findall(r'data-key="lp:lot:([^"]+)"', lst)
+    assert sorted(keys) == ["0901", "DBM", "WUP", "WUS"]                 # TEST 는 DBM 으로
+    assert lst.count("확인 필요") == 2                                     # WUP · WUS 둘 다
+    (dbm,) = screen(rows, meta("AOI-1"), [["lotHtml"]], state={"view": "lot", "lotPick": {"k": "lot", "v": "DBM"}})
+    assert dbm.count('class="lotatt"') == 2 and "lotconf" not in dbm
+    (wup,) = screen(rows, meta("AOI-1"), [["lotHtml"]], state={"view": "lot", "lotPick": {"k": "lot", "v": "WUP"}})
+    assert "lotconf" in wup and "WUS" in wup and "같은 Lot 으로 보기" in wup and wup.count('class="lotatt"') == 1
 
 
 def test_scan_share_counts_only_rows_with_scan_sec_and_keeps_utilization():
