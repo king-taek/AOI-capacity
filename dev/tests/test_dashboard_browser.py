@@ -823,7 +823,7 @@ def rdl2_page(page_factory, tmp_path):
 
 def test_rdl_tab_lot_stat_outlier_x5_rule_and_wording(rdl_page):
     pg, errors = rdl_page
-    assert [t.strip() for t in pg.locator("nav button").all_inner_texts()] == ["가동률", "Error", "TB500 · Kendall", "RDL 단일스캔"]
+    assert [t.strip() for t in pg.locator("nav button").all_inner_texts()] == ["가동률", "Error", "TB500 · Kendall", "RDL 단일스캔", "LOT 추적"]
     pg.locator('button[data-fk="nav:recipe"]').click()
     pg.wait_for_selector('main[data-key="view:recipe"]')
     pg.wait_for_timeout(400)

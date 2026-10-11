@@ -434,7 +434,7 @@ def test_header_has_four_tabs_and_each_popup_renders_an_accessible_dialog():
         ["devPopupHtml"], ["errPopupHtml"], ["typePopupHtml"],
         ["errorsHtml"], ["typePopupHtml"]],
         state={"modalDev": "AOI-1", "modalDayI": 0, "errDev": "AOI-1", "errDayI": 0})
-    assert re.findall(r'data-fk="nav:([a-z]+)"', head) == ["home", "errors", "report", "recipe"]   # 10/5: KLA 탭 · 추이 탭 없음
+    assert re.findall(r'data-fk="nav:([a-z]+)"', head) == ["home", "errors", "report", "recipe", "lot"]   # 10/5: KLA 탭 · 추이 탭 없음, 10/11 LOT 추적
     for label in (">가동률<", ">Error<", ">TB500 · Kendall<", ">RDL 단일스캔<", ">사본 저장<"):
         assert label in head, label
     assert ">추이<" not in head and ">KLA<" not in head
@@ -689,3 +689,19 @@ def test_no_pattern_jobs_are_test_and_leave_utilization():
     rows = [w("AOI-1", "W1", "08:00", "09:00", job="No Pattern Mon_0901"), w("AOI-1", "W2", "10:00", "10:30")]
     t = at(run(rows), "AOI-1")
     assert (t["t"], t["r"]) == (60, 30)
+
+
+def test_lot_tab_follows_wafer_ids_across_renamed_lots_and_devices():
+    """LOT 추적(10/11): Lot 이름이 바뀌어도 Wafer ID 로 같은 실물을 묶어 모든 검사를 시간 순으로 보인다."""
+    A = "J1_6321_0909-XKS_18-Sep-26_(01.00.00)_BatchReport.htm"
+    B = "J1_6321_XKS-161_18-Sep-26_(03.00.00)_BatchReport.htm"
+    rows = [w("AOI-1", "38135F75EWB5", "00:10", "00:20", lot="0909-XKS", report=A) | {"recipe": "x20", "faults": "7"},
+            w("AOI-1", "38135F75EWB6", "00:20", "00:30", lot="0909-XKS", report=A, status="Failed to align. Wafer rejected."),
+            w("AOI-2", "38135F75EWB5", "02:10", "02:30", lot="XKS-161", report=B) | {"recipe": "x20", "faults": "5"},
+            w("AOI-2", "OTHER0WAFER1", "05:00", "05:10", lot="ZZZ-1")]
+    (out,) = screen(rows, meta("AOI-1", "AOI-2"), [["lotHtml"]], state={"view": "lot", "lotPick": {"k": "lot", "v": "0909-XKS"}})
+    assert out.count('class="lotatt"') == 2                        # 두 Report, 장비·이름 달라도
+    assert "XKS-161" in out and "ZZZ-1" not in out.split("검사 순서")[1]
+    assert "이름 바뀐 재검사 1" in out
+    (q,) = screen(rows, meta("AOI-1", "AOI-2"), [["lotHtml"]], state={"view": "lot", "lotQ": "ewb6"})
+    assert "Wafer 38135F75EWB6" in q

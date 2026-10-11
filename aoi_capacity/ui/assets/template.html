@@ -346,6 +346,11 @@ main{max-width:1420px;margin:0 auto;padding:22px 24px 90px}
 .kpi{border:1px solid var(--line);border-radius:12px;padding:14px 16px;background:#FBFCFD}.kpi .k{font-size:13px;font-weight:700;display:flex;align-items:center;gap:7px;margin:0 0 8px;flex-wrap:wrap}.kpi .kn{font-weight:500;font-size:12px}
 .kpi2{display:grid;grid-template-columns:1fr 1fr;gap:16px}.kpi2>div+div{border-left:1px solid #E6EBF0;padding-left:16px}.kpi .v{font-size:32px;font-weight:700;line-height:1.1;margin:0;color:var(--ink);white-space:nowrap}.kpi .v small{font-size:12px;font-weight:600;color:var(--ink-3);margin-left:3px}
 .kpi .vl{margin:3px 0 6px;font-size:12px;color:var(--ink-3)}.kpi .cc{margin:0;font-size:12px;line-height:1.5}.chip2{font-weight:700}
+.cards.lotcards .v{font-size:18px}.cards.lotcards>div{padding-left:14px;padding-right:12px}
+.lotgrid{display:grid;grid-template-columns:300px minmax(0,1fr);gap:16px;align-items:start}.lotlist .lotscroll{max-height:70vh;overflow:auto}
+.rowbtn.lotpick{display:flex;flex-direction:column;align-items:flex-start;gap:2px;width:100%;padding:8px 12px;border:0;border-bottom:1px solid #F3F5F8;background:transparent;text-align:left;cursor:pointer;font:inherit;font-size:12.5px}.rowbtn.lotpick:hover{background:#F6F9FC}.rowbtn.lotpick.on{background:#EAF2FB;box-shadow:inset 3px 0 0 var(--nav-on)}.rowbtn.lotpick .muted{font-size:11px}
+.lotatt{display:grid;grid-template-columns:84px 74px minmax(90px,1.2fr) minmax(110px,1.4fr) minmax(70px,.8fr) 64px 64px 78px minmax(110px,1fr) 52px;gap:8px;align-items:center;font-size:12px;padding:5px 0;border-bottom:1px solid #F3F5F8}.lotatt>span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.lotatt.head{font-weight:700;color:var(--ink-2);border-bottom:1px solid #EDF1F5}.lotatt .r{text-align:right}.lotatt .pill{margin-right:4px}.lotatt.sm{grid-template-columns:84px 74px minmax(90px,1fr) 70px minmax(80px,1fr) 80px 78px minmax(90px,1fr)}.lotbox{max-height:44vh;overflow:auto}
+.lotmx{display:grid;gap:2px;align-items:center;font-size:11px}.lotmx .lh{text-align:center;color:var(--ink-3)}.lotmx .lc{display:block;height:20px;border-radius:3px;background:#F3F5F8;color:#fff;font-style:normal;text-align:center;line-height:20px;font-size:10px;overflow:hidden}.lotmx .lw{border:0;background:transparent;text-align:left;font-size:11.5px;cursor:pointer;padding:2px 4px;border-radius:4px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.lotmx .lw:hover,.lotmx .lw.on{background:#EAF2FB}
 .psec{margin-top:22px}.psec h3{margin:0 0 10px;font-size:14px}.psec h3 .muted{font-weight:400;font-size:12px;margin-left:6px}
 .sgrid,.tgrid{display:grid;grid-template-columns:1fr 1fr;gap:16px}.sblock h4,.tblock h4{margin:0 0 8px;font-size:12.5px}.sblock h4 .muted,.tblock h4 .muted{font-weight:400;font-size:11px;margin-left:4px}
 .strip{display:grid;grid-template-columns:78px minmax(0,1fr) 66px;gap:10px;align-items:center;margin-bottom:6px}.strip .sk{display:flex;align-items:center;gap:6px;font-size:12px;font-weight:600}.strip .rk{text-align:right;font-size:12px;color:var(--ink-2)}.strip .rk b{color:var(--ink);font-size:13px}
@@ -1000,7 +1005,7 @@ function jobNm(G){if(!G)return{nm:"",al:false,raw:""};const raw=D.pool.job[G.l]|
 const PROPS={attentionUtil:40,attentionErr:3};   /* 살펴볼 장비 문턱 — meta.dashboard_settings 의 같은 이름 숫자가 있으면 그것으로(D14) */
 function applySettings(m){const o=(m&&m.dashboard_settings)||{};for(const k of Object.keys(PROPS)){const v=Number(o[k]);if(o[k]!==undefined&&Number.isFinite(v)&&v>=0)PROPS[k]=v;}}
 let D=null;
-const VIEWS=["home","errors","report","recipe"];   /* 10/5: KLA 탭 · 추이 탭은 없앴다(KLA 는 가동률의 구분 필터로) */
+const VIEWS=["home","errors","report","recipe","lot"];   /* 10/5: KLA 탭 · 추이 탭은 없앴다(KLA 는 가동률의 구분 필터로) */
 const state={view:"home",dayI:null,sort:"name",floor:"all",maker:"all",span:0,vp:"all",unit:"day",metric:"min",pickDay:undefined,
   modalDev:null,modalDayI:null,modalType:null,modalJob:null,selLot:null,lotFilter:"all",showMembers:false,
   stack:[],                                  /* 열린 팝업의 순서(type · dev · err) — 마지막이 맨 위, 나머지는 뒤로 물러난다 */
@@ -1011,7 +1016,7 @@ const state={view:"home",dayI:null,sort:"name",floor:"all",maker:"all",span:0,vp
   rcpSel:null,rcpJob:null,rcpPop:null,rcpUnit:"wafer",rcpMetric:"time",rcpOff:{},rcpHowAll:false,rcpPopOpen:{},rcpHide:{},rcpDevSort:"name",rcpBin:null,rcpQ:"",rcpMore:false,rcpDevSel:null,rcpExclOpen:false,rcpHowOpen:{},dayNote:"",                /* 레시피 탭(D70): 고른 레시피(그 묶음의 Job 원문 하나 — 다시 묶어도 따라간다) · 검색 · 기간 */
   errWinEnd:null,errFDev:null,                /* Error 팝업 21일 창의 끝(끌어서 옮김) · Error 탭 장비 필터(10/5) */
   _end:0};   /* 레시피 묶음 편집기(D67): 검색 · 새 이름 · 고른 Job 원문 · 목록 필터 */
-const INPUT_KEYS=new Set(["rgQ","rgName","rcpQ"]);   /* data-in 칸 → 같은 이름의 state */
+const INPUT_KEYS=new Set(["rgQ","rgName","rcpQ","lotQ"]);   /* data-in 칸 → 같은 이름의 state */
 let _drag=null;
 let H=[];const h=fn=>{H.push(fn);return H.length-1;};
 function setState(p){Object.assign(state,p);render();}
@@ -1556,7 +1561,7 @@ function render(){
   let html;
   if(!D||!D.days.length)html=headerHtml(null)+`<div class="stage" data-key="stage"><main data-key="view:none"><div class="panel" style="padding:28px 24px"><h2>아직 수집한 데이터가 없습니다</h2><p class="muted" style="margin-top:6px">수집 프로그램에서 '수집' 을 실행한 뒤 이 파일을 다시 여세요.</p></div></main></div>`+footHtml();
   else{const V=state.view;let body="";
-    if(V==="home")body=homeHtml();else if(V==="errors")body=errorsHtml();else if(V==="recipe")body=rcpHtml();else body=reportHtml();
+    if(V==="home")body=homeHtml();else if(V==="errors")body=errorsHtml();else if(V==="recipe")body=rcpHtml();else if(V==="lot")body=lotHtml();else body=reportHtml();
     html=headerHtml(V)+`<div class="stage" data-key="stage" data-anim="el"><main data-key="view:${V}">${body}</main></div>`+footHtml()+popupsHtml();}
   const tpl=document.createElement("template");tpl.innerHTML=html;
   if(app.getAttribute("data-anim")!=="el")app.setAttribute("data-anim","el");
@@ -1620,7 +1625,7 @@ function headerHtml(V){
   let stampTxt=gen?gen+" 수집 기준":"";
   if(meta.mode==="saved")stampTxt+=" · 사본";
   if(!fixed&&gen)stampTxt+=" · 수집 시각 정보 없음";
-  const nav=[["home","가동률"],["errors","Error"],["report","TB500 · Kendall"],["recipe","RDL 단일스캔"]];
+  const nav=[["home","가동률"],["errors","Error"],["report","TB500 · Kendall"],["recipe","RDL 단일스캔"],["lot","LOT 추적"]];
   return `<header class="hdr" data-key="hdr"><div class="brand"><span class="lt" data-lottie="scan" data-loop="1" data-static aria-hidden="true"></span>AOI 가동 현황</div>
     <nav class="nav"><i class="ind" data-key="ind" data-static aria-hidden="true"><b class="l"></b><b class="m"></b><b class="r"></b><b class="s"></b></i>${nav.map(([k,l])=>`<button class="${V===k?"on":""}" data-h="${h(S.go(k))}" data-fk="nav:${k}">${l}</button>`).join("")}</nav>
     <div class="spacer"></div>
@@ -1989,6 +1994,81 @@ function reportHtml(){
       <p style="margin:0;padding:11px 18px;background:#FBFCFD;font-size:12px;color:#5A6673;border-top:1px solid #EDF1F5">배치시간 = 준비 + 장당 × 장수 로 1차 회귀 — 절편이 준비, 기울기가 장당, ± 는 회귀 표준오차. 환산은 최빈 장수 기준. 표본 5개 미만이면 내지 않음. 배치시간은 Report 의 배치 시작~종료. 평균 Defect 는 Report 표 Faults 열이 있는 행만(옛 캐시 행은 다시 읽어야 채워짐).</p></div></div>`;
 }
 
+/* ---------- LOT 추적 탭(10/11 사용자, D87) ----------
+   Lot 이름은 사람이 적어 같은 Lot 이 다른 이름으로 다시 돌 때가 있다 — 기계가 읽은 Wafer ID 로 같은 Lot 을 묶어 따라간다.
+   고른 Lot(또는 Wafer ID)의 Wafer 들이 나온 모든 Report(장비 · 이름 무관)를 시간 순으로: 장비 · Lot 이름 · Job · 레시피 · 결과 · Defect · 시간 · 재검사 구분.
+   이 파일에 담긴 기록 전부를 본다(헤더 기간과 무관). Wafer ID 가 짧은 숫자(슬롯 번호 따위)면 같은 실물로 보지 않는다(matKey2 와 같은 규칙). 원천 행에서 계산 — 모델과 따로. */
+const lotIdOk=w=>{const id=String(w||"").toUpperCase().replace(/[^A-Z0-9]/g,"");return id.length>=6&&!/^\d+$/.test(id)?id:null;};
+let _lotIx=null;
+function lotIndex(){if(_lotIx&&_lotIx.rows===rows)return _lotIx;
+  const byW=new Map(),byLot=new Map();
+  for(const r of rows){if(r.kind)continue;const id=lotIdOk(r.wafer_id);const t=P(r.wafer_start_time)||P(r.batch_start);if(!t)continue;
+    const lot=String(r.lot||"").trim();
+    if(id){let a=byW.get(id);if(!a)byW.set(id,a=[]);a.push(r);}
+    if(lot){let L=byLot.get(lot);if(!L)byLot.set(lot,L={lot,ids:new Set(),devs:new Set(),last:0,n:0});if(id)L.ids.add(id);L.devs.add(r.device);L.n++;if(t.getTime()>L.last)L.last=t.getTime();}}
+  return _lotIx={rows,byW,byLot};}
+function lotFamily(pick){const X=lotIndex();let ids=new Set();
+  if(pick.k==="lot"){const L=X.byLot.get(pick.v);if(L)ids=new Set(L.ids);}else{const id=lotIdOk(pick.v);if(id)ids.add(id);}
+  const fam=[];for(const id of ids)for(const r of X.byW.get(id)||[])fam.push(r);
+  const tOf=r=>(P(r.wafer_start_time)||P(r.batch_start)).getTime();
+  fam.sort((a,b)=>tOf(a)-tOf(b));
+  /* 시도 = (장비, Report) 한 장 */
+  const atts=new Map(),lastPass=new Map(),names=new Set();
+  for(const r of fam){const k=r.device+"\u0001"+(r.report||r.lot+"\u0001"+r.batch_start);let A=atts.get(k);
+    if(!A){const bs=P(r.batch_start),be=P(r.batch_end);A={k,dev:r.device,lot:String(r.lot||""),job:String(r.job||""),rep:r.report||"",t:tOf(r),bmin:bs&&be&&be>bs?(be-bs)/60000:null,
+      rcp:new Set(),w:new Map(),p:0,e:0,s:0,f:0,fN:0,scan:0,scanN:0,re:0,ren:0,step:0,test:/(^|[^A-Z])TEST([^A-Z]|$)/i.test(r.lot||"")||MONITOR_JOB_RE.test(r.job||"")};atts.set(k,A);}
+    names.add(A.lot);if(r.recipe)A.rcp.add(String(r.recipe));
+    const id=lotIdOk(r.wafer_id),pass=isPass(r.status),c=causeOf(r.status);
+    const ws=P(r.wafer_start_time),we=P(r.wafer_end_time);
+    /* 재검사 = 모델의 Rescan 과 같은 조건(D87: Job 묶음 · 단계 낱말 · 레시피가 같고 앞 시도가 PASS) — 같은 Wafer 라도 Job·단계·레시피가 다르면 '다른 검사' */
+    const mk=(matKey2(r.job,r.lot,r.wafer_id)||"")+"|"+String(r.recipe||"");
+    let tag="";const prev=lastPass.get(mk),prevAny=lastPass.get(id);
+    if(prev&&prev.A!==A)tag=prev.lot===A.lot?"re":"ren";else if(prevAny&&prevAny.A!==A)tag="step";
+    const f=/^\d+$/.test(String(r.faults??"").trim())?+r.faults:null;
+    A.w.set(id,{r,pass,c,tag,f,min:r.ini_match==="EXACT"&&ws&&we&&we>ws?(we-ws)/60000:null});
+    if(pass){A.p++;if(f!=null){A.f+=f;A.fN++;}if(tag==="re")A.re++;else if(tag==="ren")A.ren++;else if(tag==="step")A.step++;lastPass.set(id,{A,lot:A.lot});lastPass.set(mk,{A,lot:A.lot});}
+    else if(c)A.e++;else A.s++;
+    const wm=A.w.get(id).min;if(wm!=null){A.scan+=wm;A.scanN++;}}
+  return {ids:[...ids].sort(),atts:[...atts.values()].sort((a,b)=>a.t-b.t),names};}
+function lotHtml(){
+  const X=lotIndex(),Q=(state.lotQ||"").trim().toUpperCase(),pick=state.lotPick;
+  const fmtT=t=>{const d=new Date(t);return md(dk(d))+" "+hhmm(t);};
+  let list=[];
+  if(Q){for(const L of X.byLot.values())if(L.lot.toUpperCase().includes(Q))list.push({k:"lot",v:L.lot,L});
+    const wids=[...X.byW.keys()].filter(id=>id.includes(Q.replace(/[^A-Z0-9]/g,""))).slice(0,12);for(const id of wids)list.push({k:"wid",v:id,n:X.byW.get(id).length});}
+  else list=[...X.byLot.values()].sort((a,b)=>b.last-a.last).slice(0,30).map(L=>({k:"lot",v:L.lot,L}));
+  list.sort((a,b)=>(a.k===b.k?0:a.k==="lot"?-1:1)||((b.L?b.L.last:0)-(a.L?a.L.last:0)));
+  const shown=list.slice(0,40);
+  const pickBtn=o=>`<button type="button" class="rowbtn lotpick${pick&&pick.k===o.k&&pick.v===o.v?" on":""}" data-key="lp:${esc(o.k+":"+o.v)}" data-h="${h(()=>setState({lotPick:{k:o.k,v:o.v},lotWid:null}))}"><span class="mono">${o.k==="wid"?"Wafer ":""}${esc(o.v)}</span><span class="muted">${o.L?`${o.L.ids.size} wafer · ${[...o.L.devs].join(", ")} · ${fmtT(o.L.last)}`:`${o.n}번 검사`}</span></button>`;
+  const left=`<div class="panel lotlist"><div style="padding:10px 12px;border-bottom:1px solid #EDF1F5"><input class="inp" type="search" data-in="lotQ" data-fk="lot:q" placeholder="Lot 이름 · Wafer ID 검색" value="${esc(state.lotQ||"")}" style="width:100%"></div>
+    <p class="muted" style="font-size:11.5px;margin:8px 12px 4px">${Q?`검색 결과 ${list.length}개${list.length>40?" · 40개 표시":""}`:"최근 Lot 30개"}</p><div class="lotscroll">${shown.map(pickBtn).join("")||`<p class="empty">없음</p>`}</div></div>`;
+  let right=`<div class="panel" style="padding:28px;color:#5A6673;font-size:13px">왼쪽에서 Lot 이나 Wafer ID 를 고르면, 그 Wafer 들이 <b>이름이 달라도</b> 어느 장비에서 어떤 레시피로 몇 번 검사됐는지 시간 순으로 보여 줍니다.</div>`;
+  if(pick){const F=lotFamily(pick);const A=F.atts;
+    if(!A.length)right=`<div class="panel" style="padding:24px">이 ${pick.k==="lot"?"Lot":"Wafer"} 에는 따라갈 Wafer ID 가 없습니다(슬롯 번호 같은 짧은 ID 뿐).</div>`;
+    else{const tot={p:0,e:0,re:0,ren:0,f:0,b:0,scan:0};for(const a of A){tot.p+=a.p;tot.e+=a.e;tot.re+=a.re;tot.ren+=a.ren;tot.f+=a.f;tot.b+=a.bmin||0;tot.scan+=a.scan;}
+      const devs=new Set(A.map(a=>a.dev)),others=[...F.names].filter(n=>!(pick.k==="lot"&&n===pick.v));
+      const cards=[{k:"Wafer",v:F.ids.length+"장",s:"Wafer ID 로 묶음"},{k:"검사(Report)",v:A.length+"번",s:`장비 ${devs.size}대 · ${[...devs].join(", ")}`},{k:"Lot 이름",v:F.names.size+"개",s:others.length?"다른 이름: "+others.slice(0,4).join(", ")+(others.length>4?" …":""):"이름 하나"},
+        {k:"재검사",v:(tot.re+tot.ren)+"장",s:`같은 이름 ${tot.re} · 이름 바뀜 ${tot.ren}`},{k:"Error",v:tot.e+"장",s:"원인 있는 행"},{k:"시간",v:hm(tot.b),s:`Report 배치 합 · INI 스캔 ${hm(tot.scan)}`},{k:"Defect",v:A.some(a=>a.fN)?tot.f.toLocaleString():"—",s:A.some(a=>a.fN)?"PASS 장의 Faults 합":"Faults 값 없음(재수집 전 기록)"}];
+      const TAG={re:"재검사(같은 이름)",ren:"재검사(이름 바뀜)",step:"다른 검사(Job·단계·레시피)"};
+      const attTag=a=>a.test?`<span class="pill" style="background:${TEST}22;color:#5B3F8F">Test</span>`:(a.ren?`<span class="pill" style="background:${DUP}55">이름 바뀐 재검사 ${a.ren}</span>`:"")+(a.re?`<span class="pill" style="background:${DUP}55">재검사 ${a.re}</span>`:"")+(a.step?`<span class="pill">다른 검사 ${a.step}</span>`:"")+(!a.re&&!a.ren&&!a.step&&!a.test?`<span class="pill" style="background:${RUN}1F">첫 검사</span>`:"");
+      const tl=A.map((a,i)=>`<div class="lotatt" data-key="la:${i}"><span class="num">${fmtT(a.t)}</span><b>${esc(a.dev)}</b><span class="mono" title="${esc(a.lot)}">${esc(a.lot||"(Lot 없음)")}</span><span class="mono muted" title="${esc(a.job)}">${esc(a.job)}</span><span class="mono">${esc([...a.rcp].join(" · ")||"—")}</span>
+        <span class="num r">${a.p}<small class="muted">/${a.w.size}</small>${a.e?` <b class="bad">E${a.e}</b>`:""}</span><span class="num r">${a.fN?a.f.toLocaleString():"—"}</span><span class="num r">${a.bmin!=null?hm(a.bmin):"—"}</span><span>${attTag(a)}</span>
+        <span>${a.rep&&reportUrl({device:a.dev,report:a.rep})?`<button class="link" data-h="${h(()=>openReport({device:a.dev,report:a.rep}))}">Report</button>`:""}</span></div>`).join("");
+      const AC=A.slice(-30),cut=A.length-AC.length;
+      const cell=(a,id)=>{const x=a.w.get(id);if(!x)return `<i class="lc"></i>`;const col=a.test?TEST:x.pass?(x.tag==="re"||x.tag==="ren"?DUP:RUN):x.c?ERR:"#C9D2DC";
+        const tip=`${id} · ${a.dev} · ${a.lot} · ${fmtT(a.t)} · ${x.pass?"PASS":x.c?x.c:String(x.r.status||"").slice(0,40)}${x.f!=null?" · Defect "+x.f:""}${x.min!=null?" · "+hm(x.min):""}${x.tag?" · "+TAG[x.tag]:""}`;
+        return `<i class="lc" style="background-color:${col}" title="${esc(tip)}">${x.pass&&x.f!=null&&x.f<1000?x.f:x.c?"E":""}</i>`;};
+      const mx=`<div class="lotmx" style="grid-template-columns:132px repeat(${AC.length},28px)"><span></span>${AC.map((a,i)=>`<span class="lh" title="${esc(a.dev+" · "+a.lot+" · "+fmtT(a.t))}">${cut+i+1}</span>`).join("")}
+        ${F.ids.map(id=>`<button type="button" class="lw mono${state.lotWid===id?" on":""}" data-h="${h(()=>setState({lotWid:state.lotWid===id?null:id}))}">${esc(id)}</button>${AC.map(a=>cell(a,id)).join("")}`).join("")}</div>`;
+      let wd="";if(state.lotWid&&F.ids.includes(state.lotWid)){const id=state.lotWid;
+        wd=`<div class="panel" style="padding:12px 16px;margin-top:12px" data-key="lotwid"><b class="mono">${esc(id)}</b> <span class="muted">이 Wafer 의 검사 ${A.filter(a=>a.w.has(id)).length}번</span>
+          ${A.filter(a=>a.w.has(id)).map(a=>{const x=a.w.get(id);return `<div class="lotatt sm"><span class="num">${fmtT(a.t)}</span><b>${esc(a.dev)}</b><span class="mono">${esc(a.lot)}</span><span class="mono">${esc(x.r.recipe||"—")}</span><span>${x.pass?"PASS":esc(x.c||String(x.r.status||"").slice(0,30))}</span><span class="num r">${x.f!=null?"Defect "+x.f:""}</span><span class="num r">${x.min!=null?hm(x.min):"시각 없음"}</span><span>${x.tag?esc(TAG[x.tag]):""}</span></div>`;}).join("")}</div>`;}
+      right=`<section class="cards sm lotcards" style="margin-bottom:14px;grid-template-columns:repeat(7,minmax(0,1fr))">${cards.map(s=>`<div><p class="k">${s.k}</p><p class="v num">${esc(s.v)}</p><p class="s" title="${esc(s.s)}">${esc(s.s)}</p></div>`).join("")}</section>
+        <div class="panel" style="padding:12px 16px;margin-bottom:14px"><h3 style="margin:0 0 8px;font-size:14px">검사 순서 <span class="muted" style="font-weight:400;font-size:12px">Report 한 장 = 한 줄 · PASS/이 Lot 의 wafer · E = Error</span></h3>
+          <div class="lotatt head"><span>시작</span><span>장비</span><span>Lot 이름</span><span>Job</span><span>레시피</span><span class="r">PASS</span><span class="r">Defect</span><span class="r">배치 시간</span><span>구분</span><span></span></div><div class="lotbox">${tl}</div></div>
+        <div class="panel" style="padding:12px 16px;overflow-x:auto"><h3 style="margin:0 0 8px;font-size:14px">Wafer × 검사 <span class="muted" style="font-weight:400;font-size:12px">칸 = 그 검사에서 그 Wafer · 숫자 = Defect · 파랑 PASS · 연한 파랑 재검사 · 빨강 Error · 회색 건너뜀/중단 · 보라 Test${cut?` · 최근 30번만(앞 ${cut}번 생략)`:""} · Wafer ID 를 누르면 그 Wafer 의 이력</span></h3>${mx}</div>${wd}`;}}
+  return `<div class="bar-h"><h1>LOT 추적</h1><span style="font-size:12.5px;color:#5A6673">Wafer ID 로 같은 Lot 을 따라갑니다 — 이름이 달라도 · 이 파일의 기록 전부(헤더 기간과 무관)</span></div>
+    <div class="lotgrid">${left}<div>${right}</div></div>`;}
 /* ---------- RDL 단일스캔 탭(옛 '레시피' 탭, D70 · D74 · 10/6 개편) ----------
    ★ 10/6 사용자 개편: 탭 이름은 'RDL 단일스캔'(새 '레시피' 탭은 나중에 다시 만든다). 레시피는 **TB500 RDL(TB500_RDL1~4 - Multi 계열)** 과 **TB500 PI(R_TB500_LIVE_PI2/3/4, Enhanced 는 따로)** 만 —
      `rcpKind` 가 행의 Job 원문으로 가른다(다른 Job · KLA 는 이 탭에 없다). 레시피 = Job 묶음(D.jobGroups — '레시피 묶음' 편집기 D67 + 자동 묶음). 원천 행에서 장 단위로 다시 모은다(모델 값은 건드리지 않는다).

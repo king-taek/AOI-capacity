@@ -26,7 +26,7 @@ Camtek AOI 장비의 BatchReport/WaferInfo.ini 를 읽어 장비별 가동률을
    `AOI_capacity.html` 한 장을 사용자가 더블클릭해 브라우저에서 본다. QtWebEngine·로컬 서버·localhost 를 쓰지 않는다.
    그 HTML 은 데이터·CSS·JS 를 모두 품고 **바깥으로 요청을 한 건도 보내지 않는다**(가드: `test_template_contract.py`).
    브라우저가 NAS 를 직접 읽는 경로도 두지 않는다 — 수집은 Python 만 한다. 자동 주기 수집은 없다(수동 실행만, D50).
-   화면은 **재설계 구조**(D47, 9/20): 가동률 · Error · TB500 · Kendall(D59) · RDL 단일스캔(옛 레시피 D70, D80) 4탭(10/5 — 추이 · KLA 탭 없앰, KLA 는 장비 종류 필터) + 장비/Error/유형·Job · 레시피 묶음 팝업, 라이트 단일. 모델은 아래 '레이아웃' 의 화면 절.
+   화면은 **재설계 구조**(D47, 9/20): 가동률 · Error · TB500 · Kendall(D59) · RDL 단일스캔(옛 레시피 D70, D80) · LOT 추적(D88) 5탭(10/5 — 추이 · KLA 탭 없앰, KLA 는 장비 종류 필터) + 장비/Error/유형·Job · 레시피 묶음 팝업, 라이트 단일. 모델은 아래 '레이아웃' 의 화면 절.
 4. **Scanresult 를 재귀 검색하지 않는다.** INI 경로는 `{scan}/{job}/{setup}/{lot}/{wafer}/WaferInfo.ini` 로 계산해 존재만 확인한다.
    `job`·`setup` 의 출처는 **Report 안의 `Job/Setup` 값**이다(파일명이 아니다 — 실장비 516개 중 옛 파일명 규칙에 맞는 건 6개뿐이었다).
    `Job/Setup` 이 없는 옛 형식만 파일명 규칙(`{job}_{4자리}_{lot}_…`)으로 되돌아가고, 그것도 안 맞으면
@@ -224,6 +224,10 @@ Camtek AOI 장비의 BatchReport/WaferInfo.ini 를 읽어 장비별 가동률을
   LOT별 목록에 **Clean ref · AF 열**(Recipe.ini 의 CleanReferenceEvery · AutoFocusEvery — Wafer 는 붉은 굵은 글씨)과 그 위 요약 한 줄(Lot 수, `crCell` · `crSummary`, 10/11 사용자: 이 설정은 이 탭에서만 확인).
   하위 레시피 칸(`recipe` 열 — `x20`·`x5`·`x20|x5`) 수집 순서(D74 — **RDL Job 만**, `collect.is_rdl_job`; 다른 Job 은 RecipesInfo.ini 를 열지 않고 Report 값 그대로 · scan_mode 는 표에 `|` 가 있을 때만): Wafer 폴더 `RecipesInfo.ini` 의 `[Recipe-n] Name` 전부(멀티 스캔에만 있는 파일, `|` 로 이음) → `WaferInfo.ini` `[Recipe] Name`(단일) → Report 표 Recipe 칸 → 요약 Recipe. 표 칸은 멀티여도 `x20` 만 찍혀 믿지 않는다(실물 10/5). 덮어써진(STALE) INI 의 것은 쓰지 않는다. 날짜는 Wafer 시작일, 파일의 기간(`D.days`) 안만.
   입력 칸은 `data-in` + `INPUT_KEYS`(같은 이름의 state). 좁은 화면은 신경 쓰지 않는다(사용자 10/6 — PC 전용).
+- **LOT 추적 탭(D88, 10/11 — `lotHtml` · `lotIndex` · `lotFamily`)**: Lot 이름은 사람이 적어 같은 Lot 이 다른 이름으로 다시 돈다 — 기계가 읽은 **Wafer ID**(`lotIdOk`: 영숫자 6자 이상 · 숫자만 아님, matKey2 와 같은 규칙)로 묶는다.
+  왼쪽 검색(`data-in="lotQ"` — Lot 이름 · Wafer ID, 비우면 최근 Lot 30개) → 고른 Lot 의 Wafer ID 들이 나온 **모든 Report**(장비 · 이름 무관, 이 파일의 기록 전부 — 헤더 기간과 무관)를 시간 순으로:
+  카드(Wafer · 검사 · Lot 이름 수 · 재검사 · Error · 배치 시간 합 · Defect) · 검사 순서(Report 한 장 = 한 줄: 장비 · Lot 원문 · Job · 레시피 · PASS/wafer · Defect · 배치 시간 · 구분 · Report 열기) · Wafer × 검사 칸(최근 30번, Wafer ID 를 누르면 그 Wafer 의 이력 `state.lotWid`).
+  **구분은 모델의 Rescan 과 같은 조건**(matKey2 + 레시피가 같고 앞 시도 PASS → 재검사, Lot 원문이 같으면 같은 이름 · 다르면 이름 바뀜) — 같은 Wafer 라도 Job·단계·레시피가 다르면 '다른 검사'. 원천 행에서 계산하고 모델 값은 건드리지 않는다.
 - **헤더 날짜 두 줄(D79 C8 · D80)**: `dateControlsHtml` — 위 '조회 기간'(`rangeHtml`), 아래 '하루 날짜'(입력 칸 `data-in="day"` · ‹ › 최신, 기간 안 데이터 날짜만 · 기간이 하루를 밀어내면 `state.dayNote` 짧은 알림). **하루 날짜 줄은 하루가 기준인 화면에서만**(`dayBasis` — 가동률 · Error 일자별; 나머지 탭은 줄 자체가 없다), 하루가 기준일 땐 조회 기간 줄이 **회색**(`.rangebar.dim` + '이 탭은 하루 날짜 기준', 눌러도 되고 Error 에서 누르면 하루 기준이 풀려 기간 모드). 탭 제목 옆 `scopeBadge`(가동률 · Error 일자별 = 하루, 나머지 = 기간). Error 날짜 막대를 고르면 헤더 하루도 그 날. 사본 저장 · 레시피 묶음은 `.hacts`. ≤820px 헤더는 sticky 아님. 작은 창(D79 C4): 홈 · Error 목록 열 너비는 CSS(`.homelist .rowbtn` · `.errlist .rowbtn[data-cols]`, 인라인 grid 없음), 장비 팝업 Lot 이름표는 실제 폭(`calloutW`·`calloutFit`).
 - **화면 기간(10/5)**: 헤더 `rangeHtml` — 프리셋 **최근 7일 · 1달 · 전체**(가진 데이터의 끝날 기준, 열람 시계 아님) + 날짜 두 칸(change 때 `setRange`). 모델은 가진 날 전부로 한 번(`D.allDays`), 보이는 날 `D.days` 만 좁힌다 —
   모든 탭이 그 기간만 그리고 날마다의 값은 그대로. 탭마다 있던 7일·21일 버튼은 없앴다(Error 탭은 '일자별' · '기간 전체' 둘). 레시피 묶음·레시피 색인·전후 비교는 `D.allDays` 를 쓴다(비교 기간은 보이는 기간 밖도 가능).
