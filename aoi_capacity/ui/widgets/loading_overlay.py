@@ -32,6 +32,13 @@ def _c(key: str) -> QColor:
     return QColor(theme.colors()[key])
 
 
+def _left_text(sec: float) -> str:
+    """남은 시간 글자 — '약 3분' · '1분 안쪽'."""
+    m = int(sec + 30) // 60
+    K = i18n.KO
+    return K.ETA_UNDER_MIN if sec < 60 else K.ETA_MIN_FMT.format(m=m) if m < 60 else K.ETA_HOUR_FMT.format(h=m // 60, m=m % 60)
+
+
 class _PulseDot(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -288,7 +295,13 @@ class LoadingOverlay(QWidget):
             self._phase.setText(fm.elidedText(message, Qt.TextElideMode.ElideMiddle, max(160, self._card.width() - 60)))
         if total and total > 0:
             self._bar.set_fraction(done / total)
-            self._count.setText(i18n.KO.LOADING_COUNT_FMT.format(done=done, total=total))
+            now = time.monotonic()
+            if total != getattr(self, "_eta_total", None) or done < getattr(self, "_eta_done", 0):
+                self._eta_t0, self._eta_total = now, total              # 단계(총량)가 바뀌었다 — 남은 시간은 새로 센다
+            self._eta_done = done
+            el = now - self._eta_t0
+            left = (i18n.KO.LOADING_LEFT_FMT.format(t=_left_text(el * (total - done) / done)) if done >= 5 and el >= 8 and done < total else "")
+            self._count.setText(i18n.KO.LOADING_COUNT_FMT.format(done=done, total=total) + left)
         else:
             self._bar.set_fraction(None)
             self._count.setText("")

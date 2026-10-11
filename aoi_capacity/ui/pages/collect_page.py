@@ -136,6 +136,37 @@ class _ParamZipWorker(QThread):
             self.done.emit(None, f"{type(ex).__name__}: {ex}")
 
 
+class _ParamFillWorker(QThread):
+    """파라미터 빈 구간 채우기(10/11) — 캐시에서 빈 Report 를 찾아 그 Wafer 폴더 안만 읽는다. 끝나면 (통계 | None, 오류 문구)."""
+    log = pyqtSignal(str)
+    progress = pyqtSignal(int, int)
+    done = pyqtSignal(object, str)
+
+    def __init__(self, cfg: dict, parent=None):
+        super().__init__(parent)
+        self._cfg = cfg
+        self._stop = False
+
+    def stop(self) -> None:
+        self._stop = True
+
+    def run(self) -> None:  # noqa: D401
+        try:
+            st = collect.fill_params(self._cfg, log=self.log.emit, progress=lambda d, t, p: self.progress.emit(d, t),
+                                     should_stop=lambda: self._stop)
+            self.done.emit(st, "")
+        except Exception as ex:  # noqa: BLE001
+            self.done.emit(None, f"{type(ex).__name__}: {ex}")
+
+
+def eta_text(sec, rough: bool = False) -> str:
+    """초 → '약 12분' · '1분 안쪽' · '약 1시간 20분'. 실측이 없으면 앞에 '대략'."""
+    sec = max(0, int(sec or 0))
+    m = (sec + 30) // 60
+    t = K.ETA_UNDER_MIN if sec < 60 else K.ETA_MIN_FMT.format(m=m) if m < 60 else K.ETA_HOUR_FMT.format(h=m // 60, m=m % 60)
+    return K.ETA_ROUGH_FMT.format(t=t) if rough else t
+
+
 class ModeCard(QFrame):
     """상황 카드 하나 — 누르면(또는 Space/Enter) 고른다. 고른 카드는 파란 테두리와 채운 점."""
     picked = pyqtSignal(str)
@@ -401,6 +432,22 @@ class CollectPage(QWidget):
         # 파라미터 이력 채우기(D89, 10/11 사용자 Q9) — 30일 Wafer 로그 zip 폴더를 골라 한 번. 캐시를 고치므로 수집과 동시에 돌지 않는다.
         pcard, pl = _card(body, K.PARAM_ZIP_TITLE)
         pl.addWidget(_label(K.PARAM_ZIP_WHEN, "help", pcard, wrap=True))
+        # 빈 구간 채우기(10/11) — 수집된 기간 중 파라미터가 비어 있는 곳을 NAS 에서 바로. 한 줄 요약 + 예상 시간.
+        self._pf_sum = _label("", "mono", pcard, wrap=True)
+        self._pf_help = _label("", "muted", pcard, wrap=True)
+        self._pf_status = _label("", "muted", pcard, wrap=True)
+        self._b_pfill = make_button(K.PARAMS_FILL_RUN, "primary", pcard)
+        self._b_pfill.setEnabled(False)
+        self._b_pfill.clicked.connect(self._on_param_fill)
+        pfrow = QHBoxLayout()
+        pfrow.addWidget(self._b_pfill)
+        pfrow.addWidget(self._pf_status, 1)
+        pl.addWidget(self._pf_sum)
+        pl.addWidget(self._pf_help)
+        pl.addLayout(pfrow)
+        self._pf_n = 0
+        self._pf_worker: Optional[_ParamFillWorker] = None
+        self._pf_t0 = 0.0
         prow = QHBoxLayout()
         self._b_pzip = make_button(K.PARAM_ZIP_RUN, "default", pcard)
         self._b_pzip.clicked.connect(self._on_param_zip)
@@ -610,8 +657,50 @@ class CollectPage(QWidget):
             self.append_log(K.HTML_ONLY_FAIL_FMT.format(error=err))
             self.error.emit(K.HTML_ONLY_TITLE, K.HTML_ONLY_FAIL_FMT.format(error=err))
 
+    def _on_param_fill(self) -> None:
+        if self._pf_worker is not None:                       # 실행 중에 다시 누르면 멈춤
+            self._pf_worker.stop()
+            self._b_pfill.setEnabled(False)
+            return
+        if self._pz_worker is not None or self._running or self._wl_worker is not None or not self._pf_n:
+            return
+        w = _ParamFillWorker(prefs.to_collect_cfg(prefs.load()), self)
+        w.log.connect(self.append_log)
+        w.progress.connect(self._on_param_fill_progress)
+        w.done.connect(self._on_param_fill_done)
+        w.finished.connect(lambda w=w: self._worker_done("_pf_worker", w))
+        self._pf_worker = w
+        self._pf_t0 = time.monotonic()
+        self._b_pfill.setText(K.BTN_STOP)
+        self._b_pzip.setEnabled(False)
+        self._b_run.setEnabled(False)
+        self.append_log(K.PARAMS_FILL_START_FMT.format(n=self._pf_n))
+        w.start()
+
+    def _on_param_fill_progress(self, done: int, total: int) -> None:
+        el = time.monotonic() - self._pf_t0
+        if total <= 0:
+            return
+        left = el * (total - done) / done if done >= 3 and el >= 5 else None
+        self._pf_status.setText(K.PARAMS_FILL_PROGRESS_FMT.format(done=done, total=total, t=eta_text(left)) if left is not None
+                                else K.PARAMS_FILL_PROGRESS_FMT.format(done=done, total=total, t="…"))
+
+    def _on_param_fill_done(self, st, err: str) -> None:
+        self._b_pfill.setText(K.PARAMS_FILL_RUN)
+        self._b_pzip.setEnabled(not self._running)
+        self._b_run.setEnabled(not self._running and self._wl_worker is None)
+        if st is not None:
+            msg = (K.PARAMS_FILL_STOPPED_FMT if st.get("stopped") else K.PARAMS_FILL_DONE_FMT).format(added=st.get("added", 0), empty=st.get("empty", 0))
+            self.append_log(msg)
+            self._status.setText(msg)
+            self._pf_status.setText(msg)
+        else:
+            self.append_log(K.PARAMS_FILL_FAIL_FMT.format(error=err))
+            self.error.emit(K.PARAM_ZIP_TITLE, K.PARAMS_FILL_FAIL_FMT.format(error=err))
+        self.refresh_plan()
+
     def _on_param_zip(self) -> None:
-        if self._pz_worker is not None or self._running or self._wl_worker is not None:
+        if self._pz_worker is not None or self._running or self._wl_worker is not None or self._pf_worker is not None:
             return
         folder = QFileDialog.getExistingDirectory(self, K.PARAM_ZIP_PICK, str(paths.data_root()))
         if not folder:
@@ -683,6 +772,7 @@ class CollectPage(QWidget):
             self._plan.setText("")
             return
         self._update_cards(plan, n_recover)
+        self._update_param_fill(plan)
         if self._mode == "rebuild":
             text = K.COLLECT_PLAN_FULL_FMT.format(days=_days_text(plan.retention_days))
         elif self._mode == "rdl":
@@ -704,6 +794,25 @@ class CollectPage(QWidget):
             text = K.COLLECT_PLAN_INCR_FMT.format(n=plan.known_devices)
         self._plan.setText(text)
 
+    def _update_param_fill(self, plan) -> None:
+        """파라미터 카드 한 줄 요약 · 예상 시간 · 버튼 — 캐시만 보고 쓴다(NAS 접근 없음)."""
+        self._pf_n = plan.params_missing
+        busy = self._pf_worker is not None
+        if not plan.total_reports:
+            self._pf_sum.setText(K.PARAMS_FILL_NO_CACHE)
+            self._pf_help.setText("")
+        elif not plan.params_missing:
+            self._pf_sum.setText(K.PARAMS_FILL_NONE_FMT.format(a=plan.span_from, b=plan.span_to, total=plan.total_reports))
+            self._pf_help.setText("")
+        else:
+            sec, rough = (plan.etas or {}).get("params", (None, True))
+            self._pf_sum.setText(K.PARAMS_FILL_SUMMARY_FMT.format(a=plan.span_from, b=plan.span_to, total=plan.total_reports, missing=plan.params_missing,
+                                                                 devs=plan.params_devices, fa=plan.params_from, fb=plan.params_to))
+            self._pf_help.setText(K.PARAMS_FILL_HELP_FMT.format(n=plan.params_missing, t=eta_text(sec, rough)))
+            self._pf_help.setToolTip(K.ETA_BASIS_TIP)
+        if not busy:
+            self._b_pfill.setEnabled(bool(plan.params_missing) and not self._running and self._pz_worker is None and self._wl_worker is None)
+
     def _update_cards(self, plan, n_recover) -> None:
         """캐시로 아는 사실을 카드에 적는다: 처음이면 '처음 수집' 하나만, 복구 대상 수, 마지막 수집이 오래됐는지."""
         first = plan.total_reports == 0 and self._mode != "rebuild"
@@ -723,11 +832,26 @@ class CollectPage(QWidget):
             n.set_badges([(K.MODE_BADGE_REC, "rec"), (K.MODE_BADGE_FAST, "slow")])
         if self._mode == "normal":
             self._b_run.setText(K.MODE_RUN_FMT.format(title=n.title()))
+        et = plan.etas or {}
+
+        def eta(mode):
+            sec, rough = et.get(mode, (None, True))
+            return None if sec is None else eta_text(sec, rough)
+
+        if not first and eta("incremental"):
+            n.set_badges([(K.MODE_BADGE_REC, "rec"), (K.MODE_BADGE_USUAL_ETA_FMT.format(t=eta("incremental")), "slow")])
+        if not first:
+            for m, name in (("backfill", "backfill"), ("range", "range")):
+                if eta(m):
+                    self._cards[name].set_badges([(K.MODE_BADGE_USUAL_ETA_FMT.format(t=eta(m)), "slow")])
+            self._cards["refresh"].set_badges([(K.MODE_BADGE_TARGET_ETA_FMT.format(n=plan.reread_reports, t=eta("refresh")), "slow")]
+                                              if plan.reread_reports else [(K.MODE_BADGE_MEDIUM, "slow")])
+            self._cards["rebuild"].set_badges([(K.MODE_BADGE_ETA_FMT.format(t=eta("rebuild")), "warn")])
         if n_recover is not None and not first:
-            self._cards["recover"].set_badges([(K.MODE_BADGE_TARGET_FMT.format(n=n_recover), "warn") if n_recover
+            self._cards["recover"].set_badges([(K.MODE_BADGE_TARGET_ETA_FMT.format(n=n_recover, t=eta("recover")), "warn") if n_recover
                                                else (K.MODE_BADGE_NONE, "slow")])
         if not first:
-            self._cards["rdl"].set_badges([(K.MODE_RDL_TARGET_FMT.format(n=plan.rdl_reports, devs=plan.rdl_devices), "warn")
+            self._cards["rdl"].set_badges([(K.MODE_BADGE_TARGET_ETA_FMT.format(n=plan.rdl_reports, t=eta("rdl")), "warn")
                                            if plan.rdl_reports else (K.MODE_BADGE_NONE, "slow")])
 
     # ── Wafer 폴더 로그 모으기(10/9) ──

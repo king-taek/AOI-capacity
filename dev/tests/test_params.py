@@ -120,3 +120,46 @@ def test_collector_reads_params_once_per_report_and_html_carries_them(tmp_path, 
     assert '"params"' in open(path, encoding="utf-8").read()
     monkeypatch.setattr(params, "read_wafer_files", lambda p: (_ for _ in ()).throw(AssertionError("꺼져 있으면 읽지 않는다")))
     collect.collect(dict(make_cfg(tmp_path / "off", csv_path), collect_params=False))
+
+
+def test_fill_params_reads_only_wafer_folders_of_reports_without_snapshots(tmp_path, fake_nas, monkeypatch):
+    """파라미터 빈 구간 채우기(10/11): 스냅숏이 없는 Report 의 Wafer 폴더 안만 읽고, 두 번째 실행은 아무것도 읽지 않는다. 예상 시간 실측도 남는다."""
+    from aoi_capacity import nas_guard
+    nas, csv_path = fake_nas
+    (_wafer_dir(nas) / "Recipe.ini").write_text(RECIPE, encoding="utf-8")
+    cfg = make_cfg(tmp_path, csv_path)
+    collect.collect(dict(cfg, collect_params=False))                         # 파라미터 없이 수집 — 빈 구간을 만든다
+    plan = collect.plan_run(cfg)
+    assert plan.params_missing >= 1 and plan.params_have == 0 and plan.span_from and plan.params_devices >= 1
+    sec, rough = plan.etas["params"]
+    assert rough and sec > 0                                                  # 실측이 없으면 대략
+    listed, opened = [], []
+    real_scan, real_bytes = nas_guard.scandir, nas_guard.read_bytes
+    monkeypatch.setattr(nas_guard, "scandir", lambda p, *a, **k: listed.append(str(p)) or real_scan(p, *a, **k))
+    monkeypatch.setattr(nas_guard, "read_bytes", lambda p, *a, **k: opened.append(str(p)) or real_bytes(p, *a, **k))
+    st = collect.fill_params(cfg)
+    assert st["targets"] == plan.params_missing and st["added"] >= 1 and not st["stopped"]
+    assert not any(p.lower().endswith((".htm", ".html")) for p in opened)    # Report 는 다시 읽지 않는다
+    deep = [p for p in listed if "scanresult" in p.lower() and p.lower().rstrip("/\\").split("scanresult")[-1].strip("/\\")]
+    assert deep and all("K625407-01B0" in p for p in deep)                    # Scanresult 아래에서 연 폴더는 계산한 Wafer 폴더(와 그 하위)뿐 — 재귀 검색 없음
+    after = collect.plan_run(cfg)
+    assert after.params_missing == 0 and after.params_have >= 1
+    opened.clear()
+    assert collect.fill_params(cfg)["targets"] == 0 and not [p for p in opened if str(nas) in p]
+    cache = json.loads(open(cfg["cache_file"], encoding="utf-8").read())
+    assert cache["eta"]["params_fill"][0][0] == st["targets"]
+
+
+def test_estimate_sec_uses_recent_measurements_else_rough_default():
+    assert collect.estimate_sec({}, "refresh", 100) == (int(collect.ETA_DEFAULT_FIXED_SEC + 100 * collect.ETA_DEFAULT_PER_UNIT["read"]), True)
+    eta = {}
+    collect.record_eta({"eta": eta}, "x", 0, 5, 1)                           # 개수 0 은 남기지 않는다
+    cache = {}
+    for n, w in ((100, 50.0), (100, 40.0), (100, 60.0)):
+        collect.record_eta(cache, "incremental", n, w, 10.0)
+    sec, rough = collect.estimate_sec(cache["eta"], "refresh", 200)          # 개수당 0.5초(중앙값) × 200 + 고정 10초(수집 계열 실측을 같이 씀)
+    assert (sec, rough) == (110, False)
+    assert collect.estimate_run_sec(cache["eta"], "incremental") == 60 and collect.estimate_run_sec(cache["eta"], "backfill") is None
+    for _ in range(9):
+        collect.record_eta(cache, "incremental", 1, 1.0, 1.0)
+    assert len(cache["eta"]["incremental"]) == collect.ETA_KEEP

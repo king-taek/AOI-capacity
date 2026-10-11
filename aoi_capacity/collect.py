@@ -294,6 +294,14 @@ class RunPlan:
     keep_reports: int = 0      # 손대지 않는 캐시 Report 수(refresh 창 밖)
     rdl_reports: int = 0       # 'RDL 영역 INI 패치' 대상 Report 수(멀티/단일 판정이 빠진 RDL Report, 캐시만 보고 센다)
     rdl_devices: int = 0       # 그 Report 가 있는 장비 수 — 패치는 이 장비들만 본다
+    params_missing: int = 0    # 파라미터 스냅숏이 빠진 Report 수(10/11 '빈 구간 채우기' 대상, 캐시만 보고 센다)
+    params_have: int = 0       # 이미 스냅숏이 있는 Report 수
+    params_devices: int = 0
+    params_from: str = ""      # 빠진 Report 의 첫 · 끝 날짜
+    params_to: str = ""
+    span_from: str = ""        # 수집된 기간(캐시의 첫 · 끝 날짜)
+    span_to: str = ""
+    etas: Optional[Dict[str, Tuple[Optional[int], bool]]] = None   # 모드 → (예상 초 | None, 대략 여부) — 지난 실측으로(10/11)
     # 새로 생긴 Report 수는 NAS 를 봐야 알 수 있어 여기 없다(계획 조회는 NAS 에 접근하지 않는다).
 
 
@@ -701,6 +709,134 @@ def _patch_rdl_modes(cfg, cache, devs, should_stop, log, progress, stats, dirty)
         dirty.add(DIRTY_UPDATED)
     stats.update({"rdl_rows": len(tasks), "rdl_patched": n_ok, "rdl_devices": len(devs_hit)})
     _say(log, f"RDL 영역 INI 패치: {n_ok}/{len(tasks)}장 판정 — 나머지는 폴더가 그 뒤 다시 쓰였거나 INI 를 읽지 못했습니다")
+
+
+# ----------------------------------------------------------------------------- 예상 시간(10/11) · 파라미터 빈 구간
+#: 이 PC 에서 아직 한 번도 안 돌린 작업의 대략값(초) — 실측이 쌓이면 쓰이지 않는다. 화면은 '대략' 이라고 적는다.
+ETA_DEFAULT_FIXED_SEC = 60.0          # 장비 확인 + 목록
+ETA_DEFAULT_PER_UNIT = {"read": 1.0, "rdl_patch": 0.3, "params_fill": 2.0}
+PARAMS_FILL_CHUNK = 500              # 파라미터 빈 구간 채우기는 이만큼 읽을 때마다 캐시를 저장한다
+ETA_KEEP = 5                          # 모드마다 최근 몇 번의 실측을 남길지
+
+
+def record_eta(cache: dict, mode: str, units: int, work_sec: float, fixed_sec: float) -> None:
+    """이번 실행의 실측 [처리 개수, 읽기에 쓴 초, 고정(장비 확인 · 목록) 초] 를 캐시에 남긴다 — 다음 예상 시간의 근거. 개수가 0 이면 남기지 않는다."""
+    if units <= 0 or work_sec <= 0:
+        return
+    hist = cache.setdefault("eta", {}).setdefault(mode, [])
+    hist.append([int(units), round(float(work_sec), 1), round(float(fixed_sec), 1)])
+    del hist[:-ETA_KEEP]
+
+
+def _median(xs) -> float:
+    xs = sorted(xs)
+    n = len(xs)
+    return 0.0 if not n else xs[n // 2] if n % 2 else (xs[n // 2 - 1] + xs[n // 2]) / 2
+
+
+def estimate_sec(eta: dict, mode: str, units: int, kind: str = "read") -> Tuple[int, bool]:
+    """예상 걸리는 시간 → (초, 대략 여부). 고정 시간 + 개수 × 개수당 시간(최근 실측의 중앙값).
+    `kind` 가 read 인 모드(수집 계열)는 서로의 실측을 같이 쓴다 — Report 하나를 읽는 비용이 비슷하기 때문. 실측이 없으면 기본값이고 대략=True."""
+    eta = eta if isinstance(eta, dict) else {}
+    pool = ([x for k, v in eta.items() if k not in ("rdl_patch", "params_fill") for x in v] if kind == "read" else list(eta.get(mode, [])))
+    pool = [h for h in pool if isinstance(h, list) and len(h) == 3 and h[0] > 0]
+    own = [h for h in eta.get(mode, []) if isinstance(h, list) and len(h) == 3]
+    per = _median([h[1] / h[0] for h in pool]) if pool else ETA_DEFAULT_PER_UNIT[kind]
+    fixed = _median([h[2] for h in (own or pool)]) if (own or pool) else (0.0 if kind != "read" else ETA_DEFAULT_FIXED_SEC)
+    return int(round(fixed + max(0, units) * per)), not pool
+
+
+def estimate_run_sec(eta: dict, mode: str) -> Optional[int]:
+    """개수를 미리 알 수 없는 수집(평소 · 빠진 날 · 기간)은 같은 모드의 지난 실행 전체 시간의 중앙값. 기록이 없으면 None."""
+    hist = [h for h in (eta or {}).get(mode, []) if isinstance(h, list) and len(h) == 3]
+    return int(round(_median([h[1] + h[2] for h in hist]))) if hist else None
+
+
+def _params_targets(cache: dict) -> List[Tuple[str, dict]]:
+    """파라미터 스냅숏이 없는 Report 중 INI 를 찾은(EXACT) Wafer 가 있는 것 — 읽을 곳을 되짚을 수 있는 것만. 캐시만 본다."""
+    have = (cache.get("params") or {}).get("snaps") or {}
+    return [(k, e) for k, e in (cache.get("reports") or {}).items()
+            if k not in have and not e.get("superseded_by") and any(r.get("ini_match") == "EXACT" and not r.get("kind") for r in e.get("rows") or ())]
+
+
+def _first_day(e: dict) -> str:
+    ts = [parse_dt(r.get("batch_start") or r.get("wafer_start_time")) for r in e.get("rows") or ()]
+    ts = [t for t in ts if t]
+    return min(ts).strftime("%Y-%m-%d") if ts else ""
+
+
+def fill_params(cfg: dict, log: Optional[LogFn] = None, progress: Optional[ProgressFn] = None,
+                should_stop: Optional[Callable[[], bool]] = None) -> Dict[str, int]:
+    """'파라미터 빈 구간 채우기'(10/11) — 캐시에 Report 는 있는데 파라미터 스냅숏이 없는 것마다, 처음 INI 를 찾은 Wafer 폴더 **안**만 정확 경로로 읽는다.
+    Report 폴더 나열 · Report 읽기 · 재귀 검색 · 범위 밖 장비 · KLA 는 없다. 폴더가 사라졌으면 빈 스냅숏으로 남겨 다시 열지 않는다.
+    스레드는 읽기만, 캐시에 넣는 일은 메인 스레드가 입력 순서로. 중간에 멈춰도 그때까지 읽은 것은 저장한다."""
+    cfg = config_mod.check_or_raise(cfg)
+    nas_guard.check_cfg(cfg)
+    progress = progress or (lambda d, t, p: None)
+    t0 = time.perf_counter()
+    dirty = _Dirty()
+    cache = _load_cache(cfg, log=log, dirty=dirty)
+    store = cache.setdefault("params", params_mod.empty_store())
+    devs = devices_mod.resolve_devices(cfg, log, should_stop=should_stop)
+    _assign_device_keys(cache, devs, cfg, dirty, log)         # 장비마다 안정 키(d["key"]) — 캐시 대응표로 영속, 수집과 같다
+    by_key = {str(d["key"]): d for d in devs if d.get("kind") != "kla"}
+    fixed = time.perf_counter() - t0
+    tasks, no_dev = [], 0
+    for key, e in _params_targets(cache):
+        d = by_key.get(key.split("|", 1)[0])
+        if d is None:
+            no_dev += 1                                  # 이번 장비 목록 · 수집 범위 밖 — 손대지 않는다
+            continue
+        scan_root = os.path.join(d["path"], str(d.get("scan_dir") or cfg["scan_dir"]))
+        backups = _backup_roots(d, scan_root)
+        for r in e.get("rows") or ():
+            if r.get("ini_match") == "EXACT" and not r.get("kind"):
+                w = _rdl_wafer_dir(r, scan_root, backups)
+                if w:
+                    tasks.append((key, e, r, w, d["name"]))
+                    break
+    days = sorted(x for x in (_first_day(t[1]) for t in tasks) if x)
+    _say(log, f"파라미터 빈 구간 채우기: 대상 Report {len(tasks)}개 · 장비 {len({t[4] for t in tasks})}대"
+              + (f" · {days[0]} ~ {days[-1]}" if days else "") + " — Report 는 다시 읽지 않습니다")
+    done, total = _Counter(), len(tasks)
+
+    def one(t):
+        _check(should_stop)
+        _key, _e, _r, w, name = t
+        try:
+            files = params_mod.snapshot(params_mod.read_wafer_files(w))
+            err = ""
+        except OSError as ex:
+            files, err = {}, f"{type(ex).__name__}: {ex}"
+        progress(done.bump(), total, i18n.KO.PARAMS_FILL_PHASE_FMT.format(device=name))
+        return files, err
+
+    st = {"targets": total, "added": 0, "empty": 0, "no_device": no_dev, "stopped": 0}
+    t1, n_done = time.perf_counter(), 0
+    for lo in range(0, total, PARAMS_FILL_CHUNK):                  # 덩어리마다 저장 — 멈추거나 끊겨도 읽은 만큼은 남는다
+        chunk = tasks[lo:lo + PARAMS_FILL_CHUNK]
+        try:
+            results = _run(cfg, chunk, one, should_stop, group=lambda t: nas_group(t[3]))
+        except CollectCancelled:
+            st["stopped"] = 1
+            break
+        for (key, e, r, _w, name), (files, err) in zip(chunk, results):
+            bst = parse_dt(r.get("batch_start", ""))
+            if params_mod.put(store, key, dev=name, job=r.get("job", ""), setup=r.get("setup", ""),
+                              t=bst.strftime("%Y-%m-%d %H:%M") if bst else "", report=str(r.get("report") or ""), files=files):
+                dirty.add(DIRTY_PARAMS)
+            st["added" if files else "empty"] += 1
+        n_done += len(chunk)
+        if n_done >= total:
+            record_eta(cache, "params_fill", n_done, time.perf_counter() - t1, fixed)
+            dirty.add(DIRTY_PARAMS)
+        if dirty:
+            _save_cache(cfg, cache)
+            dirty = _Dirty()
+    _say(log, "파라미터 빈 구간 채우기: " + " · ".join(f"{k}={v}" for k, v in st.items()))
+    return st
+
+
 
 
 def read_recipes_info(path) -> List[str]:
@@ -1718,7 +1854,8 @@ _PLAN_MEMO: Dict[str, tuple] = {}
 def _cache_summary(path: str) -> dict:
     """계획 조회에 필요한 것만 — Report 수 · 장비 커서 수 · 누락 복구 대상 수 · Report 수정시각 목록(refresh 창 계산용).
     행은 재분류하지 않는다(수집 워커가 한다)."""
-    empty = {"n_reports": 0, "known_devices": 0, "n_recover": 0, "n_rdl": 0, "rdl_devices": 0, "mtimes": []}
+    empty = {"n_reports": 0, "known_devices": 0, "n_recover": 0, "n_rdl": 0, "rdl_devices": 0, "mtimes": [], "eta": {},
+             "n_params": 0, "n_params_have": 0, "params_devices": 0, "params_from": "", "params_to": "", "span_from": "", "span_to": ""}
     if not path or not os.path.isfile(path):
         return empty
     try:
@@ -1730,7 +1867,14 @@ def _cache_summary(path: str) -> dict:
     if hit and hit[0] == key:
         return hit[1]
     cache = _load_cache({"cache_file": path}, rederive=False)
-    summary = {"n_reports": len(cache.get("reports", {})), "known_devices": len(cache.get("last_mtime", {})),
+    ptargets = _params_targets(cache)
+    pdays = sorted(x for x in (_first_day(e) for _k, e in ptargets) if x)
+    alld = sorted(x for x in (_first_day(e) for e in cache.get("reports", {}).values() if not e.get("superseded_by")) if x)
+    summary = {"n_reports": len(cache.get("reports", {})), "eta": cache.get("eta") if isinstance(cache.get("eta"), dict) else {},
+               "n_params": len(ptargets), "n_params_have": len((cache.get("params") or {}).get("snaps") or {}),
+               "params_devices": len({k.split("|", 1)[0] for k, _e in ptargets}),
+               "params_from": pdays[0] if pdays else "", "params_to": pdays[-1] if pdays else "",
+               "span_from": alld[0] if alld else "", "span_to": alld[-1] if alld else "", "known_devices": len(cache.get("last_mtime", {})),
                "n_recover": sum(1 for e in cache.get("reports", {}).values() if _needs_recovery(e)),
                "n_rdl": sum(1 for e in cache.get("reports", {}).values() if _needs_rdl_patch(e)),
                "rdl_devices": len({k.split("|", 1)[0] for k, e in cache.get("reports", {}).items() if _needs_rdl_patch(e)}),
@@ -1755,6 +1899,20 @@ def _mode_args(cfg: dict, full: bool, refresh_window_days, rebuild_all) -> Tuple
     return max(0, days), bool(rebuild or full)
 
 
+def _plan_etas(s: dict, n_reports: int, reread: int, n_recover: int, n_rdl: int, n_params: int) -> Dict[str, Tuple[Optional[int], bool]]:
+    """모드마다 예상 시간(초, 대략 여부). 개수를 아는 모드는 개수 × 개수당 시간, 모르는 모드(평소 · 빠진 날 · 기간)는 지난 실행의 전체 시간(없으면 None)."""
+    eta = s.get("eta") or {}
+    out: Dict[str, Tuple[Optional[int], bool]] = {}
+    for m in ("incremental", "backfill", "range"):
+        out[m] = (estimate_run_sec(eta, m), False)
+    out["refresh"] = estimate_sec(eta, "refresh", reread)
+    out["recover"] = estimate_sec(eta, "recover", n_recover)
+    out["rebuild"] = estimate_sec(eta, "rebuild", n_reports)
+    out["rdl"] = estimate_sec(eta, "rdl_patch", n_rdl, kind="rdl_patch")
+    out["params"] = estimate_sec(eta, "params_fill", n_params, kind="params_fill")
+    return out
+
+
 def plan_run(cfg: dict, full: bool = False, backfill: bool = False, recover: bool = False, *,
              refresh_window_days=None, rebuild_all=None) -> RunPlan:
     """UI 안내용 — 캐시만 보고 이번 실행이 어떤 성격인지 알려준다(NAS 접근 없음). 행을 다시 계산하지 않고 결과를 메모한다.
@@ -1776,7 +1934,10 @@ def plan_run(cfg: dict, full: bool = False, backfill: bool = False, recover: boo
                    recover_reports=s["n_recover"] if recover and not rebuild else 0,
                    mode=mode, refresh_days=refresh_days, retention_days=int(cfg.get("retention_days") or 0),
                    total_reports=n, reread_reports=reread, keep_reports=max(0, n - reread) if not rebuild else 0,
-                   rdl_reports=s.get("n_rdl", 0), rdl_devices=s.get("rdl_devices", 0))
+                   rdl_reports=s.get("n_rdl", 0), rdl_devices=s.get("rdl_devices", 0),
+                   params_missing=s["n_params"], params_have=s["n_params_have"], params_devices=s["params_devices"],
+                   params_from=s["params_from"], params_to=s["params_to"], span_from=s["span_from"], span_to=s["span_to"],
+                   etas=_plan_etas(s, n, reread, s["n_recover"], s.get("n_rdl", 0), s["n_params"]))
 
 
 # ----------------------------------------------------------------------------- collect
@@ -2125,6 +2286,7 @@ def collect(cfg: dict, full: bool = False, backfill: bool = False, *, recover: b
     index = _DeviceIndex(devs)                                # C09: 실행 단위로 한 번만 색인
     _migrate_identity(base, index, dirty, log)                # 옛 절대 경로 키 → (안정 키|상대 경로), 한 번만
     if old_cache is not None:
+        cache["eta"] = json.loads(json.dumps(old_cache.get("eta") or {}))       # 예상 시간의 근거(10/11)도 이어 간다
         cache["devices"] = json.loads(json.dumps(old_cache.get("devices") or {}))
         if old_cache.get("identity"):
             cache["identity"] = json.loads(json.dumps(old_cache["identity"]))
@@ -2338,6 +2500,11 @@ def collect(cfg: dict, full: bool = False, backfill: bool = False, *, recover: b
     if devinfo and devinfo != cache.get("last_devices"):
         cache["last_devices"] = devinfo
         dirty.add(DIRTY_DEVICE_INFO)
+    _units = int(stats.get("rdl_rows", 0)) if rdl_patch else n_new
+    _fixed = (stats.get("devices_ms", 0) + stats.get("list_ms", 0)) / 1000.0
+    if dirty and _units > 0:       # 예상 시간의 근거(10/11) — 이미 저장할 이유가 있는 실행에만 남긴다(아무것도 안 바뀐 실행은 파일을 건드리지 않는다)
+        record_eta(cache, "rebuild" if rebuild else "rdl_patch" if rdl_patch else "range" if rng else "refresh" if refresh_days > 0 else "recover" if recover
+                   else "backfill" if backfill else "incremental", _units, clock() - t0 - _fixed, _fixed)
     stats["cache_dirty"] = dict(sorted(dirty.reasons.items()))
     if dirty:
         saved = _save_cache(cfg, cache)
