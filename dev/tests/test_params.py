@@ -183,3 +183,19 @@ def test_fill_params_stop_keeps_what_was_read_and_resumes(tmp_path, fake_nas, mo
     assert 0 < left < total                                                    # 읽은 만큼은 저장됐다
     st2 = collect.fill_params(cfg)
     assert st2["targets"] == left and not st2["stopped"] and collect.plan_run(cfg).params_missing == 0
+
+
+def test_resumed_runs_are_left_out_of_timing_records(tmp_path, fake_nas, monkeypatch):
+    """이어하기로 끝낸 수집은 일부만 읽어 시간이 짧다 — 예상 시간의 근거에서 뺀다. 처음부터 끝까지 돈 실행은 남긴다."""
+    import pytest
+    from test_collect_incremental import _cache_of, _stop_after_reads
+    nas, csv_path = fake_nas
+    cfg = make_cfg(tmp_path, csv_path, read_workers=1)
+    collect.collect(cfg)
+    state, stop = _stop_after_reads(monkeypatch, 1)
+    with pytest.raises(collect.CollectCancelled):
+        collect.collect(cfg, rebuild_all=True, should_stop=stop)
+    collect.collect(cfg, rebuild_all=True)                                    # 이어서 끝냄
+    assert "rebuild" not in (_cache_of(cfg).get("eta") or {})
+    collect.collect(cfg, rebuild_all=True)                                    # 처음부터 끝까지
+    assert _cache_of(cfg)["eta"]["rebuild"][0][0] >= 1
