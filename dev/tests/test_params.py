@@ -163,3 +163,23 @@ def test_estimate_sec_uses_recent_measurements_else_rough_default():
     for _ in range(9):
         collect.record_eta(cache, "incremental", 1, 1.0, 1.0)
     assert len(cache["eta"]["incremental"]) == collect.ETA_KEEP
+
+
+def test_fill_params_stop_keeps_what_was_read_and_resumes(tmp_path, fake_nas, monkeypatch):
+    """멈추면 그때까지 읽은 덩어리는 저장되고, 다시 누르면 남은 Report 부터 이어서 한다."""
+    nas, csv_path = fake_nas
+    cfg = make_cfg(tmp_path, csv_path)
+    collect.collect(dict(cfg, collect_params=False))
+    total = collect.plan_run(cfg).params_missing
+    assert total >= 2
+    monkeypatch.setattr(collect, "PARAMS_FILL_CHUNK", 1)
+    seen = []
+
+    def stop():
+        return len(seen) >= 1                                                  # 첫 덩어리를 읽은 뒤 멈춤
+    st = collect.fill_params(cfg, progress=lambda d, t, p: seen.append(d), should_stop=stop)
+    assert st["stopped"] == 1 and 1 <= st["added"] + st["empty"] < total
+    left = collect.plan_run(cfg).params_missing
+    assert 0 < left < total                                                    # 읽은 만큼은 저장됐다
+    st2 = collect.fill_params(cfg)
+    assert st2["targets"] == left and not st2["stopped"] and collect.plan_run(cfg).params_missing == 0
