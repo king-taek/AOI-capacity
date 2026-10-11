@@ -35,6 +35,7 @@ RULES: Dict[str, Tuple[str, Any, Optional[int], Optional[int]]] = {
     "html_days": (INT, 30, 0, 36500),             # 수집 뒤 만드는 결과 HTML 에 담을 최근 일수(0 = 가진 데이터 전부, 10/5)
     "write_csv": (BOOL, False, None, None),
     "rebuild_all": (BOOL, False, None, None),
+    "collect_params": (BOOL, True, None, None),   # D89: 레시피 파라미터 읽기(파라미터 탭)
     "report_dir": (NAME, "Report", None, None),
     "scan_dir": (NAME, "Scanresult", None, None),
     "output_name": (NAME, "AOI_capacity.html", None, None),

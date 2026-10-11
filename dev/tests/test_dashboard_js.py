@@ -434,7 +434,7 @@ def test_header_has_four_tabs_and_each_popup_renders_an_accessible_dialog():
         ["devPopupHtml"], ["errPopupHtml"], ["typePopupHtml"],
         ["errorsHtml"], ["typePopupHtml"]],
         state={"modalDev": "AOI-1", "modalDayI": 0, "errDev": "AOI-1", "errDayI": 0})
-    assert re.findall(r'data-fk="nav:([a-z]+)"', head) == ["home", "errors", "report", "recipe", "lot"]   # 10/5: KLA 탭 · 추이 탭 없음, 10/11 LOT 추적
+    assert re.findall(r'data-fk="nav:([a-z]+)"', head) == ["home", "errors", "report", "recipe", "lot", "param"]   # 10/5: KLA 탭 · 추이 탭 없음, 10/11 LOT 추적 · 파라미터
     for label in (">가동률<", ">Error<", ">TB500 · Kendall<", ">RDL 단일스캔<", ">사본 저장<"):
         assert label in head, label
     assert ">추이<" not in head and ">KLA<" not in head

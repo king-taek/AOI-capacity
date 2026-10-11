@@ -26,7 +26,7 @@ Camtek AOI 장비의 BatchReport/WaferInfo.ini 를 읽어 장비별 가동률을
    `AOI_capacity.html` 한 장을 사용자가 더블클릭해 브라우저에서 본다. QtWebEngine·로컬 서버·localhost 를 쓰지 않는다.
    그 HTML 은 데이터·CSS·JS 를 모두 품고 **바깥으로 요청을 한 건도 보내지 않는다**(가드: `test_template_contract.py`).
    브라우저가 NAS 를 직접 읽는 경로도 두지 않는다 — 수집은 Python 만 한다. 자동 주기 수집은 없다(수동 실행만, D50).
-   화면은 **재설계 구조**(D47, 9/20): 가동률 · Error · TB500 · Kendall(D59) · RDL 단일스캔(옛 레시피 D70, D80) · LOT 추적(D88) 5탭(10/5 — 추이 · KLA 탭 없앰, KLA 는 장비 종류 필터) + 장비/Error/유형·Job · 레시피 묶음 팝업, 라이트 단일. 모델은 아래 '레이아웃' 의 화면 절.
+   화면은 **재설계 구조**(D47, 9/20): 가동률 · Error · TB500 · Kendall(D59) · RDL 단일스캔(옛 레시피 D70, D80) · LOT 추적(D88) · 파라미터(D89) 6탭(10/5 — 추이 · KLA 탭 없앰, KLA 는 장비 종류 필터) + 장비/Error/유형·Job · 레시피 묶음 팝업, 라이트 단일. 모델은 아래 '레이아웃' 의 화면 절.
 4. **Scanresult 를 재귀 검색하지 않는다.** INI 경로는 `{scan}/{job}/{setup}/{lot}/{wafer}/WaferInfo.ini` 로 계산해 존재만 확인한다.
    `job`·`setup` 의 출처는 **Report 안의 `Job/Setup` 값**이다(파일명이 아니다 — 실장비 516개 중 옛 파일명 규칙에 맞는 건 6개뿐이었다).
    `Job/Setup` 이 없는 옛 형식만 파일명 규칙(`{job}_{4자리}_{lot}_…`)으로 되돌아가고, 그것도 안 맞으면
@@ -229,6 +229,12 @@ Camtek AOI 장비의 BatchReport/WaferInfo.ini 를 읽어 장비별 가동률을
   왼쪽 검색(`data-in="lotQ"` — Lot 이름 · Wafer ID, 비우면 최근 Lot 30개) → 고른 Lot 의 Wafer ID 들이 나온 **모든 Report**(장비 · 이름 무관, 이 파일의 기록 전부 — 헤더 기간과 무관)를 시간 순으로:
   카드(Wafer · 검사 · Lot 이름 수 · 재검사 · Error · 배치 시간 합 · Defect) · 검사 순서(Report 한 장 = 한 줄: 장비 · Lot 원문 · Job · 레시피 · PASS/wafer · Defect · 배치 시간 · 구분 · Report 열기) · Wafer × 검사 칸(최근 30번, Wafer ID 를 누르면 그 Wafer 의 이력 `state.lotWid`).
   **구분은 모델의 Rescan 과 같은 조건**(matKey2 + 레시피가 같고 앞 시도 PASS → 재검사, Lot 원문이 같으면 같은 이름 · 다르면 이름 바뀜) — 같은 Wafer 라도 Job·단계·레시피가 다르면 '다른 검사'. 원천 행에서 계산하고 모델 값은 건드리지 않는다.
+- **파라미터 탭(D89, 10/11 — 수집 `aoi_capacity/params.py` · 가져오기 `params_import.py` · 화면 `paramHtml`)**: Report(= Lot 한 번)마다 INI 를 찾은 **첫 Wafer 폴더 안만** 읽는다(맨 위 한 번 나열 + `Zones` · `Recipe2-Zones` · `TrainData` 한 단계 · `FocusMapping/FocusMapping.ini`, 규칙 4 — 정확 경로 아래, 재귀 아님).
+  스레드는 읽기만(`rows_for_report(params_out=)`), 메인 스레드가 캐시 `params` 에 넣는다: 파일마다 파싱해 **측정값(`MEASURE_RE` — Rotate_Wafer · FocusPosAboveChuck · Zwafer · NominalGL · 광학 Id · 보정 파일 날짜 경로 · ScanResultsPath · ChuckPos · MskPixelCount, 이어진 Lot 2,159쌍으로 확인)과 LastCam 을 뺀** 정규화 글을 해시로 한 번(`blobs`), Report 마다 스냅숏(`snaps[Report 키]` — 파일이 없어도 빈 스냅숏으로 남겨 다시 열지 않는다, rebuild · refresh 에도 이미 있는 Report 는 다시 읽지 않는다). cfg `collect_params`(기본 true) 로 끈다. dirty 이유 `params`.
+  HTML: `write_html` 이 `params_for_range` → `params.build_meta` 로 `meta.params`(기간 끝날까지의 스냅숏, 기간 안에 돈 Job 만) — Job 마다 장비별 가장 최근 스냅숏을 그룹 · Zone · 키 순서대로(순서 있는 합집합), 다수값 + 다른 장비 값만 · 빠진 장비 · 동률 표시, 장비 고유 그룹(광학 · System · Teaching)은 다른 줄만, 바뀐 이력(같은 장비의 이어진 스냅숏 차이, 40개까지). 문자열은 `pool` 번호.
+  그룹(`params.GROUPS`, 화면 순서): Recipe 동작 · 검출 (RTP) · **Zones — <레시피 1 이름>** · **Zones — <레시피 2 이름>**(MultiRecipe.ini) · Global RTP · 접힘: Focus · Alignment · 광학 · System · Teaching. Scan 순서(MultiRecipe)는 그리지 않는다. Clean reference · AutoFocus 는 숫자 대신 글자(None · Lot · Wafer). 단위는 키의 `[um]` · `(um)` 또는 주석에서.
+  화면: 왼쪽 Job 검색(`data-in="prmQ"`, 최근 스캔 순) → 장비 열(가장 최근 스캔 날짜) · 다수값 열 · **다수와 다른 칸만 노랑** · 빠짐 '—' · '다른 칸 있는 줄만' · 그룹 접기(`state.prmOpen`) · 바뀐 이력(접힘). 한 그룹 800줄까지.
+  **30일 로그 zip 으로 이력 한 번 채우기**(사용자 Q9): 수집 창 카드 '파라미터 이력 채우기' → 폴더 고르기 → `collect.import_param_zips`(이 PC 의 `*.zip` · `*.zip.enc` 만 — NAS 접근 0, `_목록.tsv` 의 `= 참조` 를 zip 장 사이에서 풀고, Lot 폴더의 BatchReport 로 Job · 시각 · Report 키, 범위 밖 장비 제외, 이미 있는 Report 는 건너뜀). 수집과 동시에 돌지 않는다.
 - **헤더 날짜 두 줄(D79 C8 · D80)**: `dateControlsHtml` — 위 '조회 기간'(`rangeHtml`), 아래 '하루 날짜'(입력 칸 `data-in="day"` · ‹ › 최신, 기간 안 데이터 날짜만 · 기간이 하루를 밀어내면 `state.dayNote` 짧은 알림). **하루 날짜 줄은 하루가 기준인 화면에서만**(`dayBasis` — 가동률 · Error 일자별; 나머지 탭은 줄 자체가 없다), 하루가 기준일 땐 조회 기간 줄이 **회색**(`.rangebar.dim` + '이 탭은 하루 날짜 기준', 눌러도 되고 Error 에서 누르면 하루 기준이 풀려 기간 모드). 탭 제목 옆 `scopeBadge`(가동률 · Error 일자별 = 하루, 나머지 = 기간). Error 날짜 막대를 고르면 헤더 하루도 그 날. 사본 저장 · 레시피 묶음은 `.hacts`. ≤820px 헤더는 sticky 아님. 작은 창(D79 C4): 홈 · Error 목록 열 너비는 CSS(`.homelist .rowbtn` · `.errlist .rowbtn[data-cols]`, 인라인 grid 없음), 장비 팝업 Lot 이름표는 실제 폭(`calloutW`·`calloutFit`).
 - **화면 기간(10/5)**: 헤더 `rangeHtml` — 프리셋 **최근 7일 · 1달 · 전체**(가진 데이터의 끝날 기준, 열람 시계 아님) + 날짜 두 칸(change 때 `setRange`). 모델은 가진 날 전부로 한 번(`D.allDays`), 보이는 날 `D.days` 만 좁힌다 —
   모든 탭이 그 기간만 그리고 날마다의 값은 그대로. 탭마다 있던 7일·21일 버튼은 없앴다(Error 탭은 '일자별' · '기간 전체' 둘). 레시피 묶음·레시피 색인·전후 비교는 `D.allDays` 를 쓴다(비교 기간은 보이는 기간 밖도 가능).

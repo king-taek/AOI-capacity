@@ -346,6 +346,11 @@ main{max-width:1420px;margin:0 auto;padding:22px 24px 90px}
 .kpi{border:1px solid var(--line);border-radius:12px;padding:14px 16px;background:#FBFCFD}.kpi .k{font-size:13px;font-weight:700;display:flex;align-items:center;gap:7px;margin:0 0 8px;flex-wrap:wrap}.kpi .kn{font-weight:500;font-size:12px}
 .kpi2{display:grid;grid-template-columns:1fr 1fr;gap:16px}.kpi2>div+div{border-left:1px solid #E6EBF0;padding-left:16px}.kpi .v{font-size:32px;font-weight:700;line-height:1.1;margin:0;color:var(--ink);white-space:nowrap}.kpi .v small{font-size:12px;font-weight:600;color:var(--ink-3);margin-left:3px}
 .kpi .vl{margin:3px 0 6px;font-size:12px;color:var(--ink-3)}.kpi .cc{margin:0;font-size:12px;line-height:1.5}.chip2{font-weight:700}
+.pgrp{margin-bottom:10px;padding:0;overflow:hidden}.pgh{display:flex;gap:10px;align-items:center;width:100%;padding:11px 16px;background:none;border:0;text-align:left;font:inherit;cursor:pointer}.pgh:hover{background:#F6F8FA}.pgh .chev{width:12px;color:#5A6673}
+.ptw{overflow:auto;max-height:72vh;border-top:1px solid #EDF1F5}.ptab{border-collapse:collapse;font-size:12px;width:max-content}.ptab th{position:sticky;top:0;background:#F6F8FA;z-index:1;font-weight:600;text-align:left;padding:6px 8px;border-bottom:1px solid #DCE3EA;white-space:nowrap}
+.ptab th.pdv small{display:block;font-weight:400;color:#7A8794;font-size:10.5px}.ptab td{padding:4px 8px;border-bottom:1px solid #F0F3F6;white-space:nowrap;max-width:220px;overflow:hidden;text-overflow:ellipsis}.ptab td.pk{position:sticky;left:0;background:#fff;max-width:260px}
+.ptab td.pu{color:#5A6673}.ptab td.pm{color:#2B3640;background:#FAFBFC}.ptab td.pc{color:#9AA5B1}.ptab td.dif{background:#FFF1B8;color:#5C4300;font-weight:600}.ptab td.mis{color:#C9D2DC;text-align:center}.ptab tr.pz td{background:#F2F5F8;font-weight:600;color:#2B3640;position:static}
+.phist{display:grid;grid-template-columns:70px 90px minmax(0,1.2fr) minmax(0,2fr);gap:10px;padding:7px 0;border-bottom:1px solid #F0F3F6;font-size:12px;align-items:start}
 .cards.lotcards .v{font-size:18px}.cards.lotcards>div{padding-left:14px;padding-right:12px}
 .lotgrid{display:grid;grid-template-columns:300px minmax(0,1fr);gap:16px;align-items:start}.lotlist .lotscroll{max-height:70vh;overflow:auto}
 .rowbtn.lotpick{display:flex;flex-direction:column;align-items:flex-start;gap:2px;width:100%;padding:8px 12px;border:0;border-bottom:1px solid #F3F5F8;background:transparent;text-align:left;cursor:pointer;font:inherit;font-size:12.5px}.rowbtn.lotpick:hover{background:#F6F9FC}.rowbtn.lotpick.on{background:#EAF2FB;box-shadow:inset 3px 0 0 var(--nav-on)}.rowbtn.lotpick .muted{font-size:11px}
@@ -1008,7 +1013,7 @@ function jobNm(G){if(!G)return{nm:"",al:false,raw:""};const raw=D.pool.job[G.l]|
 const PROPS={attentionUtil:40,attentionErr:3};   /* 살펴볼 장비 문턱 — meta.dashboard_settings 의 같은 이름 숫자가 있으면 그것으로(D14) */
 function applySettings(m){const o=(m&&m.dashboard_settings)||{};for(const k of Object.keys(PROPS)){const v=Number(o[k]);if(o[k]!==undefined&&Number.isFinite(v)&&v>=0)PROPS[k]=v;}}
 let D=null;
-const VIEWS=["home","errors","report","recipe","lot"];   /* 10/5: KLA 탭 · 추이 탭은 없앴다(KLA 는 가동률의 구분 필터로) */
+const VIEWS=["home","errors","report","recipe","lot","param"];   /* 10/5: KLA 탭 · 추이 탭은 없앴다(KLA 는 가동률의 구분 필터로) */
 const state={view:"home",dayI:null,sort:"name",floor:"all",maker:"all",span:0,vp:"all",unit:"day",metric:"min",pickDay:undefined,
   modalDev:null,modalDayI:null,modalType:null,modalJob:null,selLot:null,lotFilter:"all",showMembers:false,
   stack:[],                                  /* 열린 팝업의 순서(type · dev · err) — 마지막이 맨 위, 나머지는 뒤로 물러난다 */
@@ -1019,7 +1024,7 @@ const state={view:"home",dayI:null,sort:"name",floor:"all",maker:"all",span:0,vp
   rcpSel:null,rcpJob:null,rcpPop:null,rcpUnit:"wafer",rcpMetric:"time",rcpOff:{},rcpHowAll:false,rcpPopOpen:{},rcpHide:{},rcpDevSort:"name",rcpBin:null,rcpQ:"",rcpMore:false,rcpDevSel:null,rcpExclOpen:false,rcpHowOpen:{},dayNote:"",                /* 레시피 탭(D70): 고른 레시피(그 묶음의 Job 원문 하나 — 다시 묶어도 따라간다) · 검색 · 기간 */
   errWinEnd:null,errFDev:null,                /* Error 팝업 21일 창의 끝(끌어서 옮김) · Error 탭 장비 필터(10/5) */
   _end:0};   /* 레시피 묶음 편집기(D67): 검색 · 새 이름 · 고른 Job 원문 · 목록 필터 */
-const INPUT_KEYS=new Set(["rgQ","rgName","rcpQ","lotQ"]);   /* data-in 칸 → 같은 이름의 state */
+const INPUT_KEYS=new Set(["rgQ","rgName","rcpQ","lotQ","prmQ"]);   /* data-in 칸 → 같은 이름의 state */
 let _drag=null;
 let H=[];const h=fn=>{H.push(fn);return H.length-1;};
 function setState(p){Object.assign(state,p);render();}
@@ -1564,7 +1569,7 @@ function render(){
   let html;
   if(!D||!D.days.length)html=headerHtml(null)+`<div class="stage" data-key="stage"><main data-key="view:none"><div class="panel" style="padding:28px 24px"><h2>아직 수집한 데이터가 없습니다</h2><p class="muted" style="margin-top:6px">수집 프로그램에서 '수집' 을 실행한 뒤 이 파일을 다시 여세요.</p></div></main></div>`+footHtml();
   else{const V=state.view;let body="";
-    if(V==="home")body=homeHtml();else if(V==="errors")body=errorsHtml();else if(V==="recipe")body=rcpHtml();else if(V==="lot")body=lotHtml();else body=reportHtml();
+    if(V==="home")body=homeHtml();else if(V==="errors")body=errorsHtml();else if(V==="recipe")body=rcpHtml();else if(V==="lot")body=lotHtml();else if(V==="param")body=paramHtml();else body=reportHtml();
     html=headerHtml(V)+`<div class="stage" data-key="stage" data-anim="el"><main data-key="view:${V}">${body}</main></div>`+footHtml()+popupsHtml();}
   const tpl=document.createElement("template");tpl.innerHTML=html;
   if(app.getAttribute("data-anim")!=="el")app.setAttribute("data-anim","el");
@@ -1628,7 +1633,7 @@ function headerHtml(V){
   let stampTxt=gen?gen+" 수집 기준":"";
   if(meta.mode==="saved")stampTxt+=" · 사본";
   if(!fixed&&gen)stampTxt+=" · 수집 시각 정보 없음";
-  const nav=[["home","가동률"],["errors","Error"],["report","TB500 · Kendall"],["recipe","RDL 단일스캔"],["lot","LOT 추적"]];
+  const nav=[["home","가동률"],["errors","Error"],["report","TB500 · Kendall"],["recipe","RDL 단일스캔"],["lot","LOT 추적"],["param","파라미터"]];
   return `<header class="hdr" data-key="hdr"><div class="brand"><span class="lt" data-lottie="scan" data-loop="1" data-static aria-hidden="true"></span>AOI 가동 현황</div>
     <nav class="nav"><i class="ind" data-key="ind" data-static aria-hidden="true"><b class="l"></b><b class="m"></b><b class="r"></b><b class="s"></b></i>${nav.map(([k,l])=>`<button class="${V===k?"on":""}" data-h="${h(S.go(k))}" data-fk="nav:${k}">${l}</button>`).join("")}</nav>
     <div class="spacer"></div>
@@ -1997,6 +2002,59 @@ function reportHtml(){
       <p style="margin:0;padding:11px 18px;background:#FBFCFD;font-size:12px;color:#5A6673;border-top:1px solid #EDF1F5">배치시간 = 준비 + 장당 × 장수 로 1차 회귀 — 절편이 준비, 기울기가 장당, ± 는 회귀 표준오차. 환산은 최빈 장수 기준. 표본 5개 미만이면 내지 않음. 배치시간은 Report 의 배치 시작~종료. 평균 Defect 는 Report 표 Faults 열이 있는 행만(옛 캐시 행은 다시 읽어야 채워짐).</p></div></div>`;
 }
 
+/* ---------- 파라미터 탭(D89, 10/11 사용자 Q6~Q10) ----------
+   수집기가 Report(= Lot 한 번)마다 INI 를 찾은 첫 Wafer 폴더의 레시피 파라미터를 읽어 두고(측정값 제외), meta.params 에 Job 마다
+   장비별 **가장 최근 스냅숏**을 묶어 준다: 다수값 + 다른 장비 값만(`x`), 빠진 장비, 바뀐 이력. 화면은 그대로 그린다(계산 없음).
+   그룹 순서 · 이름은 수집기(params.GROUPS)가 정한다 — Zones 는 레시피 이름으로, Focus · Alignment · 광학 · System · Teaching 은 접힌 채 아래.
+   다수값과 다른 칸만 노랑. Clean reference · AutoFocus 는 글자(None · Lot · Wafer). */
+const PRM_MAX_ROWS=800;
+function prmData(){const p=meta&&meta.params;return p&&Array.isArray(p.jobs)?p:null;}
+/* Job 하나는 gzip+base64 로 접혀 있다(30일 516 Job 을 펴면 21MB) — 고를 때만 브라우저 내장 DecompressionStream 으로 편다(바깥 요청 없음). */
+const _prm=new Map();
+function prmBody(i){const PM=prmData();const got=_prm.get(i);if(got)return got;
+  _prm.set(i,{loading:true});
+  (async()=>{try{const b=Uint8Array.from(atob(PM.jobs[i].z),c=>c.charCodeAt(0));
+      const txt=await new Response(new Blob([b]).stream().pipeThrough(new DecompressionStream("gzip"))).text();
+      _prm.set(i,JSON.parse(txt));}catch(e){_prm.set(i,{error:String(e&&e.message||e)});}
+    render();})();
+  return _prm.get(i);}
+function paramHtml(){
+  const PM=prmData();const head=`<div class="bar-h"><h1>파라미터</h1><span style="font-size:12.5px;color:#5A6673">Job 을 고르면 장비마다 가장 최근에 스캔한 Lot 의 레시피 값을 나란히 — 다수와 다른 칸만 노랑</span></div>`;
+  if(!PM||!PM.jobs.length)return head+`<div class="panel" style="padding:24px;color:#5A6673;font-size:13px">이 파일에는 파라미터 기록이 없습니다. 다음 수집부터 Lot 마다 첫 Wafer 의 레시피 파일을 읽어 담습니다(30일 로그 zip 으로 이력을 한 번 채울 수도 있습니다 — 수집 창).</div>`;
+  const Q=(state.prmQ||"").trim().toUpperCase();
+  const jobs=PM.jobs.map((J,i)=>({i,J,last:J.t||""}));
+  const list=(Q?jobs.filter(o=>o.J.j.toUpperCase().includes(Q)):jobs).sort((a,b)=>b.last.localeCompare(a.last));
+  const cur=state.prmJob!=null&&PM.jobs[state.prmJob]?state.prmJob:(list[0]?list[0].i:null);
+  const shown=list.slice(0,60);
+  const left=`<div class="panel lotlist"><div style="padding:10px 12px;border-bottom:1px solid #EDF1F5"><input class="inp" type="search" data-in="prmQ" data-fk="prm:q" placeholder="Job 이름 검색" value="${esc(state.prmQ||"")}" style="width:100%"></div>
+    <p class="muted" style="font-size:11.5px;margin:8px 12px 4px">${Q?`검색 결과 ${list.length}개`:`Job ${list.length}개 · 최근 스캔 순`}${list.length>60?" · 60개 표시":""}</p>
+    <div class="lotscroll">${shown.map(o=>`<button type="button" class="rowbtn lotpick${o.i===cur?" on":""}" data-key="pj:${o.i}" data-h="${h(()=>setState({prmJob:o.i,prmOpen:{}}))}"><span class="mono" style="word-break:break-all">${esc(o.J.j)}</span><span class="muted">장비 ${o.J.n}대 · ${esc(o.last.slice(5,16).replace("-","/"))}</span></button>`).join("")||`<p class="empty">없음</p>`}</div></div>`;
+  if(cur==null)return head+`<div class="lotgrid">${left}<div></div></div>`;
+  const J=prmBody(cur),jname=PM.jobs[cur].j;
+  if(J.loading||J.error)return head+`<div class="lotgrid">${left}<div class="panel" style="padding:24px;color:#5A6673;font-size:13px">${J.error?"이 Job 의 파라미터를 펴지 못했습니다: "+esc(J.error):"불러오는 중…"}</div></div>`;
+  const S_=i=>J.pool[i]??"";
+  const devs=J.d,only=!!state.prmOnlyDiff,open=state.prmOpen||{};
+  let nAll=0,nDiff=0;for(const g of J.g)for(const z of g[2])for(const it of z[2]){nAll++;if(Object.keys(it[4]).length||it[5].length)nDiff++;}
+  const devHead=devs.map((d,di)=>`<th class="pdv" title="${esc(d+" · 가장 최근 스캔 "+J.l[di][0]+" · "+S_(J.l[di][1]))}">${esc(d)}<small>${esc((J.l[di][0]||"").slice(5,10).replace("-","/"))}</small></th>`).join("");
+  const groupHtml=(g,gi)=>{const name=S_(g[0]),fold=!!g[1];const isOpen=open[name]!=null?open[name]:!fold;
+    let n=0,nd=0;for(const z of g[2])for(const it of z[2]){n++;if(Object.keys(it[4]).length||it[5].length)nd++;}
+    if(only&&!nd)return "";
+    let body="";if(isOpen){let rowsN=0;const parts=[];
+      for(const z of g[2]){const zn=S_(z[0]),al=S_(z[1]);const its=only?z[2].filter(it=>Object.keys(it[4]).length||it[5].length):z[2];if(!its.length)continue;
+        if(rowsN>=PRM_MAX_ROWS)break;
+        parts.push(`<tr class="pz"><td colspan="${3+devs.length}">${esc(zn||"(공통)")}${al?` <span class="muted">· ${esc(al)}</span>`:""}</td></tr>`);
+        for(const it of its){if(rowsN++>=PRM_MAX_ROWS)break;const maj=S_(it[3]),note=S_(it[2]);
+          parts.push(`<tr><td class="pk mono"${note?` data-tip="${esc(note)}"`:""}>${esc(S_(it[0]))}${it[6]?` <span class="muted" data-tip="다수값이 둘 이상 동률 — 장비 순서상 앞 값을 다수로 봤습니다">≈</span>`:""}</td><td class="pu">${esc(S_(it[1]))}</td><td class="pm mono">${esc(maj)}</td>${
+            devs.map((d,di)=>{const x=it[4][di];if(x!=null)return `<td class="pc dif mono" data-tip="${esc(d+": "+S_(x)+" (다수 "+maj+")")}">${esc(S_(x))}</td>`;if(it[5].includes(di))return `<td class="pc mis">—</td>`;return `<td class="pc mono">${esc(maj)}</td>`;}).join("")}</tr>`);}}
+      body=`<div class="ptw"><table class="ptab"><thead><tr><th>키</th><th>단위</th><th>다수값</th>${devHead}</tr></thead><tbody>${parts.join("")}</tbody></table></div>${rowsN>PRM_MAX_ROWS?`<p class="muted" style="font-size:11.5px;margin:6px 0 0">줄이 많아 처음 ${PRM_MAX_ROWS}줄만 — '다른 칸 있는 줄만' 을 켜면 다른 값을 모두 봅니다</p>`:""}`;}
+    return `<section class="panel pgrp" data-key="pg:${esc(name)}"><button type="button" class="pgh" aria-expanded="${isOpen}" data-h="${h(()=>setState({prmOpen:{...open,[name]:!isOpen}}))}"><span class="chev">${isOpen?"▾":"▸"}</span><b>${esc(name)}</b><span class="muted">${n}개${nd?` · <b style="color:#8A6100">다른 줄 ${nd}</b>`:" · 모두 같음"}</span>${fold?`<span class="pill" style="margin-left:auto">장비마다 다를 수 있음 · 접어 둠</span>`:""}</button>${body}</section>`;};
+  const hist=J.h||[];const hOpen=!!state.prmHist;
+  const histHtml=`<section class="panel pgrp" data-key="pg:__hist"><button type="button" class="pgh" aria-expanded="${hOpen}" data-h="${h(()=>setState({prmHist:!hOpen}))}"><span class="chev">${hOpen?"▾":"▸"}</span><b>바뀐 이력</b><span class="muted">${hist.length?hist.length+"번":"이 기간에 바뀐 적 없음"}</span></button>${hOpen&&hist.length?`<div style="padding:4px 16px 12px">${hist.slice(0,80).map(e=>`<div class="phist"><span class="num">${esc(e[0].slice(5).replace("-","/"))}</span><b>${esc(devs[e[1]])}</b><span class="mono muted" style="word-break:break-all">${esc(S_(e[2]))}</span><div>${e[3].map(c=>`<div class="mono" style="font-size:11.5px"><span>${esc(S_(c[0]))}</span>: <s class="muted">${esc(S_(c[1])||"(없음)")}</s> → <b>${esc(S_(c[2])||"(없음)")}</b></div>`).join("")}${e[4]?`<div class="muted" style="font-size:11.5px">… ${e[4]}개 더</div>`:""}</div></div>`).join("")}</div>`:""}</section>`;
+  const right=`<div class="panel" style="padding:12px 16px;margin-bottom:12px;display:flex;gap:12px;align-items:center;flex-wrap:wrap"><h2 class="mono" style="margin:0;font-size:15px;word-break:break-all">${esc(jname)}</h2>
+      <span class="muted" style="font-size:12.5px">장비 ${devs.length}대 · 키 ${nAll}개 · 장비끼리 다른 줄 ${nDiff}개</span><div class="spacer"></div>
+      <button type="button" class="btn${only?" on":""}" aria-pressed="${only}" data-h="${h(()=>setState({prmOnlyDiff:!only}))}">다른 칸 있는 줄만</button></div>
+    ${J.g.map(groupHtml).join("")}${histHtml}`;
+  return head+`<div class="lotgrid">${left}<div style="min-width:0">${right}</div></div>`;}
 /* ---------- LOT 추적 탭(10/11 사용자, D87) ----------
    Lot 이름은 사람이 적어 같은 Lot 이 다른 이름으로 다시 돌 때가 있다 — 기계가 읽은 Wafer ID 로 같은 Lot 을 묶어 따라간다.
    고른 Lot(또는 Wafer ID)의 Wafer 들이 나온 모든 Report(장비 · 이름 무관)를 시간 순으로: 장비 · Lot 이름 · Job · 레시피 · 결과 · Defect · 시간 · 재검사 구분.

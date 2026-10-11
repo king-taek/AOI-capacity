@@ -116,6 +116,23 @@ class _HtmlOnlyWorker(QThread):
             self.done.emit(None, f"{type(ex).__name__}: {ex}")
 
 
+class _ParamZipWorker(QThread):
+    """30일 Wafer 로그 zip 으로 파라미터 이력 채우기(D89) — 이 PC 의 zip 만 읽는다. 끝나면 (통계 | None, 오류 문구)."""
+    log = pyqtSignal(str)
+    done = pyqtSignal(object, str)
+
+    def __init__(self, cfg: dict, folder: str, parent=None):
+        super().__init__(parent)
+        self._args = (cfg, folder)
+
+    def run(self) -> None:  # noqa: D401
+        cfg, folder = self._args
+        try:
+            self.done.emit(collect.import_param_zips(cfg, folder, log=self.log.emit), "")
+        except Exception as ex:  # noqa: BLE001
+            self.done.emit(None, f"{type(ex).__name__}: {ex}")
+
+
 class ModeCard(QFrame):
     """상황 카드 하나 — 누르면(또는 Space/Enter) 고른다. 고른 카드는 파란 테두리와 채운 점."""
     picked = pyqtSignal(str)
@@ -372,6 +389,18 @@ class CollectPage(QWidget):
         self._days_worker: Optional[_DaysWorker] = None
         self._html_worker: Optional[_HtmlOnlyWorker] = None
 
+        # 파라미터 이력 채우기(D89, 10/11 사용자 Q9) — 30일 Wafer 로그 zip 폴더를 골라 한 번. 캐시를 고치므로 수집과 동시에 돌지 않는다.
+        pcard, pl = _card(body, K.PARAM_ZIP_TITLE)
+        pl.addWidget(_label(K.PARAM_ZIP_WHEN, "help", pcard, wrap=True))
+        prow = QHBoxLayout()
+        self._b_pzip = make_button(K.PARAM_ZIP_RUN, "default", pcard)
+        self._b_pzip.clicked.connect(self._on_param_zip)
+        prow.addWidget(self._b_pzip)
+        prow.addStretch(1)
+        pl.addLayout(prow)
+        lay.addWidget(pcard)
+        self._pz_worker: Optional[_ParamZipWorker] = None
+
         # Wafer 로그 30일 전체 수집(10/9 1차 → 10/10 2차 → 10/10 30일 전체로 교체) — 개발자 조사용. 가동률 수집과 따로 돌고, 둘이 동시에 NAS 를 읽지 않게 서로 막는다.
         wcard, wl = _card(body, K.WAFER_LOGS_TITLE)
         wl.addWidget(_label(K.WAFER_LOGS_WHEN, "help", wcard, wrap=True))
@@ -558,6 +587,33 @@ class CollectPage(QWidget):
             self.append_log(K.HTML_ONLY_FAIL_FMT.format(error=err))
             self.error.emit(K.HTML_ONLY_TITLE, K.HTML_ONLY_FAIL_FMT.format(error=err))
 
+    def _on_param_zip(self) -> None:
+        if self._pz_worker is not None or self._running or self._wl_worker is not None:
+            return
+        folder = QFileDialog.getExistingDirectory(self, K.PARAM_ZIP_PICK, str(paths.data_root()))
+        if not folder:
+            return
+        self._b_pzip.setEnabled(False)
+        self._b_run.setEnabled(False)
+        w = _ParamZipWorker(prefs.to_collect_cfg(prefs.load()), folder, self)
+        w.log.connect(self.append_log)
+        w.done.connect(self._on_param_zip_done)
+        w.finished.connect(lambda w=w: self._worker_done("_pz_worker", w))
+        self._pz_worker = w
+        self.append_log(K.PARAM_ZIP_START_FMT.format(folder=folder))
+        w.start()
+
+    def _on_param_zip_done(self, st, err: str) -> None:
+        self._b_pzip.setEnabled(not self._running)
+        self._b_run.setEnabled(not self._running and self._wl_worker is None)
+        if st is not None:
+            msg = K.PARAM_ZIP_DONE_FMT.format(added=st.get("added", 0), lots=st.get("lots", 0), known=st.get("skipped_known", 0))
+            self.append_log(msg)
+            self._status.setText(msg)
+        else:
+            self.append_log(K.PARAM_ZIP_FAIL_FMT.format(error=err))
+            self.error.emit(K.PARAM_ZIP_TITLE, K.PARAM_ZIP_FAIL_FMT.format(error=err))
+
     def _open_result(self) -> None:
         QDesktopServices.openUrl(QUrl.fromLocalFile(str(results.ensure_html())))
 
@@ -717,8 +773,10 @@ class CollectPage(QWidget):
 
     def set_running(self, running: bool) -> None:
         self._running = running
-        self._b_run.setEnabled(not running and self._wl_worker is None)
+        self._b_run.setEnabled(not running and self._wl_worker is None and getattr(self, "_pz_worker", None) is None)
         self._b_wl_run.setEnabled(not running and self._wl_worker is None)
+        if hasattr(self, "_b_pzip"):
+            self._b_pzip.setEnabled(not running and self._pz_worker is None)
         self._b_stop.setVisible(running)
         self._b_stop.setEnabled(running)
         for w in (*self._cards.values(), self._refresh_days, self._r_from, self._r_to, self._out, self._b_out, self._csv, self._b_html, self._b_all):

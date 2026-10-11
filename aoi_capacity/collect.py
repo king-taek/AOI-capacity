@@ -57,6 +57,7 @@ from typing import Callable, Dict, List, Optional, Tuple
 from . import devices as devices_mod
 from . import i18n, nas_guard, scope
 from . import kla as kla_mod
+from . import params as params_mod
 from . import recipes as recipes_mod
 from .utils import config as config_mod
 
@@ -107,6 +108,7 @@ DEFAULT_CONFIG: Dict[str, object] = {
     "attention_util": 40,                         # D14: 살펴볼 장비 = 가동률 이 값(%) 미만 — 결과 HTML 의 meta.dashboard_settings 로 나간다
     "attention_err": 3,                           # D14: 또는 Error 건수 이 값 이상
     "html_days": 30,                              # 수집 뒤 결과 HTML 에 담을 최근 일수(0 = 가진 데이터 전부, 기본 1달 — 10/5 사용자). 분할은 없다(9/23 분할 롤백)
+    "collect_params": True,                       # D89: Report 마다 INI 를 찾은 첫 Wafer 폴더의 레시피 파라미터 파일을 읽어 둔다(파라미터 탭). 끄면 읽지 않는다
     "recipe_groups_file": "",                     # D67: 결과 HTML 에 담을 레시피 묶음(화면에서 내보낸 JSON). 비우면 데이터 폴더·다운로드에서 가장 최근 것
 }
 MAX_READ_RETRY = 3   # 읽기에 실패한 Report 를 몇 번까지 다시 시도하고 커서를 붙잡아 둘지
@@ -924,7 +926,7 @@ def ini_roots_for(batch_start: Optional[dt.datetime], scan_root: str, backups: O
 
 
 def rows_for_report(dev_name: str, rep: dict, scan_root: str, memo: Optional[_IniMemo] = None,
-                    backups: Optional[ScanRoots] = None) -> List[dict]:
+                    backups: Optional[ScanRoots] = None, params_out: Optional[dict] = None) -> List[dict]:
     """Report 한 장 → Wafer 행들(+ 통째로 실패한 배치면 배치 행 하나).
 
     `backups` 가 있으면 INI 를 `ini_roots_for` 순서로 찾는다(정확 경로만, 재귀 없음). 백업에서 찾은 행은 `data_issue` 에 폴더 이름을 남긴다.
@@ -1030,6 +1032,12 @@ def rows_for_report(dev_name: str, rep: dict, scan_root: str, memo: Optional[_In
                             if one:
                                 r["recipe"] = one
                             r["scan_mode"] = "SINGLE"
+                    if r["ini_match"] == "EXACT" and params_out is not None and "files" not in params_out:
+                        # D89: Report(= Lot 한 번)마다 INI 를 찾은 첫 Wafer 폴더의 레시피 파라미터 — 그 폴더 안만(맨 위 + 하위 폴더 한 단계).
+                        try:
+                            params_out["files"] = params_mod.snapshot(params_mod.read_wafer_files(os.path.join(found_in, rel_found)))
+                        except OSError as e:
+                            params_out["files"], params_out["error"] = {}, f"{type(e).__name__}: {e}"
                     if r["ini_match"] == "EXACT" and want_settings:
                         # 10/11: Clean reference · AutoFocus 설정은 Report 마다 한 번 — INI 를 찾은 첫 Wafer 폴더의 Recipe.ini(정확 경로 하나).
                         want_settings = False
@@ -1209,6 +1217,7 @@ DIRTY_CURSOR, DIRTY_IDENTITY, DIRTY_MAPPING = "cursor", "identity", "device_mapp
 DIRTY_REPORTS, DIRTY_UPDATED, DIRTY_FAILED, DIRTY_RETENTION, DIRTY_REBUILD = "reports", "reports_updated", "failed", "retention", "rebuild"
 DIRTY_DEVICE_INFO = "device_info"
 DIRTY_KLA = "kla"                                            # D73: KLA 기록(cache["kla"])이 바뀜
+DIRTY_PARAMS = "params"                                      # D89: 레시피 파라미터 스냅숏(cache["params"])이 바뀜
 UNLIMITED_DAYS = 36500                                       # retention_days 0(기한 없음)일 때 rebuild 가 읽는 창
 DIRTY_LISTING = "listing"      # 장비의 마지막 전체 나열 시각(`full_listed`) — 패턴 나열을 쓸 수 있는 PC(Windows)에서만 적는다
 #: identity 기록의 충돌 목록 상한 — 요약이지 원장(ledger)이 아니다. 건수는 `n_conflicts` 에 전부 남는다.
@@ -2176,6 +2185,13 @@ def collect(cfg: dict, full: bool = False, backfill: bool = False, *, recover: b
         backups = _backup_roots(d, scan_root)
         jobs.extend((d, dm, e, key, scan_root, backups) for e, key in pick)
 
+    # D89: 레시피 파라미터 — 스냅숏이 이미 있는 Report 는 다시 읽지 않는다(rebuild · refresh 에도). 스레드는 이 집합을 읽기만 한다.
+    pstore = cache.setdefault("params", params_mod.empty_store())
+    if old_cache is not None and not pstore.get("snaps") and (old_cache.get("params") or {}).get("snaps"):
+        pstore.update(json.loads(json.dumps(old_cache["params"])))     # rebuild 후보 캐시에도 파라미터 이력은 그대로
+    want_params = bool(cfg.get("collect_params", True)) and not rdl_patch
+    have_params = frozenset(pstore.get("snaps", {}))
+
     def read_one(job):
         d, _dm, e, _key, scan_root, backups = job
         _check(should_stop)
@@ -2187,11 +2203,12 @@ def collect(cfg: dict, full: bool = False, backfill: bool = False, *, recover: b
             sha = hashlib.sha256(raw).hexdigest()
             rep = parse_report(e.name, _decode_report(raw))
             del raw
-            out = (job, mtime, rows_for_report(d["name"], rep, scan_root, memo, backups), None, clock() - t_job, sha)
+            pout = {} if want_params and _key not in have_params else None
+            out = (job, mtime, rows_for_report(d["name"], rep, scan_root, memo, backups, pout), None, clock() - t_job, sha, pout)
         except CollectCancelled:
             raise
         except Exception as ex:  # noqa: BLE001
-            out = (job, mtime, None, f"{type(ex).__name__}: {ex}", clock() - t_job, sha)
+            out = (job, mtime, None, f"{type(ex).__name__}: {ex}", clock() - t_job, sha, None)
         progress(done.bump(), total, i18n.KO.COLLECT_PHASE_PARSE_FMT.format(device=d["name"], name=e.name))
         with left_lock:                       # 여러 스레드가 같이 줄이므로 잠그고 센다
             dk = str(d["key"])
@@ -2207,8 +2224,8 @@ def collect(cfg: dict, full: bool = False, backfill: bool = False, *, recover: b
     slow: List[Tuple[int, str, str]] = []
     by_dev: Dict[str, dict] = {str(d["key"]): {"ok": list(known), "blocked": []}
                                for d, dm, _pick, known in plan if not dm["error"]}
-    for (d, _dm, e, key, _scan, _bk), mtime, rows_of, err, sec, sha in _run(cfg, jobs, read_one, should_stop,
-                                                                          group=lambda j: nas_group(j[0]["path"])):
+    for (d, _dm, e, key, _scan, _bk), mtime, rows_of, err, sec, sha, pout in _run(cfg, jobs, read_one, should_stop,
+                                                                                group=lambda j: nas_group(j[0]["path"])):
         dk, did = str(d["key"]), str(d["id"])
         _dm["read_sum_ms"] = _dm.get("read_sum_ms", 0) + int(sec * 1000)   # 병렬로 겹치는 시간의 **합**(경과시간 아님)
         _dm["read_n"] = _dm.get("read_n", 0) + 1
@@ -2229,6 +2246,13 @@ def collect(cfg: dict, full: bool = False, backfill: bool = False, *, recover: b
                 dirty.add(DIRTY_FAILED)
             by_dev[dk]["ok"].append(mtime)
             n_new += 1
+            if pout is not None and "files" in pout:            # 파일이 없어도 빈 스냅숏으로 남겨 다시 열지 않는다
+                first = next((r for r in rows_of if not r.get("kind")), rows_of[0] if rows_of else {})
+                bst = parse_dt(first.get("batch_start", ""))
+                if params_mod.put(pstore, key, dev=d["name"], job=first.get("job", ""), setup=first.get("setup", ""),
+                                  t=bst.strftime("%Y-%m-%d %H:%M") if bst else "", report=e.name, files=pout["files"]):
+                    dirty.add(DIRTY_PARAMS)
+                    stats["params_snaps"] = stats.get("params_snaps", 0) + 1
             continue
         tries = int(failed.get(key, {}).get("tries", 0)) + 1
         prev = reports.get(key)                                      # 다시 읽기(refresh·recover·재시도)였다면 이전 행이 있다
@@ -2324,6 +2348,8 @@ def collect(cfg: dict, full: bool = False, backfill: bool = False, *, recover: b
     else:
         stats["cache_saved"] = False                            # C04: 순수 no-op — 파일의 mtime·바이트를 그대로 둔다
         _say(log, "캐시에 바뀐 것이 없어 저장을 생략합니다")
+    if (cache.get("params") or {}).get("snaps"):
+        stats["params_store"] = cache["params"]                 # D89: write_html(timing=stats) 이 파라미터 탭 묶음을 만든다(메타 timing 에는 넣지 않는다)
     rows, hidden = _rows_from_cache(cache, index, cfg, stats)
     _mark_device_status(dev_meta, rows)
     dev_meta.extend(_out_of_scope_meta(cfg, devs))
@@ -2604,11 +2630,22 @@ def range_name(output_name: str, day_from: str, day_to: str) -> str:
     return f"{stem}_{day_from}~{day_to}{ext or '.html'}"
 
 
+def params_for_range(store: dict, r_from: str = "", r_to: str = "") -> dict:
+    """파라미터 탭 묶음(D89) — 기간 끝날까지의 스냅숏으로(그날 기준 '가장 최근' 값), Job 은 기간 안에 한 번이라도 돈 것만(HTML 크기)."""
+    snaps = {k: s for k, s in store.get("snaps", {}).items() if not r_to or (s.get("t") or "")[:10] <= r_to}
+    if r_from:
+        live = {s.get("job") for s in snaps.values() if (s.get("t") or "")[:10] >= r_from}
+        snaps = {k: s for k, s in snaps.items() if s.get("job") in live}
+    return params_mod.build_meta({"blobs": store.get("blobs", {}), "snaps": snaps}, sort_key=devices_mod.sort_key)
+
+
 def write_html(cfg: dict, rows: List[dict], dev_meta: List[dict], errors: List[dict], started: float, *,
                mode: str = "auto", log: Optional[LogFn] = None, progress: Optional[ProgressFn] = None,
                timing: Optional[dict] = None, warnings: Optional[List[dict]] = None,
-               day_from: str = "", day_to: str = "") -> str:
+               day_from: str = "", day_to: str = "", params_store: Optional[dict] = None) -> str:
     """template.html 에 데이터를 넣어 출력 폴더에 HTML 한 장을 쓴다(분할 없음).
+
+    `params_store`(캐시 `params`, D89)를 주거나 `timing["params_store"]`(collect 가 넣는다)가 있으면 파라미터 탭 묶음(`meta.params`)도 담는다.
 
     `day_from`·`day_to`(YYYY-MM-DD) 를 주면 그 기간만 담아 `range_name` 이름으로, 안 주면 cfg `html_days` 의 최근 N일을 원래 이름으로. 고유 임시 파일에 쓴 뒤 교체(원자적), 실패하면 자기 임시 파일만 지운다.
 
@@ -2634,7 +2671,7 @@ def write_html(cfg: dict, rows: List[dict], dev_meta: List[dict], errors: List[d
             "mode": mode, "devices": dev_meta, "reportErrors": errors,
             "scope": {"restricted": not scope.unrestricted(cfg), "devices": scope.scope_list(cfg)},
             "elapsed": int((time.time() - started) * 1000), "retention_days": cfg["retention_days"],
-            "timing": {k: v for k, v in timing.items() if k != "log"} if timing else {},   # 상세 로그는 app.log 에(HTML 에 넣지 않는다)
+            "timing": {k: v for k, v in timing.items() if k not in ("log", "params_store")} if timing else {},   # 상세 로그는 app.log 에(HTML 에 넣지 않는다)
             "sha": ver.get("sha", ""), "branch": ver.get("branch", ""), "repo": ver.get("repo", ""),
             "version": (str(ver.get("sha", ""))[:7]) if ver.get("sha") else "",
             "dashboard_settings": config_mod.dashboard_settings(cfg)}      # D14: 살펴볼 장비 문턱(attentionUtil · attentionErr)
@@ -2654,6 +2691,9 @@ def write_html(cfg: dict, rows: List[dict], dev_meta: List[dict], errors: List[d
         meta["range"] = {"from": r_from, "to": r_to, "explicit": explicit}
     if known_days:
         meta["data_from"], meta["data_to"] = known_days[0], known_days[-1]   # 가진 데이터 전체의 첫날 — 첫날은 수집 창이 도중에 시작해 '부분'
+    pst = params_store if params_store is not None else (timing or {}).get("params_store")
+    if pst and pst.get("snaps"):
+        meta["params"] = params_for_range(pst, r_from, r_to)
     emb = _embed_rows(rows)
     if meta["timing"]:
         meta["timing"]["html_ms"] = int((time.perf_counter() - t_html) * 1000)   # 템플릿 읽기 + 접기까지(쓰기 전)
@@ -2738,7 +2778,25 @@ def html_from_cache(cfg: dict, day_from: str = "", day_to: str = "", *, log: Opt
     _mark_device_status(dev_meta, rows)
     _say(log, f"가진 데이터로 HTML 만들기: 캐시 행 {len(rows)}개(범위 밖 {hidden}개 제외) · 기간 {day_from or '처음'} ~ {day_to or '끝'}")
     return write_html(cfg, render_issue_rows(rows), dev_meta, [], started, mode="html_only", log=log, progress=progress,
-                      warnings=warnings, day_from=day_from, day_to=day_to)
+                      warnings=warnings, day_from=day_from, day_to=day_to, params_store=cache.get("params"))
+
+
+def import_param_zips(cfg: dict, folder: str, log: Optional[LogFn] = None, progress: Optional[ProgressFn] = None) -> Dict[str, int]:
+    """30일 Wafer 로그 zip 으로 파라미터 이력을 한 번 채운다(D89, 사용자 Q9) — 이 PC 의 zip 만 읽고 NAS 는 건드리지 않는다.
+    캐시를 읽어 `params` 에 스냅숏을 더하고, 더한 것이 있으면 캐시를 저장한다(`_save_cache`). 이미 있는 Report 는 건너뛴다."""
+    cfg = config_mod.check_or_raise(cfg)
+    nas_guard.check_cfg(cfg)
+    from . import params_import
+    cache = _load_cache(cfg, log=log, dirty=_Dirty())
+    store = cache.setdefault("params", params_mod.empty_store())
+    by_name = {str(v.get("name")): k for k, v in (cache.get("devices") or {}).items() if isinstance(v, dict)}
+    st = params_import.import_zips(folder, store, dev_key_of=lambda n: by_name.get(n) or devices_mod.derive_key(n), report_key=report_key,
+                                   parse_report=parse_report, parse_dt=parse_dt, cfg=cfg, log=lambda m: _say(log, m),
+                                   progress=progress or (lambda d, t, p: None))
+    if st["added"]:
+        _save_cache(cfg, cache)
+    _say(log, "파라미터 가져오기: " + " · ".join(f"{k}={v}" for k, v in st.items()))
+    return st
 
 
 def _write_csv(cfg: dict, path: str, rows: List[dict], log: Optional[LogFn] = None) -> None:

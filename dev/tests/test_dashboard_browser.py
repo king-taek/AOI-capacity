@@ -823,7 +823,7 @@ def rdl2_page(page_factory, tmp_path):
 
 def test_rdl_tab_lot_stat_outlier_x5_rule_and_wording(rdl_page):
     pg, errors = rdl_page
-    assert [t.strip() for t in pg.locator("nav button").all_inner_texts()] == ["가동률", "Error", "TB500 · Kendall", "RDL 단일스캔", "LOT 추적"]
+    assert [t.strip() for t in pg.locator("nav button").all_inner_texts()] == ["가동률", "Error", "TB500 · Kendall", "RDL 단일스캔", "LOT 추적", "파라미터"]
     pg.locator('button[data-fk="nav:recipe"]').click()
     pg.wait_for_selector('main[data-key="view:recipe"]')
     pg.wait_for_timeout(400)
@@ -982,3 +982,36 @@ def test_popup_dots_switch_device_bins_filter_lots_and_hover_highlights(rdl2_pag
     pg.wait_for_timeout(500)
     assert "AOI-5" in pg.locator("#dlg-rcpdev-title").inner_text()
     assert errors == []
+
+
+def test_param_tab_unpacks_a_job_on_demand_and_marks_differing_cells(page_factory, tmp_path):
+    """D89 파라미터 탭: Job 은 gzip 으로 접혀 있다가 고를 때만 펴진다(DecompressionStream — 바깥 요청 없음). 다수와 다른 칸만 노랑, 장비 고유 그룹은 접힘."""
+    from aoi_capacity import params
+    st = params.empty_store()
+    for dev, thr in (("AOI-5", "5"), ("AOI-6", "5"), ("AOI-7", "9")):
+        params.put(st, f"dev:{dev}|x.htm", dev=dev, job="TB500_RDL4 - Multi", setup="", t="2026-09-18 08:00", report="x.htm",
+                   files=params.snapshot({"Recipe.ini": f"[AutoCycle]\nCleanReferenceEvery=2\nAutoFocusEvery=3\n[General]\nThreshold[um]={thr}\n".encode(),
+                                          "OpticPreset.ini": f"[Scan1]\nGain={thr}\n".encode()}))
+    emb = collect._embed_rows(_rdl_rows())
+    meta = _meta()
+    meta["scope"]["devices"] = ["AOI-5"]
+    meta["devices"] = [{"name": "AOI-5", "note": "X:\\AOI-5", "report_dir": "Report", "status": "ok"}]
+    meta["params"] = params.build_meta(st)
+    emb["meta"] = meta
+    out = tmp_path / "prm.html"
+    out.write_text(TEMPLATE.read_text(encoding="utf-8").replace("__DATA__", json.dumps(emb, ensure_ascii=False).replace("</", "<\\/"), 1), encoding="utf-8")
+    ctx = page_factory.new_context(viewport={"width": 1280, "height": 900})
+    pg = ctx.new_page()
+    errors, requests = [], []
+    pg.on("pageerror", lambda e: errors.append(str(e)))
+    pg.on("request", lambda r: requests.append(r.url) if not r.url.startswith(("file:", "data:", "blob:")) else None)
+    pg.goto(out.as_uri())
+    pg.wait_for_selector('main[data-key^="view:"]')
+    pg.locator('button[data-fk="nav:param"]').click()
+    pg.wait_for_selector("table.ptab")
+    assert pg.locator(".ptab td.dif").all_inner_texts() == ["9"]                       # Threshold — AOI-7 만 다름
+    body = pg.locator('main[data-key="view:param"]').inner_text()
+    assert "Lot" in body and "Wafer" in body and "um" in body                          # CR/AF 는 글자, 단위 칸
+    assert pg.locator('section.pgrp:has-text("광학") .ptab').count() == 0              # 장비 고유 그룹은 접힌 채
+    assert not errors and not requests
+    ctx.close()
