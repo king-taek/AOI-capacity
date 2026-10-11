@@ -645,3 +645,24 @@ def test_rdl_tab_excludes_user_listed_jobs_and_lists_excluded_recipes_small():
     assert "제외 1" in c3 and jobs[3] in c3 and "사용자 제외" in c3
     assert "제외 1" in c1 and jobs[5] in c1 and "Swelling" in c1
     assert "제외 1" in c4 and jobs[6] in c4 and "x5 전용" in c4
+
+
+# ── 10/11 Report 덮어쓰기: 설명만 나누고 분은 옮기지 않는다 ─────────────────────────
+def test_overwritten_and_unscanned_rows_are_split_for_the_popup_without_moving_minutes():
+    rep1 = "J1_6321_LOT-A_18-Sep-26_(09.00.00)_BatchReport.htm"
+    rep2 = "J1_6321_LOT-A_18-Sep-26_(12.00.00)_BatchReport.htm"   # 같은 Lot 이름으로 다시 — 같은 INI 자리를 덮어쓴다
+    rows = [w("AOI-1", "W1", bs="08:00", be="09:00", report=rep1) | {"ini_match": "STALE", "wafers_scanned": "2"},
+            w("AOI-1", "W2", bs="08:00", be="09:00", report=rep1) | {"wafers_scanned": "2", "avg_scan_time": "00:13:00"},
+            w("AOI-1", "W3", status="Wafer Skipped.", bs="08:00", be="09:00", report=rep1) | {"wafers_scanned": "2"},
+            w("AOI-1", "W1", "11:00", "11:20", report=rep2) | {"wafers_scanned": "2"},
+            w("AOI-1", "W4", status="Aborted.", bs="11:00", be="11:40", report=rep2) | {"wafers_scanned": "2"}]
+    D = run(rows)
+    t = at(D, "AOI-1")
+    plain = at(run([{k: v for k, v in r.items() if k not in ("wafers_scanned", "avg_scan_time")} | {"ini_match": "NOT_FOUND" if not r["wafer_start_time"] else "EXACT"} for r in rows]), "AOI-1")
+    assert (t["r"], t["d"], t["ne"]) == (plain["r"], plain["d"], plain["ne"])          # 분 · 추정 장 수는 그대로
+    iv = t["iv"]
+    assert (iv["ov"], iv["nf"], iv["sk"]) == (1, 1, 1) and iv["km"] == 60            # 덮어씀 1 · INI 없음 1 · 건너뜀 1, 배치 창 60분
+    assert iv["s1"] == 1                                                              # 두 번째 Report: Pass 1 인데 Wafers Scanned 2 → 스캔 후 중단
+    lot_a = next(L for L in t["lots"] if D["pool"]["rep"][L[8]] == rep1)
+    assert lot_a[15] == 1 and lot_a[16] >= 0 and D["pool"]["st"][lot_a[16]].startswith("LOT-A · 09/18 11:00")   # 나중 시도
+    assert "Avg. Scan Time 00:13:00" in D["pool"]["st"][lot_a[17]]

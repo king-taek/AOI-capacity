@@ -142,12 +142,19 @@ DEV_OK, DEV_NO_DATA, DEV_PARTIAL, DEV_UNREACHABLE = "ok", "no_data", "partial", 
 #: `RecipesInfo.ini` 에 레시피가 둘 이상이면 MULTI, INI 를 찾았는데(EXACT) 그 파일이 없으면 SINGLE(같은 Lot 이름으로 다시 단일 검사하면
 #: Scanresult 폴더가 통째로 새로 쓰인다 — 사용자 확인 10/5). Report 표·요약만 있는 행은 `x20|x5` 처럼 둘 이상일 때만 MULTI, 아니면 모름.
 #: 캐시에 든 옛 행에는 없다(모름) — 채우려면 그 기간을 다시 읽는다(`--refresh-window N` · 전체 다시 만들기).
-ROW_SCHEMA_VERSION = 7
+#: `wafers_scanned` · `avg_scan_time`(ROW_SCHEMA_VERSION 8, 10/11) — Report 요약의 Wafers Scanned · Avg. Scan Time 원문(Report 마다 같은 값, 그 Report 의 모든 행에).
+#: Wafers Scanned = 스캔이 끝난 장 수(30일 12,020 Report 중 11,797 이 Pass 행 수와 같고 나머지 223 은 전부 Pass + 1 — 중단됐지만 스캔은 끝난 장).
+#: Avg. Scan Time = 첫 레시피 ScanLog Duration 평균(×0.998) — 실제 장 시간보다 30~45% 짧아 **시간 계산에는 쓰지 않는다**(화면에 원문으로만).
+#: `cr_every` · `af_every`(같은 버전) — Recipe.ini 의 CleanReferenceEvery · AutoFocusEvery 를 `None`·`Lot`·`Wafer` 로(RDL 단일스캔 탭 Job 만,
+#: Report 마다 INI 를 찾은 첫 Wafer 폴더에서 한 번 — `RECIPE_TAB_JOB_RE`). 그 밖의 Job · 옛 캐시 행은 빈 값(다시 읽으면 채워진다).
+ROW_SCHEMA_VERSION = 8
 OUT_COLS = ["device", "kind", "job", "setup", "lot", "wafer_id", "status", "norm_status", "cause", "outcome", "scan_type", "recipe", "scan_mode",
-            "faults", "scanned_dice", "yield",
+            "faults", "scanned_dice", "yield", "wafers_scanned", "avg_scan_time", "cr_every", "af_every",
             "wafer_start_time", "wafer_end_time", "batch_start", "batch_end", "report", "ini_match", "time_basis", "slots", "data_issue",
             "issue_codes"]
 QUALITY_COLS = ("faults", "scanned_dice", "yield")
+#: Report 한 장에 하나인 값 — 그 Report 의 모든 행(합성 행 포함)이 같은 값을 갖는다.
+REPORT_COLS = ("wafers_scanned", "avg_scan_time", "cr_every", "af_every")
 #: 합성 행의 종류 — "batch"(통째로 실패한 시도, D06) · "slot"(일부 성공한 배치의 자리표시 행 Error, Report 당 1건, D38)
 SYNTHETIC_KINDS = ("batch", "slot")
 #: HTML 에 박아 넣는 JSON 에서 문자열 풀로 접는 열 — 같은 값이 수없이 되풀이되는 열들이다.
@@ -591,6 +598,33 @@ def is_rdl_job(job) -> bool:
     return bool(RDL_JOB_RE.search(str(job or "")))
 
 
+#: RDL 단일스캔 탭이 보는 Job(RDL 계열 + TB500 PI2/3/4) — Clean reference · AutoFocus 설정(Recipe.ini)을 읽는 범위(10/11 사용자: 이 탭에서만 확인).
+RECIPE_TAB_JOB_RE = re.compile(r"RDL|TB500[ _-]*LIVE[ _-]*PI\s*[234]", re.I)
+#: Recipe.ini [AutoCycle] 의 Every 값 — 주석(`CleanReferenceEvery=2 ; Lot`)이 있으면 그것을, 없으면 이 표(30일 로그에서 1·2·3 = None·Lot·Wafer).
+EVERY_LABELS = {"1": "None", "2": "Lot", "3": "Wafer"}
+
+
+def is_recipe_tab_job(job) -> bool:
+    return bool(RECIPE_TAB_JOB_RE.search(str(job or "")))
+
+
+def read_recipe_settings(path) -> dict:
+    """Wafer 폴더의 `Recipe.ini` → {"cr_every": "Lot", "af_every": "Wafer"} (읽기 전용 · 이 두 키만)."""
+    want = {"CleanReferenceEvery": "cr_every", "AutoFocusEvery": "af_every"}
+    out: Dict[str, str] = {}
+    for line in nas_guard.read_text(path).splitlines():
+        if "=" not in line or line.lstrip()[:1] in ";#[":
+            continue
+        k, v = line.split("=", 1)
+        col = want.get(k.strip())
+        if not col or col in out:
+            continue
+        val, _, note = v.partition(";")
+        val, note = val.strip(), note.strip()
+        out[col] = note if note and len(note) <= 20 else EVERY_LABELS.get(val, val)
+    return out
+
+
 def _needs_rdl_patch(entry: dict) -> bool:
     """'RDL 영역 INI 패치' 대상 — RDL Job 인데 INI 를 찾은(EXACT) 행에 멀티/단일 판정이 없는 Report(업데이트 전에 읽은 것). 밀려난 옛 판은 아니다."""
     if entry.get("superseded_by") or entry.get("rdl_checked"):
@@ -702,6 +736,7 @@ class _IniMemo:
         self._flags: Dict[str, bool] = {}
         self.asked = 0
         self._recipes: Optional["_IniMemo"] = None
+        self._settings: Optional["_IniMemo"] = None
 
     def get(self, path: str) -> tuple:
         """→ ("ok", 필드 dict) · ("missing", None) · ("error", 예외)"""
@@ -738,6 +773,14 @@ class _IniMemo:
             m = self._recipes
         return m.get(path)
 
+    def settings(self, path: str) -> tuple:
+        """`Recipe.ini` 의 Clean reference · AutoFocus 설정을 같은 방식(경로별 한 번 · 읽기 전용)으로."""
+        with self._lock:
+            if self._settings is None:
+                self._settings = _IniMemo(read_recipe_settings)
+            m = self._settings
+        return m.get(path)
+
     def exists(self, path: str) -> bool:
         """파일 존재만(`MoveResultFlag`) — 같은 경로는 한 번만 stat 한다. 읽기 전용."""
         with self._lock:
@@ -758,6 +801,12 @@ class _IniMemo:
             with m._lock:
                 rk = [k for k, _ in m._done.values()]
             out.update({"recipes_info_unique": len(rk), "recipes_info_found": rk.count("ok")})
+        with self._lock:
+            ms = self._settings
+        if ms is not None:
+            with ms._lock:
+                sk = [k for k, _ in ms._done.values()]
+            out.update({"recipe_ini_unique": len(sk), "recipe_ini_found": sk.count("ok")})
         return out
 
 
@@ -806,6 +855,8 @@ def rows_for_report(dev_name: str, rep: dict, scan_root: str, memo: Optional[_In
     memo = memo if memo is not None else _IniMemo()
     s = rep["summary"]
     b_start, b_end = parse_dt(s.get("Batch Start", "")), parse_dt(s.get("Batch End", ""))
+    rfields = {"wafers_scanned": s.get("Wafers Scanned", ""), "avg_scan_time": s.get("Avg. Scan Time", ""), "cr_every": "", "af_every": ""}
+    want_settings = is_recipe_tab_job(rep.get("job", ""))
     for w in rep["wafers"]:
         causes = norm_causes(w["status"])
         r = {"device": dev_name, "kind": "", "job": rep.get("job", ""), "setup": rep.get("setup", ""),
@@ -814,6 +865,7 @@ def rows_for_report(dev_name: str, rep: dict, scan_root: str, memo: Optional[_In
              "scan_type": scan_type(w["lot"]),
              "recipe": w["recipe"] or s.get("Recipe", ""), "scan_mode": "",
              "faults": w.get("faults", ""), "scanned_dice": w.get("scanned_dice", ""), "yield": w.get("yield", ""),
+             **rfields,
              "wafer_start_time": "", "wafer_end_time": "", "batch_start": s.get("Batch Start", ""),
              "batch_end": s.get("Batch End", ""), "ini_match": "", "time_basis": "MISSING", "slots": "", "data_issue": "",
              "issue_codes": ""}
@@ -882,12 +934,20 @@ def rows_for_report(dev_name: str, rep: dict, scan_root: str, memo: Optional[_In
                             if one:
                                 r["recipe"] = one
                             r["scan_mode"] = "SINGLE"
+                    if r["ini_match"] == "EXACT" and want_settings:
+                        # 10/11: Clean reference · AutoFocus 설정은 Report 마다 한 번 — INI 를 찾은 첫 Wafer 폴더의 Recipe.ini(정확 경로 하나).
+                        want_settings = False
+                        sk, sv = memo.settings(os.path.join(found_in, rel_found, "Recipe.ini"))
+                        if sk == "ok":
+                            rfields["cr_every"], rfields["af_every"] = sv.get("cr_every", ""), sv.get("af_every", "")
                     r["issue_codes"] = issue_field(iss)
                 except Exception as e:  # noqa: BLE001
                     r["ini_match"], r["issue_codes"] = "READ_ERROR", issue_field([(ISSUE_INI_READ_ERROR, f"{type(e).__name__}: {e}")])
         if not r["scan_mode"] and "|" in r["recipe"]:
             r["scan_mode"] = "MULTI"                   # INI 근거가 없어도 표에 레시피가 둘 이상 찍혔으면 멀티
         rows.append(r)
+    for r in rows:                                    # Report 한 장의 값 — 설정은 첫 Wafer 에서 읽었으므로 앞 행에도 채운다
+        r.update(rfields)
     return synthesize_rows(rows)
 
 
@@ -984,7 +1044,8 @@ def _batch_from_rows(rows: List[dict]) -> Optional[dict]:
             "recipe": lead.get("recipe", ""), "faults": "", "scanned_dice": "", "yield": "", "wafer_start_time": b_start,
             "wafer_end_time": b_end, "batch_start": b_start,
             "batch_end": b_end, "ini_match": "BATCH", "time_basis": "BATCH_ONLY", "slots": "",
-            "data_issue": "", "issue_codes": issue_field([(ISSUE_BATCH_NO_WAFER, len(rows), len(errs))])}
+            "data_issue": "", "issue_codes": issue_field([(ISSUE_BATCH_NO_WAFER, len(rows), len(errs))]),
+            **{c: _first(rows, c) for c in REPORT_COLS}}
 
 
 def slot_error_row(rows: List[dict]) -> Optional[dict]:
@@ -1018,7 +1079,8 @@ def slot_error_row(rows: List[dict]) -> Optional[dict]:
             "faults": "", "scanned_dice": "", "yield": "",
             "wafer_start_time": "", "wafer_end_time": "", "batch_start": b_start, "batch_end": b_end,
             "ini_match": "BATCH_SLOT", "time_basis": "MISSING", "slots": str(len(slots)),
-            "data_issue": "", "issue_codes": issue_field(codes)}
+            "data_issue": "", "issue_codes": issue_field(codes),
+            **{c: _first(src, c) for c in REPORT_COLS}}
 
 
 def synthesize_rows(rows: List[dict]) -> List[dict]:

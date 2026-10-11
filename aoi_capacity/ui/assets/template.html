@@ -390,7 +390,8 @@ button.bd.out{background:transparent;border:1.5px solid var(--err,#C5453C);opaci
 .drow .r,.crow .r{text-align:right;font-size:12.5px}.drow .muted,.crow .muted{text-align:center}
 .drow.head,.crow.head{font-size:11.5px;color:var(--ink-3);font-weight:700;padding-bottom:0}.hk2{display:inline-flex;align-items:center;gap:5px}
 .crow.me{background:#F2F7FD;border-radius:6px}.crow.me .dn{font-weight:700}
-.rawh,.rawrow{display:grid;grid-template-columns:92px minmax(120px,1.5fr) 62px 40px 110px 84px 96px minmax(90px,1fr);gap:8px;align-items:center;font-size:12px}
+.rawh,.rawrow{display:grid;grid-template-columns:92px minmax(120px,1.5fr) 62px 40px 110px 84px 96px 104px minmax(90px,1fr);gap:8px;align-items:center;font-size:12px}
+.rawrow .cra{font-size:11.5px;color:var(--ink-2);white-space:nowrap}.rawrow .cra b{color:#B4402F;font-weight:700}.crsum{font-size:12px;color:var(--ink-2);margin:0 0 8px}.crsum b{color:var(--ink)}
 .rawh{font-weight:700;color:var(--ink-2);padding:4px 0;border-bottom:1px solid #EDF1F5}.rawh .r,.rawrow .r{text-align:right}
 .rawbox{max-height:36vh;overflow:auto}.rawrow{padding:4px 0;border-bottom:1px solid #F3F5F8}.rawrow .mono{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.bad{color:#B4402F;font-weight:600}
 .verdict-table{display:grid;grid-template-columns:auto minmax(0,auto) minmax(0,1fr);gap:6px 12px;align-items:baseline;margin-top:8px}
@@ -705,7 +706,8 @@ for(let i=0;i<rowsIn.length;i++){const r=rowsIn[i];
   const fv=String(val(r,'faults')??'').replace(/,/g,'').trim(), f=/^\d+$/.test(fv)?+fv:null;   /* Report 표 Faults 원문 — 숫자일 때만(옛 캐시 행은 빈 값) */
   all.push({idx:i,f,dev:val(r,'device'),t:an.getTime(),s:ws?ws.getTime():null,e:(ws&&we&&we.getTime()>ws.getTime())?we.getTime():null,timed:!!ws,
     bs:bs?bs.getTime():null, bend:be?be.getTime():(bs?bs.getTime():null),
-    c:test?null:causeOf(st),status:st,report:rp,job,lot,test,key:matKey(job0,lot,wid),day:dk(an),pass:isPass(st)});
+    c:test?null:causeOf(st),status:st,report:rp,job,lot,test,key:matKey(job0,lot,wid),day:dk(an),pass:isPass(st),
+    im:String(val(r,'ini_match')||''),wid,ik:job0+'\u0001'+rl+'\u0001'+wid,wsc:String(val(r,'wafers_scanned')??'').trim(),ast:String(val(r,'avg_scan_time')??'').trim()});
 }
 /* D52: PASS 도 원인 Error 도 없는 Report 의 중단은 그 Report 의 Error(ABORTED). Test Lot 은 제외(D64). */
 {const rg=new Map();
@@ -761,6 +763,10 @@ if(all.length){
         for(let q=from;q<to;q++){kind[free[q]]=k;owner[free[q]]=R.i;got++;}
         w.alloc=got; if(got&&!w.c)R.ne=(R.ne||0)+1; from=to;});
     }
+    /* 10/11: 덮어써진(STALE) 장의 '나중 시도' — 같은 INI 자리(Job · Lot 원문 · Wafer ID — Scanresult 경로가 같은 것)를 이 Report 보다 늦게 시작한
+       다른 Report(같은 장비). 화면 설명용, 분은 바꾸지 않는다. */
+    const byKey=new Map();for(const w of ws){if(!w.wid||w.bs==null)continue;const g=byKey.get(w.ik);if(g)g.push(w);else byKey.set(w.ik,[w]);}
+    const laterOf=(w)=>{let best=null;for(const o of byKey.get(w.ik)||[]){if(o.R===w.R||o.bs<=w.bs)continue;if(!best||o.bs<best.bs)best=o;}return best;};
     /* ③ Error 를 담은 Report 가 끝난 뒤 다음 활동까지 대기(D56-③ · D44) */
     const repEnd=new Int32Array(reps.length).fill(-1);
     for(let i=0;i<N;i++){const o=owner[i];if(o>=0&&kind[i]!==K_WAIT)repEnd[o]=i+1;}
@@ -784,7 +790,7 @@ if(all.length){
         if(k!==cur){if(cur>K_NONE)seg.push([ca-ds,i-ds,K_SEG[cur]]);cur=k;ca=i;}
         if(i<de){if(k===K_SCAN)r++;else if(k===K_RESCAN)d++;else if(k===K_TEST)t++;else if(k===K_ERR)x++;else if(k===K_WAIT)s++;}}
       const list=rowsByDay[dy]||[];
-      const ct={}; const lots=[]; let dayE=0,ne=0;
+      const ct={}; const lots=[]; let dayE=0,ne=0,ov=0,nf=0,km=0,sk=0,s1=0;
       /* 이 날에 닿는 Report: 이 날 행이 있거나 이 날에 칠해진 분이 있는 것 */
       const rset=new Set(list.map(w=>w.R.i)); for(let i=ds;i<de;i++)if(owner[i]>=0)rset.add(owner[i]);
       for(const idx of rset){const R=reps[idx];const m=rMin[idx];
@@ -798,9 +804,20 @@ if(all.length){
         const ba=R.ws!=null?Math.max(0,Math.min(1440,R.ws-ds)):0, bb=R.we!=null?Math.max(0,Math.min(1440,R.we-ds)):0;
         if(!(b>a)&&!n&&!(bb>ba)&&!rowsHere.length)continue;
         ne+=rowsHere.filter(w=>w.alloc&&!w.c).length;
+        /* 10/11 Report 덮어쓰기: INI 없는 Pass 를 덮어씀(STALE) · INI 없음으로 나누고, 스캔 안 한 행(건너뜀 · 중단 — 이미 0분)과
+           Wafers Scanned = Pass + 1(중단됐지만 스캔은 끝난 장)을 센다. 분은 옮기지 않는다 — 설명만. */
+        let lov=0,later=null,rsk=0;
+        for(const w of rowsHere){if(w.alloc&&!w.c){if(w.im==='STALE')ov++;else nf++;km+=w.alloc;}else if(!w.pass&&!w.c&&!w.timed&&!w.test)rsk++;
+          if(w.im==='STALE'&&w.pass){lov++;const o=laterOf(w);if(o&&(!later||o.bs<later.bs))later=o;}}
+        const rw=R.rows.find(w=>w.wsc)||R.rows[0], ra=R.rows.find(w=>w.ast)||R.rows[0];   /* Report 요약 값(Report 마다 같다 — 빈 행이 섞여도 첫 값) */
+        const wsc=/^\d+$/.test(rw.wsc)?+rw.wsc:null, npass=R.rows.filter(w=>w.pass).length;
+        if(countDay===dy&&wsc!=null&&wsc===npass+1){s1++;if(rsk)rsk--;}   /* 중단 행 중 하나는 스캔이 끝난 장 — '스캔 안 함' 에서 뺀다 */
+        sk+=rsk;
         const st=(R.rows.find(w=>w.c)||{}).status||'';
         lots.push({a:b>a?a:1441,b:b>a?b:0,ba,bb,arr:[put('job',R.job),put('lot',R.lot),b>a?a:1441,b>a?b:0,rowsHere.length,n,rowsHere.filter(w=>w.rel).length,rowsHere.filter(w=>w.test).length,put('rep',R.rep),cs,causes.length?put('st',st):-1,ba,bb>ba?bb:ba,
-          rowsHere.reduce((q,w)=>w.f==null?q:q+w.f,0),rowsHere.filter(w=>w.f!=null).length]});   /* [13] faults 합 · [14] faults 가 있는 행 수(D08) */
+          rowsHere.reduce((q,w)=>w.f==null?q:q+w.f,0),rowsHere.filter(w=>w.f!=null).length,   /* [13] faults 합 · [14] faults 가 있는 행 수(D08) */
+          lov,later?put('st',later.lot+' · '+later.day.slice(5).replace('-','/')+' '+new Date(later.bs).toTimeString().slice(0,5)+(later.dev!==dv?' · '+later.dev:'')):-1,   /* [15] INI 덮어씀 장 · [16] 나중 시도(10/11) */
+          (rw.wsc||ra.ast)?put('st',(rw.wsc?'Wafers Scanned '+rw.wsc:'')+(rw.wsc&&ra.ast?' · ':'')+(ra.ast?'Avg. Scan Time '+ra.ast:'')):-1]});   /* [17] Report 요약 두 값 */
       }
       lots.sort((p,q)=>(p.a<1441?p.a:p.ba)-(q.a<1441?q.a:q.ba));
       const rct={};for(const[k,v]of Object.entries(ct))rct[k]=[v[0],Math.round(v[1])];
@@ -808,7 +825,7 @@ if(all.length){
       const timedRows=list.filter(w=>w.timed).length;
       const bsegs=[];for(const idx of rset){const R=reps[idx];if(R.ws==null)continue;const a=Math.max(0,Math.min(1440,R.ws-ds)),b=Math.max(a,Math.min(1440,(R.we??R.ws)-ds));if(b>a)bsegs.push([a,b]);}
       bsegs.sort((p,q)=>p[0]-q[0]);const mgd=[];for(const g of bsegs){const L=mgd[mgd.length-1];if(L&&g[0]-L[1]<=3)L[1]=Math.max(L[1],g[1]);else mgd.push([g[0],g[1]]);}
-      const T={r,d,t,x,s,w:list.length,e:dayE,we,ne,seg,ct:rct,lots:lots.map(L=>L.arr),
+      const T={r,d,t,x,s,w:list.length,e:dayE,we,ne,seg,ct:rct,lots:lots.map(L=>L.arr),...((ov||nf||sk||s1)?{iv:{ov,nf,km,sk,s1}}:{}),
         cv:list.length?Math.round(timedRows/list.length*100):(seg.length?100:0),bseg:mgd,be:mgd.reduce((q,g)=>q+(g[1]-g[0]),0),
         den:(today&&dy===today)?Math.max(0,Math.min(1440,obsIdx-ds)):1440};
       if(!dev.includes(dv))continue;
@@ -1091,6 +1108,14 @@ const S={
   modeOf(xs){const c={};let best=null;for(const x of xs){c[x]=(c[x]||0)+1;if(best===null||c[x]>c[best]||(c[x]===c[best]&&x>best))best=x;}return best;}
 };
 
+/* 10/11 Report 덮어쓰기 — 장비 팝업의 INI 설명 한 줄: INI 없는 Pass 를 '다른 시도가 덮어씀(STALE)' · 'INI 없음' 으로 나누고(분은 배치 창 추정 그대로),
+   스캔 안 한 행(건너뜀 · 중단 — 0분)과 Wafers Scanned = Pass + 1(중단됐지만 스캔은 끝난 장 — 시각이 없어 0분)을 따로 적는다. 숫자는 바꾸지 않는다. */
+function iniNote(t){const v=t.iv||{},parts=[];
+  if(t.ne){const why=[v.ov&&`다른 시도가 덮어씀 ${v.ov}장`,v.nf&&`INI 없음 ${v.nf}장`].filter(Boolean).join(" · ");
+    parts.push(`Wafer ${t.w}장 중 ${t.ne}장은 INI(시각 기록)가 없어 그 Report 배치 창의 빈 시간을 나눠 가졌습니다${why?` — ${why}, 추정 ${hm(Math.round(v.km||0))}`:""}`);}
+  if(v.sk)parts.push(`스캔 안 함 ${v.sk}장(건너뜀 · 중단 — 0분)`);
+  if(v.s1)parts.push(`스캔 후 중단 ${v.s1}건(Wafers Scanned 가 Pass 보다 1장 많음 — 시각이 없어 0분)`);
+  return parts.join(" · ")+(t.ne?` (시각 확인 ${t.cv}%)`:"")+".";}
 /* ── 제품 기능: BatchReport 열기(meta.devices[].note + report_dir + report) · 수집 상태 칩 · 사본 저장 ── */
 function devPath(name){const d=(meta.devices||[]).find(x=>x.name===name);return d?{path:d.note||"",dir:d.report_dir||"Report"}:null;}
 function reportUrl(r){
@@ -1803,14 +1828,15 @@ function devPopupHtml(){
     return `<div class="sel animate__animated animate__fadeIn" data-key="sel"><div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:10px"><b style="font-size:14.5px">${esc(P.lot[sel[1]]||"(Lot 확인 불가)")}</b>
       ${types.map(([k,v])=>`<span class="pill err mono">${esc(k)} ${hm(v[1])}</span>`).join("")}${types.length?"":`<span class="pill ok">Error 없음</span>`}<div class="spacer"></div><button class="link" style="color:#5A6673;text-decoration:none" data-h="${h(()=>setState({selLot:null}))}">선택 해제</button></div>
       <div class="kv"><span class="k">시간</span><span class="num">${clock(a)} – ${clock(b)} (${hm(b-a)})</span><span class="k">Wafer</span><span>${sel[4]?sel[4]+"장":"전날 시작한 배치(장수는 전날에)"}${sel[6]?" · Rescan "+sel[6]+"장":""}${sel[7]?" · Test "+sel[7]+"장":""}</span>
-      <span class="k">Job</span><span class="mono" style="word-break:break-all">${esc(P.job[sel[0]]||"(Job 없음)")}</span>${sel[10]>=0?`<span class="k">원문</span><span class="mono" style="color:#4B5866;word-break:break-all">${esc(P.st[sel[10]])}</span>`:""}
+      ${sel[15]?`<span class="k">INI</span><span>덮어씀 ${sel[15]}장 — 같은 자리를 나중 시도가 다시 썼습니다${sel[16]>=0?`: <b class="mono">${esc(P.st[sel[16]])}</b>`:""} · 이 장들의 시간은 Report 배치 창으로 추정</span>`:""}
+      <span class="k">Job</span><span class="mono" style="word-break:break-all">${esc(P.job[sel[0]]||"(Job 없음)")}</span>${sel[17]>=0&&sel[17]!=null?`<span class="k">Report 요약</span><span class="mono" style="color:#4B5866" title="Wafers Scanned = 스캔이 끝난 장 수 · Avg. Scan Time = 첫 레시피 스캔 평균(로드 · 둘째 레시피 제외) — 시간 계산에는 쓰지 않습니다">${esc(P.st[sel[17]])}</span>`:""}${sel[10]>=0?`<span class="k">원문</span><span class="mono" style="color:#4B5866;word-break:break-all">${esc(P.st[sel[10]])}</span>`:""}
       <span class="k">Report</span><span class="mono" style="color:#4B5866;word-break:break-all">${esc(rep||"—")}${rep&&reportUrl({device:mDev,report:rep})?` <button class="link" data-h="${h(()=>openReport({device:mDev,report:rep}))}" title="이 BatchReport 를 새 탭으로 엽니다(NAS 경로)">Report 열기</button>`:""}</span></div></div>`;})():"";
   return `<div class="ov z50"><button class="scrim" data-h="${h(close)}" aria-label="닫기"></button><div class="dlg w1120" role="dialog" aria-modal="true" aria-labelledby="dlg-dev-title" data-dlg="dev">
     <div class="dh"><h2 id="dlg-dev-title" tabindex="-1">${esc(mDev)}</h2><span class="sub num">${dayName(mDay)}</span><span class="note">${esc(sc.note||"")}</span><div class="spacer"></div>
       ${sib.map(s=>`<button class="btn" data-h="${h(s.go)}" title="${esc(s.title)}">${esc(s.label)}</button>`).join("")}<button class="x" data-h="${h(close)}" data-fk="x:dev" title="닫기 (Esc)">✕</button></div>
     <div class="db">
       <section class="cards xs" style="margin-bottom:18px">${stats.map(s=>`<div><p class="k">${s.k}</p><p class="v num" style="color:${s.ink}">${s.h||esc(s.v)}</p></div>`).join("")}</section>
-      ${S.hasEst(t)?`<p style="margin:0 0 12px;font-size:11.5px;color:#5A6673;word-break:keep-all">Wafer ${t.w}장 중 ${t.ne}장은 INI(시각 기록)가 없어 그 Report 배치 창의 빈 시간을 나눠 가졌습니다(시각 확인 ${t.cv}%).</p>`:""}
+      ${(S.hasEst(t)||(t&&t.iv))?`<p style="margin:0 0 12px;font-size:11.5px;color:#5A6673;word-break:keep-all">${iniNote(t)}</p>`:""}
       ${den<1440?`<p style="margin:0 0 12px;font-size:11.5px;color:#5A6673">수집한 날이라 00:00 ~ ${clock(den)}(모든 장비의 마지막 기록)까지를 분모로 씁니다.</p>`:""}
       <div class="bar-h" style="margin-bottom:10px"><h3 style="margin:0">Lot ${all.length}개</h3><span style="font-size:12.5px;color:#5A6673">${shown.length?(fold?"Lot 이 많아 이름표는 Error·Test·선택 Lot 만 — 막대를 누르면 어느 Lot 이든 봅니다":"막대나 이름표를 누르면 그 Lot 을 봅니다"):""}</span><div class="spacer"></div>${segHtml(lotFilters)}</div>
       <div style="position:relative;height:16px;margin-bottom:4px">${ticksHtml()}</div>
@@ -1981,6 +2007,12 @@ const OUT_SIGMA=3,OUT_MIN_N=5,LOT_MIN=20,LOT_STD=25;
 /* 단일의 레시피 칸 — 비었거나 x20 만이면 정상 단일(x5 · x10 만 쓴 것은 실수) */
 const singleOk=r=>{const t=String(r.recipe||"").trim();return !t||/^x20$/i.test(t);};
 let _rcp=null;
+/* 10/11: Clean reference · AutoFocus 적용 여부 — RDL 단일스캔 탭에서만(사용자). 값은 Recipe.ini 의 Every 설정(None · Lot · Wafer), 모르면 '—'.
+   Wafer 마다(Every=Wafer)는 장마다 기준영상 · 포커스를 다시 해 시간이 크게 늘어 굵게 붉은 글씨. */
+const crCell=G=>{const f=v=>v?(v==="Wafer"?`<b>${esc(v)}</b>`:esc(v)):"—";return G.cr||G.af?`${f(G.cr)} · ${f(G.af)}`:`<span class="muted">—</span>`;};
+const crTip=G=>`Clean reference: ${G.cr||"모름"} · AutoFocus: ${G.af||"모름"}${G.cr||G.af?"":" (이 Lot 을 수집한 뒤 업데이트되었거나 INI 를 못 찾음)"}`;
+function crSummary(lots){if(!lots.length)return "";const c=k=>{const m=new Map();for(const G of lots){const v=G[k]||"모름";m.set(v,(m.get(v)||0)+1);}return ["Lot","Wafer","None","모름"].filter(v=>m.get(v)).map(v=>`${v} ${m.get(v)}`).concat([...m.keys()].filter(v=>!["Lot","Wafer","None","모름"].includes(v)).map(v=>`${esc(v)} ${m.get(v)}`)).join(" · ");};
+  return `<p class="crsum"><b>Clean reference</b> ${c("cr")} &nbsp;·&nbsp; <b>AutoFocus</b> ${c("af")} <span class="muted">(Lot 수)</span></p>`;}
 function rcpIndex(){if(_rcp&&_rcp.D===D&&_rcp.G===D.jobGroups)return _rcp;
   const jix=new Map(D.pool.job.map((n,i)=>[n,i])),dayset=new Set(D.allDays||D.days),recs=[],ign=[],seen=new Set(),reps=new Map(),kindG=new Map(),excl=[];
   for(const r of rows){if(r.kind||isKla(r.device))continue;const kind=rcpKind(r.job);
@@ -1994,7 +2026,8 @@ function rcpIndex(){if(_rcp&&_rcp.D===D&&_rcp.G===D.jobGroups)return _rcp;
     else if(m==="S"&&!singleOk(r)){if(pass&&!test)ign.push({g,day,dev:r.device});continue;}   /* 단일은 x20 만 — x5 · x10 만 쓴 단일은 통계에서 무시(사용자 10/6) */
     kindG.set(g,kind);
     const rk=r.device+"\u0001"+(r.report||"");let R=reps.get(rk);
-    if(!R){R={g,n:0,err:false,mixed:false,bs,be,sumS:0,share:0,dev:r.device,lot:r.lot||"",day,fSum:0,fN:0};reps.set(rk,R);}else if(R.g!==g)R.mixed=true;
+    if(!R){R={g,n:0,err:false,mixed:false,bs,be,sumS:0,share:0,dev:r.device,lot:r.lot||"",day,fSum:0,fN:0,cr:"",af:""};reps.set(rk,R);}else if(R.g!==g)R.mixed=true;
+    if(!R.cr&&r.cr_every)R.cr=String(r.cr_every);if(!R.af&&r.af_every)R.af=String(r.af_every);   /* 10/11: Recipe.ini 의 Clean reference · AutoFocus(Report 마다 한 번) */
     if(cause)R.err=true;
     if(cause&&!test&&!(r.ini_match==="EXACT"&&ws&&we))R.share++;   /* 시각 없는 Error 행도 배치 창의 빈 시간을 나눠 가진다(D58) */
     if(!pass||test)continue;
@@ -2346,16 +2379,17 @@ function rcpDevPopupHtml(){const S0=state.rcpPop;if(!S0||!D||!D.days.length)retu
     return `<div class="dblock"><h4>${title}${LG?' <span class="muted">로그 축</span>':""}</h4>${rows.length?rows[0]+axis+rows.slice(1).join(""):`<p class="empty">기록 없음</p>`}</div>`;};
   /* LOT별 표: Report 한 장 = 한 줄 — 이 장비 · 이 레시피 · 이 기간 */
   const outB=new Set(),outQ=new Set();for(const k of ["M","S","U"]){for(const p of d[k].xb.out)outB.add(p);for(const q of d[k].xs.out)outQ.add(q);}
-  const groups=new Map();for(const q of X.recs){if(!gs.has(q.g)||q.dev!==S0.dev||q.day<from||q.day>to)continue;let G=groups.get(q.rk);if(!G){G={rk:q.rk,t:q.t,lot:q.lot,m:q.m||"U",day:q.day,s:[],f:[],out:0,w:0};groups.set(q.rk,G);}
+  const groups=new Map();for(const q of X.recs){if(!gs.has(q.g)||q.dev!==S0.dev||q.day<from||q.day>to)continue;let G=groups.get(q.rk);if(!G){G={rk:q.rk,t:q.t,lot:q.lot,m:q.m||"U",day:q.day,s:[],f:[],out:0,w:0,cr:q.R.cr,af:q.R.af};groups.set(q.rk,G);}
     G.w++;if(q.t<G.t)G.t=q.t;if(q.s!=null)G.s.push(q.s);if(q.f!=null)G.f.push(q.f);if(outQ.has(q))G.out++;}
   const WHY={err:"Error 있음",mixed:"다른 레시피 섞임",time:"배치 시각 없음",few:`PASS ${LOT_MIN} wafer 미만`};
   const lotsAll=[...groups.values()].sort((x,y)=>y.t-x.t),lots=BIN?lotsAll.filter(G=>G.rk===BIN.rk):lotsAll,cap=300;
   const lotRows=lots.slice(0,cap).map((G,i)=>{const p=X.per.get(G.rk),why=X.repWhy.get(G.rk);const st=p?(outB.has(p)?`<span class="bad">이상치 제외</span>`:`<span>포함</span>`):`<span class="muted">${WHY[why]||"제외"}</span>`;
-    return `<div class="rawrow" data-key="lr:${i}" data-lk="${lk(G.rk)}"><span class="num">${md(G.day)} ${hhmm(G.t)}</span><span class="mono" title="${esc(G.lot)}">${esc(G.lot||"(Lot 확인 불가)")}</span><span>${NMK(G.m)}</span><span class="num r">${G.w}</span><span class="num r">${G.s.length?f1(qs(G.s,.5)):"—"}${G.out?`<small class="bad"> ·이상치 ${G.out}</small>`:""}</span><span class="num r${p&&outB.has(p)?" bad":""}">${p?f1(p.v):"—"}</span><span class="num r">${p&&p.d!=null?fD(p.d):(G.f.length?fD(G.f.reduce((x,y)=>x+y,0)):"—")}</span><span>${st}</span></div>`;}).join("");
+    return `<div class="rawrow" data-key="lr:${i}" data-lk="${lk(G.rk)}"><span class="num">${md(G.day)} ${hhmm(G.t)}</span><span class="mono" title="${esc(G.lot)}">${esc(G.lot||"(Lot 확인 불가)")}</span><span>${NMK(G.m)}</span><span class="num r">${G.w}</span><span class="num r">${G.s.length?f1(qs(G.s,.5)):"—"}${G.out?`<small class="bad"> ·이상치 ${G.out}</small>`:""}</span><span class="num r${p&&outB.has(p)?" bad":""}">${p?f1(p.v):"—"}</span><span class="num r">${p&&p.d!=null?fD(p.d):(G.f.length?fD(G.f.reduce((x,y)=>x+y,0)):"—")}</span><span class="cra" title="${esc(crTip(G))}">${crCell(G)}</span><span>${st}</span></div>`;}).join("");
   const lotsOpen=!!state.rcpPopOpen&&!!state.rcpPopOpen.lots;
   const tog=(key,label,sub,open,inner)=>`<div class="pdet"><button type="button" class="pdh" aria-expanded="${open}" data-fk="pd:${key}" data-h="${h(()=>setState({rcpPopOpen:{...(state.rcpPopOpen||{}),[key]:!open}}))}"><b>${label}</b><span class="muted">${sub}</span><i class="chev" aria-hidden="true">${open?"▴":"▾"}</i></button>${open?`<div class="pdb" data-reveal="pd:${key}">${inner}</div>`:""}</div>`;
   const binChip=BIN?(()=>{const G=groups.get(BIN.rk);return `<div class="binchip"><span><b>필터</b> ${esc(G?md(G.day)+" "+hhmm(G.t)+" · "+(G.lot||"(Lot 확인 불가)"):"고른 Lot")}</span><button type="button" class="btn sm" data-h="${h(()=>setState({rcpBin:null}))}">필터 해제</button></div>`;})():"";
-  const lotTbl=`${binChip}<div class="rawh"><span>시작</span><span>Lot</span><span>방식</span><span class="r">wafer</span><span class="r">Wafer당 스캔(중앙)</span><span class="r">LOT당 시간</span><span class="r">Defect(LOT당)</span><span>LOT당 통계</span></div><div class="rawbox">${lotRows||`<p class="empty">기록 없음</p>`}</div>${lots.length>cap?`<p class="muted" style="font-size:11.5px;margin:6px 0 0">처음 ${cap}개만 · 전체 ${lots.length}개</p>`:""}`;
+  const crSum=crSummary(lotsAll);
+  const lotTbl=`${binChip}${crSum}<div class="rawh"><span>시작</span><span>Lot</span><span>방식</span><span class="r">wafer</span><span class="r">Wafer당 스캔(중앙)</span><span class="r">LOT당 시간</span><span class="r">Defect(LOT당)</span><span title="Recipe.ini 의 CleanReferenceEvery · AutoFocusEvery — Lot 의 첫 Wafer">Clean ref · AF</span><span>LOT당 통계</span></div><div class="rawbox">${lotRows||`<p class="empty">기록 없음</p>`}</div>${lots.length>cap?`<p class="muted" style="font-size:11.5px;margin:6px 0 0">처음 ${cap}개만 · 전체 ${lots.length}개</p>`:""}`;
   return shell(S0.dev+" · "+FN,md(from)+" ~ "+md(to)+" · "+f0(d.w)+" wafer · "+d.lots.size+" Lot",
     `<div class="pbody"><div class="kpis">${kinds.map(stat).join("")}</div>
     <div class="plegend">${KS.map(k=>kbtn(k,NMK(k))).join("")}</div>

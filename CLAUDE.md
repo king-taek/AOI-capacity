@@ -56,6 +56,7 @@ Camtek AOI 장비의 BatchReport/WaferInfo.ini 를 읽어 장비별 가동률을
    ★ D56·D58(9/20, D54 개정): 화면 모델은 장비마다 **1분 단위 시간축에 한 번만** 배정한다 — INI 시각 구간(측정)을 먼저 놓고, Report 의 배치 시작~종료에서 남은 빈 분을
    그 Report 의 **INI 없는 Pass·Error 행들이 똑같이 나눠 갖는다**(Pass 행은 이력대로 Scan/Rescan, Error 행은 Error, Skipped·중단 행은 0). 장비-일 50% 문턱도 3분 표식도 없다.
    이것은 화면 규칙이다 — 수집기는 여전히 시각을 지어내지 않고 행의 `wafer_start_time` 은 비워 둔다. 장비 팝업이 'n장은 INI 가 없어 배치 시각으로 추정' 과 시각 확인 비율을 적는다.
+   10/11(Report 덮어쓰기): 그 한 줄을 **다른 시도가 덮어씀(STALE) · INI 없음 · 추정 분 · 스캔 안 함(건너뜀 · 중단, 0분) · 스캔 후 중단(Wafers Scanned = Pass + 1, 0분)** 으로 나눠 적고(`iniNote` · 장비-일 `iv`), 선택 Lot 에 '나중 시도'(같은 Job · Lot 원문 · Wafer — 같은 INI 자리를 늦게 쓴 Report)와 Report 요약 두 값을 보인다. **분은 옮기지 않는다** — 덮어써진 장의 시간은 지금 규칙이 가장 정확했다(INI 절반을 가린 시험에서 오차 가운데 5~17%, Avg. Scan Time 은 늘 30% 짧음).
 6. **런처 exe 에는 앱 코드가 0줄이다.** `scripts/exe_launcher.py` 는 표준 라이브러리만 import 한다
    (PyInstaller 의 FrozenImporter 가 디스크의 새 코드를 가린다). `hiddenimports=[]`, `pathex=[]`, 앱 패키지는 `excludes`.
 7. **`app.new` 는 완성·검증된 트리만.** `app.new.part` 에 만들고 검증 후 rename 한 것이 준비 신호. VERSION 은 스테이징 트리에만 쓴다.
@@ -72,7 +73,11 @@ Camtek AOI 장비의 BatchReport/WaferInfo.ini 를 읽어 장비별 가동률을
    장비 확인(Report/Scanresult 폴더 · 백업 나열 · 연결 확인)도 `devices._pmap` 으로 `read_workers` 개씩 동시에 하되 **범위 게이트를 지난 장비만**, 결과·로그는 입력 순서,
    취소는 새 작업 제출만 멈춘다(SMB 호출을 중간에 끊는다고 주장하지 않는다). 동시성 예산은 하나 — Report 읽기 단계 안에 풀을 겹치지 않는다(C08, 가드 `test_parallel_device_check_stays_in_scope_and_matches_serial`).
 10. `requirements.txt` 변경은 업데이트가 통째로 실패할 수 있는 지점 — 작업 요약에 반드시 표시하고 `--upgrade` 는 쓰지 않는다. 테스트는 실제 pip 을 절대 실행하지 않는다.
-11. **일은 추론 난이도로 모델을 나눠 맡긴다**(사용자 지시 10/10, 기본은 Opus): 정말 단순한 일(파일 찾기 · 반복 치환 · 표 정리 · 테스트 실행 · 값 조회)은 `Agent(model="haiku")`, 가벼운 일(집계 · 예시 고르기 · 스크립트 정리)은 `sonnet`, 추론이 필요한 일(설계 · 통합 · 규칙 결정 · 결과 검증)은 메인(Opus), 어려운 데이터 분석 · 새 분석 방법 탐색처럼 넓은 시야와 날카로운 추론이 필요한 일은 `fable` — **Fable 을 쓸 수 없으면(오류 · 사용 불가) 같은 지시로 `opus` 에 다시 맡긴다**(사용자 지시 10/11). 서로 기다리지 않는 일은 백그라운드로 병렬로 돌린다.
+11. **일은 추론 난이도로 모델을 나눠 맡긴다**(사용자 지시 10/10, 기본은 Opus): 정말 단순한 일(파일 찾기 · 반복 치환 · 표 정리 · 테스트 실행 · 값 조회)은 `Agent(model="haiku")`, 가벼운 일(집계 · 예시 고르기 · 스크립트 정리)은 `sonnet`, 추론이 필요한 일(설계 · 통합 · 규칙 결정 · 결과 검증)은 메인(Opus), 고난도 분석 설계 · 새 분석 방법 · 새 시각처럼 넓은 시야와 날카로운 추론이 필요한 일만 `fable` — **Fable 을 쓸 수 없으면(오류 · 사용 불가) 같은 지시로 `opus` 에 다시 맡긴다**(사용자 지시 10/11). 서로 기다리지 않는 일은 백그라운드로 병렬로 돌린다.
+    **Fable 은 데이터를 직접 읽지 않는다**(사용자 지시 10/11 — 목표: Fable 비용을 10/11 의 20% 이하로). 10/11 실측으로 Fable 작업 하나가 $5~11 이었고 그중 55~60% 가 캐시 쓰기였다 — 스크립트 출력 · 원문을 읽을 때마다 대화가 커진 탓(시작만 해도 약 9만 토큰).
+    그래서 ① 메인(또는 Haiku)이 자료의 모양(파일 · 열 · 표본 몇 줄 · 이미 아는 숫자)을 1만 토큰 안쪽 요약으로 준비하고 ② Fable 은 그 요약만 보고 **분석 계획**(어떤 파일을 어떻게 읽고 무엇과 무엇을 비교할지 · 스크립트 사양 · 검증 기준 · 예상 함정)을 쓰고
+    ③ Sonnet 이 스크립트를 짜 돌리고 Haiku 가 실행 · 정리하며 ④ 결과 표(5천 토큰 안쪽)를 **같은 Fable 에 SendMessage** 로 돌려 해석 · 새 시각을 받고 ⑤ 메인이 검증한다. 여러 질문은 Fable 하나에 묶는다.
+    이미 정해진 숫자를 다시 얹는 계산 · 집계 · 비교표 · 검증 재실행은 Fable 이 아니라 Opus 이하가 한다.
 
 ## 레이아웃
 - `main.py`(진입), `aoi_capacity/`(앱: `collect.py`, `cli.py`, `devices.py`, `scope.py`, `nas_guard.py`, `i18n/`, `utils/`, `workers/`,
@@ -114,11 +119,12 @@ Camtek AOI 장비의 BatchReport/WaferInfo.ini 를 읽어 장비별 가동률을
   **`TEST` 는 분모(24시간)에는 들어가되 분자(실가동)에서만 뺀다**(사용자 확정 — 양산을 위해 돈 게 아니다).
   오류 건수에도 넣지 않는다. 화면에서 사라지지는 않는다: 타임라인에 분홍 점무늬 띠, 제목에 'Test n건 제외',
   Lot 목록에 '시험 · 제외' 표. 빼는 것과 없었던 것은 다르다.
-- 행 데이터 계약(`collect.OUT_COLS`, **26열 · `ROW_SCHEMA_VERSION` 7**): `kind`("" = Wafer 한 장 · "batch" = 통째로 실패한 시도 · "slot" = 일부 성공한
+- 행 데이터 계약(`collect.OUT_COLS`, **30열 · `ROW_SCHEMA_VERSION` 8**): `kind`("" = Wafer 한 장 · "batch" = 통째로 실패한 시도 · "slot" = 일부 성공한
   배치의 자리표시 행 Error 를 Report 당 1건으로 합성한 사건, D38), `batch_end`,
   `job`·`setup`(Report 안의 `Job/Setup`, 없으면 파일명 규칙), `report`(BatchReport 파일 이름 — 화면에서 그 파일을 다시 여는 근거),
   `cause`(원인 코드들, 규칙 순 세미콜론) · `outcome`(종료 결과) · `norm_status`(호환: 원인이 있으면 첫 원인, 없으면 결과) — **원인과 결과는 다른 축**(D43),
   `scan_type`("" · RESCAN · REWORK · TEST — 겹치면 TEST → RESCAN → REWORK 순), `scan_mode`(MULTI · SINGLE · "" — Wafer 폴더 `RecipesInfo.ini` 에 레시피 둘 이상이면 MULTI, INI 만 있으면 SINGLE, 표·요약만이면 `|` 가 있을 때만 MULTI, D74·D75), `ini_match`(EXACT · NOT_FOUND · MOVED_ONLY · NO_WAFER_ID · READ_ERROR · STALE · BATCH_FAILED · BATCH · BATCH_SLOT),
+  `wafers_scanned` · `avg_scan_time`(Report 요약 원문, Report 마다 같은 값 — Wafers Scanned = 스캔이 끝난 장 수 · Avg. Scan Time = 첫 레시피 ScanLog 평균이라 **시간 계산에 쓰지 않는다**, 10/11) · `cr_every` · `af_every`(Recipe.ini 의 CleanReferenceEvery · AutoFocusEvery 를 None · Lot · Wafer 로 — `RECIPE_TAB_JOB_RE`(RDL · TB500 PI2~4) Job 만, Report 마다 INI 를 찾은 첫 Wafer 폴더에서 한 번, 10/11),
   `faults` · `scanned_dice` · `yield`(Report 표의 Faults · Scanned Dice · Yield **원문 그대로**, 합성 행은 빈 값 — 옛 캐시 행에는 없어 `--rebuild-all`(또는 `--refresh-window N`) 재수집으로만 채워진다),
   `time_basis`(STRICT_IN_BATCH · TOLERANCE_ONLY · OUTSIDE_BATCH · BATCH_ONLY · MISSING · INVALID · UNKNOWN_BATCH), `slots`(slot 행의 영향 Slot 수),
   `issue_codes`(C12: `CODE` 또는 `CODE=인자,인자` 를 `;` 로 이은 목록, `collect.ISSUE_CODES` 16개 — 인자 안의 `% ; = ,` 만 퍼센트 이스케이프, 경로·한글은 그대로).
@@ -146,7 +152,7 @@ Camtek AOI 장비의 BatchReport/WaferInfo.ini 를 읽어 장비별 가동률을
     ③ **Error 를 담은 Report 가 끝난 뒤** 다음 활동까지(관측 종료·그날 자정 중 이른 것까지, D44)를 '에러 후 대기'(Report 안에서 Error 뒤 스캔이 이어지면 그 사이는 스캔)
     ④ 날짜 경계로 잘라(D04) 장비-일 값을 만든다 — 시간은 걸치는 날마다, Error 건수(Lot 단위)·Wafer 수는 시작일에 한 번. **불변식**: 장비-일마다 r+d+t+x+s ≤ den, seg 는 서로 겹치지 않음(30일치 slow 가드).
   - 장비-일 값 `t`: `r` Scan · `d` Rescan · `t` Test · `x` Error 구간 · `s` 에러 후 대기 (전부 분) · `e` Error 건수(Lot 단위) · `w` 이 날 시작한 행 수 · `seg` [시작,끝,종류] (0 Scan · 1 Error · 2 Test · **3 대기** · 4 Rescan, 배타) ·
-    `ct` {유형:[건수,Error+대기 분]} · `lots` [job,lot,a,b,w,e,dup,test,rep,causes,st,ba,bb] · `cv` 시각 확인 %(이 날 행 기준) · `bseg`/`be` 배치 구간·점유 · `we` 이 날 마지막 대기의 끝 · `ne` 배치 시각을 받은 Pass 행 수 · `den` 분모(분).
+    `ct` {유형:[건수,Error+대기 분]} · `lots` [job,lot,a,b,w,e,dup,test,rep,causes,st,ba,bb,faults 합,faults 행 수,덮어씀 장,나중 시도(st 풀),Report 요약(st 풀)] · `iv` {ov 덮어씀 · nf INI 없음 · km 추정 분 · sk 스캔 안 함 · s1 스캔 후 중단}(있을 때만, 10/11) · `cv` 시각 확인 %(이 날 행 기준) · `bseg`/`be` 배치 구간·점유 · `we` 이 날 마지막 대기의 끝 · `ne` 배치 시각을 받은 Pass 행 수 · `den` 분모(분).
   - 종류: 원인 코드(`CAUSE_RULES` 첫 매치)가 있으면 Error, **Lot 원문에 `TEST` 가 있으면 그 Report 의 행은 전부 Test(D64 — 원인 Error 도 Error 로 세지 않음)**,
     같은 자재의 **앞선 시도의 결과가 PASS 였을 때만** Rescan(D63, 장비 무관), 아니면 Scan. 자재 키 = `jobKey(Job)|Lot 토큰(RE·RESCAN·REWORK·SRD·R 제외)|Wafer ID(영숫자)`.
     **Job 병합(`jobKey`)** 은 구분자·공백·대소문자 · `_Copy` · `LIVE` · 장비별 복사본 · `Test_` 접두 · 끝 4자리 날짜 · `AO`→`A0` 를 묶고 R접두어(RE·R2·R3…)와 단계 번호(PI2/PI3, RDL1~4)는 나눈다(D48-④). 통계에서만 묶고 **표기는 원문**, 표기명 21개는 `JOB_ALIAS`.
@@ -214,6 +220,7 @@ Camtek AOI 장비의 BatchReport/WaferInfo.ini 를 읽어 장비별 가동률을
   **장비 상세 팝업(D80 → D82 → D84, `rcpDevPopupHtml`)**: '장비별' 행을 **누르면**(Enter · Space 도 — 근거 칸 · '상세 팝업' 단추 · 더블클릭은 D84 에서 없앴다) → 팀장이 한눈에 보도록 ① KPI(방식마다 큰 숫자 둘 + 전체 장비 중앙 대비 ▲▼ — 한 방식만 돈 장비도 다른 칸을 지우지 않고 '멀티스캔만 진행') ② **전체 장비 속 위치**(장비마다 점 하나 · 이 장비 강조 · 전체 중앙 세로선 · 빠른/적은 순 n위, 없는 방식은 '…만') ③ **이 장비 vs 전체**(`cmpBlock` — 같은 축에 전체 장비 25~75% 회색 띠 · 전체 중앙, 이 장비 25~75% 상자 · 중앙 숫자, 점 = Lot 하나(장당이면 그 Lot wafer 들의 중앙), 시간 이상치는 붉은 고리, 축 밖은 ▸ · **x축은 두 줄(멀티 · 단일) 사이 · Defect 는 로그 축**(D85, 축 끝 = 가장 큰 값이 들어가는 10 의 거듭제곱) · 툴팁은 핵심만(Lot · 날짜 · 값)) ④ **자세히(접힘)**: **LOT별 목록**(Report 한 장 = 한 줄). 단위 단추는 팝업에도 있고 같은 값이다.
   **그래프는 모두 interactive(D83, 10/6)**: ① **즉시 뜨는 툴팁**(`init` 의 `TIP_SEL` 엔진 — 막대 · 타임라인 · 점 · 분포 칸 · `[data-tip]`; 기본 `title` 은 첫 호버 때 `data-tip` 으로 옮기고 빈 요소엔 `aria-label` 을 남긴다, 키보드 포커스도 같다, 24시간 막대는 마우스 위치(분)의 구간을 `barText` 로 말한다) ② **방식 켜기/끄기**(`kbtn` · `state.rcpHide` — 그래프에서만 숨기고 타일 숫자는 그대로, 마지막 하나는 못 끈다) ③ 장비별 그래프 **정렬**(`rcpDevSort`) · 지표 ④ 팝업의 **점을 누르면 그 장비로**(`.sd`) · 올리면 같은 장비가 모든 그래프에서 함께 켜지고 나머지는 흐려진다(클래스만 토글, 다시 그리지 않음) ⑤ **'이 장비 vs 전체' 의 점에 올리면 같은 Lot 이 두 그래프와 LOT별 목록에서 함께 켜지고(`data-lk` · `.lh/.hl`), 누르면 그 Lot 만 목록에**(`state.rcpBin = {rk}` · 필터 칩).
   제목은 레시피를 바꾸면 글자가 넘어가지 않고 **페이드**(`h2.tfade[data-nr]`). 목록 안내는 짧게: 검색 안 하면 '전체 n개', 하면 '검색 결과 n개'(40개를 넘을 때만 ' · 40개 표시').
+  LOT별 목록에 **Clean ref · AF 열**(Recipe.ini 의 CleanReferenceEvery · AutoFocusEvery — Wafer 는 붉은 굵은 글씨)과 그 위 요약 한 줄(Lot 수, `crCell` · `crSummary`, 10/11 사용자: 이 설정은 이 탭에서만 확인).
   하위 레시피 칸(`recipe` 열 — `x20`·`x5`·`x20|x5`) 수집 순서(D74 — **RDL Job 만**, `collect.is_rdl_job`; 다른 Job 은 RecipesInfo.ini 를 열지 않고 Report 값 그대로 · scan_mode 는 표에 `|` 가 있을 때만): Wafer 폴더 `RecipesInfo.ini` 의 `[Recipe-n] Name` 전부(멀티 스캔에만 있는 파일, `|` 로 이음) → `WaferInfo.ini` `[Recipe] Name`(단일) → Report 표 Recipe 칸 → 요약 Recipe. 표 칸은 멀티여도 `x20` 만 찍혀 믿지 않는다(실물 10/5). 덮어써진(STALE) INI 의 것은 쓰지 않는다. 날짜는 Wafer 시작일, 파일의 기간(`D.days`) 안만.
   입력 칸은 `data-in` + `INPUT_KEYS`(같은 이름의 state). 좁은 화면은 신경 쓰지 않는다(사용자 10/6 — PC 전용).
 - **헤더 날짜 두 줄(D79 C8 · D80)**: `dateControlsHtml` — 위 '조회 기간'(`rangeHtml`), 아래 '하루 날짜'(입력 칸 `data-in="day"` · ‹ › 최신, 기간 안 데이터 날짜만 · 기간이 하루를 밀어내면 `state.dayNote` 짧은 알림). **하루 날짜 줄은 하루가 기준인 화면에서만**(`dayBasis` — 가동률 · Error 일자별; 나머지 탭은 줄 자체가 없다), 하루가 기준일 땐 조회 기간 줄이 **회색**(`.rangebar.dim` + '이 탭은 하루 날짜 기준', 눌러도 되고 Error 에서 누르면 하루 기준이 풀려 기간 모드). 탭 제목 옆 `scopeBadge`(가동률 · Error 일자별 = 하루, 나머지 = 기간). Error 날짜 막대를 고르면 헤더 하루도 그 날. 사본 저장 · 레시피 묶음은 `.hacts`. ≤820px 헤더는 sticky 아님. 작은 창(D79 C4): 홈 · Error 목록 열 너비는 CSS(`.homelist .rowbtn` · `.errlist .rowbtn[data-cols]`, 인라인 grid 없음), 장비 팝업 Lot 이름표는 실제 폭(`calloutW`·`calloutFit`).
