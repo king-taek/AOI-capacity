@@ -119,12 +119,13 @@ Camtek AOI 장비의 BatchReport/WaferInfo.ini 를 읽어 장비별 가동률을
   **`TEST` 는 분모(24시간)에는 들어가되 분자(실가동)에서만 뺀다**(사용자 확정 — 양산을 위해 돈 게 아니다).
   오류 건수에도 넣지 않는다. 화면에서 사라지지는 않는다: 타임라인에 분홍 점무늬 띠, 제목에 'Test n건 제외',
   Lot 목록에 '시험 · 제외' 표. 빼는 것과 없었던 것은 다르다.
-- 행 데이터 계약(`collect.OUT_COLS`, **30열 · `ROW_SCHEMA_VERSION` 8**): `kind`("" = Wafer 한 장 · "batch" = 통째로 실패한 시도 · "slot" = 일부 성공한
+- 행 데이터 계약(`collect.OUT_COLS`, **31열 · `ROW_SCHEMA_VERSION` 9**): `kind`("" = Wafer 한 장 · "batch" = 통째로 실패한 시도 · "slot" = 일부 성공한
   배치의 자리표시 행 Error 를 Report 당 1건으로 합성한 사건, D38), `batch_end`,
   `job`·`setup`(Report 안의 `Job/Setup`, 없으면 파일명 규칙), `report`(BatchReport 파일 이름 — 화면에서 그 파일을 다시 여는 근거),
   `cause`(원인 코드들, 규칙 순 세미콜론) · `outcome`(종료 결과) · `norm_status`(호환: 원인이 있으면 첫 원인, 없으면 결과) — **원인과 결과는 다른 축**(D43),
   `scan_type`("" · RESCAN · REWORK · TEST — 겹치면 TEST → RESCAN → REWORK 순), `scan_mode`(MULTI · SINGLE · "" — Wafer 폴더 `RecipesInfo.ini` 에 레시피 둘 이상이면 MULTI, INI 만 있으면 SINGLE, 표·요약만이면 `|` 가 있을 때만 MULTI, D74·D75), `ini_match`(EXACT · NOT_FOUND · MOVED_ONLY · NO_WAFER_ID · READ_ERROR · STALE · BATCH_FAILED · BATCH · BATCH_SLOT),
   `wafers_scanned` · `avg_scan_time`(Report 요약 원문, Report 마다 같은 값 — Wafers Scanned = 스캔이 끝난 장 수 · Avg. Scan Time = 첫 레시피 ScanLog 평균이라 **시간 계산에 쓰지 않는다**, 10/11) · `cr_every` · `af_every`(Recipe.ini 의 CleanReferenceEvery · AutoFocusEvery 를 None · Lot · Wafer 로 — `RECIPE_TAB_JOB_RE`(RDL · TB500 PI2~4) Job 만, Report 마다 INI 를 찾은 첫 Wafer 폴더에서 한 번, 10/11),
+  `scan_sec`(실제 촬영 초 — EXACT 장마다 Wafer 폴더 ScanLog.ini `Duration`(첫 레시피만) + 멀티면 `ExtendedScanMetaData_<레시피 2>.json` 시작 ~ 장 끝(첫 레시피와 겹친 만큼 · 마무리 `SCAN_TAIL_SEC` 20초 제외), 장 시간 상한 · 근거가 안 맞으면 빈 값, 10/11 — 이 때문에 RecipesInfo.ini 는 모든 EXACT 장에서 열고 scan_mode 판정은 여전히 RDL 만),
   `faults` · `scanned_dice` · `yield`(Report 표의 Faults · Scanned Dice · Yield **원문 그대로**, 합성 행은 빈 값 — 옛 캐시 행에는 없어 `--rebuild-all`(또는 `--refresh-window N`) 재수집으로만 채워진다),
   `time_basis`(STRICT_IN_BATCH · TOLERANCE_ONLY · OUTSIDE_BATCH · BATCH_ONLY · MISSING · INVALID · UNKNOWN_BATCH), `slots`(slot 행의 영향 Slot 수),
   `issue_codes`(C12: `CODE` 또는 `CODE=인자,인자` 를 `;` 로 이은 목록, `collect.ISSUE_CODES` 16개 — 인자 안의 `% ; = ,` 만 퍼센트 이스케이프, 경로·한글은 그대로).
@@ -152,7 +153,7 @@ Camtek AOI 장비의 BatchReport/WaferInfo.ini 를 읽어 장비별 가동률을
     ③ **Error 를 담은 Report 가 끝난 뒤** 다음 활동까지(관측 종료·그날 자정 중 이른 것까지, D44)를 '에러 후 대기'(Report 안에서 Error 뒤 스캔이 이어지면 그 사이는 스캔)
     ④ 날짜 경계로 잘라(D04) 장비-일 값을 만든다 — 시간은 걸치는 날마다, Error 건수(Lot 단위)·Wafer 수는 시작일에 한 번. **불변식**: 장비-일마다 r+d+t+x+s ≤ den, seg 는 서로 겹치지 않음(30일치 slow 가드).
   - 장비-일 값 `t`: `r` Scan · `d` Rescan · `t` Test · `x` Error 구간 · `s` 에러 후 대기 (전부 분) · `e` Error 건수(Lot 단위) · `w` 이 날 시작한 행 수 · `seg` [시작,끝,종류] (0 Scan · 1 Error · 2 Test · **3 대기** · 4 Rescan, 배타) ·
-    `ct` {유형:[건수,Error+대기 분]} · `lots` [job,lot,a,b,w,e,dup,test,rep,causes,st,ba,bb,faults 합,faults 행 수,덮어씀 장,나중 시도(st 풀),Report 요약(st 풀)] · `iv` {ov 덮어씀 · nf INI 없음 · km 추정 분 · sk 스캔 안 함 · s1 스캔 후 중단}(있을 때만, 10/11) · `cv` 시각 확인 %(이 날 행 기준) · `bseg`/`be` 배치 구간·점유 · `we` 이 날 마지막 대기의 끝 · `ne` 배치 시각을 받은 Pass 행 수 · `den` 분모(분).
+    `ct` {유형:[건수,Error+대기 분]} · `lots` [job,lot,a,b,w,e,dup,test,rep,causes,st,ba,bb,faults 합,faults 행 수,덮어씀 장,나중 시도(st 풀),Report 요약(st 풀)] · `iv` {ov 덮어씀 · nf INI 없음 · km 추정 분 · sk 스캔 안 함 · s1 스캔 후 중단}(있을 때만, 10/11) · `sc` [실제 촬영 분, 그 장들의 INI 분](scan_sec 있는 장만 — 장비 팝업 Scan 카드 밑 '그중 스캔 n%', 가동률 값은 그대로, 10/11) · `cv` 시각 확인 %(이 날 행 기준) · `bseg`/`be` 배치 구간·점유 · `we` 이 날 마지막 대기의 끝 · `ne` 배치 시각을 받은 Pass 행 수 · `den` 분모(분).
   - 종류: 원인 코드(`CAUSE_RULES` 첫 매치)가 있으면 Error, **Lot 원문에 `TEST` 가 있으면 그 Report 의 행은 전부 Test(D64 — 원인 Error 도 Error 로 세지 않음)**,
     같은 자재의 **앞선 시도의 결과가 PASS 였을 때만** Rescan(D63, 장비 무관), 아니면 Scan. 자재 키 = `jobKey(Job)|Lot 토큰(RE·RESCAN·REWORK·SRD·R 제외)|Wafer ID(영숫자)`.
     **D87(10/11)**: Lot 이름을 바꿔 다시 넣은 재검사도 Rescan — 두 번째 키 `matKey2` = `jobKey|검사 단계 낱말(STEP_TOK: DIA·SRD·3D·EDGE·BUMP·CENTER·PCM·SPT·2D)|Wafer ID`(영숫자 6자 이상 · 숫자만이 아닌 ID 만), 앞 시도 PASS · **레시피(`recipe` 열) 같음** · 첫 키가 다를 때 `rel=2`. **Job 이 `No Pattern` 으로 시작하면 Test**(`MONITOR_JOB_RE` — 모니터 웨이퍼로 보이나 현장 확인 전, 확인되면 이 상수만 고친다).

@@ -98,14 +98,15 @@ def test_multi_ignores_the_waferinfo_name_and_report_only_rows_stay_unknown(rdl_
     assert {x["scan_mode"] for x in nine if x["wafer_id"] == "K625407-99Z9"} == {""}
 
 
-def test_recipesinfo_is_read_only_for_rdl_jobs(tmp_path, fake_nas, monkeypatch):
-    """10/5: RecipesInfo.ini 는 RDL Job 만 연다 — 다른 Job 은 파일 열기를 늘리지 않고 scan_mode 는 모름(표에 `|` 가 없으면)."""
+def test_recipesinfo_sets_scan_mode_only_for_rdl_jobs(tmp_path, fake_nas, monkeypatch):
+    """10/5: 멀티/단일 판정(scan_mode · recipe)은 RDL Job 만 — 다른 Job 은 scan_mode 모름(표에 `|` 가 없으면).
+    10/11(D86 Q4): 실제 촬영 초 때문에 RecipesInfo.ini 는 모든 EXACT 장에서 연다(정확 경로 하나, 두 번째 레시피 이름을 알려고)."""
     nas, csv_path = fake_nas
     opened = []
     real = collect.read_recipes_info
     monkeypatch.setattr(collect, "read_recipes_info", lambda p: opened.append(p) or real(p))
     rows, _m, _e = collect.collect(make_cfg(tmp_path, csv_path))
-    assert opened == [] and {r["scan_mode"] for r in rows if not r.get("kind")} == {""}
+    assert all(p.endswith("RecipesInfo.ini") for p in opened) and {r["scan_mode"] for r in rows if not r.get("kind")} == {""}
 
 
 def _make_rdl(nas, dev="AOI-9", job="TB500_RDL3 - Multi", lot="GVB-RDL3", wafer="W01", multi=True):

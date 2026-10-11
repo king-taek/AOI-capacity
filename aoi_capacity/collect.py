@@ -147,9 +147,12 @@ DEV_OK, DEV_NO_DATA, DEV_PARTIAL, DEV_UNREACHABLE = "ok", "no_data", "partial", 
 #: Avg. Scan Time = 첫 레시피 ScanLog Duration 평균(×0.998) — 실제 장 시간보다 30~45% 짧아 **시간 계산에는 쓰지 않는다**(화면에 원문으로만).
 #: `cr_every` · `af_every`(같은 버전) — Recipe.ini 의 CleanReferenceEvery · AutoFocusEvery 를 `None`·`Lot`·`Wafer` 로(RDL 단일스캔 탭 Job 만,
 #: Report 마다 INI 를 찾은 첫 Wafer 폴더에서 한 번 — `RECIPE_TAB_JOB_RE`). 그 밖의 Job · 옛 캐시 행은 빈 값(다시 읽으면 채워진다).
-ROW_SCHEMA_VERSION = 8
+#: `scan_sec`(ROW_SCHEMA_VERSION 9, 10/11) — 그 Wafer 의 **실제 촬영 초**(정수 문자열): Wafer 폴더 ScanLog.ini 의 `Duration`(첫 레시피만 센다 — 10/10 검증)
+#: + 두 번째 레시피 구간(`ExtendedScanMetaData_<레시피 2>.json` 의 시작 ~ 장 끝, 첫 레시피와 겹친 만큼과 마무리 `SCAN_TAIL_SEC` 는 뺌), 장 시간(INI)을 넘지 않게.
+#: INI 를 찾은(EXACT) 행만 — STALE · 없음 · ScanLog 없음은 빈 값(지어내지 않는다). 장비 팝업의 '그중 스캔 n%' 근거(D86 Q4 · Q5). 옛 캐시 행은 빈 값.
+ROW_SCHEMA_VERSION = 9
 OUT_COLS = ["device", "kind", "job", "setup", "lot", "wafer_id", "status", "norm_status", "cause", "outcome", "scan_type", "recipe", "scan_mode",
-            "faults", "scanned_dice", "yield", "wafers_scanned", "avg_scan_time", "cr_every", "af_every",
+            "faults", "scanned_dice", "yield", "wafers_scanned", "avg_scan_time", "cr_every", "af_every", "scan_sec",
             "wafer_start_time", "wafer_end_time", "batch_start", "batch_end", "report", "ini_match", "time_basis", "slots", "data_issue",
             "issue_codes"]
 QUALITY_COLS = ("faults", "scanned_dice", "yield")
@@ -718,6 +721,71 @@ def read_recipes_info(path) -> List[str]:
     return [names[k] for k in sorted(names)]
 
 
+#: 두 번째 레시피 구간 끝의 마무리(결과 저장 · 언로드 준비) — 30일 로그에서 장 끝 바로 앞 약 20초는 촬영이 아니었다(10/10 분석).
+SCAN_TAIL_SEC = 20
+_MDY_RE = re.compile(r"(\d{1,2})/(\d{1,2})/(\d{4})\s+(\d{1,2}):(\d{1,2}):(\d{1,2})\s*([AaPp][Mm])?")
+
+
+def parse_mdy(text) -> Optional[dt.datetime]:
+    """ScanLog `StartScan`(`10/10/2026 0:53:58 AM` — 0시에도 AM 이 붙는다) · ExtendedScanMetaData `DateTime`(`M/d/yyyy h:m:s tt`) → datetime."""
+    m = _MDY_RE.search(str(text or ""))
+    if not m:
+        return None
+    mo, d, y, h, mi, sec, ap = m.groups()
+    h = int(h)
+    if ap:
+        h = h % 12 + (12 if ap.upper() == "PM" else 0)
+    try:
+        return dt.datetime(int(y), int(mo), int(d), h, int(mi), int(sec))
+    except ValueError:
+        return None
+
+
+def read_scan_log(path) -> dict:
+    """Wafer 폴더의 `ScanLog.ini` → {"dur": 초(float), "start": datetime 또는 None} — `[General]` 의 Duration(ms) · StartScan 만(읽기 전용)."""
+    sec, out = None, {}
+    for line in nas_guard.read_text(path).splitlines():
+        line = line.strip()
+        if line[:1] == "[" and line.endswith("]"):
+            if sec == "general":
+                break
+            sec = line[1:-1].strip().lower()
+            continue
+        if sec == "general" and "=" in line:
+            k, v = line.split("=", 1)
+            out[k.strip().lower()] = v.strip()
+    try:
+        dur = float(out.get("duration", "")) / 1000.0
+    except ValueError:
+        dur = None
+    return {"dur": dur, "start": parse_mdy(out.get("startscan"))}
+
+
+def read_ext_meta(path) -> Optional[dt.datetime]:
+    """`ExtendedScanMetaData_<레시피>.json` → 그 레시피 스캔 시작(`RecipeSignatureObj.CreationDateTime.DateTime`)."""
+    import json as _json
+    try:
+        obj = _json.loads(nas_guard.read_text(path))
+        return parse_mdy(obj["RecipeSignatureObj"]["CreationDateTime"]["DateTime"])
+    except (ValueError, KeyError, TypeError):
+        return None
+
+
+def scan_seconds(st, en, log: Optional[dict], second: Optional[dt.datetime]) -> Optional[int]:
+    """실제 촬영 초 = Duration + 두 번째 레시피 구간(첫 레시피와 겹친 만큼 · 마무리 SCAN_TAIL_SEC 제외), 장 시간 상한.
+    근거가 맞지 않으면(ScanLog 시작이 장 밖 · Duration 없음) None — 지어내지 않는다."""
+    if not (log and st and en and en > st) or log.get("dur") is None or log["dur"] < 0:
+        return None
+    s0, dur = log.get("start"), log["dur"]
+    if s0 is None or not (st - dt.timedelta(seconds=60) <= s0 <= en):
+        return None
+    total = dur
+    if second is not None and st <= second <= en:
+        a = max(second, s0 + dt.timedelta(seconds=dur))
+        total += max(0.0, (en - a).total_seconds() - SCAN_TAIL_SEC)
+    return int(round(min(total, (en - st).total_seconds())))
+
+
 class _IniMemo:
     """수집 한 번 안에서 같은 WaferInfo.ini 를 **한 번만** 연다.
 
@@ -781,6 +849,15 @@ class _IniMemo:
             m = self._settings
         return m.get(path)
 
+    def sub(self, name: str, reader, path: str) -> tuple:
+        """다른 파일(ScanLog.ini · ExtendedScanMetaData_*.json)도 같은 방식으로 — 이름마다 따로 기억하고 통계도 따로."""
+        with self._lock:
+            subs = self.__dict__.setdefault("_subs", {})
+            m = subs.get(name)
+            if m is None:
+                m = subs[name] = _IniMemo(reader)
+        return m.get(path)
+
     def exists(self, path: str) -> bool:
         """파일 존재만(`MoveResultFlag`) — 같은 경로는 한 번만 stat 한다. 읽기 전용."""
         with self._lock:
@@ -807,6 +884,12 @@ class _IniMemo:
             with ms._lock:
                 sk = [k for k, _ in ms._done.values()]
             out.update({"recipe_ini_unique": len(sk), "recipe_ini_found": sk.count("ok")})
+        with self._lock:
+            subs = dict(self.__dict__.get("_subs", {}))
+        for name, sm in subs.items():
+            with sm._lock:
+                ks = [k for k, _ in sm._done.values()]
+            out.update({f"{name}_unique": len(ks), f"{name}_found": ks.count("ok")})
         return out
 
 
@@ -863,7 +946,7 @@ def rows_for_report(dev_name: str, rep: dict, scan_root: str, memo: Optional[_In
              "report": rep.get("name", ""), "lot": w["lot"], "wafer_id": w["wafer_id"], "status": w["status"],
              "norm_status": norm_status(w["status"]), "cause": cause_field(causes), "outcome": norm_outcome(w["status"]),
              "scan_type": scan_type(w["lot"]),
-             "recipe": w["recipe"] or s.get("Recipe", ""), "scan_mode": "",
+             "recipe": w["recipe"] or s.get("Recipe", ""), "scan_mode": "", "scan_sec": "",
              "faults": w.get("faults", ""), "scanned_dice": w.get("scanned_dice", ""), "yield": w.get("yield", ""),
              **rfields,
              "wafer_start_time": "", "wafer_end_time": "", "batch_start": s.get("Batch Start", ""),
@@ -919,15 +1002,28 @@ def rows_for_report(dev_name: str, rep: dict, scan_root: str, memo: Optional[_In
                         iss.append((ISSUE_FOUND_IN_BACKUP, os.path.basename(found_in.rstrip(chr(92) + '/'))))
                     if found_job != rep["equipment"]:
                         iss.append((ISSUE_JOB_FOLDER_DIFFERS, found_job))
+                    names = None
+                    if r["ini_match"] == "EXACT":
+                        # 10/11(D86 Q4): 실제 촬영 초 — 모든 Job 의 EXACT 장. ScanLog.ini 하나 + (멀티면) 두 번째 레시피의 ExtendedScanMetaData 하나, 정확 경로만.
+                        wdir = os.path.join(found_in, rel_found)
+                        rk, names = memo.recipes(os.path.join(wdir, "RecipesInfo.ini"))
+                        names = names if rk == "ok" else None
+                        lk, lv = memo.sub("scanlog", read_scan_log, os.path.join(wdir, "ScanLog.ini"))
+                        second = None
+                        if lk == "ok" and names and len(names) > 1:
+                            ek, ev = memo.sub("extmeta", read_ext_meta, os.path.join(wdir, f"ExtendedScanMetaData_{names[1]}.json"))
+                            second = ev if ek == "ok" else None
+                        sec_ = scan_seconds(st, en, lv if lk == "ok" else None, second)
+                        if sec_ is not None:
+                            r["scan_sec"] = str(sec_)
                     if r["ini_match"] == "EXACT" and is_rdl_job(rep.get("job", "")):
                         # 10/5: RecipesInfo.ini 는 RDL Job 만 본다(사용자 — 멀티/단일을 바꿔 돌리는 건 RDL 뿐, 다른 Job 은 파일 열기를 늘리지 않는다).
                         # 10/5: 멀티 스캔(x20+x5)은 Report 표의 Recipe 칸에 `x20` 만 찍힌다(실물 GVB·GVC·LGA·LHP 확인).
                         # 실제로 돈 레시피는 Wafer 폴더에 있다 — 멀티면 RecipesInfo.ini(이름 전부), 단일이면 WaferInfo.ini [Recipe] Name.
                         # 덮어써진 INI(STALE)는 다른 시도의 것이라 쓰지 않는다. 정확 경로 하나만 연다(규칙 4).
-                        rk, names = memo.recipes(os.path.join(found_in, rel_found, "RecipesInfo.ini"))
                         one = got.get("Recipe", {}).get("Name", "")
                         # 멀티면 WaferInfo 의 [Recipe] Name 은 스캔 진행 창에 떠 있던 이름일 뿐이다(사용자 10/5) — 쓰지 않는다.
-                        if rk == "ok" and names:
+                        if names:
                             r["recipe"] = "|".join(names)
                             r["scan_mode"] = "MULTI" if len(names) > 1 else "SINGLE"
                         else:

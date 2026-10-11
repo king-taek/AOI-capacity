@@ -705,3 +705,15 @@ def test_lot_tab_follows_wafer_ids_across_renamed_lots_and_devices():
     assert "이름 바뀐 재검사 1" in out
     (q,) = screen(rows, meta("AOI-1", "AOI-2"), [["lotHtml"]], state={"view": "lot", "lotQ": "ewb6"})
     assert "Wafer 38135F75EWB6" in q
+
+
+def test_scan_share_counts_only_rows_with_scan_sec_and_keeps_utilization():
+    """10/11(D86 Q5): 장비-일 `sc` = [실제 촬영 분, 그 장들의 INI 분] — scan_sec 이 있는 장만. 가동률(r)은 그대로, 팝업 Scan 카드 밑에 '그중 스캔 n%'."""
+    rows = [w("AOI-1", "W1", "08:00", "08:20") | {"scan_sec": "900"},       # 20분 중 15분
+            w("AOI-1", "W2", "08:20", "08:40") | {"scan_sec": "600"},       # 20분 중 10분
+            w("AOI-1", "W3", "08:40", "09:00")]                              # 옛 행 — 분모에도 넣지 않는다
+    t = at(run(rows), "AOI-1")
+    assert t["sc"] == [25, 40] and t["r"] == 60
+    assert "sc" not in at(run([w("AOI-1", "W3", "08:40", "09:00")]), "AOI-1")
+    (pop,) = screen(rows, meta("AOI-1"), [["devPopupHtml"]], state={"modalDev": "AOI-1", "modalDayI": 0})
+    assert "그중 스캔 63%" in pop

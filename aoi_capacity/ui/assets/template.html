@@ -719,7 +719,8 @@ for(let i=0;i<rowsIn.length;i++){const r=rowsIn[i];
   all.push({idx:i,f,dev:val(r,'device'),t:an.getTime(),s:ws?ws.getTime():null,e:(ws&&we&&we.getTime()>ws.getTime())?we.getTime():null,timed:!!ws,
     bs:bs?bs.getTime():null, bend:be?be.getTime():(bs?bs.getTime():null),
     c:test?null:causeOf(st),status:st,report:rp,job,lot,test,key:matKey(job0,lot,wid),key2:matKey2(job0,rl,wid),rcp:String(val(r,'recipe')||''),day:dk(an),pass:isPass(st),
-    im:String(val(r,'ini_match')||''),wid,ik:job0+'\u0001'+rl+'\u0001'+wid,wsc:String(val(r,'wafers_scanned')??'').trim(),ast:String(val(r,'avg_scan_time')??'').trim()});
+    im:String(val(r,'ini_match')||''),wid,ik:job0+'\u0001'+rl+'\u0001'+wid,wsc:String(val(r,'wafers_scanned')??'').trim(),ast:String(val(r,'avg_scan_time')??'').trim(),
+    sc:/^\d+$/.test(String(val(r,'scan_sec')??'').trim())?+val(r,'scan_sec'):null});   /* 10/11 실제 촬영 초(ScanLog — 옛 행은 null) */
 }
 /* D52: PASS 도 원인 Error 도 없는 Report 의 중단은 그 Report 의 Error(ABORTED). Test Lot 은 제외(D64). */
 {const rg=new Map();
@@ -837,9 +838,11 @@ if(all.length){
       const rct={};for(const[k,v]of Object.entries(ct))rct[k]=[v[0],Math.round(v[1])];
       let we=0;for(const g of seg)if(g[2]===3)we=Math.max(we,g[1]);
       const timedRows=list.filter(w=>w.timed).length;
+      /* 10/11(D86 Q5): INI 시간 중 실제 촬영 — 이 날 시작한 행 중 scan_sec 이 있는 장만(분자 · 분모 같은 장, 분). 가동률 값은 그대로. */
+      let scS=0,scI=0;for(const w of list)if(w.sc!=null&&w.s!=null&&w.e!=null){scS+=w.sc;scI+=(w.e-w.s)/1000;}
       const bsegs=[];for(const idx of rset){const R=reps[idx];if(R.ws==null)continue;const a=Math.max(0,Math.min(1440,R.ws-ds)),b=Math.max(a,Math.min(1440,(R.we??R.ws)-ds));if(b>a)bsegs.push([a,b]);}
       bsegs.sort((p,q)=>p[0]-q[0]);const mgd=[];for(const g of bsegs){const L=mgd[mgd.length-1];if(L&&g[0]-L[1]<=3)L[1]=Math.max(L[1],g[1]);else mgd.push([g[0],g[1]]);}
-      const T={r,d,t,x,s,w:list.length,e:dayE,we,ne,seg,ct:rct,lots:lots.map(L=>L.arr),...((ov||nf||sk||s1)?{iv:{ov,nf,km,sk,s1}}:{}),
+      const T={r,d,t,x,s,w:list.length,e:dayE,we,ne,seg,ct:rct,lots:lots.map(L=>L.arr),...((ov||nf||sk||s1)?{iv:{ov,nf,km,sk,s1}}:{}),...(scI>0?{sc:[Math.round(scS/60),Math.round(scI/60)]}:{}),
         cv:list.length?Math.round(timedRows/list.length*100):(seg.length?100:0),bseg:mgd,be:mgd.reduce((q,g)=>q+(g[1]-g[0]),0),
         den:(today&&dy===today)?Math.max(0,Math.min(1440,obsIdx-ds)):1440};
       if(!dev.includes(dv))continue;
@@ -1836,7 +1839,7 @@ function devPopupHtml(){
     return{l:(la/1440*100).toFixed(2),w:Math.max(0.2,(lb-la)/1440*100).toFixed(2),on,title:(P.lot[L[1]]||"Lot")+" · "+clock(la)+"–"+clock(lb),pick:()=>setState({selLot:on?null:key(L)})};});
   const calloutH=Math.max(30,(levels.length||1)*ROW+14);
   const close=()=>setState(CLOSE.dev());
-  const stats=[{k:"가동률",v:u===null?"기록 없음":u.toFixed(1)+"%",h:u===null?null:cnt(u,1)+"%",ink:u!==null&&u<S.thU()?"#B4402F":"#0F151C"},{k:"Scan",v:t?hm(t.r):"—",ink:"#0F151C"},{k:"Rescan",v:t?hm(t.d):"—",ink:"#0F151C"},{k:"Test",v:t?hm(t.t):"—",ink:t&&t.t?"#7A5BA8":"#4B5866"},{k:"Error",v:t?(t.e+"건"+(t.x?" · "+hm(t.x):"")):"—",ink:t&&t.e>=S.thE()?"#B4402F":"#0F151C"},{k:"에러 후 대기",v:t?hm(t.s):"—",ink:t&&t.s?"#B4402F":"#4B5866"},{k:"대기",v:hm(idle),ink:"#4B5866"}].concat(S.hasEst(t)?[{k:"시각 확인",v:t.cv+"%",ink:"#B4402F"}]:[]);
+  const stats=[{k:"가동률",v:u===null?"기록 없음":u.toFixed(1)+"%",h:u===null?null:cnt(u,1)+"%",ink:u!==null&&u<S.thU()?"#B4402F":"#0F151C"},{k:"Scan",v:t?hm(t.r):"—",ink:"#0F151C",s:t&&t.sc&&t.sc[1]>0?"그중 스캔 "+Math.round(t.sc[0]/t.sc[1]*100)+"%":"",tip:t&&t.sc?`INI 로 시각을 잰 장의 시간 ${hm(t.sc[1])} 중 실제 촬영(ScanLog Duration + 둘째 레시피) ${hm(t.sc[0])} — 나머지는 로드 · 얼라인 · 레시피 전환 · 마무리. 가동률 값은 그대로입니다.`:""},{k:"Rescan",v:t?hm(t.d):"—",ink:"#0F151C"},{k:"Test",v:t?hm(t.t):"—",ink:t&&t.t?"#7A5BA8":"#4B5866"},{k:"Error",v:t?(t.e+"건"+(t.x?" · "+hm(t.x):"")):"—",ink:t&&t.e>=S.thE()?"#B4402F":"#0F151C"},{k:"에러 후 대기",v:t?hm(t.s):"—",ink:t&&t.s?"#B4402F":"#4B5866"},{k:"대기",v:hm(idle),ink:"#4B5866"}].concat(S.hasEst(t)?[{k:"시각 확인",v:t.cv+"%",ink:"#B4402F"}]:[]);
   const lotFilters=S.segGroup([{k:"all",label:"전체"},{k:"err",label:"Error 있는 Lot"}],state.lotFilter,k=>setState({lotFilter:k,selLot:null}));
   const selH=sel?(()=>{const a=LA(sel),b=Math.max(LB(sel),a+1);const types=Object.entries(sel[9]).sort((x,y)=>y[1][1]-x[1][1]);const rep=P.rep[sel[8]]||"";
     return `<div class="sel animate__animated animate__fadeIn" data-key="sel"><div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:10px"><b style="font-size:14.5px">${esc(P.lot[sel[1]]||"(Lot 확인 불가)")}</b>
@@ -1849,7 +1852,7 @@ function devPopupHtml(){
     <div class="dh"><h2 id="dlg-dev-title" tabindex="-1">${esc(mDev)}</h2><span class="sub num">${dayName(mDay)}</span><span class="note">${esc(sc.note||"")}</span><div class="spacer"></div>
       ${sib.map(s=>`<button class="btn" data-h="${h(s.go)}" title="${esc(s.title)}">${esc(s.label)}</button>`).join("")}<button class="x" data-h="${h(close)}" data-fk="x:dev" title="닫기 (Esc)">✕</button></div>
     <div class="db">
-      <section class="cards xs" style="margin-bottom:18px">${stats.map(s=>`<div><p class="k">${s.k}</p><p class="v num" style="color:${s.ink}">${s.h||esc(s.v)}</p></div>`).join("")}</section>
+      <section class="cards xs" style="margin-bottom:18px">${stats.map(s=>`<div><p class="k">${s.k}</p><p class="v num" style="color:${s.ink}">${s.h||esc(s.v)}</p>${s.s?`<p class="s" data-tip="${esc(s.tip||"")}">${esc(s.s)}</p>`:""}</div>`).join("")}</section>
       ${(S.hasEst(t)||(t&&t.iv))?`<p style="margin:0 0 12px;font-size:11.5px;color:#5A6673;word-break:keep-all">${iniNote(t)}</p>`:""}
       ${den<1440?`<p style="margin:0 0 12px;font-size:11.5px;color:#5A6673">수집한 날이라 00:00 ~ ${clock(den)}(모든 장비의 마지막 기록)까지를 분모로 씁니다.</p>`:""}
       <div class="bar-h" style="margin-bottom:10px"><h3 style="margin:0">Lot ${all.length}개</h3><span style="font-size:12.5px;color:#5A6673">${shown.length?(fold?"Lot 이 많아 이름표는 Error·Test·선택 Lot 만 — 막대를 누르면 어느 Lot 이든 봅니다":"막대나 이름표를 누르면 그 Lot 을 봅니다"):""}</span><div class="spacer"></div>${segHtml(lotFilters)}</div>
