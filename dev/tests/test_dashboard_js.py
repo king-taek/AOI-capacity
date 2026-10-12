@@ -696,7 +696,7 @@ def test_lot_tab_follows_wafer_ids_across_renamed_lots_and_devices():
     A = "J1_6321_LPT-PIDS5_18-Sep-26_(01.00.00)_BatchReport.htm"
     B = "J1_6321_LPT-RDL3_18-Sep-26_(03.00.00)_BatchReport.htm"
     rows = [w("AOI-1", "38135F75EWB5", "00:10", "00:20", lot="LPT-PIDS5", report=A) | {"recipe": "x20", "faults": "7"},
-            w("AOI-1", "38135F75EWB6", "00:20", "00:30", lot="LPT-PIDS5 RESCAN", report=A, status="Failed to align. Wafer rejected."),
+            w("AOI-1", "38135F75EWB6", "00:20", "00:30", lot="LPT-PIDS5 RESCAN", report=A, status="Alignment Error."),
             w("AOI-2", "38135F75EWB5", "02:10", "02:30", lot="LPT-RDL3", report=B) | {"recipe": "x20", "faults": "5"},
             w("AOI-2", "OTHER0WAFER1", "05:00", "05:10", lot="ZZZ-1")]
     (lst,) = screen(rows, meta("AOI-1", "AOI-2"), [["lotHtml"]], state={"view": "lot"})
@@ -704,6 +704,7 @@ def test_lot_tab_follows_wafer_ids_across_renamed_lots_and_devices():
     (out,) = screen(rows, meta("AOI-1", "AOI-2"), [["lotHtml"]], state={"view": "lot", "lotPick": {"k": "lot", "v": "LPT"}})
     assert out.count('class="lotatt"') == 2 and "ZZZ-1" not in out.split("검사 순서")[1]
     assert "LPT-RDL3" in out and "확인 필요" not in out
+    assert "Error 원인" in out and "ALIGN_ERROR" in out and "앞 검사와 간격" in out and "AOI-1 → AOI-2" in out   # 10/12: 원인 칸 · 간격 칸
     (q,) = screen(rows, meta("AOI-1", "AOI-2"), [["lotHtml"]], state={"view": "lot", "lotQ": "ewb6"})
     assert "Wafer 38135F75EWB6" in q
 
