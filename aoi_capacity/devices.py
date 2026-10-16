@@ -331,6 +331,27 @@ def ensure_kla_rows(path) -> bool:
     return True
 
 
+#: 10/16: 2층 신규 장비 — 이미 있는 devices.csv 에 이 이름의 행이 하나도 없을 때만 덧붙인다.
+CAMTEK_ADDED_ROWS = [("AOI-26", "J:\\"), ("AOI-27", "J:\\"), ("AOI-28", "J:\\")]
+
+
+def ensure_camtek_rows(path) -> bool:
+    """이미 있는 devices.csv 에 AOI-26~28 행이 없으면 덧붙인다(행이 하나라도 있으면 사용자가 고른 것이라 건드리지 않음). 덧붙였으면 True."""
+    try:
+        rows = read_devices_csv(path)
+    except OSError:
+        return False
+    if not rows:
+        return False
+    have = {scope.key(r.get("name") or r.get("sub") or "") for r in rows}
+    add = [(n, r) for n, r in CAMTEK_ADDED_ROWS if scope.key(n) not in have]
+    if not add or len(add) < len(CAMTEK_ADDED_ROWS):
+        return False
+    rows += [{"name": n, "root": r, "sub": n, "on": True, "memo": "Camtek 26~28"} for n, r in add]
+    write_devices_csv(path, rows, roots=[])
+    return True
+
+
 def _has_report(path: str, cfg: dict) -> bool:
     return bool(find_subdir(path, cfg.get("report_dir", ""), REPORT_DIR_NAMES))
 

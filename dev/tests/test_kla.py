@@ -62,10 +62,10 @@ def kla_nas(tmp_path, fake_nas):
 
 
 def test_scope_and_names():
-    assert len(scope.DEFAULT_SCOPE) == 38 and scope.KLA_SCOPE[-1] == "4F-K2"
+    assert len(scope.DEFAULT_SCOPE) == 41 and scope.KLA_SCOPE[-1] == "4F-K2"
     assert scope.is_kla("K1") and scope.is_kla("4f_k2") and not scope.is_kla("AOI-1")
     assert devices.kla_name("k 3") == "K3" and devices.kla_name("4f-k1") == "4F-K1"
-    assert list(scope.CAMTEK_SCOPE) in scope.PAST_DEFAULTS                   # 옛 기본 30대 그대로인 설정만 38대로
+    assert scope._CAMTEK_30 in scope.PAST_DEFAULTS                          # 옛 기본 30대 그대로인 설정만 새 목록으로
 
 
 def test_parse_result_counts_defect_records_and_reads_both_timestamp_forms():

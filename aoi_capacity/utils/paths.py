@@ -111,6 +111,7 @@ def ensure_user_files() -> bool:
             from .. import devices
 
             devices.ensure_kla_rows(dst)
+            devices.ensure_camtek_rows(dst)
         except Exception:  # noqa: BLE001 — 덧붙이기는 편의 기능이라 실패해도 시작을 막지 않는다
             pass
         return False

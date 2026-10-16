@@ -46,6 +46,7 @@ DEVICE_ROOTS = [
     r"V:\AOI-10", r"V:\AOI-11", r"V:\AOI-12", r"V:\AOI-13", r"V:\AOI-14", r"V:\AOI-15", r"V:\AOI-16",
     r"P:\AOI-17", r"P:\AOI-18", r"P:\AOI-19", r"P:\AOI-20", r"P:\AOI-21", r"P:\AOI-22", r"P:\AOI-23",
     r"Y:\AOI-24", r"Y:\AOI-25",
+    r"J:\AOI-26", r"J:\AOI-27", r"J:\AOI-28",
     r"I:\4F-AOI-01", r"I:\4F-AOI-02", r"I:\4F-AOI-03", r"I:\4F-AOI-04", r"I:\4F-AOI-05",
 ]
 # ══════════════════════════════════════════════════════════════════════════════

@@ -1,4 +1,4 @@
-"""수집 허용 장비 범위(scope) — 지금은 30대 전부(`DEFAULT_SCOPE`).
+"""수집 허용 장비 범위(scope) — 지금은 41대 전부(`DEFAULT_SCOPE`).
 
 ★ 절대 규칙: 허용 목록 밖 장비에는 **파일 접근을 하지 않는다**(scandir / stat / isdir / isfile / open).
   그래서 게이트는 "파일을 만지기 전" 단계인 `devices.py` 에 걸리고, 수집 루프·CLI·백필·예약 실행·
@@ -23,10 +23,12 @@ from typing import Dict, Iterable, List, Sequence
 #: prefs.migrate(이미 저장된 설정을 새 기본값으로 옮긴다)를 함께 본다.
 #: 10/5: KLA 8대(K1~K6 · 4F-K1 · 4F-K2)를 같은 수집기로 모은다(사용자 확정 D68 · D73) — 이름이 KLA 규칙(`is_kla`)이면 KLA 수집 경로.
 KLA_SCOPE: List[str] = [f"K{i}" for i in range(1, 7)] + ["4F-K1", "4F-K2"]
-CAMTEK_SCOPE: List[str] = [f"AOI-{i}" for i in range(1, 26)] + [f"4F-AOI-{i:02d}" for i in range(1, 6)]
+#: 10/16: 2층 AOI-26~28 추가(사용자 확정) — 41대.
+CAMTEK_SCOPE: List[str] = [f"AOI-{i}" for i in range(1, 29)] + [f"4F-AOI-{i:02d}" for i in range(1, 6)]
 DEFAULT_SCOPE: List[str] = CAMTEK_SCOPE + KLA_SCOPE
+_CAMTEK_30: List[str] = [f"AOI-{i}" for i in range(1, 26)] + [f"4F-AOI-{i:02d}" for i in range(1, 6)]
 #: 지금까지 기본값이었던 목록들 — 사용자가 직접 고르지 않고 그대로 둔 설정만 새 기본값으로 옮긴다.
-PAST_DEFAULTS: List[List[str]] = [["AOI-25"], ["AOI-1", "AOI-8", "AOI-9", "AOI-25"], list(CAMTEK_SCOPE)]
+PAST_DEFAULTS: List[List[str]] = [["AOI-25"], ["AOI-1", "AOI-8", "AOI-9", "AOI-25"], list(_CAMTEK_30), list(_CAMTEK_30) + list(KLA_SCOPE)]
 _KLA_RE = re.compile(r"^(4f)?k\d+$")
 
 
