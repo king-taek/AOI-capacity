@@ -79,6 +79,10 @@ Camtek AOI 장비의 BatchReport/WaferInfo.ini 를 읽어 장비별 가동률을
     ③ Sonnet 이 스크립트를 짜 돌리고 Haiku 가 실행 · 정리하며 ④ 결과 표(5천 토큰 안쪽)를 **같은 Fable 에 SendMessage** 로 돌려 해석 · 새 시각을 받고 ⑤ 메인이 검증한다. 여러 질문은 Fable 하나에 묶는다.
     이미 정해진 숫자를 다시 얹는 계산 · 집계 · 비교표 · 검증 재실행은 Fable 이 아니라 Opus 이하가 한다.
 
+## 외부 스킬
+`.claude/skills/` 에 설치한 스킬의 출처 · 고정 커밋은 그 폴더 `README.md`. **ponytail 은 lite 또는 off** 로 쓴다(`/ponytail-review` · `/ponytail-audit` 위주) — 위 절대 규칙의 방어 코드(NAS 가드 · 범위 게이트 · STALE)는 줄일 대상이 아니다.
+graphify 는 `--code-only` 로, template.html 인라인 JS 까지 보려면 `python dev/tools/graphify_build.py --out <임시 폴더>`.
+
 ## 레이아웃
 - `main.py`(진입), `aoi_capacity/`(앱: `collect.py`, `cli.py`, `devices.py`, `scope.py`, `nas_guard.py`, `i18n/`, `utils/`, `workers/`,
   `ui/` — 수집 UI 만: `pages/collect_page.py`·`devices_page.py`·`settings_page.py`), `scripts/`(런처·빌드), `dev/`(테스트), `docs/`.

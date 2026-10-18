@@ -10,6 +10,8 @@
 | `lottie-web/` | https://github.com/airbnb/lottie-web `index.d.ts` · `docs/json` @ `bede03d2` (5.13.0) | MIT (`LICENSE.md`) | loadAnimation API · Bodymovin JSON 스키마 + 인라인 자산 규칙(10/7 추가) |
 | `design-motion-principles/` | https://github.com/kylezantos/design-motion-principles `skills/design-motion-principles` @ `4a9ca879` | MIT (`LICENSE`) | 모션 설계 · 감사(Emil Kowalski · Jakub Krehel · Jhey Tompkins 세 관점, 안티-슬롭 체크리스트) — 원본 그대로(10/7 추가) |
 | `react-bits/` | https://github.com/DavidHDev/react-bits `public/llms.txt` · `LICENSE.md` @ `63a008de` | MIT + **Commons Clause**(`LICENSE.md`) | React 애니메이션 · 컴포넌트 **목록**과 포팅 규칙만(10/7 추가) — 컴포넌트 소스는 넣지 않았다(라이선스가 묶음 · 포팅본 재배포를 금지). 필요할 때 고정 커밋에서 한 개만 받아 template 안에 포팅 |
+| `ponytail/` · `ponytail-review/` · `ponytail-audit/` · `ponytail-debt/` · `ponytail-help/` · `ponytail-gain/` | https://github.com/DietrichGebert/ponytail `skills/*` @ `09c434ab` | MIT (`LICENSE`) | 코드를 덜 쓰게 하는 지침 + diff 검토 · 저장소 감사(10/18 추가) — 원본 플러그인의 hook · band 는 연결하지 않음 |
+| `graphify/` | https://github.com/safishamsi/graphify `graphify/skill.md` + `graphify/skills/claude/references/` @ `86c57be8` (0.9.92) | Apache-2.0 (`LICENSE` · `NOTICE`) | 대화 중 코드 그래프 질의(10/18 추가) — 그래프 생성 자체는 이미 CI(`graphify.yml` · `dev/tools/graphify_build.py`)가 한다 |
 
 - 원본을 고치지 않고 그대로 복사했다(awesome-design-md · gsap · animate-css · lottie-web 의 `SKILL.md` 와 이 README 만 새로 씀 — 세 라이브러리는 저장소에 스킬 파일이 없어 이 저장소 규칙을 담아 직접 썼다. 라이브러리 코드 자체는 이미 `template.html` 에 인라인돼 있다). 갱신은 같은 경로로 다시 복사한다.
 - `.claude/` 는 업데이트 payload(`updater._UPDATE_TOP_ALLOW`) 밖이라 현장 PC 로 배포되지 않는다.
@@ -17,3 +19,5 @@
 - `design-motion-principles` 를 이 저장소에서 쓸 때: 대시보드는 업무 도구라 **Emil Kowalski(절제 · 속도)를 주 관점**으로 둔다 — `CLAUDE.md` 의 '틀은 그대로, 내용만 바뀐다' · 등장 연출은 처음 한 번과 같은 방향이다.
   감사 모드의 HTML 보고서(`references/report-template.html` · `demo-shell.html`)는 Google Fonts 를 불러온다 — **개발용 보고서에만** 쓰고, 그 글꼴 링크나 CDN 을 결과 HTML(`template.html`)로 옮기지 않는다(바깥 요청 0건). 보고서는 기본으로 저장소 맨 위 `motion-audits/` 에 쓰이니 커밋하지 않는다.
   예시 코드는 React · Framer Motion 중심이다 — 이 저장소는 순수 JS 렌더 + 인라인 GSAP/animate.css 이므로 원리만 가져온다(`gsap` · `animate-css` 스킬 참고).
+- ponytail 은 **lite 또는 off** 로 쓴다(CLAUDE.md) — 이 저장소의 방어 코드(STALE · NAS 가드 · 범위 게이트)는 줄일 대상이 아니다. `/ponytail-review` · `/ponytail-audit` 위주.
+- graphify 는 `--code-only` 로 돌린다(`docs/` 는 `.graphifyignore` 로 빠져 있다). template.html 의 인라인 JS 까지 보려면 `python dev/tools/graphify_build.py --out <임시 폴더>` 를 쓴다 — 스킬의 기본 `/graphify .` 는 인라인 `<script>` 를 읽지 못한다.
