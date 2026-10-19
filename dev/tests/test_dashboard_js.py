@@ -369,12 +369,14 @@ def test_report_tab_regresses_only_with_five_or_more_clean_batches_and_lists_exc
     for k in range(5):
         rows.append(w("AOI-1", f"E{k}", _hhmm("18:00", k + 1), _hhmm("18:00", k + 2), lot="LOT-E", job="R_TB500_LIVE_PI3", report=err_rep, bs="18:00", be="18:30"))
     rows.append(w("AOI-1", "E9", "18:20", "18:22", lot="LOT-E", job="R_TB500_LIVE_PI3", report=err_rep, bs="18:00", be="18:30", status="Alignment Error."))
-    (html,) = screen(rows, meta("AOI-1"), [["reportHtml"]], state={"view": "report"})
+    (html,) = screen(rows, meta("AOI-1"), [["reportHtml"]], state={"view": "report", "rptDev": "AOI-1"})
     assert "<h1>TB500 · Kendall</h1>" in html and "표기명 21개 Job 만 봅니다" in html
-    assert "TB500 PI3" in html and "10.0 ± 0.0분" in html and "5.00 ± 0.00분" in html
-    assert "표본 5개 / 배치 6개" in html and "제외 — Error 1 · 5장 미만 0" in html
+    assert ">PI3</b>" in html and "준비 10분 + 장당 5.0분" in html and "2시간 15분" in html          # 10 + 5×25 = 135분 (25장 환산)
+    assert "10.0 ± 0.0분" in html and "5.00 ± 0.00분" in html                                      # 장비 상세의 회귀 값
+    assert "5 / 6" in html and "제외 — Error 1 · 5장 미만 0" in html
+    assert "data-dh=" in html and "이 장비의 모든 배치 보기 (6개)" in html            # 더블클릭 · 단추 = 모든 배치 팝업(10/19)
     (html4,) = screen(_clean_batches(4), meta("AOI-1"), [["reportHtml"]], state={"view": "report"})
-    assert "표본 4개 (5개 미만)" in html4 and "10.0 ± 0.0분" not in html4
+    assert "표본 4개 — 5개 미만" in html4 and "2시간 15분" not in html4
 
 
 def test_error_popup_shows_each_types_own_phrase_when_one_lot_has_two_types():

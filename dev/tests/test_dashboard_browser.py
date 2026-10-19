@@ -193,7 +193,6 @@ def test_error_popup_type_popup_trend_and_report_tab(page):
     rpt = pg.inner_text("main")
     assert "TB500 · Kendall" in rpt and "개 Job 만 봅니다" in rpt                    # D59
     assert "평균 Defect" in rpt and "수집 예정" not in rpt                             # D08
-    assert pg.evaluate("[...document.querySelectorAll('main .panel')].some(p => p.style.overflowX === 'auto')")   # D10
     assert errors == []
 
 
@@ -313,20 +312,24 @@ def test_popups_stack_behind_each_other_and_escape_closes_the_top(page):
     assert errors == []
 
 
-def test_report_tab_groups_and_sorts_by_column(page):
+def test_report_tab_picks_a_job_and_opens_all_batches_of_a_device(page):
+    """10/19 개편: Kendall | TB500 전환 · Job 목록 · 장비 막대 · 더블클릭(또는 상세의 단추) = 그 장비의 모든 배치 팝업(ESC 로 닫힘).
+    fixture 의 배치는 표본 5개 미만이라 장비 막대는 비고('계산 못 한 장비'), 팝업은 그래도 모든 배치를 보여 준다."""
     pg, errors, _ = page
     pg.locator('button[data-fk="nav:report"]').click()
     pg.wait_for_selector('main[data-key="view:report"]')
-    groups = pg.evaluate("[...document.querySelectorAll('.grp')].map(g => g.firstChild.textContent)")
-    assert groups == ["Kendall", "TB500"]
-    order = pg.evaluate("[...document.querySelectorAll('[data-row^=\"job:\"]')].map(e => e.dataset.row.slice(4))")
-    assert order == ["Kendall FS", "TB500 RDL2-Multi"]                      # 그룹 순서 · 이름순 · 멀티는 다른 Job(D76)
-    hdr = pg.locator('.thead button.th', has_text="배치")
-    hdr.click()
-    pg.wait_for_selector('.thead button.th[aria-sort="descending"]')
-    hdr.click()
-    pg.wait_for_selector('.thead button.th[aria-sort="ascending"]')
-    pg.wait_for_function("document.querySelector('main').innerText.includes('오름차순')", timeout=3000)   # 글자 넘김(0.24초) 뒤
+    pg.locator('.bar-h .seg button', has_text="Kendall").click()
+    pg.wait_for_function("document.querySelector('main h2').textContent.includes('Kendall FS')", timeout=3000)
+    pg.locator('.bar-h .seg button', has_text="TB500").click()
+    pg.locator('.lotpick', has_text="RDL2-Multi").click()
+    pg.wait_for_function("document.querySelector('main h2').textContent.includes('RDL2-Multi')", timeout=3000)
+    assert "5개 미만" in pg.inner_text("main")                                      # 표본이 모자라면 이유를 적는다
+    pg.evaluate("rptAllOpen('TB500 RDL2-Multi', 'AOI-1')")
+    pg.wait_for_selector('.dlg[data-dlg="rptdev"]')
+    dlg = pg.locator('.dlg[data-dlg="rptdev"]').inner_text()
+    assert "AOI-1" in dlg and "LOT-A" in dlg and "제외" in dlg                     # 모든 배치(제외된 것과 이유 포함)
+    pg.keyboard.press("Escape")
+    pg.wait_for_selector('.dlg[data-dlg="rptdev"]', state="detached")
     assert errors == []
 
 

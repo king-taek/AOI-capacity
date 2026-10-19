@@ -357,6 +357,22 @@ main{max-width:1420px;margin:0 auto;padding:22px 24px 90px}
 .lotatt{display:grid;grid-template-columns:84px 70px minmax(90px,1.1fr) minmax(120px,1.6fr) minmax(48px,.5fr) 64px minmax(100px,.9fr) 60px 70px minmax(120px,1.1fr) 48px;gap:6px;align-items:center;font-size:12px;padding:5px 0;border-bottom:1px solid #F3F5F8}.lotatt>span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.lotatt.head{font-weight:700;color:var(--ink-2);border-bottom:1px solid #EDF1F5}.lotatt .r{text-align:right}.lotatt>span.wrap{white-space:normal;overflow:visible;text-overflow:clip;overflow-wrap:anywhere;line-height:1.35}.lotatt small{font-size:11px}.lotatt .pill{margin-right:4px;display:inline-block;margin-bottom:2px;white-space:normal;max-width:100%}.lotatt.sm{grid-template-columns:84px 74px minmax(90px,1fr) 70px minmax(80px,1fr) 80px 78px minmax(90px,1fr)}.lotbox{max-height:44vh;overflow:auto}
 .lotatt.x{opacity:.55}.lotgap{font-size:11px;color:var(--ink-3);padding:1px 0 1px 8px;border-bottom:1px solid #F3F5F8}.lothead{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-bottom:12px}.lotmx .lc.xc,.lotmx .lh.xc{opacity:.45}.lotmx .lw.grp{color:var(--ink-2);font-weight:600}
 .lotmx{display:grid;gap:2px;align-items:center;font-size:11px}.lotmx .lh{text-align:center;color:var(--ink-3)}.lotmx .lc{display:block;height:20px;border-radius:3px;background:#F3F5F8;color:#fff;font-style:normal;text-align:center;line-height:20px;font-size:10px;overflow:hidden}.lotmx .lw{border:0;background:transparent;text-align:left;font-size:11.5px;cursor:pointer;padding:2px 4px;border-radius:4px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.lotmx .lw:hover,.lotmx .lw.on{background:#EAF2FB}
+@media (max-width:860px){.lotgrid{grid-template-columns:minmax(0,1fr)}.rpt-dgrid{grid-template-columns:minmax(0,1fr)}}
+.rpt-scroll{overflow-x:auto}@media (max-width:820px){.rpt-in{min-width:680px}}
+.rpt-fam{font-size:11.5px;font-weight:700;color:var(--ink-3);padding:10px 12px 4px}
+.rpt-sent em{font-style:normal;font-weight:700}
+.rpt-list{padding:4px 0}
+.rowbtn.rpt-r{display:grid;grid-template-columns:76px minmax(120px,1fr) 96px 52px 150px 62px;gap:10px;align-items:center;width:100%;padding:7px 22px;border:0;background:transparent;font:inherit;text-align:left;cursor:pointer;min-height:40px}
+.rowbtn.rpt-r:hover{background:#F6F9FC}.rowbtn.rpt-r.on{background:#EAF2FB;box-shadow:inset 3px 0 0 var(--nav-on)}
+.rpt-r .rn{font-weight:600;font-size:13px}.rpt-r .rv{font-weight:700;text-align:right;font-size:13.5px}.rpt-r .rd{text-align:right;font-size:12.5px;font-weight:600}
+.rpt-r .re{font-size:12.5px;color:var(--ink-2)}.rpt-r .re.hi{color:var(--err);font-weight:700}.rpt-r .re small{font-weight:400}.rpt-r .rb{font-size:11.5px;color:var(--ink-3);text-align:right}
+.rbar{position:relative;height:22px;background:#F1F4F7;border-radius:5px;display:block}.rbar i{display:block;height:100%;border-radius:5px;transition:width .3s var(--ease),background-color .2s;background-image:linear-gradient(rgba(255,255,255,.18),rgba(0,0,0,.06))}
+.rbar u{position:absolute;top:-4px;bottom:-4px;width:2px;background:var(--ink);text-decoration:none;transition:left .3s var(--ease)}
+.rpt-legend{display:flex;gap:16px;flex-wrap:wrap;padding:0 22px 6px;font-size:12px;color:var(--ink-3)}.rpt-legend i{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:5px}.rpt-legend u{display:inline-block;width:2px;height:11px;background:var(--ink);margin-right:5px;vertical-align:-2px}
+.rpt-detail{padding:6px 22px 16px 22px;background:#F8FAFC;border-top:1px solid #EDF1F5;border-bottom:1px solid #EDF1F5}
+.rpt-dgrid{display:grid;grid-template-columns:minmax(0,1.7fr) minmax(200px,1fr);gap:22px;align-items:start;padding-top:10px}
+.rpt-kv{display:flex;justify-content:space-between;gap:10px;padding:5px 0;border-bottom:1px solid #EDF1F5;font-size:12.5px}.rpt-kv span{color:var(--ink-3)}
+.rpt-detail svg .ax{font-size:10px;fill:#7A8591}
 .psec{margin-top:22px}.psec h3{margin:0 0 10px;font-size:14px}.psec h3 .muted{font-weight:400;font-size:12px;margin-left:6px}
 .sgrid,.tgrid{display:grid;grid-template-columns:1fr 1fr;gap:16px}.sblock h4,.tblock h4{margin:0 0 8px;font-size:12.5px}.sblock h4 .muted,.tblock h4 .muted{font-weight:400;font-size:11px;margin-left:4px}
 .strip{display:grid;grid-template-columns:78px minmax(0,1fr) 66px;gap:10px;align-items:center;margin-bottom:6px}.strip .sk{display:flex;align-items:center;gap:6px;font-size:12px;font-weight:600}.strip .rk{text-align:right;font-size:12px;color:var(--ink-2)}.strip .rk b{color:var(--ink);font-size:13px}
@@ -1019,13 +1035,13 @@ const state={view:"home",dayI:null,sort:"name",floor:"all",maker:"all",span:0,vp
   modalDev:null,modalDayI:null,modalType:null,modalJob:null,selLot:null,lotFilter:"all",showMembers:false,
   stack:[],                                  /* 열린 팝업의 순서(type · dev · err) — 마지막이 맨 위, 나머지는 뒤로 물러난다 */
   errDays:null,errFType:null,errFJob:null,   /* Error 팝업의 기간(여러 날) · Error 탭의 유형/Job 필터 */
-  rptSort:{k:"name",d:1},
-  errDev:null,errDayI:null,errJob:null,errType:null,rptOpen:null,
+  rptSort:"conv",rptAll:null,rptAllF:"all",rptAllS:"date",rptGrp:null,rptJob:null,rptDev:null,rptStd:true,rptQ:"",
+  errDev:null,errDayI:null,errJob:null,errType:null,
   rgQ:"",rgName:"",rgSel:[],rgFilter:"all",   /* 레시피 묶음 편집기(D67): 검색 · 새 이름 · 고른 Job 원문 · 목록 필터 */
   rcpSel:null,rcpJob:null,rcpPop:null,rcpUnit:"wafer",rcpMetric:"time",rcpOff:{},rcpHowAll:false,rcpPopOpen:{},rcpHide:{},rcpDevSort:"name",rcpBin:null,rcpQ:"",rcpMore:false,rcpDevSel:null,rcpExclOpen:false,rcpHowOpen:{},dayNote:"",                /* 레시피 탭(D70): 고른 레시피(그 묶음의 Job 원문 하나 — 다시 묶어도 따라간다) · 검색 · 기간 */
   errWinEnd:null,errFDev:null,                /* Error 팝업 21일 창의 끝(끌어서 옮김) · Error 탭 장비 필터(10/5) */
   _end:0};   /* 레시피 묶음 편집기(D67): 검색 · 새 이름 · 고른 Job 원문 · 목록 필터 */
-const INPUT_KEYS=new Set(["rgQ","rgName","rcpQ","lotQ","prmQ"]);   /* data-in 칸 → 같은 이름의 state */
+const INPUT_KEYS=new Set(["rgQ","rgName","rcpQ","lotQ","prmQ","rptQ"]);   /* data-in 칸 → 같은 이름의 state */
 let _drag=null;
 let H=[];const h=fn=>{H.push(fn);return H.length-1;};
 function setState(p){Object.assign(state,p);render();}
@@ -1035,6 +1051,7 @@ function init(){
   D=buildModel(rows,meta);D.allDays=D.days.slice();   /* 화면 기간(10/5): 모델은 가진 날 전부, 보이는 날(D.days)만 헤더의 기간으로 좁힌다 */
   rgLoad();if(!rgSame(RG,rgNorm(meta.recipe_groups)))rgApply();   /* 이 브라우저에서 더 늦게 고친 묶음이 있으면 그것으로(D67) */
   state.dayI=D.day?D.days.indexOf(D.day):-1;
+  document.addEventListener("dblclick",e=>{const el=e.target.closest("[data-dh]");if(!el)return;const fn=H[+el.dataset.dh];if(fn){e.preventDefault();window.getSelection&&window.getSelection().removeAllRanges();fn(e);}});
   document.addEventListener("click",e=>{if(_drag&&_drag.moved){_drag=null;e.preventDefault();return;}_drag=null;const el=e.target.closest("[data-h]");if(!el)return;const fn=H[+el.dataset.h];if(fn){e.preventDefault();fn(e);}});
   /* 막대 끌기(10/5): Error 팝업의 21일 막대 위를 좌우로 끌면 창이 하루씩 움직인다 — 끈 뒤의 클릭은 날짜 고르기로 치지 않는다 */
   document.addEventListener("pointerdown",e=>{const el=e.target.closest&&e.target.closest("[data-drag='errwin']");if(!el||e.button!==0)return;
@@ -1171,7 +1188,8 @@ const CLOSE={type:()=>({modalType:null,modalJob:null,showMembers:false,stack:wit
   dev:()=>({modalDev:null,selLot:null,stack:without("dev")}),
   err:()=>({errDev:null,errDays:null,errJob:null,errType:null,errWinEnd:null,stack:without("err")}),
   recipe:()=>({rgSel:[],stack:without("recipe")}),
-  rcpdev:()=>({rcpPop:null,rcpBin:null,stack:without("rcpdev")})};
+  rcpdev:()=>({rcpPop:null,rcpBin:null,stack:without("rcpdev")}),
+  rptdev:()=>({rptAll:null,stack:without("rptdev")})};
 function closeTop(){const k=state.stack[state.stack.length-1];if(k)setState(CLOSE[k]());}
 const FUNNEL=`<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M1.5 2.5h13l-5 6v4.3l-3 1.7V8.5z" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/></svg>`;
 const SORTICON=d=>`<svg viewBox="0 0 10 10" aria-hidden="true">${d>0?`<path d="M5 1.5 8.5 7h-7z" fill="currentColor"/>`:d<0?`<path d="M5 8.5 1.5 3h7z" fill="currentColor"/>`:`<path d="M5 1 7.6 4.5H2.4zM5 9 2.4 5.5h5.2z" fill="currentColor"/>`}</svg>`;
@@ -1435,7 +1453,7 @@ function rgCommit(groups,msg,keep){const p=(n=>String(n).padStart(2,"0")),d=new 
   rgSaveLocal();rgApply();
   /* Job 묶음 번호가 바뀌었으니 번호를 쥔 필터·팝업은 놓는다 */
   const st=state.modalJob!=null?state.stack.filter(k=>k!=="type"):state.stack;
-  setState({modalJob:null,errFJob:null,errJob:null,rptOpen:null,stack:st,rgSel:keep?state.rgSel:[],rgName:keep?state.rgName:""});if(msg)toast(msg);}
+  setState({modalJob:null,errFJob:null,errJob:null,stack:st,rgSel:keep?state.rgSel:[],rgName:keep?state.rgName:""});if(msg)toast(msg);}
 function rgGroupsCopy(){return RG.groups.map(g=>({name:g.name,jobs:g.jobs.slice()}));}
 function rgAdd(name,raws){name=String(name||"").trim();if(!name||!raws.length)return;const gs=rgGroupsCopy(),set=new Set(raws);
   for(const g of gs)g.jobs=g.jobs.filter(j=>!set.has(j));
@@ -1451,7 +1469,7 @@ function rgExport(){const blob=new Blob([JSON.stringify(RG,null,1)],{type:"appli
 function rgImportFile(f){if(!f)return;const r=new FileReader();r.onload=()=>{let d=null;try{d=rgNorm(JSON.parse(String(r.result||"")));}catch(e){d=null;}
   if(!d){toast("레시피 묶음 파일이 아닙니다");return;}rgCommit(d.groups,`묶음 ${d.groups.length}개를 가져왔습니다`);};r.readAsText(f,"utf-8");}
 function rgRevert(){if(!RG_EMB&&!RG.groups.length)return;RG=RG_EMB||{v:1,saved:"",groups:[]};try{localStorage.removeItem(RG_LS);}catch(e){}rgApply();
-  setState({modalJob:null,errFJob:null,errJob:null,rptOpen:null,stack:state.modalJob!=null?state.stack.filter(k=>k!=="type"):state.stack,rgSel:[]});toast("이 HTML 에 담긴 묶음으로 되돌렸습니다");}
+  setState({modalJob:null,errFJob:null,errJob:null,stack:state.modalJob!=null?state.stack.filter(k=>k!=="type"):state.stack,rgSel:[]});toast("이 HTML 에 담긴 묶음으로 되돌렸습니다");}
 let _rgDev=null;
 function rgJobDevs(){if(_rgDev&&_rgDev.D===D)return _rgDev.m;const m={};
   for(const dy of D.days){const X=D.detail[dy]||{};for(const dv of D.devices){const t=X[dv];if(!t)continue;for(const L of t.lots)(m[L[0]]||(m[L[0]]=new Set())).add(dv);}}
@@ -1507,11 +1525,12 @@ function recipePopupHtml(){
       </div>
     </div>
   </div></div>`;}
-const POPUP={type:()=>typePopupHtml(),dev:()=>devPopupHtml(),err:()=>errPopupHtml(),recipe:()=>recipePopupHtml(),rcpdev:()=>rcpDevPopupHtml()};
+const POPUP={type:()=>typePopupHtml(),dev:()=>devPopupHtml(),err:()=>errPopupHtml(),recipe:()=>recipePopupHtml(),rcpdev:()=>rcpDevPopupHtml(),rptdev:()=>rptDevPopupHtml()};
 const POPUP_TITLE={type:()=>{const mt=state.modalType,mj=state.modalJob;if(mt)return mt;const G=D&&D.jobGroups[mj];return G?jobNm(G).nm:"Job";},
   dev:()=>(state.modalDev||"")+" · "+md(D.days[state.modalDayI]||""),
   recipe:()=>"레시피 묶음",
   rcpdev:()=>(state.rcpPop?state.rcpPop.dev:"")+" · Wafer당 스캔",
+  rptdev:()=>(state.rptAll?state.rptAll.dev+" · 모든 배치":""),
   err:()=>(state.errDev||"")+" Error"+(state.errDays&&state.errDays.length>1?" · "+state.errDays.length+"일":" · "+md(D.days[state.errDayI]||""))};
 const POPUP_ICON={rcpdev:`<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2 13V9m4 4V4m4 9V7m4 6V2" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>`,recipe:`<svg viewBox="0 0 16 16" aria-hidden="true"><rect x="2" y="2.5" width="5" height="5" rx="1.2" fill="none" stroke="currentColor" stroke-width="1.5"/><rect x="9" y="2.5" width="5" height="5" rx="1.2" fill="none" stroke="currentColor" stroke-width="1.5"/><rect x="2" y="9.5" width="12" height="4" rx="1.2" fill="currentColor"/></svg>`,type:`<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2 3h12M2 8h8M2 13h5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>`,
   dev:`<svg viewBox="0 0 16 16" aria-hidden="true"><rect x="2" y="6" width="12" height="4" rx="2" fill="currentColor"/></svg>`,
@@ -1533,7 +1552,7 @@ function stackbarHtml(ks){if(ks.length<2)return"";
   return `<div class="stackbar" data-key="stackbar" role="navigation" aria-label="열린 팝업">${ks.map((k,i)=>{const cur=i===ks.length-1,t=POPUP_TITLE[k]?POPUP_TITLE[k]():k;
     return (i?`<span class="arrow" aria-hidden="true">›</span>`:"")+(cur?`<span class="sb cur" title="지금 보는 팝업">${POPUP_ICON[k]||""}<span>${esc(t)}</span></span>`
       :`<button class="sb" data-h="${h(()=>bringToFront(k))}" title="${esc(t)} 팝업을 앞으로">${POPUP_ICON[k]||""}<span>${esc(t)}</span></button>`);}).join("")}</div>`;}
-const POPUP_ORDER=["type","dev","err","recipe","rcpdev"];
+const POPUP_ORDER=["type","dev","err","recipe","rcpdev","rptdev"];
 function popupsHtml(){const ks=state.stack.filter(k=>POPUP[k]);const n=ks.length;if(!n)return"";
   return `<div class="deckscrim" data-key="deckscrim" aria-hidden="true"></div>`+POPUP_ORDER.filter(k=>ks.includes(k)).map(k=>{const i=ks.indexOf(k);const html=POPUP[k]();if(!html)return"";const d=n-1-i;
     return html.replace(/^<div class="ov ([^"]*)"/,`<div class="ov $1${d?" behind":""}" data-key="ov:${k}" style="z-index:${50+i};--d:${d}"`).replace(/<div class="dlg /,`<div data-key="dlg" class="dlg `).replace(/<button class="scrim"[^>]*><\/button>/,`<button class="scrim" data-h="${h(scrimClick)}" aria-label="닫기"></button>`);}).join("")+stackbarHtml(ks);}   /* 스택 바는 덮개 밖 — 팝업 스크롤과 무관하게 왼쪽 위 고정 */
@@ -1948,7 +1967,13 @@ function errPopupHtml(){
       </div></div></div></div>`;
 }
 
-/* ---------- 리포트 (TB500 · Kendall, D49) ---------- */
+/* ---------- TB500 · Kendall (D49 → 10/19 개편) ----------
+   예전 표는 Job 25개 × 8열 숫자 나열이라 '그래서 어디가 문제인지' 가 안 보였다(사용자 10/19). 지금은 Job 을 하나 고르면 그 Job 의 장비 편차만 한 장으로 보인다:
+   맨 위 한 문장(가장 느린 · 빠른 장비) → 숫자 5개 → 장비 막대(25장 환산 시간, 중앙선, 중앙보다 20% 넘게 느리면 빨강 · 빠르면 파랑) → 장비 줄을 누르면 그 장비의 배치 점 · 회귀선(Job 전체 선과 겹쳐서).
+   계산 규칙은 그대로다: 배치시간 = 준비 + 장당 × 장수 1차 회귀(S.ols), 표본 5개 미만 · 기울기 ≤ 0 이면 내지 않음, 제외 = 원인 Error 있는 Report · 5장 미만 · 배치 시각 없음.
+   환산은 기본 25장으로 통일(Job 마다 최빈 장수가 달라 숫자끼리 비교가 안 됐다) — '이 Job 최빈 장수' 로 바꿀 수 있다. */
+const RPT_MIN_N=5,RPT_STD=25,RPT_SLOW=0.2;
+const rptFam=al=>/PI\d/.test(al)?"PI":/RDL/.test(al)?"RDL":"기타";
 function reportHtml(){
   const P=D.pool,days=D.days;   /* 기간은 헤더에서(10/5) */
   const aliasCache={};
@@ -1957,55 +1982,137 @@ function reportHtml(){
   const byAlias={};let lotAll=0,lotIn=0;
   for(const dy of days)for(const n of D.devices){const t=S.at(dy,n);if(!t)continue;
     for(const L of t.lots){const gi=D.jobG[L[0]],al=aliasOf(gi);lotAll++;if(!al)continue;lotIn++;
-      const A=byAlias[al]||(byAlias[al]={name:al,raw:{},all:blank(),devs:{}});const rawName=P.job[L[0]];A.raw[rawName]=(A.raw[rawName]||0)+1;
+      const A=byAlias[al]||(byAlias[al]={name:al,raw:{},all:blank(),devs:{},bt:{}});const rawName=P.job[L[0]];A.raw[rawName]=(A.raw[rawName]||0)+1;
       const dv=A.devs[n]||(A.devs[n]=blank());let em=0;for(const v of Object.values(L[9]))em+=v[1];
       for(const Sx of [A.all,dv]){Sx.n++;Sx.err+=L[5];Sx.errMin+=em;Sx.fS+=L[13]||0;Sx.fN+=L[14]||0;}
       /* 제외: 원인 Error 가 있는 Report(L[10]>=0 — 시작일이 아니어도) · 5장 미만 · 배치 시각 없음. 중단은 D52 로 Error 이거나 정상 종료라 따로 없다. */
       const ex=L[10]>=0?"err":(L[4]<5?"small":((L[12]>L[11])?null:"noTime"));
+      (A.bt[n]||(A.bt[n]=[])).push({dy,L,ex:ex||""});   /* 모든 배치(제외된 것도) — 더블클릭 팝업이 보여 준다 */
       if(ex){A.all.ex[ex]++;dv.ex[ex]++;continue;}
       A.all.pts.push([L[4],L[12]-L[11]]);dv.pts.push([L[4],L[12]-L[11]]);}}
-  const MIN_N=5;
-  const fit=Sx=>{const r=Sx.pts.length>=MIN_N?S.ols(Sx.pts):null,mode=S.modeOf(Sx.pts.map(p=>p[0])),bad=r&&r.b<=0;
-    return{prep:r&&!bad?r.a.toFixed(1)+" ± "+r.seA.toFixed(1)+"분":"—",per:r&&!bad?r.b.toFixed(2)+" ± "+r.seB.toFixed(2)+"분":"—",conv:r&&!bad&&mode?hm(Math.max(0,r.a+r.b*mode)):"—",
-      convSub:r&&!bad&&mode?(mode+"장 기준"):(bad?"기울기 음수 · 신뢰 불가":(Sx.pts.length<MIN_N?"표본 "+Sx.pts.length+"개 (5개 미만)":"장수가 모두 같음")),
-      n:Sx.pts.length+" / "+Sx.n,err:Sx.err?Sx.err+"건":"—",eInk:Sx.err?"#B4402F":"#5A6673",wait:Sx.errMin?hm(Sx.errMin):"—",
-      defect:Sx.fN?(Sx.fS/Sx.fN).toFixed(1):"—",defectSub:Sx.fN?(Sx.fN+"장"):"Defect 열 없음",
-      /* 정렬용 원값(없으면 null → 맨 뒤) */
-      _n:Sx.pts.length,_a:r&&!bad?r.a:null,_b:r&&!bad?r.b:null,_c:r&&!bad&&mode?Math.max(0,r.a+r.b*mode):null,_e:Sx.err,_w:Sx.errMin,_f:Sx.fN?Sx.fS/Sx.fN:null};};
   const exTxt=Sx=>"제외 — Error "+Sx.ex.err+" · 5장 미만 "+Sx.ex.small+(Sx.ex.noTime?" · 배치 시각 없음 "+Sx.ex.noTime:"");
-  const names=Object.keys(byAlias).sort((a,b)=>a<b?-1:a>b?1:0);
-  const cols="minmax(210px,1.3fr) 66px 122px 122px 132px 56px 92px 84px";
-  /* 정렬(열 머리를 누르면 오름차순 ↔ 내림차순, 기본 이름순) — 그룹(Kendall · TB500) 안에서만 섞인다 */
-  const SK=state.rptSort.k,SD=state.rptSort.d;
-  const COLS=[["name","Job","",true],["n","배치","표본 / 전체 배치"],["prep","준비","회귀 절편 ± 표준오차"],["per","장당","회귀 기울기 ± 표준오차"],["conv","환산","준비 + 장당 × 최빈 장수"],["err","Error",""],["wait","Error 대기",""],["defect","평균 Defect","Report 표 Faults 열(Defect 수)의 장당 평균 — 값이 있는 행만"]];
-  const fits={};for(const al of names)fits[al]=fit(byAlias[al].all);
-  const valOf=al=>{const f=fits[al];return{name:al,n:f._n,prep:f._a,per:f._b,conv:f._c,err:f._e,wait:f._w,defect:f._f}[SK];};
-  const cmpV=(x,y)=>{const a=valOf(x),b=valOf(y);if(a==null&&b==null)return x<y?-1:1;if(a==null)return 1;if(b==null)return -1;
-    const c=typeof a==="string"?(a<b?-1:a>b?1:0):a-b;return c?c*SD:(x<y?-1:x>y?1:0);};
-  const th=([k,label,title,left])=>`<button class="th ${left?"l":""} ${SK===k?"on":""}" data-h="${h(()=>setState({rptSort:{k,d:SK===k?-SD:(k==="name"?1:-1)}}))}" title="${esc(title||label)} — 누르면 ${SK===k?(SD>0?"내림차순":"오름차순"):"이 열로 정렬"}" aria-sort="${SK===k?(SD>0?"ascending":"descending"):"none"}">${esc(label)}${SORTICON(SK===k?SD:0)}</button>`;
-  const cell=(f,small)=>`<span class="num" style="text-align:right;font-size:${small?12.5:13}px;color:#4B5866;white-space:nowrap">${f.n}</span><span class="num" style="text-align:right;font-size:${small?12.5:13}px;${small?"":"font-weight:600;"}white-space:nowrap">${f.prep}</span><span class="num" style="text-align:right;font-size:${small?12.5:13}px;${small?"":"font-weight:600;"}white-space:nowrap">${f.per}</span>
-    <span style="text-align:right;min-width:0"><span class="num" style="display:block;font-size:${small?12.5:13}px;${small?"":"font-weight:600;"}white-space:nowrap">${f.conv}</span><span style="display:block;font-size:11px;color:#5A6673;white-space:nowrap">${esc(f.convSub)}</span></span>
-    <span class="num" style="text-align:right;font-size:${small?12.5:13}px;white-space:nowrap;color:${f.eInk}">${f.err}</span><span class="num" style="text-align:right;font-size:${small?12.5:13}px;white-space:nowrap;color:${f.eInk}">${f.wait}</span><span style="text-align:right;min-width:0"><span class="num" style="display:block;font-size:${small?12.5:13}px;white-space:nowrap">${f.defect}</span><span style="display:block;font-size:11px;color:#5A6673;white-space:nowrap">${esc(f.defectSub)}</span></span>`;
-  let _rs=0;const rowH=al=>{const A=byAlias[al],f=fits[al],open=state.rptOpen===al,raws=Object.entries(A.raw).sort((a,b)=>b[1]-a[1]);
-    const devs=Object.keys(A.devs).sort(cmpDev).map(n=>({name:n,title:n+" · "+exTxt(A.devs[n]),...fit(A.devs[n])}));
-    return `<div data-key="slot:${_rs++}" data-row="job:${esc(al)}"><button class="rowbtn" data-h="${h(()=>setState({rptOpen:open?null:al}))}" title="${esc(raws.map(([k,c])=>k+" ("+c+")").join("\n")+"\n"+exTxt(A.all))}" style="grid-template-columns:${cols};gap:10px;padding:10px 18px;border-bottom:0;border-top:1px solid #F1F4F7;min-height:48px;background:${open?"#F7F9FB":"transparent"}">
-      <span style="display:block;min-width:0"><span style="display:flex;align-items:center;gap:7px;font-size:13.5px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis"><span style="color:#5A6673;font-size:11px;width:10px;display:inline-block;flex:none">${open?"▾":"▸"}</span>${esc(al)}</span><span style="display:block;font-size:11.5px;color:#5A6673;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;padding-left:17px">표본 ${A.all.pts.length}개 / 배치 ${A.all.n}개 · 장비 ${devs.length}대${raws.length>1?" · 이름 "+raws.length+"개":""}</span></span>${cell(f,false)}</button>
-      ${open?`<div data-reveal="job:${esc(al)}" style="background:#FBFCFD">${devs.map(d=>`<div title="${esc(d.title)}" style="display:grid;grid-template-columns:${cols};gap:10px;align-items:center;padding:7px 18px;border-top:1px solid #F1F4F7;font-size:12.5px"><span style="padding-left:17px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(d.name)}</span>${cell(d,true)}</div>`).join("")}</div>`:""}</div>`;};
-  /* 두 묶음: Kendall · TB500(표기명이 Kendall 로 시작하면 Kendall, 나머지는 TB500) */
-  const groups=[["Kendall",names.filter(n=>/^Kendall/i.test(n)).sort(cmpV)],["TB500",names.filter(n=>!/^Kendall/i.test(n)).sort(cmpV)]];
-  const gsum=ns=>ns.reduce((a,al)=>{const Sx=byAlias[al].all;a.n+=Sx.n;a.s+=Sx.pts.length;a.e+=Sx.err;a.m+=Sx.errMin;return a;},{n:0,s:0,e:0,m:0});
-  const rowsH=groups.map(([g,ns])=>{const t=gsum(ns);return `<div class="grp" data-key="grp:${g}">${g}<small>Job ${ns.length}개 · 표본 ${t.s} / 배치 ${t.n}${t.e?" · Error "+t.e+"건 · Error 대기 "+hm(t.m):""}</small></div>`+(ns.map(rowH).join("")||`<p class="empty" data-key="empty:${g}">이 기간 ${g} Job 의 기록이 없습니다.</p>`);}).join("");
-  const tot=gsum(names);
+  /* 회귀 → 숫자(basis 장 기준 환산). 못 내면 이유를 단다. */
+  const fitN=(Sx,basis)=>{const r=Sx.pts.length>=RPT_MIN_N?S.ols(Sx.pts):null;
+    if(!r)return{ok:false,why:"표본 "+Sx.pts.length+"개 — 5개 미만",n:Sx.pts.length};
+    if(r.b<=0)return{ok:false,why:"기울기 음수 — 신뢰 불가",n:Sx.pts.length};
+    const a=Math.max(0,r.a);return{ok:true,a,b:r.b,conv:a+r.b*basis,neg:r.a<0,n:Sx.pts.length,seA:r.seA,seB:r.seB};};
+  const median=xs=>{const s=[...xs].sort((p,q)=>p-q),m=s.length>>1;return s.length?(s.length%2?s[m]:(s[m-1]+s[m])/2):null;};
+  const names=Object.keys(byAlias);
+  const isK=al=>/^Kendall/i.test(al);
+  const groups={Kendall:names.filter(isK),TB500:names.filter(n=>!isK(n))};
+  let gk=state.rptGrp==="Kendall"||state.rptGrp==="TB500"?state.rptGrp:"TB500";
+  if(!groups[gk].length&&groups[gk==="TB500"?"Kendall":"TB500"].length)gk=gk==="TB500"?"Kendall":"TB500";
+  const FAMS=["PI","RDL","기타"];
+  const Q=(state.rptQ||"").trim().toLowerCase();
+  const list=groups[gk].filter(al=>!Q||al.toLowerCase().includes(Q)).sort((a,b)=>FAMS.indexOf(rptFam(a))-FAMS.indexOf(rptFam(b))||(a<b?-1:a>b?1:0));
+  const cur=state.rptJob&&list.includes(state.rptJob)?state.rptJob:(list[0]||null);
   const pct=lotAll?Math.round(lotIn/lotAll*100):0;
-  const sortLabel=(COLS.find(c=>c[0]===SK)||COLS[0])[1]+(SD>0?" 오름차순":" 내림차순");
-  return `<div class="bar-h"><h1>TB500 · Kendall</h1><span style="font-size:12.5px;color:#5A6673">Kendall ${groups[0][1].length}개 · TB500 ${groups[1][1].length}개 · ${esc(sortLabel)}</span><div class="spacer"></div><span class="scope-badge" data-key="scope">${scopeBadge("report")}</span></div>
-    <p style="margin:-6px 0 14px;font-size:12.5px;color:#5A6673;word-break:keep-all">이 탭은 TB500 · Kendall 을 위한 것입니다 — 표기명 ${Object.keys(JOB_ALIAS).length}개 Job 만 봅니다(이 기간 Lot ${lotAll}개 중 ${lotIn}개, ${pct}%). 나머지 Job 은 가동률·Error 탭에 있습니다. 열 머리를 누르면 그 열로 정렬합니다.</p>
-    <section class="cards sm" style="margin-bottom:16px">${[{k:"Job",h:cnt(names.length)+"개",s:"표기명이 있는 것만"},{k:"표본 배치",h:cnt(tot.s)+"개",s:"배치 "+tot.n+"개 중 (Error·5장 미만 제외)"},{k:"Error",h:cnt(tot.e)+"건",s:"Lot 단위"},{k:"Error 대기",h:esc(hm(tot.m)),s:"Error 구간 + 그 뒤 공백"}].map(s=>`<div><p class="k">${s.k}</p><p class="v num">${s.h}</p><p class="s">${esc(s.s)}</p></div>`).join("")}</section>
-    <div class="panel" style="overflow-x:auto"><div style="min-width:980px"><div class="thead" style="grid-template-columns:${cols};gap:10px;align-items:end">${COLS.map(th).join("")}</div>
-      ${rowsH}
-      <p style="margin:0;padding:11px 18px;background:#FBFCFD;font-size:12px;color:#5A6673;border-top:1px solid #EDF1F5">배치시간 = 준비 + 장당 × 장수 로 1차 회귀 — 절편이 준비, 기울기가 장당, ± 는 회귀 표준오차. 환산은 최빈 장수 기준. 표본 5개 미만이면 내지 않음. 배치시간은 Report 의 배치 시작~종료. 평균 Defect 는 Report 표 Faults 열이 있는 행만(옛 캐시 행은 다시 읽어야 채워짐).</p></div></div>`;
+  const head=`<div class="bar-h"><h1>TB500 · Kendall</h1>${segHtml([{label:"Kendall "+groups.Kendall.length,on:gk==="Kendall",pick:()=>setState({rptGrp:"Kendall",rptJob:null,rptDev:null})},{label:"TB500 "+groups.TB500.length,on:gk==="TB500",pick:()=>setState({rptGrp:"TB500",rptJob:null,rptDev:null})}])}<div class="spacer"></div><span class="scope-badge" data-key="scope">${scopeBadge("report")}</span></div>
+    <p style="margin:-6px 0 14px;font-size:12.5px;color:#5A6673;word-break:keep-all">이 탭은 TB500 · Kendall 을 위한 것입니다 — 표기명 ${Object.keys(JOB_ALIAS).length}개 Job 만 봅니다(이 기간 Lot ${lotAll}개 중 ${lotIn}개, ${pct}%). Job 을 고르면 장비마다 얼마나 다른지 보입니다. 나머지 Job 은 가동률·Error 탭에 있습니다.</p>`;
+  if(!names.length)return head+`<div class="panel" style="padding:24px;color:#5A6673;font-size:13px">이 기간에는 표기명이 있는 Job 의 기록이 없습니다.</div>`;
+  /* 왼쪽: Job 목록(공정 묶음 · 검색) */
+  let lf=null;const items=list.map(al=>{const A=byAlias[al],f=rptFam(al);const hd=f!==lf?`<div class="rpt-fam" data-key="rf:${esc(f)}">${f}</div>`:"";lf=f;
+    return hd+`<button type="button" class="rowbtn lotpick${al===cur?" on":""}" data-key="rj:${esc(al)}" data-h="${h(()=>setState({rptJob:al,rptDev:null}))}"><span style="display:flex;width:100%;gap:8px;align-items:baseline"><b style="font-size:13px">${esc(al.replace(/^(TB500|Kendall)\s+/,""))}</b><span class="muted" style="flex:1;font-size:11px">장비 ${Object.keys(A.devs).length}대</span>${A.all.err?`<span class="num" style="color:${ERR};font-weight:600;font-size:11.5px">${A.all.err}</span>`:""}</span></button>`;}).join("");
+  const left=`<div class="panel lotlist"><div style="padding:10px 12px;border-bottom:1px solid #EDF1F5"><input class="inp" type="search" data-in="rptQ" data-fk="rpt:q" placeholder="Job 이름 검색" value="${esc(state.rptQ||"")}" style="width:100%"></div>
+    <p class="muted" style="font-size:11.5px;margin:8px 12px 4px">${Q?`검색 결과 ${list.length}개`:`${gk} Job ${list.length}개`} · 오른쪽 숫자는 Error 건수</p><div class="lotscroll">${items||`<p class="empty" style="padding:12px">없음</p>`}</div></div>`;
+  if(!cur)return head+`<div class="lotgrid">${left}<div></div></div>`;
+  /* 오른쪽: 고른 Job */
+  const A=byAlias[cur];
+  const stdOn=state.rptStd!==false;
+  const mode=S.modeOf(A.all.pts.map(p=>p[0]));const basis=stdOn?RPT_STD:(mode||RPT_STD);
+  const dvs=Object.keys(A.devs).map(n=>{const Sx=A.devs[n];return{n,Sx,f:fitN(Sx,basis),rate:Sx.n?Sx.err/Sx.n:0};});
+  const good=dvs.filter(d=>d.f.ok),bad=dvs.filter(d=>!d.f.ok).sort((a,b)=>cmpDev(a.n,b.n));
+  const med=good.length?median(good.map(d=>d.f.conv)):null;
+  const SKY=state.rptSort||"conv";
+  good.sort((a,b)=>{const c=SKY==="err"?b.rate-a.rate||b.Sx.err-a.Sx.err:SKY==="wait"?b.Sx.errMin-a.Sx.errMin:SKY==="dev"?cmpDev(a.n,b.n):a.f.conv-b.f.conv;return c||cmpDev(a.n,b.n);});
+  const jf=fitN(A.all,basis);
+  const slow=good.length?good.reduce((a,d)=>d.f.conv>a.f.conv?d:a):null,fast=good.length?good.reduce((a,d)=>d.f.conv<a.f.conv?d:a):null;
+  const dev=d=>med?d.f.conv/med-1:0;
+  const pc=v=>(v>=0?"+":"")+Math.round(v*100)+"%";
+  const bcol=v=>v>=RPT_SLOW?ERR:v<=-RPT_SLOW?RUN:DUP;
+  let sentence;
+  if(good.length>=2)sentence=`장비 <em>${good.length}대</em> 중 <em style="color:${ERR}">${esc(slow.n)}</em> 가 가장 느리고(${esc(hm(slow.f.conv))}, 중앙보다 <em style="color:${ERR}">${pc(dev(slow))}</em>), <em style="color:${RUN}">${esc(fast.n)}</em> 가 가장 빠릅니다(${esc(hm(fast.f.conv))}, ${pc(dev(fast))}). ${good.filter(d=>dev(d)>=RPT_SLOW).length?`중앙보다 20% 넘게 느린 장비 ${good.filter(d=>dev(d)>=RPT_SLOW).length}대.`:"20% 넘게 벗어난 장비는 없습니다."}`;
+  else if(good.length===1)sentence=`계산할 수 있는 장비가 <em>${esc(good[0].n)}</em> 한 대뿐이라 장비끼리는 비교할 수 없습니다(${esc(hm(good[0].f.conv))}).`;
+  else sentence=`배치 표본이 5개 이상인 장비가 없어 환산 시간을 내지 못합니다.`;
+  const cards=[{k:basis+"장 환산 중앙",h:jf.ok?esc(hm(jf.conv)):"—",s:jf.ok?"준비 "+Math.round(jf.a)+"분 + 장당 "+jf.b.toFixed(1)+"분":jf.why},
+    {k:"장비 간 차이",h:good.length>=2?esc(hm(slow.f.conv-fast.f.conv)):"—",s:good.length>=2?"가장 느린 − 가장 빠른":"장비 2대 이상일 때"},
+    {k:"Error",h:A.all.err?`<span style="color:${ERR}">${cnt(A.all.err)}건</span>`:"0건",s:`배치 ${A.all.n}개 중 · Lot 단위`},
+    {k:"Error 대기",h:A.all.errMin?`<span style="color:${ERR}">${esc(hm(A.all.errMin))}</span>`:"—",s:"Error 구간 + 그 뒤 공백"},
+    {k:"평균 Defect",h:A.all.fN?(A.all.fS/A.all.fN).toFixed(1):"—",s:A.all.fN?A.all.fN+"장 기준":"Defect 열 없음"}];
+  const cardsH=`<section class="cards sm" style="margin-bottom:14px">${cards.map(s=>`<div><p class="k">${esc(s.k)}</p><p class="v num" style="font-size:24px">${s.h}</p><p class="s">${esc(s.s)}</p></div>`).join("")}</section>`;
+  /* 장비 줄 + 줄을 누르면 열리는 배치 점 그림 */
+  const maxC=good.length?Math.max(...good.map(d=>d.f.conv))*1.08:1;
+  const scatter=d=>{const pts=d.Sx.pts,W=560,H=210,L=44,R=12,T=10,B=26;
+    const xs=pts.map(p=>p[0]),ys=pts.map(p=>p[1]).sort((a,b)=>a-b);const xmax=Math.max(26,Math.max(...xs)+1);
+    const p95=ys[Math.min(ys.length-1,Math.floor(ys.length*.95))]||1;const ymax=Math.max(p95,d.f.conv,jf.ok?jf.conv:0)*1.12;
+    const sx=x=>L+x/xmax*(W-L-R),sy=y=>H-B-Math.min(y,ymax)/ymax*(H-B-T);
+    const stepL=[15,30,60,120,180,240,360,480],step=stepL.find(s=>ymax/s<=5)||480;
+    const lab=t=>t===0?"0":t%60===0?(t/60)+"시간":t<60?t+"분":(t/60).toFixed(1)+"시간";
+    let g="";for(let t=0;t<=ymax;t+=step)g+=`<line x1="${L}" x2="${W-R}" y1="${sy(t).toFixed(1)}" y2="${sy(t).toFixed(1)}" stroke="#EDF1F5"/><text x="${L-6}" y="${(sy(t)+3.5).toFixed(1)}" text-anchor="end" class="ax">${lab(t)}</text>`;
+    for(let x=0;x<=xmax;x+=5)g+=`<text x="${sx(x).toFixed(1)}" y="${H-8}" text-anchor="middle" class="ax">${x}장</text>`;
+    const line=(f,col,w,dash)=>f&&f.ok?`<line x1="${sx(0).toFixed(1)}" y1="${sy(f.a).toFixed(1)}" x2="${sx(xmax).toFixed(1)}" y2="${sy(f.a+f.b*xmax).toFixed(1)}" stroke="${col}" stroke-width="${w}"${dash?` stroke-dasharray="${dash}"`:""}/>`:"";
+    const dots=pts.map(([x,y])=>`<circle cx="${sx(x).toFixed(1)}" cy="${sy(y).toFixed(1)}" r="3.2" fill="${y>ymax?"none":RUN}" fill-opacity=".38" stroke="${y>ymax?RUN:"none"}" data-tip="${esc(x+"장 · "+hm(y))}"/>`).join("");
+    const bx=sx(basis);
+    return `<svg viewBox="0 0 ${W} ${H}" width="100%" role="img" aria-label="${esc(d.n)} 배치 시간 산점도">${g}<line x1="${bx.toFixed(1)}" x2="${bx.toFixed(1)}" y1="${T}" y2="${H-B}" stroke="#C9D1DA" stroke-dasharray="3 3"/>${line(jf,"#9AA5B1",1.5,"5 4")}${dots}${line(d.f,ERR,2.2)}</svg>`;};
+  const detail=d=>{const f=d.f,Sx=d.Sx;
+    const kv=(k,v,c)=>`<div class="rpt-kv"><span>${k}</span><b class="num"${c?` style="color:${c}"`:""}>${v}</b></div>`;
+    return `<div class="rpt-detail" data-reveal="rpt:${esc(d.n)}"><div class="rpt-dgrid"><div><p class="muted" style="font-size:12px;margin:0 0 4px">점 = 배치 1회(줄을 더블클릭해도 전체 배치) · <span style="color:${ERR};font-weight:600">빨간 선 = ${esc(d.n)}</span> · <span style="color:#7A8591">회색 점선 = ${esc(cur.replace(/^(TB500|Kendall)\s+/,""))} 전체</span> · 세로 점선 = ${basis}장</p>${scatter(d)}</div>
+      <div>${kv("준비",f.a.toFixed(1)+" ± "+f.seA.toFixed(1)+"분"+(f.neg?" ⚠":""))}${kv("장당",f.b.toFixed(2)+" ± "+f.seB.toFixed(2)+"분")}${kv(basis+"장 환산",hm(f.conv),bcol(dev(d)))}${kv("표본 / 배치",Sx.pts.length+" / "+Sx.n)}${kv("Error",Sx.err?Sx.err+"건 ("+Math.round(d.rate*100)+"%)":"없음",Sx.err?ERR:null)}${kv("Error 대기",Sx.errMin?hm(Sx.errMin):"—",Sx.errMin?ERR:null)}${kv("평균 Defect",Sx.fN?(Sx.fS/Sx.fN).toFixed(1):"—")}
+      <button type="button" class="btn primary" style="margin-top:10px" data-h="${h(()=>{rptAllOpen(cur,d.n);})}">이 장비의 모든 배치 보기 (${Sx.n}개)</button><p class="muted" style="font-size:11.5px;margin:8px 0 0">${esc(exTxt(Sx))}${f.neg?" · 준비 시간 절편이 음수라 0분으로 봄":""}</p></div></div></div>`;};
+  let _rs=0;
+  const rowH=d=>{const sel=state.rptDev===d.n,v=dev(d),hi=d.rate>=0.3&&d.Sx.n>=RPT_MIN_N;
+    const tip=d.n+"\n"+basis+"장 환산 "+hm(d.f.conv)+" (중앙 대비 "+pc(v)+")\n준비 "+d.f.a.toFixed(1)+"분 + 장당 "+d.f.b.toFixed(2)+"분\nError "+d.Sx.err+"건 · "+exTxt(d.Sx);
+    return `<div data-key="slot:${_rs++}" data-row="dev:${esc(d.n)}"><button type="button" class="rowbtn rpt-r${sel?" on":""}" aria-expanded="${sel}" data-h="${h(()=>setState({rptDev:sel?null:d.n}))}" data-dh="${h(()=>{rptAllOpen(cur,d.n);})}" data-tip="${esc(tip)}&#10;더블클릭 — 이 장비의 모든 배치">
+      <span class="rn">${esc(d.n)}</span><span class="rbar"><i style="width:${(d.f.conv/maxC*100).toFixed(1)}%;background-color:${bcol(v)}"></i><u style="left:${(med/maxC*100).toFixed(1)}%"></u></span>
+      <span class="rv num">${esc(hm(d.f.conv))}</span><span class="rd num" style="color:${bcol(v)===DUP?"var(--ink-3)":bcol(v)}">${pc(v)}</span>
+      <span class="re num${hi?" hi":""}">${d.Sx.err?"Error "+d.Sx.err+"건 <small>("+Math.round(d.rate*100)+"%)</small>":"Error 없음"}</span><span class="rb num">${d.Sx.n}배치</span></button>${sel?detail(d):""}</div>`;};
+  const sel=state.rptDev&&dvs.find(d=>d.n===state.rptDev&&!d.f.ok);
+  const badH=bad.length?`<p class="muted" style="font-size:12px;margin:12px 22px 4px">계산 못 한 장비 ${bad.length}대 — ${bad.map(d=>`<span title="${esc(d.f.why)}">${esc(d.n)}(${esc(d.f.why.replace(" — 5개 미만"," ·"+" 5개 미만").replace("표본 ","표본 "))})</span>`).join(" · ")}</p>`:"";
+  const ctl=`<div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;padding:12px 22px 4px"><span class="muted" style="font-size:12px">${basis}장 환산 시간 · 줄을 누르면 배치 점</span><div class="spacer"></div>
+    ${segHtml([{label:"빠른 순",on:SKY==="conv",pick:()=>setState({rptSort:"conv"})},{label:"Error 많은 순",on:SKY==="err",pick:()=>setState({rptSort:"err"})},{label:"Error 대기 순",on:SKY==="wait",pick:()=>setState({rptSort:"wait"})},{label:"장비 번호",on:SKY==="dev",pick:()=>setState({rptSort:"dev"})}])}
+    ${segHtml([{label:"25장 기준",on:stdOn,pick:()=>setState({rptStd:true})},{label:"이 Job 최빈 "+(mode||"?")+"장",on:!stdOn,pick:()=>setState({rptStd:false})}])}</div>
+    <div class="rpt-legend"><span><i style="background-color:${ERR}"></i>중앙보다 20% 넘게 느림</span><span><i style="background-color:${RUN}"></i>20% 넘게 빠름</span><span><i style="background-color:${DUP}"></i>비슷함</span><span><u></u>중앙 ${med!=null?esc(hm(med)):"—"}</span></div>`;
+  const right=`<div style="min-width:0"><div class="panel" style="margin-bottom:14px"><div style="padding:18px 22px 14px"><h2 style="margin:0 0 6px;font-size:20px">${esc(cur)}</h2><p style="margin:0;font-size:14.5px;line-height:1.55;word-break:keep-all" class="rpt-sent">${sentence}</p></div></div>
+    ${cardsH}<div class="panel" style="padding-bottom:8px">${good.length?ctl+`<div class="rpt-scroll" style="overflow-x:auto"><div class="rpt-in"><div class="rpt-list">${good.map(rowH).join("")}</div></div></div>`:`<p class="empty" style="padding:18px 22px">${esc(sentence.replace(/<[^>]+>/g,""))}</p>`}${badH}
+      <p style="margin:8px 0 0;padding:11px 22px;background:#FBFCFD;font-size:12px;color:#5A6673;border-top:1px solid #EDF1F5">배치시간 = 준비 + 장당 × 장수 로 1차 회귀 — ± 는 회귀 표준오차. 표본 5개 미만이면 내지 않음. 배치시간은 Report 의 배치 시작~종료. 평균 Defect 는 Report 표 Faults 열이 있는 행만(옛 캐시 행은 다시 읽어야 채워짐).</p></div></div>`;
+  return head+`<div class="lotgrid">${left}${right}</div>`;
 }
 
+/* ---------- TB500 · Kendall: 장비 하나의 모든 배치(더블클릭, 10/19 사용자) ----------
+   고른 Job · 장비의 배치(= Report 한 장 = Lot 한 번)를 날짜 순으로 전부: 표본에 든 것과 제외된 것(이유)을 같이 보여 준다 — 산점도의 점 하나하나가 어느 배치인지 여기서 확인. */
+function rptAllOpen(job,dev){setState({rptAll:{job,dev},rptAllF:"all",rptDev:dev,stack:pushTop("rptdev")});}
+function rptDevPopupHtml(){const S0=state.rptAll;if(!S0||!D)return"";
+  const close=()=>setState(CLOSE.rptdev());const P=D.pool;
+  const shell=(sub,body)=>`<div class="ov z55"><button class="scrim" data-h="${h(close)}" aria-label="닫기"></button><div class="dlg w1120" role="dialog" aria-modal="true" aria-labelledby="dlg-rptdev-title" data-dlg="rptdev">
+    <div class="dh"><h2 id="dlg-rptdev-title" tabindex="-1" class="mid">${esc(S0.dev+" · "+S0.job)}</h2><span class="sub">${esc(sub)}</span><div class="spacer"></div><button class="x" data-h="${h(close)}" data-fk="x:rptdev" title="닫기 (Esc)">✕</button></div>${body}</div></div>`;
+  /* 같은 Job 의 배치 목록을 다시 모은다(화면 기간 안, reportHtml 과 같은 Job 이름 규칙) */
+  const aliasOf=gi=>{const G=D.jobGroups[gi];let al=jobAlias(P.job[G.l])||null;if(!al)for(const [i] of G.m){if(jobAlias(P.job[i])){al=jobAlias(P.job[i]);break;}}if(al&&G.nm){al=G.nm;}return al;};
+  const bs=[];for(const dy of D.days){const t=S.at(dy,S0.dev);if(!t)continue;for(const L of t.lots){if(aliasOf(D.jobG[L[0]])!==S0.job)continue;
+    const ex=L[10]>=0?"err":(L[4]<5?"small":((L[12]>L[11])?"":"noTime"));bs.push({dy,L,ex,min:L[12]>L[11]?L[12]-L[11]:null});}}
+  if(!bs.length)return shell("기록 없음",`<div class="pbody"><p class="empty">이 기간에는 이 장비의 이 Job 배치가 없습니다</p></div>`);
+  const F=state.rptAllF||"all",SO=state.rptAllS||"date";
+  const exWhy={err:"제외 — 원인 Error",small:"제외 — 5장 미만",noTime:"제외 — 배치 시각 없음"};
+  const nIn=bs.filter(b=>!b.ex).length,nErr=bs.filter(b=>b.L[5]>0).length,nEx=bs.length-nIn;
+  const shown=bs.filter(b=>F==="all"||(F==="err"&&b.L[5]>0)||(F==="in"&&!b.ex)||(F==="ex"&&b.ex));
+  shown.sort((a,b)=>SO==="min"?(b.min||-1)-(a.min||-1):SO==="w"?b.L[4]-a.L[4]:(a.dy<b.dy?1:a.dy>b.dy?-1:(b.L[11]||0)-(a.L[11]||0)));
+  const med=(()=>{const xs=bs.filter(b=>!b.ex).map(b=>b.min).sort((x,y)=>x-y);return xs.length?xs[xs.length>>1]:null;})();
+  const cols="64px 112px 78px 56px minmax(120px,1.4fr) minmax(150px,1.6fr) 74px";
+  const rowH=(b,i)=>{const L=b.L,types=Object.entries(L[9]).sort((x,y)=>y[1][1]-x[1][1]);const rp=P.rep[L[8]]||"";const a=L[11]||0;
+    const st=b.ex?`<span class="muted" title="${esc(exWhy[b.ex])}">${esc(exWhy[b.ex])}</span>`:`<span style="color:var(--good);font-weight:600">표본</span>`;
+    const slow=b.min!=null&&med&&b.min/med-1>=RPT_SLOW&&!b.ex;
+    return `<div class="rcpdev" data-key="slot:${i}" data-row="b:${esc(b.dy+"|"+(L[1]||"")+"|"+a)}" style="grid-template-columns:${cols}">
+      <span class="num">${md(b.dy)}</span><span class="num">${b.min!=null?clock(a)+" – "+clock(L[12]):clock(a)+" – ?"}</span><span class="num r" style="font-weight:600${slow?";color:"+ERR:""}">${b.min!=null?esc(hm(b.min)):"—"}</span><span class="num r">${L[4]?L[4]+"장":"—"}</span>
+      <span class="mono" style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(P.lot[L[1]]||"")}">${esc(P.lot[L[1]]||"(Lot 확인 불가)")}</span>
+      <span style="min-width:0">${st}${types.map(([k,v])=>` <span class="pill err mono">${esc(k)} ${esc(hm(v[1]))}</span>`).join("")}</span>
+      <span style="text-align:right">${rp&&reportUrl({device:S0.dev,report:rp})?`<button class="link" data-h="${h(()=>openReport({device:S0.dev,report:rp}))}" title="이 BatchReport 를 새 탭으로 엽니다(NAS 경로)">Report</button>`:""}</span></div>`;};
+  const fSeg=segHtml([{label:"전체 "+bs.length,on:F==="all",pick:()=>setState({rptAllF:"all"})},{label:"표본 "+nIn,on:F==="in",pick:()=>setState({rptAllF:"in"})},{label:"제외 "+nEx,on:F==="ex",pick:()=>setState({rptAllF:"ex"})},{label:"Error 있는 것 "+nErr,on:F==="err",pick:()=>setState({rptAllF:"err"})}]);
+  const sSeg=segHtml([{label:"날짜 순",on:SO==="date",pick:()=>setState({rptAllS:"date"})},{label:"배치 시간 긴 순",on:SO==="min",pick:()=>setState({rptAllS:"min"})},{label:"장수 많은 순",on:SO==="w",pick:()=>setState({rptAllS:"w"})}]);
+  const MAXR=400;
+  return shell(md(D.days[0])+" ~ "+md(D.days[D.days.length-1])+" · 배치 "+bs.length+"개",
+    `<div class="pbody"><div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:10px">${fSeg}<div class="spacer"></div><span class="muted" style="font-size:12px">정렬</span>${sSeg}</div>
+    <p class="muted" style="font-size:12px;margin:0 0 8px">표본 배치 중앙 ${med!=null?esc(hm(med)):"—"} · 빨간 시간 = 중앙보다 20% 넘게 긴 표본 배치 · 제외된 배치도 그대로 적습니다(이유 포함).</p>
+    <div class="panel"><div class="tbl-h" style="grid-template-columns:${cols}"><span>날짜</span><span>시각</span><span class="r">배치 시간</span><span class="r">장수</span><span>Lot</span><span>상태 · Error</span><span></span></div>
+      ${shown.slice(0,MAXR).map(rowH).join("")||`<p class="empty">조건에 맞는 배치가 없습니다</p>`}${shown.length>MAXR?`<p class="muted" style="padding:8px 14px;font-size:12px">${MAXR}개만 표시 — 필터로 줄여 보세요</p>`:""}</div></div>`);}
 /* ---------- 파라미터 탭(D89, 10/11 사용자 Q6~Q10) ----------
    수집기가 Report(= Lot 한 번)마다 INI 를 찾은 첫 Wafer 폴더의 레시피 파라미터를 읽어 두고(측정값 제외), meta.params 에 Job 마다
    장비별 **가장 최근 스냅숏**을 묶어 준다: 다수값 + 다른 장비 값만(`x`), 빠진 장비, 바뀐 이력. 화면은 그대로 그린다(계산 없음).
