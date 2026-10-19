@@ -691,39 +691,77 @@ def test_no_pattern_jobs_are_test_and_leave_utilization():
     assert (t["t"], t["r"]) == (60, 30)
 
 
-def test_lot_tab_follows_wafer_ids_across_renamed_lots_and_devices():
-    """LOT 추적(10/11): 앞 세 글자가 같은 이름은 한 Lot 으로 묶고, Wafer ID 로 모든 검사를 시간 순으로 보인다."""
+def _lot_keys(html):
+    return re.findall(r'data-key="lp:lot:([^"]+)"', html)
+
+
+def _lot_screen(rows, pick=None, **st):
+    state = {"view": "lot", **st}
+    if pick is not None:
+        state["lotPick"] = {"k": "lot", "v": pick}
+    (out,) = screen(rows, meta("AOI-1", "AOI-2"), [["lotHtml"]], state=state)
+    return out
+
+
+def test_lot_tab_groups_by_wafer_id_not_by_name_and_follows_devices():
+    """LOT 추적(10/19 D92): 같은 Wafer ID 를 가진 Report 가 한 Lot — 이름 · 세 글자 코드가 달라도(별칭) 묶고, 장비가 바뀌어도 시간 순으로 잇는다."""
     A = "J1_6321_LPT-PIDS5_18-Sep-26_(01.00.00)_BatchReport.htm"
     B = "J1_6321_LPT-RDL3_18-Sep-26_(03.00.00)_BatchReport.htm"
     rows = [w("AOI-1", "38135F75EWB5", "00:10", "00:20", lot="LPT-PIDS5", report=A) | {"recipe": "x20", "faults": "7"},
-            w("AOI-1", "38135F75EWB6", "00:20", "00:30", lot="LPT-PIDS5 RESCAN", report=A, status="Alignment Error."),
-            w("AOI-2", "38135F75EWB5", "02:10", "02:30", lot="LPT-RDL3", report=B) | {"recipe": "x20", "faults": "5"},
-            w("AOI-2", "OTHER0WAFER1", "05:00", "05:10", lot="ZZZ-1")]
-    (lst,) = screen(rows, meta("AOI-1", "AOI-2"), [["lotHtml"]], state={"view": "lot"})
-    assert lst.count('data-key="lp:lot:LPT"') == 1 and "LPT-RDL3</span>" not in lst.split("lotscroll")[1]
-    (out,) = screen(rows, meta("AOI-1", "AOI-2"), [["lotHtml"]], state={"view": "lot", "lotPick": {"k": "lot", "v": "LPT"}})
+            w("AOI-1", "38135F75EWB6", "00:20", "00:30", lot="LPT-PIDS5", report=A, status="Alignment Error."),
+            w("AOI-2", "38135F75EWB5", "02:10", "02:30", lot="TYPO-RDL3", report=B) | {"recipe": "x20", "faults": "5"},
+            w("AOI-2", "OTHER0WAFER1", "05:00", "05:10", lot="ZZZ-1", report="r9.htm")]
+    lst = _lot_screen(rows)
+    ks = _lot_keys(lst)
+    assert len(ks) == 2                                                    # 이름이 둘이어도 Lot 은 하나 + ZZZ-1
+    lot = next(k for k in ks if "LPT-PIDS5" in lst.split(f'lp:lot:{k}"')[1].split("</button>")[0])
+    out = _lot_screen(rows, lot)
     assert out.count('class="lotatt"') == 2 and "ZZZ-1" not in out.split("검사 순서")[1]
-    assert "LPT-RDL3" in out and "확인 필요" not in out
-    assert "Error 원인" in out and "ALIGN_ERROR" in out and "앞 검사와 간격" in out and "AOI-1 → AOI-2" in out   # 10/12: 원인 칸 · 간격 칸
+    assert "TYPO-RDL3" in out and "ALIGN_ERROR" in out and "↓" in out and "AOI-1 → AOI-2" in out
+    assert "확인 필요" not in out and "lotconf" not in out
     (q,) = screen(rows, meta("AOI-1", "AOI-2"), [["lotHtml"]], state={"view": "lot", "lotQ": "ewb6"})
     assert "Wafer 38135F75EWB6" in q
 
 
-def test_lot_tab_groups_test_and_dbm_names_and_flags_prefix_conflicts():
-    """10/11: 'DBM-FS DIA' → DBM, 코드가 아닌 'TEST' 는 Wafer ID 가 한 그룹뿐이면 그 그룹을 따라간다. 같은 Wafer 인데 코드가 다르면 합치지 않고 확인 필요."""
-    rows = [w("AOI-1", "AAAA00000001", "00:10", "00:20", lot="DBM-FS DIA", report="r1.htm"),
-            w("AOI-1", "AAAA00000001", "01:10", "01:20", lot="TEST", report="r2.htm"),
-            w("AOI-1", "BBBB00000001", "02:10", "02:20", lot="WUP", report="r3.htm"),
-            w("AOI-1", "BBBB00000001", "03:10", "03:20", lot="WUS", report="r4.htm"),
-            w("AOI-1", "CCCC00000001", "04:10", "04:20", lot="0901", report="r5.htm")]
-    (lst,) = screen(rows, meta("AOI-1"), [["lotHtml"]], state={"view": "lot"})
-    keys = re.findall(r'data-key="lp:lot:([^"]+)"', lst)
-    assert sorted(keys) == ["0901", "DBM", "WUP", "WUS"]                 # TEST 는 DBM 으로
-    assert lst.count("확인 필요") == 2                                     # WUP · WUS 둘 다
-    (dbm,) = screen(rows, meta("AOI-1"), [["lotHtml"]], state={"view": "lot", "lotPick": {"k": "lot", "v": "DBM"}})
-    assert dbm.count('class="lotatt"') == 2 and "lotconf" not in dbm
-    (wup,) = screen(rows, meta("AOI-1"), [["lotHtml"]], state={"view": "lot", "lotPick": {"k": "lot", "v": "WUP"}})
-    assert "lotconf" in wup and "WUS" in wup and "같은 Lot 으로 보기" in wup and wup.count('class="lotatt"') == 1
+def test_lot_tab_never_merges_past_25_wafers_and_shows_cross_rows():
+    """한 Lot 은 25장 이하 — 같은 코드의 다른 Wafer 묶음(TSX 8월 · 9월)이나 겹쳐 합치면 25장을 넘는 Report 는 합치지 않고, 흐린 '다른 LOT 이름' 줄로만 보인다."""
+    first = [w("AOI-1", f"AUG{i:06d}X", "00:10", "00:20", lot="TSX-1", report="a.htm") for i in range(25)]
+    second = [w("AOI-1", f"SEP{i:06d}X", "02:10", "02:20", lot="TSX-1", report="b.htm") for i in range(25)]
+    lst = _lot_screen(first + second)
+    assert len(_lot_keys(lst)) == 2                                        # 코드가 같아도 Wafer 가 다르면 다른 Lot
+    # 같은 Wafer 25장 + 6장(다른 Report 가 앞 5장 + 새 1장을 같이 가짐) → 합치면 26장이라 합치지 않는다
+    third = [w("AOI-1", f"AUG{i:06d}X", "04:10", "04:20", lot="TYPO-9", report="c.htm") for i in range(5)] + \
+            [w("AOI-1", "NEWW00000001", "04:10", "04:20", lot="TYPO-9", report="c.htm")]
+    rows = first + third
+    ks = _lot_keys(_lot_screen(rows))
+    assert len(ks) == 2
+    big = next(k for k in ks if "25 wafer" in _lot_screen(rows).split(f'lp:lot:{k}"')[1].split("</button>")[0])
+    out = _lot_screen(rows, big)
+    assert "겹침" in out and "다른 LOT 이름" in out and 'class="lotatt x"' in out
+
+
+def test_lot_tab_ignores_slot_ids_and_parses_kla_names():
+    """SLOT10 같은 자리표시는 Wafer ID 가 아니다(길이가 6이어도). KLA 'TB500.INT764@6322' 는 Lot 이름 TB500.INT764 + 공정 코드 6322."""
+    rows = [w("AOI-1", "SLOT10", "00:10", "00:20", lot="A-1", report="a.htm"),
+            w("AOI-1", "SLOT10", "01:10", "01:20", lot="B-1", report="b.htm")]
+    assert _lot_keys(_lot_screen(rows)) == []
+    kla = [w("K1", "KLAWAFER0001", "00:10", "00:20", lot="TB500.INT764@6322", report="KLA:TB500.INT764@6322:1")]
+    (lst,) = screen(kla, meta("K1"), [["lotHtml"]], state={"view": "lot"})
+    assert "TB500.INT764" in lst and "@6322" in lst
+
+
+def test_lot_tab_tags_retries_rescans_and_groups_same_history():
+    """구분: 앞 시도가 PASS 가 아니면 재시도, PASS 였던 같은 검사는 재검사(이름 바뀜 구분), Job 이 다르면 다른 Job. 같은 이력 Wafer 는 한 줄로 묶는다."""
+    ids = [f"GRP{i:06d}X" for i in range(4)]
+    rows = [w("AOI-1", i, "00:10", "00:20", lot="DBM-1", report="a.htm", status="Alignment Error.") | {"recipe": "x20"} for i in ids] + \
+           [w("AOI-1", i, "02:10", "02:20", lot="DBM-1", report="b.htm") | {"recipe": "x20"} for i in ids] + \
+           [w("AOI-1", i, "04:10", "04:20", lot="DBM-2", report="c.htm") | {"recipe": "x20"} for i in ids]
+    lst = _lot_screen(rows)
+    (k,) = _lot_keys(lst)
+    out = _lot_screen(rows, k)
+    assert "재시도" in out and "재검사(이름 바뀜)" in out and "4장 같은 이력" in out
+    flat = _lot_screen(rows, k, lotGrp=False)
+    assert "4장 같은 이력" not in flat and flat.count('class="lw mono') == 4
 
 
 def test_scan_share_counts_only_rows_with_scan_sec_and_keeps_utilization():
