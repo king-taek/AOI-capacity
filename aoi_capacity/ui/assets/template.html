@@ -70,7 +70,7 @@ button{font:inherit;color:inherit}
 @keyframes fadeOutDown{0%{opacity:1}to{opacity:0;-webkit-transform:translate3d(0,100%,0);transform:translate3d(0,100%,0)}}
 .animate__fadeOutDown{-webkit-animation-name:fadeOutDown;animation-name:fadeOutDown}
 /* ── /animate.css ── */
-@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition-property:opacity,color,background-color,border-color!important;transition-duration:.12s!important}.dlg.in{animation:fadeIn .12s ease-out!important}.dlg.out{animation:fadeOut .12s ease-in forwards!important}}
 /* 전환(impeccable animate 플레이북 · 9/20): 상태 변화는 150~300ms, 레이아웃·오버레이는 300~500ms, 감속은 cubic-bezier(.16,1,.3,1). 노드는 morph 로 유지되므로 CSS transition 이 실제로 이어진다. */
 .hbar i{transition:width .38s var(--ease)}
 .chart .f{transition:height .38s var(--ease),background-color .25s}
@@ -144,7 +144,7 @@ button{font:inherit;color:inherit}
 .btn:active,.seg button:active,.nav button:active,.ib:active,.x:active,.fbtn:active{transform:scale(.96)}
 .callout{transition:background-color .16s,color .16s,border-color .16s,box-shadow .16s}.callout:hover{box-shadow:0 2px 6px rgba(15,21,28,.10)}
 .chev{display:inline-block;transition:transform .18s var(--ease),color .18s}.rowbtn:hover .chev{transform:translateX(3px);color:var(--ink)}
-.dot{width:5px;height:5px;border-radius:50%;flex:none}.dot.alert{animation:pulseDot 1.4s ease-out 1}
+.dot{width:5px;height:5px;border-radius:50%;flex:none}.dot.alert{animation:pulseDot .8s ease-out 1}
 @keyframes pulseDot{0%{box-shadow:0 0 0 0 rgba(197,69,60,.45)}100%{box-shadow:0 0 0 7px rgba(197,69,60,0)}}
 .cards>div{transition:background-color .2s}.cards>div:hover{background:#FBFCFD}
 .legend i.gloss{background-image:linear-gradient(180deg,rgba(255,255,255,.30),rgba(255,255,255,0) 55%,rgba(15,21,28,.07))}
@@ -598,7 +598,7 @@ function loadDemo(){
   const run=()=>{let emb;try{emb=JSON.parse($("#embedded").textContent);}catch(e){errorPanel("embedded JSON 을 해석할 수 없습니다: "+(e&&e.message||e));return;}
     try{rows=emb.cols?unfold(emb):(emb.rows||[]);meta=emb.meta||{generated:"",mode:"saved"};}
     catch(e){log("로더 오류: "+(e&&e.message||e));errorPanel(String(e&&e.message||e));return;}
-    setTimeout(()=>{try{init();}catch(e){log("로더 오류: "+(e&&e.message||e));errorPanel(String(e&&e.message||e));}},0);};
+    setTimeout(()=>{try{init();navWarm();}catch(e){log("로더 오류: "+(e&&e.message||e));errorPanel(String(e&&e.message||e));}},0);};
   if(typeof requestAnimationFrame==="function")requestAnimationFrame(()=>setTimeout(run,0));else run();}
 
 /* ---------- ③ 모델 ----------
@@ -1287,7 +1287,10 @@ function enterView(root){if(!G()||reduced())return;
    · 부피 보존: 늘어나면 두께가 조금 얇아진다(두께 ∝ (휴지 폭/폭)^0.25, 0.92~1.08).
    3840Hz(반암시적 오일러)로 적분해 60fps 표본을 WAAPI 키프레임으로 — 합성 스레드에서 돈다.
    운동량 보존 — 연달아 누르면 그 순간 질량마다의 위치·속도에서 이어진다(앞 끝은 새 방향으로 다시 정한다). */
-const NAV_N=10,NAV_KC=1500,NAV_CC=70,NAV_KD=450,NAV_CD=20,NAV_FMAX=45000,NAV_G=14,NAV_WQ=.5,NAV_HZ=3840,NAV_CAP=7,NAV_FPS=60;
+const NAV_N=10,NAV_KC=4000,NAV_CC=115,NAV_KD=1000,NAV_CD=45,NAV_FMAX=45000,NAV_G=14,NAV_WQ=.5,NAV_HZ=3840,NAV_CAP=7,NAV_FPS=60;
+/* 탭 첫 진입 때 색인(LOT 추적 · RDL 단일스캔)을 만드느라 화면이 0.7초 멈추면 표시자 이동 시간이 그동안 흘러 한 번에 건너뛴다(10/19 실측) —
+   화면이 뜬 뒤 한가할 때 미리 만들어 둔다(캐시되므로 첫 클릭엔 비용 0, 오류는 그 탭을 열 때 다시 난다). */
+function navWarm(){if(typeof setTimeout!=="function")return;setTimeout(()=>{try{lotIndex();}catch(e){}setTimeout(()=>{try{rcpIndex();}catch(e){}},150);},500);}
 function navParts(ind){if(!ind.__p)ind.__p={l:ind.querySelector(".l"),m:ind.querySelector(".m"),r:ind.querySelector(".r"),s:ind.querySelector(".s")};return ind.__p;}
 const navTf=(L,R,sy=1)=>{const w=Math.max(2*NAV_CAP,R-L),y=sy.toFixed(4);return {l:`translateX(${L.toFixed(2)}px) scaleY(${y})`,m:`translateX(${(L+NAV_CAP-1).toFixed(2)}px) scale(${Math.max(0,w-2*NAV_CAP+2).toFixed(2)},${y})`,r:`translateX(${(L+w-NAV_CAP).toFixed(2)}px) scaleY(${y})`};};
 function navSet(ind,L,R){const p=navParts(ind),t=navTf(L,R);for(const k of ["l","m","r"])if(p[k])p[k].style.transform=t[k];
@@ -1312,7 +1315,7 @@ function navGo(ind,tL,tR,animate){const s=ind.__s||(ind.__s={L:tL,R:tR,run:null}
     a.fill(0);for(let i=0;i<N-1;i++){const F=NAV_KC*((x[i+1]-x[i])-r)+NAV_CC*(v[i+1]-v[i]);a[i]+=F/m;a[i+1]-=F/m;}   /* 이웃 스프링 */
     let Fd=-NAV_KD*(x[fi]-fT)-NAV_CD*v[fi];Fd=Math.max(-NAV_FMAX,Math.min(NAV_FMAX,Fd));a[fi]+=Fd/m;                  /* 앞 끝만 끈다 */
     for(let i=0;i<N;i++){v[i]+=(a[i]-NAV_G*v[i])*h;x[i]+=v[i]*h;}
-    if(n%per===0){fr.push({x:x.slice(),v:v.slice(),W});if(Math.abs(x[0]-tL)+Math.abs(x[N-1]-tR)<.08&&v.every(q=>Math.abs(q)<.3))break;}}
+    if(n%per===0){fr.push({x:x.slice(),v:v.slice(),W});if(Math.abs(x[0]-tL)+Math.abs(x[N-1]-tR)<.3&&v.every(q=>Math.abs(q)<2))break;}}
   fr.push(navRest(tL,tR));if(fr.length<3)return;
   const T=(fr.length-1)/NAV_FPS*1000,p=navParts(ind);
   const kf={l:[],m:[],r:[]};for(const q of fr){const L=q.x[0],R=q.x[N-1],sy=Math.max(.92,Math.min(1.08,Math.pow(q.W/Math.max(1,R-L),.25)));const t=navTf(L,R,sy);kf.l.push({transform:t.l});kf.m.push({transform:t.m});kf.r.push({transform:t.r});}

@@ -438,6 +438,14 @@ def test_tab_indicator_survives_in_tab_clicks_and_follows_the_tab(page):
     assert errors == []
 
 
+def test_heavy_tab_indexes_are_built_in_idle_time_after_load(page):
+    """10/19 실측: LOT 추적 · RDL 단일스캔 첫 진입이 색인을 만드느라 0.7초 멈추면 탭 표시자 이동 시간이 그동안 흘러 한 번에 건너뛴다.
+    화면이 뜬 뒤 한가할 때(navWarm) 미리 만들어 두면 첫 클릭에는 색인 비용이 없다."""
+    pg, errors, _ = page
+    pg.wait_for_function("typeof _lotIx !== 'undefined' && _lotIx && typeof _rcp !== 'undefined' && _rcp", timeout=5000)
+    assert errors == []
+
+
 def test_tab_indicator_moves_like_a_body_dragged_by_its_front(page):
     """탭 표시자 물리(9/24 4차): 앞 끝이 먼저 가고 뒤가 딸려 와 움직이는 동안 늘어나며, 앞 끝이 도착한 뒤에는 폭이 늘지 않고 줄어들며 선다.
     (3차는 반대였다 — 움직일 때 좁고 도착해서 넓어졌다.) 미리 계산한 표본(`__s.run.fr`)을 본다 — 시계와 무관하다."""
@@ -455,7 +463,7 @@ def test_tab_indicator_moves_like_a_body_dragged_by_its_front(page):
     assert max(r - l for l, r in fr[k:]) <= max(fr[k][1] - fr[k][0], wt) + 0.5            # 도착 뒤 더 넓어지지 않는다
     assert min(r - l for l, r in fr[k:]) >= wt - 4                                          # 눌림은 조금만
     assert max(r for _, r in fr) <= tr + 4                                                  # 앞 끝은 거의 지나치지 않는다
-    assert all(l <= l0 + 0.5 for l, _ in fr[:2])                                            # 뒤 끝은 늦게 출발한다
+    assert all(l <= l0 + 1.5 for l, _ in fr[:2])                                            # 뒤 끝은 늦게 출발한다(한 프레임 1.5px 안 — 10/19 사슬을 단단히 해 0.5 → 1.5)
     assert errors == []
 
 
