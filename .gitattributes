@@ -1,0 +1,20 @@
+# GitHub 의 archive zip(자동 업데이트가 내려받는 것)에서 뺄 것. 배포에 필요한 파일만 남긴다.
+# 남는 것: main.py · requirements.txt · aoi_capacity/ · scripts/ 의 실행 파일들 (updater._UPDATE_TOP_ALLOW / _UPDATE_KEEP_ONLY 와 같아야 한다)
+/.claude export-ignore
+/.github export-ignore
+/archive export-ignore
+/dev export-ignore
+/docs export-ignore
+/.gitattributes export-ignore
+/.gitignore export-ignore
+/.graphifyignore export-ignore
+/*.md export-ignore
+/pytest.ini export-ignore
+/test.py export-ignore
+/scripts/build.py export-ignore
+/scripts/exe_launcher.py export-ignore
+/scripts/internal export-ignore
+/scripts/kla_survey.py export-ignore
+/scripts/make_release_zip.py export-ignore
+/scripts/update_code.py export-ignore
+/scripts/update_code.bat export-ignore

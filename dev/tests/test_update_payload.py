@@ -83,3 +83,26 @@ def test_verify_rejects_unexpected_top_level_entry(tmp_path):
     (staging / "진행상황.md").write_text("x", encoding="utf-8")
     reason = updater._verify_staged(staging)
     assert "진행상황.md" in reason
+
+
+def test_github_archive_contains_only_deploy_files(tmp_path):
+    """GitHub 의 archive zip 은 .gitattributes export-ignore 를 따른다 — 그 zip 에도 허용 목록 밖 파일(.claude · dev · docs …)이 없어야 한다.
+    보안 프로그램이 임시 폴더에 풀린 스킬 스크립트를 검사하는 것을 막는다."""
+    import shutil
+    import subprocess
+    import zipfile
+
+    if shutil.which("git") is None or not (_ROOT / ".git").exists():
+        import pytest
+        pytest.skip("git 작업트리 아님")
+    out = tmp_path / "a.zip"
+    subprocess.run(["git", "archive", "--format=zip", "-o", str(out), "HEAD"], cwd=_ROOT, check=True)
+    names = [n for n in zipfile.ZipFile(out).namelist() if not n.endswith("/")]
+    allowed_tops = {"main.py", "requirements.txt"}
+    keep = updater._UPDATE_KEEP_ONLY["scripts"]
+    for n in names:
+        if n in allowed_tops or n.startswith("aoi_capacity/"):
+            continue
+        assert n.startswith("scripts/") and n.split("/", 1)[1] in keep, f"배포 밖 파일이 zip 에 들어간다: {n}"
+    for need in ("main.py", "requirements.txt", "aoi_capacity/ui/assets/template.html"):
+        assert need in names
