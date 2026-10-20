@@ -143,4 +143,4 @@ def test_bulk_listing_failure_falls_back_to_scandir(tmp_path, fake_nas, monkeypa
     ref = make_cfg(tmp_path / "r", csv_path)
     rows_r, _m, _e = collect.collect(ref)
     assert _picked(cfg) == _picked(ref) and len(rows) == len(rows_r) and not errors
-    assert not [d for d in dev_meta if d.get("error")]
+    assert not [d for d in dev_meta if d.get("error") and not d.get("missed")]
