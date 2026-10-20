@@ -900,8 +900,9 @@ def _stop_after_reads(monkeypatch, n):
     real = collect.rows_for_report
 
     def counting(*a, **k):
-        state["n"] += 1
-        return real(*a, **k)
+        out = real(*a, **k)
+        state["n"] += 1                  # 다 읽은 뒤에 센다 — 읽는 중에 세면 동시 읽기에서 결과를 합치기 전에 멈춰 저장할 게 없을 수 있다
+        return out
     monkeypatch.setattr(collect, "rows_for_report", counting)
     return state, (lambda: state["n"] >= n)
 
@@ -922,7 +923,9 @@ def test_stop_keeps_what_was_read_and_next_run_continues(tmp_path, fake_nas, mon
     with pytest.raises(collect.CollectCancelled):
         collect.collect(cfg, should_stop=stop, stats=stats)
     cache = _cache_of(cfg)
-    assert 1 <= len(cache["reports"]) < total and stats["cancel_saved"] == len(cache["reports"])
+    # 동시에 읽으면(workers 8) 3개가 멈춤 신호 전에 다 끝날 수 있다 — 한 줄로 읽을 때만 '일부만' 을 요구한다
+    assert 1 <= len(cache["reports"]) <= total and stats["cancel_saved"] == len(cache["reports"])
+    assert workers > 1 or len(cache["reports"]) < total
     assert not (tmp_path / "cut" / "out" / "AOI_capacity.html").exists()        # 결과 화면은 만들지 않는다
     done_devices = {e["device_key"] for e in cache["reports"].values()}
     stats2 = {}
