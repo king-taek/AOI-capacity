@@ -456,3 +456,18 @@ WAFER_LOGS_OLD_TOOL_FMT = ("도구 파일이 옛 판입니다: {path}\n예전에
                            "그 파일을 지우고 수집기를 다시 실행해 업데이트를 받으면(또는 최신 파일로 바꾸면) 됩니다.")
 WAFER_LOGS_NO_DEVICES = "읽을 수 있는 Camtek 장비가 없습니다 — 장비 목록 · 드라이브 연결을 확인하세요"
 WAFER_LOGS_BUSY = "가동률 수집 중에는 로그를 모을 수 없습니다(NAS 를 함께 읽지 않게)"
+
+# ── 실패 로그 수집(10/20) ───────────────────────────────────────────────────
+FAIL_LOGS_TITLE = "실패 로그 수집"
+FAIL_LOGS_WHEN = ("수집이 안 된 장비 · 읽지 못한 Report · Wafer · 데이터가 멈춘 장비 · INI 읽기 오류를 모아 zip 한 장으로 만듭니다. "
+                  "이 PC 의 app.log 와 캐시를 먼저 보고, 실패한 파일만 NAS 에서 **읽기 전용**으로 가져옵니다(쓰기 · 이동 없음, 수집 범위 밖 장비는 보지 않습니다). "
+                  "zip 에는 원인 · 오류 문구 · 파일명 · 경로 · 파일 내용 · app.log 발췌 · 장비별 상태가 들어갑니다. 파일 내용에 Lot · Job 이름이 있으니 공유 범위는 직접 판단하세요.")
+FAIL_LOGS_DAYS_PREFIX = "지난"
+FAIL_LOGS_DAYS_SUFFIX = "일"
+FAIL_LOGS_DAYS_HINT = "안의 실패를 검사합니다(1~90일)"
+FAIL_LOGS_RUN = "실패 로그 수집"
+FAIL_LOGS_OPEN = "저장 폴더 열기"
+FAIL_LOGS_RUNNING = "모으는 중…"
+FAIL_LOGS_DONE_FMT = "끝났습니다 — 실패 항목 {n}개 · {path}"
+FAIL_LOGS_NONE_FMT = "끝났습니다 — 지난 {days}일 안에 찾은 실패가 없습니다 · {path}"
+FAIL_LOGS_FAIL_FMT = "실패 로그를 모으지 못했습니다: {error}"

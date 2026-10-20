@@ -131,3 +131,50 @@ def test_existing_devices_csv_gets_the_eight_kla_rows_once(tmp_path):
     assert names == ["AOI-1", "K1", "K2", "K3", "K4", "K5", "K6", "4F-K1", "4F-K2"]
     assert devices.ensure_kla_rows(p) is False                               # 하나라도 있으면 건드리지 않는다
     assert {r["root"] for r in devices.read_devices_csv(p) if r["name"] == "K2"} == {"G:\\"}
+
+
+def test_scanning_lock_only_for_fresh_wafer_and_only_twice():
+    """막 만들어진 Wafer 의 PermissionError 는 스캔 중(최대 2번), 오래된 폴더나 다른 오류는 읽기 실패."""
+    now = dt.datetime(2026, 10, 20, 12, 0)
+    fresh, old = f"{now - dt.timedelta(minutes=10):%Y-%m-%d-%H-%M}_3", f"{now - dt.timedelta(hours=3):%Y-%m-%d-%H-%M}_3"
+    e: dict = {}
+    err = "PermissionError: [Errno 13] Permission denied"
+    assert kla._is_scanning_lock(err, fresh, now, e, "L1") and kla._is_scanning_lock(err, fresh, now, e, "L1")
+    assert not kla._is_scanning_lock(err, fresh, now, e, "L1")                       # 세 번째부터는 다시 알린다
+    assert not kla._is_scanning_lock(err, old, now, {}, "L1")
+    assert not kla._is_scanning_lock("FileNotFoundError: x", fresh, now, {}, "L1")
+    assert not kla._is_scanning_lock(err, "not-a-wafer", now, {}, "L1")
+
+
+def test_locked_fresh_wafer_is_scanning_not_partial(tmp_path, kla_nas, monkeypatch):
+    _nas, csv_path = kla_nas
+    cfg = make_cfg(tmp_path, csv_path)
+    real = kla.read_wafer
+    now = dt.datetime.now().replace(second=0, microsecond=0)
+    name = f"{now:%Y-%m-%d-%H-%M}_9"
+    lot_dir = next(Path(line.split(",")[1]) for line in open(csv_path, encoding="utf-8") if line.startswith("K1,")) / f"{now:%Y-%m-%d}" / "LOTC@3"
+    (lot_dir / name).mkdir(parents=True)
+
+    def fake(path):
+        if path.endswith(name):
+            raise PermissionError(13, "Permission denied")
+        return real(path)
+    monkeypatch.setattr(kla, "read_wafer", fake)
+    stats: dict = {}
+    _rows, meta, errors = collect.collect(cfg, stats=stats)
+    k = {d["name"]: d for d in meta}["K1"]
+    assert k["status"] != collect.DEV_PARTIAL and k["read_errors"] == 0 and k.get("scanning") == 1 and not errors
+
+
+def test_in_scope_device_that_could_not_be_reached_is_reported(tmp_path, kla_nas):
+    """범위 안인데 접근하지 못한 장비는 로그 한 줄로 사라지지 않고 meta 에 접근 실패로 남는다(첫 화면 '수집 못 한 장비')."""
+    nas, csv_path = kla_nas
+    with open(csv_path, "a", encoding="utf-8") as f:
+        f.write(f"K3,{nas / 'nowhere'},,Y,KLA\n")
+    cfg = make_cfg(tmp_path, csv_path)
+    _rows, meta, _err = collect.collect(cfg)
+    m = {d["name"]: d for d in meta}
+    assert m["K3"]["status"] == collect.DEV_UNREACHABLE and m["K3"]["missed"] and m["K3"]["error"]
+    assert m["K1"]["status"] != collect.DEV_UNREACHABLE and not m["K1"].get("missed")
+    html = collect.write_html(cfg, _rows, meta, [], 0.0)
+    assert "수집 못 한 장비" in open(html, encoding="utf-8").read()

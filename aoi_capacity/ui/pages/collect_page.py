@@ -22,7 +22,7 @@ from PyQt6.QtWidgets import (QCheckBox, QFileDialog, QFrame, QGridLayout, QHBoxL
 
 from ... import collect, i18n, nas_guard
 from ...utils import paths, prefs, results
-from ...workers import wafer_logs
+from ...workers import failure_logs, wafer_logs
 from ..widgets.buttons import make_button
 from ..widgets.collapsible import Collapsible
 from ..widgets.inputs import NoWheelDateEdit as QDateEdit, NoWheelSpinBox as QSpinBox
@@ -488,6 +488,39 @@ class CollectPage(QWidget):
         wact.addWidget(self._wl_status, 1)
         wl.addLayout(wact)
         dl.addWidget(wcard)
+
+        # 실패 로그 수집(10/20) — 수집이 안 된 장비 · 읽지 못한 파일의 원인 · 로그 · 파일 내용을 지난 N일치로 모아 zip 한 장(NAS 는 읽기만)
+        fcard, fl = _card(body, K.FAIL_LOGS_TITLE)
+        fl.addWidget(_label(K.FAIL_LOGS_WHEN, "help", fcard, wrap=True))
+        frow = QHBoxLayout()
+        self._fl_days = QSpinBox(fcard)
+        self._fl_days.setRange(1, 90)
+        self._fl_days.setValue(max(1, min(90, int(p.fail_log_days or 3))))
+        self._fl_days.setSuffix(K.FAIL_LOGS_DAYS_SUFFIX)
+        self._fl_days.setFixedWidth(84)
+        frow.addWidget(_label(K.FAIL_LOGS_DAYS_PREFIX, "muted", fcard))
+        frow.addWidget(self._fl_days)
+        frow.addWidget(_label(K.FAIL_LOGS_DAYS_HINT, "muted", fcard))
+        frow.addStretch(1)
+        fl.addLayout(frow)
+        frow2 = QHBoxLayout()
+        self._fl_out = QLineEdit(str(paths.data_root() / "fail_logs"), fcard)
+        self._fl_out.setProperty("role", "mono")
+        self._b_fl_browse = make_button(K.BTN_BROWSE, parent=fcard)
+        frow2.addWidget(QLabel(K.WAFER_LOGS_OUT, fcard))
+        frow2.addWidget(self._fl_out, 1)
+        frow2.addWidget(self._b_fl_browse)
+        fl.addLayout(frow2)
+        fact = QHBoxLayout()
+        self._fl_status = _label("", "muted", fcard, wrap=True)
+        self._b_fl_run = make_button(K.FAIL_LOGS_RUN, "primary", fcard)
+        self._b_fl_open = make_button(K.FAIL_LOGS_OPEN, "default", fcard)
+        fact.addWidget(self._b_fl_run)
+        fact.addWidget(self._b_fl_open)
+        fact.addWidget(self._fl_status, 1)
+        fl.addLayout(fact)
+        dl.addWidget(fcard)
+        self._fl_worker: Optional[failure_logs.FailureLogsWorker] = None
         self._sec_dev = Collapsible(K.COLLECT_SEC_DEV, dev, body)
         lay.addWidget(self._sec_dev)
         self._wl_worker: Optional[wafer_logs.WaferLogsWorker] = None
@@ -548,6 +581,10 @@ class CollectPage(QWidget):
         self._b_wl_stop.clicked.connect(self._stop_wafer_logs)
         self._b_wl_open.clicked.connect(lambda: QDesktopServices.openUrl(QUrl.fromLocalFile(self._wl_out.text().strip())))
         self._b_wl_browse.clicked.connect(self._browse_wl_out)
+        self._b_fl_run.clicked.connect(self._on_fail_logs)
+        self._b_fl_open.clicked.connect(lambda: QDesktopServices.openUrl(QUrl.fromLocalFile(self._fl_out.text().strip())))
+        self._b_fl_browse.clicked.connect(self._browse_fl_out)
+        self._fl_days.valueChanged.connect(lambda v: prefs.patch(fail_log_days=int(v)))
         self._pick("normal")
         self.refresh_result()
 
@@ -864,10 +901,10 @@ class CollectPage(QWidget):
 
     # ── Wafer 폴더 로그 모으기(10/9) ──
     def wafer_logs_running(self) -> bool:
-        return self._wl_worker is not None
+        return self._wl_worker is not None or self._fl_worker is not None      # 실패 로그도 NAS 를 읽으니 가동률 수집과 겹치지 않게
 
     def _on_wafer_logs(self) -> None:
-        if self._wl_worker is not None:
+        if self._wl_worker is not None or self._fl_worker is not None:
             return
         if self._running:
             self.error.emit(K.WAFER_LOGS_TITLE, K.WAFER_LOGS_BUSY)
@@ -912,6 +949,48 @@ class CollectPage(QWidget):
         self._b_wl_browse.setEnabled(not on)
         self._b_run.setEnabled(not on and not self._running)     # 가동률 수집과 동시에 NAS 를 읽지 않는다
 
+    # ── 실패 로그 수집(10/20) ──
+    def _on_fail_logs(self) -> None:
+        if self._fl_worker is not None or self._wl_worker is not None:
+            return
+        if self._running:
+            self.error.emit(K.FAIL_LOGS_TITLE, K.WAFER_LOGS_BUSY)
+            return
+        out = self._fl_out.text().strip() or str(paths.data_root() / "fail_logs")
+        self._fl_out.setText(out)
+        w = failure_logs.FailureLogsWorker(prefs.to_collect_cfg(prefs.load()), int(self._fl_days.value()), out, self)
+        w.log.connect(self.append_log)
+        w.done.connect(self._on_fail_logs_done)
+        w.finished.connect(lambda w=w: self._worker_done("_fl_worker", w))
+        self._fl_worker = w
+        self._set_fail_logs_running(True)
+        self._fl_status.setText(K.FAIL_LOGS_RUNNING)
+        w.start()
+
+    def _on_fail_logs_done(self, result, err: str) -> None:
+        self._set_fail_logs_running(False)
+        if result:
+            fmt = K.FAIL_LOGS_DONE_FMT if result.get("items") else K.FAIL_LOGS_NONE_FMT
+            text = fmt.format(n=result.get("items", 0), days=result.get("days", 0), path=result.get("path", ""))
+        else:
+            text = err
+            self.error.emit(K.FAIL_LOGS_TITLE, err)
+        self._fl_status.setText(text)
+        self.append_log(text)
+
+    def _set_fail_logs_running(self, on: bool) -> None:
+        if on:
+            self._sec_dev.set_open(True)
+        for w in (self._b_fl_run, self._fl_days, self._fl_out, self._b_fl_browse):
+            w.setEnabled(not on)
+        self._b_run.setEnabled(not on and not self._running and self._wl_worker is None)
+        self._b_wl_run.setEnabled(not on and not self._running and self._wl_worker is None)
+
+    def _browse_fl_out(self) -> None:
+        chosen = QFileDialog.getExistingDirectory(self, K.WAFER_LOGS_OUT, self._fl_out.text())
+        if chosen:
+            self._fl_out.setText(chosen)
+
     def _browse_wl_out(self) -> None:
         chosen = QFileDialog.getExistingDirectory(self, K.WAFER_LOGS_OUT, self._wl_out.text())
         if chosen:
@@ -919,19 +998,21 @@ class CollectPage(QWidget):
 
     def shutdown(self, ms: int = 15_000) -> None:
         """창을 닫을 때 — 로그 모으기를 멈추고(지금까지 담은 것으로 zip 마무리) 기다린다."""
-        w = self._wl_worker
-        if w is None:
-            return
-        try:
-            w.stop()
-            w.wait(ms)
-        except RuntimeError:
-            self._wl_worker = None
+        for attr in ("_wl_worker", "_fl_worker"):
+            w = getattr(self, attr, None)
+            if w is None:
+                continue
+            try:
+                w.stop()
+                w.wait(ms)
+            except RuntimeError:
+                setattr(self, attr, None)
 
     def set_running(self, running: bool) -> None:
         self._running = running
         self._b_run.setEnabled(not running and self._wl_worker is None and getattr(self, "_pz_worker", None) is None)
-        self._b_wl_run.setEnabled(not running and self._wl_worker is None)
+        self._b_wl_run.setEnabled(not running and self._wl_worker is None and self._fl_worker is None)
+        self._b_fl_run.setEnabled(not running and self._fl_worker is None and self._wl_worker is None)
         if hasattr(self, "_b_pzip"):
             self._b_pzip.setEnabled(not running and self._pz_worker is None)
         self._b_stop.setVisible(running)

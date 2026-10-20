@@ -635,6 +635,25 @@ def discover_devices(cfg: dict, log: Optional[LogFn] = None, should_stop: Option
     return _dedupe_sort(devs)
 
 
+SKIP_LINE = re.compile(r"^\[건너뜀\] (.+?): (.*)$")
+MISSED_NO_ROW = "devices.csv 에 켜진 행이 없거나 이름이 다릅니다"
+
+
+def missed_in_scope(cfg: dict, devs: List[Dict[str, object]], seen: List[str]) -> Dict[str, str]:
+    """수집 범위 안인데 이번에 확인되지 않은 장비 → 이유. `seen` 은 장비 확인이 남긴 로그 줄(`[건너뜀] 이름: 이유`).
+    파일은 만지지 않는다(이미 한 확인 결과를 읽을 뿐)."""
+    ok_keys = {scope.key(d["name"]) for d in devs}
+    skips: Dict[str, str] = {}
+    for m in seen:
+        mm = SKIP_LINE.match(str(m).strip())
+        if mm:
+            skips[mm[1]] = mm[2]
+    if scope.unrestricted(cfg):
+        return {k: v for k, v in skips.items() if scope.key(k) not in ok_keys}
+    by_key = {scope.key(k): v for k, v in skips.items()}
+    return {n: by_key.get(scope.key(n), MISSED_NO_ROW) for n in scope.scope_list(cfg) if scope.key(n) not in ok_keys}
+
+
 def resolve_devices(cfg: dict, log: Optional[LogFn] = None, should_stop: Optional[StopFn] = None) -> List[Dict[str, object]]:
     """설정에 맞는 장비 목록. devices.csv 가 있으면 그것, 없으면 nas_roots 자동 탐색.
 

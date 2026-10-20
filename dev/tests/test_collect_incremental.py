@@ -21,7 +21,7 @@ def test_first_run_reads_everything_and_second_run_reads_nothing(tmp_path, fake_
     nas, csv_path = fake_nas
     cfg = make_cfg(tmp_path, csv_path)
     rows, dev_meta, errors, prog = _run(cfg)
-    names = sorted(d["name"] for d in dev_meta)
+    names = sorted(d["name"] for d in dev_meta if not d.get("missed"))   # 접근 못 한 장비는 meta 에 `missed` 로 따로 남는다
     assert names == ["8호기", "9호기", "AOI-10"]          # 꺼둔 행·접근 불가 행은 제외, * 는 AOI-10 만 새로 추가(AOI-9 는 명시 행이 이김)
     assert len(rows) == 9 and not errors
     assert prog[-1][0] == prog[-1][1] > 0                 # 마지막 보고는 (total, total)
@@ -49,7 +49,7 @@ def test_new_report_is_picked_up_by_cursor(tmp_path, fake_nas):
     future = time.time() + 3600
     os.utime(rep, (future, future))
     rows, dev_meta, _, _ = _run(cfg)
-    assert {d["name"]: d["reports"] for d in dev_meta} == {"8호기": 0, "9호기": 0, "AOI-10": 1}
+    assert {d["name"]: d["reports"] for d in dev_meta if not d.get("missed")} == {"8호기": 0, "9호기": 0, "AOI-10": 1}
     assert len(rows) == 12
 
 
@@ -257,7 +257,7 @@ def test_recover_rereads_only_reports_whose_ini_was_missing(tmp_path, fake_nas, 
     assert seen["htm"] == 3 and not errors                                   # 복구 대상 3개만 다시 읽었다(4개 중)
     assert nf(rows) == [("8호기", "K625407-99Z9"), ("9호기", "K625407-99Z9"), ("AOI-10", "K625407-99Z9")]
     assert [r["ini_match"] for r in rows if r["device"] == "AOI-10" and r["wafer_id"] == "K625407-01B0"] == ["EXACT"]
-    assert {d["name"]: d.get("recovered", 0) for d in dev_meta} == {"8호기": 1, "9호기": 1, "AOI-10": 1}
+    assert {d["name"]: d.get("recovered", 0) for d in dev_meta if not d.get("missed")} == {"8호기": 1, "9호기": 1, "AOI-10": 1}
     assert len(rows) == 10                                                   # 9 + 깨끗한 Report 1행 — 복구로 행이 겹쳐 붙지 않는다
     assert collect.plan_run(cfg, recover=True).recover_reports == 3          # 99Z9 는 영영 없으니 대상으로 남는다
 
@@ -377,7 +377,7 @@ def test_write_html_embeds_timing_and_counts(tmp_path, fake_nas):
               "ini_asked", "ini_unique", "ini_missing", "read_workers"):
         assert isinstance(stats[k], int) and stats[k] >= 0, k
     assert stats["reports_found"] == 3 == stats["reports_read"]
-    assert all("read_sum_ms" in d and "list_ms" not in d for d in dev_meta if not d.get("scope"))
+    assert all("read_sum_ms" in d and "list_ms" not in d for d in dev_meta if not d.get("scope") and not d.get("missed"))
     target = collect.write_html(cfg, rows, dev_meta, errors, time.time(), mode="gui", timing=stats)
     html = open(target, encoding="utf-8").read()
     assert '"timing":{' in html and '"html_ms":' in html and '"ini_unique":' in html

@@ -121,6 +121,9 @@ graphify 는 `--code-only` 로, template.html 인라인 JS 까지 보려면 `pyt
   **암호화**(`encrypt_bytes`/`decrypt_bytes` — SHA-256 키스트림 XOR + HMAC, 표준 라이브러리): `--all` 출력은 `.enc`(`--no-encrypt` 로 끔), 키는 `_enc_secret`(env `AOI_LOG_KEY` → 없으면 `ENC_KEY` 저장소 상수 — 전송·공유 노출을 막는 수준, 강한 비밀 아님). 해독은 `--decode <파일>.enc`(XOR 한 번, 토큰 안 듦 — 샌드박스에서 zip 으로 풂, 머리말 64바이트).
   수집 창 카드('Wafer 로그 30일 전체 수집' — 10/10 2차 표본 버튼을 대체, 1차 · 2차 표본은 bat 로만)는 `workers/wafer_logs.py` 가 이 스크립트를 **파일 경로로 불러** `--wide --all` 로 `run(args, log, should_stop, result)` 을 부른다 — 장비는 수집과 같은 `devices.resolve_devices` 게이트를 지난 Camtek 만,
   저장 위치는 `nas_guard.assert_local`, 가동률 수집과는 동시에 돌지 않는다(서로 막음). 스크립트는 단독 실행도 되어야 하므로 앱 패키지를 import 하지 않는다(가드 `test_wafer_logs_ui.py`).
+- **실패 로그 수집(10/20, `aoi_capacity/failures.py` · `workers/failure_logs.py`)**: 수집 창 '장비' 구역 카드 — 지난 N일(1~90, prefs `fail_log_days`)의 실패를 app.log 여러 판 · 캐시 `failed`/행 · 장비 확인(`devices.resolve_devices` 와 같은 범위 게이트)에서 모아 로컬 zip 한 장
+  (요약 · 실패목록.tsv · 장비상태.tsv · app.log 발췌 · 실패 파일 내용, **암호화 없음** — 사용자 10/20). 실패한 파일은 허용 장비의 장비 폴더 아래 **정확한 경로만** 읽기 전용으로 읽고(범위 밖 장비는 목록에서도 뺀다), 저장 위치는 `nas_guard.assert_local`.
+  KLA 읽기 실패는 캐시에 남지 않아 `[수집 상세]` 의 `오류 …` 줄이 유일한 기록이다. 가동률 수집 · Wafer 로그 수집과 동시에 돌지 않는다. 가드 `dev/tests/test_failures.py`.
 - Lot 이름의 작업 표기는 `collect.scan_type` 이 읽는다: `RE`·`RESCAN` → RESCAN(노랑), `REWORK` → REWORK(보라).
   `TEST` → TEST(회색). 토큰이 통째로 맞을 때만 걸린다(`RETURN`·`REX`·`TESTER` 제외).
   **`SRD`·`DIA`·`3D`·`EDGE`·`BUMP`·`PIDS3/5/7/9`·`RDL2/3/4`·`TPST6`·`TPDV`·`WBG`·`STRIP`·`DUMMY`·`RW` 는

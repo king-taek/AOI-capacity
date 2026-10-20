@@ -181,6 +181,22 @@ def read_bytes(path) -> bytes:
     return _read_all(path)
 
 
+def read_head(path, limit: int) -> bytes:
+    """파일 앞 `limit+1` 바이트까지만(읽기 전용) — 큰 파일을 통째로 메모리·네트워크로 올리지 않는다. 호출자는 `len > limit` 로 잘림을 안다."""
+    fd = os.open(path, _READ_FLAGS)
+    try:
+        chunks, total = [], 0
+        while total <= limit:
+            chunk = os.read(fd, limit + 1 - total)
+            if not chunk:
+                break
+            chunks.append(chunk)
+            total += len(chunk)
+        return b"".join(chunks)
+    finally:
+        os.close(fd)
+
+
 def read_text(path, encoding: str = "utf-8", errors: str = "replace") -> str:
     """`open(path, "r", encoding=, errors=).read()` 와 같은 결과(보편 줄바꿈: \\r\\n · \\r → \\n) — 읽기는 `_read_all` 로 한 번(`read_bytes` 를 거치지 않아 호출 수를 세는 쪽이 두 번 세지 않는다)."""
     return _read_all(path).decode(encoding, errors).replace("\r\n", "\n").replace("\r", "\n")

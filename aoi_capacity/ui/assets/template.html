@@ -201,6 +201,8 @@ main{max-width:1420px;margin:0 auto;padding:22px 24px 90px}
 .pill.ok{background:var(--good-soft);color:var(--good)}
 .pill.mono{font-family:var(--mono);font-size:11px;padding:1px 7px}
 .st{display:inline-block;padding:1px 7px;border-radius:999px;font-size:11px;font-weight:600;white-space:nowrap;margin-left:6px;vertical-align:1px}
+.missnote{margin:0 0 12px;padding:9px 14px;border-radius:10px;background:var(--crit-soft);color:var(--crit-ink);font-size:12.5px;line-height:1.5}
+.missnote b{margin-right:6px}
 .st.bad{background:var(--crit-soft);color:var(--crit-ink)}
 .st.warn{background:var(--warn-soft);color:#7A5200}
 .chart{position:relative;display:flex;align-items:flex-end;justify-content:center;gap:3px;border-bottom:1px solid var(--line-2)}
@@ -885,7 +887,7 @@ const _ret=Number(metaIn&&metaIn.retention_days)||0;let partialDays=[];
 if(metaIn&&metaIn.data_from){if(days.includes(metaIn.data_from))partialDays=[metaIn.data_from];}   /* 가진 데이터의 첫날 — 첫 수집 창이 그 날 도중에 시작했다 */
 else if(today&&_ret>0){const _cut=dk(new Date(new Date(today+'T00:00:00').getTime()-_ret*86400000));partialDays=days.filter(d=>d<=_cut);}
 return {day,today,generated:(metaIn&&metaIn.generated)||"",generated_iso:genIso,devices:dev,days,pool:SP,detail,jobG,jobGroups,partialDays,
-  scope:devMeta.map(x=>({n:x.name,note:x.note,reports:x.reports,status:x.status||"",readErrors:x.read_errors||0,error:x.error||"",dir:x.report_dir||"Report",out:x.scope==="out"})),
+  scope:devMeta.map(x=>({n:x.name,note:x.note,reports:x.reports,status:x.status||"",readErrors:x.read_errors||0,error:x.error||"",dir:x.report_dir||"Report",out:x.scope==="out",missed:!!x.missed})),
   obsEnd,rules:{...rules},badRows:bad,modelVersion:MODEL_VERSION};
 }
 
@@ -991,7 +993,7 @@ for(const ids of Object.values(gm)){const mem=ids.map(i=>[i,uj[i]||0]).sort((a,b
   const gi=jobGroups.length; jobGroups.push({l:mem[0][0],m:mem}); for(const i of ids) jobG[i]=gi;}
 const day=(today&&days.includes(today))?today:(days[days.length-1]||null);
 return {day,today,generated:(metaIn&&metaIn.generated)||"",generated_iso:genIso,devices:dev,days,pool:SP,detail,jobG,jobGroups,
-  scope:devMeta.map(x=>({n:x.name,note:x.note,reports:x.reports,status:x.status||"",readErrors:x.read_errors||0,error:x.error||"",dir:x.report_dir||"Report",out:x.scope==="out"})),
+  scope:devMeta.map(x=>({n:x.name,note:x.note,reports:x.reports,status:x.status||"",readErrors:x.read_errors||0,error:x.error||"",dir:x.report_dir||"Report",out:x.scope==="out",missed:!!x.missed})),
   obsEnd,rules:{...rules}};
 }
 
@@ -1678,6 +1680,11 @@ function footHtml(){   /* 10/7(사용자): 수집 범위 목록 · 장비/일수
 const lotKey=L=>L[0]+"|"+L[1]+"|"+L[2]+"|"+(L[11]||0)+"|"+(L[8]||0);
 
 /* ---------- 가동률 ---------- */
+function missedHtml(){   /* 수집 범위 안인데 이번에 접근하지 못한 장비 — 로그 한 줄로만 남아 조용히 빠지던 것을 첫 화면에 알린다 */
+  const ms=(D&&D.scope||[]).filter(x=>x.missed);
+  if(!ms.length)return"";
+  return `<p class="missnote" data-key="missnote" role="status" title="${esc(ms.map(x=>x.n+": "+x.error).join("\n"))}"><b>수집 못 한 장비 ${ms.length}대</b> ${esc(ms.map(x=>x.n).join(", "))} — 이번 수집에서 접근하지 못해 이전 기록만 보입니다(이유는 이름에 마우스를 올리거나 수집 로그의 [건너뜀] 줄).</p>`;
+}
 function homeHtml(){
   const day=S.dayStr(), devs=S.devList();
   const sorts=S.segGroup([{k:"name",label:"번호순"},{k:"low",label:"가동률 낮은 순"}],state.sort,k=>setState({sort:k}));
@@ -1699,6 +1706,7 @@ function homeHtml(){
       <div><p class="k">살펴볼 장비</p><p class="v num" style="color:#B4402F">${cnt(items.filter(x=>S.alert(x.t)).length)}<small>대</small></p><p class="s">가동률 ${S.thU()}% 미만 또는 Error ${S.thE()}건 이상${q.no?` · 기록 없음 ${q.no}대는 따로`:""}</p></div>
       <div><p class="k" title="같은 Lot 에서 같은 유형이 여러 번 나도 1건으로 셉니다">Error</p><p class="v num">${cnt(items.reduce((a,b)=>a+(b.t?b.t.e:0),0))}<small>건</small></p><p class="s">Error ${hm(items.reduce((a,b)=>a+(b.t?b.t.x:0),0))} · 에러 후 대기 ${hm(items.reduce((a,b)=>a+(b.t?b.t.s:0),0))}</p></div>
     </section>
+    ${missedHtml()}
     <div class="bar-h"><h2>${isToday?"오늘의 가동률":dayName(day)+" 가동률"}</h2><span class="scope-badge" data-key="scope">${scopeBadge("home")}</span><div class="spacer"></div>${S.filterSegs()}${segHtml(sorts)}</div>
     <div class="panel homelist" data-listsig="${state.view}|${state.floor}|${state.maker}|${state.sort}|${day}">
       <div class="legend"><span><i class="gloss" style="background-color:${RUN}"></i>Scan</span><span><i class="gloss" style="background-color:${DUP}"></i>Rescan</span><span><i class="gloss" style="background-color:${TEST}"></i>Test</span><span><i class="gloss" style="background-color:${ERR}"></i>Error</span><span><i class="gloss" style="background-color:${STOP}"></i>에러 후 대기</span><span><i class="gloss" style="background-color:${IDLE}"></i>대기</span>${isToday?`<span><i style="background:${FUTURE};box-shadow:inset 0 0 0 1px #DCE2E9"></i>아직 오지 않은 시간</span>`:""}</div>

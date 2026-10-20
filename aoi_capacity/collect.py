@@ -2469,7 +2469,13 @@ def _collect(cfg: dict, full: bool, backfill: bool, *, recover: bool, refresh_wi
 
     stats["cache_status"] = cache_status(cache)
     backfill = backfill or rebuild or not cache["reports"]
-    devs = devices_mod.resolve_devices(cfg, log, should_stop=should_stop)   # 장비 확인도 read_workers 개씩(C08) — 같은 예산, 중첩 풀 없음
+    seen_log: List[str] = []
+
+    def log_seen(msg: str) -> None:                           # 건너뛴 이유(`[건너뜀] …`)를 모아 두었다가 화면의 '수집 못 한 장비' 로 쓴다
+        seen_log.append(msg)
+        _say(log, msg)
+
+    devs = devices_mod.resolve_devices(cfg, log_seen, should_stop=should_stop)   # 장비 확인도 read_workers 개씩(C08) — 같은 예산, 중첩 풀 없음
     _check(should_stop)
     base = old_cache if old_cache is not None else cache
     _migrate_cursors(base, devs, log, dirty)
@@ -2745,6 +2751,7 @@ def _collect(cfg: dict, full: bool, backfill: bool, *, recover: bool, refresh_wi
     if (cache.get("params") or {}).get("snaps"):
         stats["params_store"] = cache["params"]                 # D89: write_html(timing=stats) 이 파라미터 탭 묶음을 만든다(메타 timing 에는 넣지 않는다)
     rows, hidden = _rows_from_cache(cache, index, cfg, stats)
+    dev_meta.extend(_missed_meta(cfg, devs, seen_log))
     _mark_device_status(dev_meta, rows)
     dev_meta.extend(_out_of_scope_meta(cfg, devs))
     stats["cache_ms"] = int((clock() - t3) * 1000)
@@ -2890,6 +2897,16 @@ def _mark_device_status(dev_meta: List[dict], rows: List[dict]) -> None:
         dm["rows"] = n_rows.get(str(dm["name"]), 0)
         dm["status"] = (DEV_UNREACHABLE if dm.get("error") else DEV_PARTIAL if dm.get("read_errors")
                         else DEV_NO_DATA if not dm["rows"] else DEV_OK)
+
+
+def _missed_meta(cfg: dict, devs: List[dict], seen_log: List[str]) -> List[dict]:
+    """수집 범위 안인데 이번에 접근하지 못해 건너뛴 장비 — 화면이 '수집 실패' 로 알린다(예전엔 로그 한 줄뿐이라 조용히 빠졌다).
+    이미 한 장비 확인의 결과만 쓰고 NAS 에는 접근하지 않는다."""
+    out = []
+    for name, why in devices_mod.missed_in_scope(cfg, devs, seen_log).items():
+        out.append({"name": name, "note": "", "reports": 0, "found": 0, "error": why, "read_errors": 0, "recovered": 0,
+                    "refreshed": 0, "retried": 0, "kept": 0, "listing": "skipped", "missed": True})
+    return out
 
 
 def _out_of_scope_meta(cfg: dict, devs: List[dict]) -> List[dict]:

@@ -166,6 +166,29 @@ def read_wafer(path: str) -> Optional[dict]:
     return None
 
 
+LOCK_RECENT_MIN = 60     # 이 안에 만들어진 Wafer 폴더의 PermissionError 는 스캔 중(쓰는 중)으로 본다
+LOCK_MAX_TRIES = 2       # 같은 Wafer 가 이만큼 연달아 잠겨 있으면 더는 스캔 중이 아니라 읽기 실패로 알린다
+
+
+def _is_scanning_lock(err: str, wafer: str, now: dt.datetime, entry: dict, lot: str) -> bool:
+    """읽기 오류가 '막 만들어진 Wafer 의 결과 파일이 잠긴 것' 인지. 맞으면 시도 횟수를 캐시 항목에 적고(최대 `LOCK_MAX_TRIES`), 넘으면 거짓."""
+    if not err.startswith("PermissionError"):
+        return False
+    try:
+        t, _slot = wafer_time(wafer)
+    except Exception:  # noqa: BLE001 - 시각을 못 읽으면 스캔 중이라고 추정하지 않는다
+        return False
+    if t is None or not (dt.timedelta(0) <= now - t <= dt.timedelta(minutes=LOCK_RECENT_MIN)):
+        return False
+    tries = entry.setdefault("locked", {})
+    key = f"{lot}/{wafer}"
+    n = int(tries.get(key, 0)) + 1
+    if n > LOCK_MAX_TRIES:
+        return False
+    tries[key] = n
+    return True
+
+
 # ── 수집(메인 스레드가 합친다) ───────────────────────────────────────────────
 def collect_kla(cfg: dict, devs: List[dict], cache: dict, *, run: Callable, now: dt.datetime,
                 backfill: bool, refresh_days: int, rebuild: bool, log: Callable[[str], None],
@@ -296,6 +319,11 @@ def collect_kla(cfg: dict, devs: List[dict], cache: dict, *, run: Callable, now:
         m, e = metas[k], store[k]
         m["read_n"] = m.get("read_n", 0) + 1
         m["read_sum_ms"] = m.get("read_sum_ms", 0) + int(sec * 1000)
+        if err and _is_scanning_lock(err, w, now, e, lot):
+            changed = True                                     # 시도 횟수를 캐시에 남긴다
+            pending += 1                                       # 방금 만들어진 Wafer 의 결과 파일이 쓰는 중이라 잠겼다 — 스캔 중, 다음 수집에서 다시
+            m["scanning"] = m.get("scanning", 0) + 1
+            return
         if err:
             m["read_errors"] += 1
             errors.append({"device": d["name"], "path": os.path.join(str(d["path"]), dd, lot, w), "tries": 1, "error": err})
@@ -306,6 +334,7 @@ def collect_kla(cfg: dict, devs: List[dict], cache: dict, *, run: Callable, now:
         t, slot = wafer_time(w)
         rec.update({"t": t.isoformat(timespec="minutes"), "dir_slot": slot, "dd": dd, "rd": int(time.time())})
         e["lots"].setdefault(lot, {})[w] = rec
+        (e.get("locked") or {}).pop(f"{lot}/{w}", None)
         changed = True
         if on_change is not None:
             on_change()
