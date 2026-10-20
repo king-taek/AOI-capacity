@@ -18,7 +18,7 @@ def _pump(app, secs=0.05):
 
 
 @pytest.fixture
-def window(styled_qapp, fake_nas):
+def window(styled_qapp, fake_nas, monkeypatch):
     from aoi_capacity import devices
     from aoi_capacity.utils import paths, prefs
 
@@ -30,7 +30,13 @@ def window(styled_qapp, fake_nas):
     prefs.patch(scope_devices=["*"])
     from aoi_capacity.ui.main_window import MainWindow
 
+    from aoi_capacity.ui import main_window
+
+    # 가짜 NAS 에는 접근 못 하는 장비가 있다 — 수집 완료 안내(모달)가 뜨면 테스트가 멈추니 가로채서 내용만 본다
+    warned = []
+    monkeypatch.setattr(main_window.sheets, "warn", lambda _w, title, text: warned.append(text))
     w = MainWindow()
+    w._warned = warned
     w.show()
     _pump(styled_qapp)
     yield w
@@ -64,6 +70,7 @@ def test_collect_flow_writes_html_and_updates_status(window, styled_qapp):
     from aoi_capacity import i18n
     from aoi_capacity.utils import paths
 
+    warned = window._warned
     window.nav.set_current("collect")
     window._start_collect(False, False)
     assert window.is_collecting() and window.overlay.isVisible()
@@ -76,6 +83,7 @@ def test_collect_flow_writes_html_and_updates_status(window, styled_qapp):
     assert paths.output_html("").exists()
     assert window.nav._status.text().startswith(i18n.KO.NAV_LAST_COLLECT_FMT.split("{")[0])
     assert "수집 완료" in window.collect_page._status.text()
+    assert len(warned) == 1 and "접근 못 함" in warned[0]       # 범위 안인데 접근하지 못한 장비는 완료 안내에 이름이 나온다
     assert window.collect_page._b_run.isEnabled()
     # 결과 카드가 방금 만든 HTML 경로를 가리키고 '결과 화면 열기' 가 살아난다
     assert window.collect_page._result.text() == str(paths.output_html(""))
