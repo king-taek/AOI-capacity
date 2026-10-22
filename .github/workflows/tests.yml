@@ -1,6 +1,7 @@
 # main 푸시 = 현장 배포(업데이터가 main 의 SHA 를 보고 내려보낸다)이므로 그 전에 전체 테스트를 돌린다.
 # 이름 `tests` 는 계약이다 — 업데이터가 나중에 "이 워크플로가 그 커밋에서 성공했는가" 를 배포 조건으로 본다(계획 S02·AC05).
-# - core   : Linux + Python 3.11 + Node 22 + Qt offscreen 으로 전체 스위트(slow 포함, pytest.ini 의 -q 그대로).
+# - core   : Linux + Python 3.11 + Node 22 + Qt offscreen 으로 전체 스위트(slow 포함, pytest.ini 의 -q 그대로). 10/22: `-n auto --dist loadfile`(pytest-xdist)로 파일 단위 병렬 —
+#            같은 파일의 테스트는 한 프로세스에서 차례로 돈다(파일 안 공유 상태가 있어서).
 #            필수 의존성(yaml·PyQt6·node)이 없으면 사전 점검에서 실패한다 — 조용한 skip 으로 초록불이 되지 않게.
 # - browser: Playwright Chromium 으로 `browser` 마커 테스트. 아직 그런 테스트가 없으면(pytest exit 5) 통과로 처리한다.
 # - progress-doc(PR 만): merge-base → PR head 범위에 코드 변경이 있으면 진행상황.md 도 함께 바뀌었어야 한다(CLAUDE.md '커밋' 규칙, S14).
@@ -66,7 +67,7 @@ jobs:
       - name: 전체 테스트 (slow 포함)
         env:
           QT_QPA_PLATFORM: offscreen
-        run: python -m pytest -q --durations=15
+        run: python -m pytest -q -n auto --dist loadfile --durations=15
 
   browser:
     runs-on: ubuntu-latest

@@ -8,6 +8,12 @@ from aoi_capacity.utils import paths
 
 
 def test_setup_logging_writes_to_data_root():
+    # 병렬 실행(pytest-xdist)에서는 같은 프로세스의 앞선 테스트가 이미 'aoi' 로거를 다른 데이터 폴더로 설정해 두었을 수 있다 — 깨끗이 시작한다
+    logger = logging.getLogger("aoi")
+    for h in list(logger.handlers):
+        logger.removeHandler(h)
+        h.close()
+    logger._aoi_configured = False  # type: ignore[attr-defined]
     logger = app_main._setup_logging()
     logger.info("hello-from-test")
     for h in logger.handlers:
