@@ -336,6 +336,17 @@ class CollectPage(QWidget):
         rx.addWidget(_label(K.HTML_ONLY_TO, "muted", self._cards["range"]))
         rx.addWidget(self._r_to)
         rx.addStretch(1)
+        # 10/22: '빠진 날 채우기' 의 시작일 — 이 날부터 오늘까지 아직 읽지 않은 것만 읽는다(기본 = 오늘 − backfill_days)
+        self._b_from = QDateEdit(self._cards["backfill"])
+        self._b_from.setCalendarPopup(True)
+        self._b_from.setDisplayFormat("yyyy-MM-dd")
+        self._b_from.setMaximumDate(today)
+        self._b_from.setDate(today.addDays(-int(prefs.load().backfill_days or 30)))
+        self._b_from.setMinimumWidth(130)
+        bx = self._cards["backfill"].extra
+        bx.addWidget(_label(K.BACKFILL_FROM, "muted", self._cards["backfill"]))
+        bx.addWidget(self._b_from)
+        bx.addStretch(1)
         grid.setColumnStretch(0, 1)
         grid.setColumnStretch(1, 1)
         tl.addLayout(grid)
@@ -575,6 +586,7 @@ class CollectPage(QWidget):
         self._refresh_days.valueChanged.connect(self._on_refresh_days)
         for w in (self._r_from, self._r_to):
             w.dateChanged.connect(lambda _d: self._mode == "range" and self.refresh_plan())
+        self._b_from.dateChanged.connect(lambda _d: self._mode == "backfill" and self.refresh_plan())
         self._csv.toggled.connect(lambda on: prefs.patch(write_csv=bool(on)))
         self._out.editingFinished.connect(self._apply_out)
         self._b_wl_run.clicked.connect(self._on_wafer_logs)
@@ -623,6 +635,12 @@ class CollectPage(QWidget):
             return None
         a, b = self._r_from.date().toString("yyyy-MM-dd"), self._r_to.date().toString("yyyy-MM-dd")
         return tuple(sorted((a, b)))
+
+    def backfill_days(self) -> Optional[int]:
+        """'빠진 날 채우기' 를 고른 동안만 시작일부터 오늘까지의 일수(1~3650). 다른 카드면 None."""
+        if self._mode != "backfill":
+            return None
+        return max(1, min(3650, self._b_from.date().daysTo(QDate.currentDate()) + 1))
 
     def options(self) -> tuple:
         return _ARGS[self._mode]
@@ -774,7 +792,10 @@ class CollectPage(QWidget):
         """계획 문구·카드 상태를 갱신한다 — 캐시 읽기는 워커 스레드에서(UI 스레드가 몇 초씩 멈추던 원인)."""
         p = prefs.load()
         cfg = prefs.to_collect_cfg(p)
-        self._cards["backfill"].set_texts(what=K.MODE_BACKFILL_WHAT_FMT.format(days=int(p.backfill_days)))
+        bdays = self.backfill_days()
+        if bdays:
+            cfg["backfill_days"] = bdays
+        self._cards["backfill"].set_texts(what=K.MODE_BACKFILL_WHAT_FMT.format(days=bdays or int(p.backfill_days)))
         self._cards["rebuild"].set_texts(what=K.MODE_REBUILD_WHAT_FMT.format(days=_days_text(p.retention_days)))
         self._plan_token += 1
         token = self._plan_token

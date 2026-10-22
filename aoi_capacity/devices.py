@@ -29,7 +29,7 @@ import re
 from concurrent.futures import ThreadPoolExecutor
 from typing import Callable, Dict, List, Optional, Tuple
 
-from . import nas_guard, scope
+from . import kla_drives, nas_guard, scope
 from .utils import config as _config
 
 _LOG = logging.getLogger("aoi.devices")
@@ -551,7 +551,10 @@ def devices_from_rows(rows: List[Dict[str, object]], cfg: dict, log: Optional[Lo
         if kind == "explicit":
             return _has_report(path, cfg), []
         if kind == "kla":
-            return _is_kla_root(path), []
+            if _is_kla_root(path):
+                return True, []
+            ok, msgs = kla_drives.reconnect(path, cfg)      # 끊긴 드라이브: kla_drives.txt 가 있으면 다시 연결(10/22)
+            return (ok and _is_kla_root(path)), msgs
         return None, []
 
     results = _pmap(cfg, tasks, probe, should_stop)
@@ -684,7 +687,7 @@ def check_rows(rows: List[Dict[str, object]], cfg: dict) -> List[Dict[str, objec
         if not auto and not scope.allows_row(cfg, row):
             return "out_of_scope"                                   # 파일 접근 없음
         root = _norm_root(str(row.get("root", "")))
-        if not os.path.isdir(root):
+        if not os.path.isdir(root) and not (not auto and scope.is_kla(row.get("name") or sub) and kla_drives.reconnect(root, cfg)[0]):
             return "unreachable"
         if not auto and scope.is_kla(row.get("name") or sub):
             return "ok" if _is_kla_root(os.path.join(root, sub) if sub else root) else "no_report"

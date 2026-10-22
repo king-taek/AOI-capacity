@@ -199,6 +199,9 @@ class MainWindow(QMainWindow):
         self._confirm_devices_dirty()
         p = prefs.load()
         cfg = prefs.to_collect_cfg(p)
+        bdays = self.collect_page.backfill_days()           # '빠진 날 채우기' 의 시작일 (10/22)
+        if bdays:
+            cfg["backfill_days"] = bdays
         names = self._device_names(cfg)
         if not names:
             sheets.warn(self, i18n.KO.COLLECT_NO_DEVICES_TITLE, i18n.KO.COLLECT_NO_DEVICES_BODY)
