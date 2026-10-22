@@ -22,7 +22,7 @@ from PyQt6.QtWidgets import (QCheckBox, QFileDialog, QFrame, QGridLayout, QHBoxL
 
 from ... import collect, i18n, nas_guard
 from ...utils import paths, prefs, results
-from ...workers import failure_logs, image_survey, wafer_logs
+from ...workers import failure_logs, image_survey, no_image, wafer_logs
 from ..widgets.buttons import make_button
 from ..widgets.collapsible import Collapsible
 from ..widgets.inputs import NoWheelDateEdit as QDateEdit, NoWheelSpinBox as QSpinBox
@@ -558,6 +558,27 @@ class CollectPage(QWidget):
         iact.addWidget(self._is_status, 1)
         il.addLayout(iact)
         self._top_cards.addWidget(icard)
+
+        # No image 점검(10/22) — Lot 이름 NO IMAGE 재스캔과 그 원래 스캔의 Wafer 폴더 파일을 zip 한 장(8MB 이하)으로(NAS 는 읽기만)
+        ncard, nl = _card(body, K.NO_IMAGE_TITLE)
+        nl.addWidget(_label(K.NO_IMAGE_WHEN, "help", ncard, wrap=True))
+        nrow = QHBoxLayout()
+        self._ni_days = QSpinBox(ncard)
+        self._ni_days.setRange(1, 90)
+        self._ni_days.setValue(max(1, min(90, int(p.no_image_days or 60))))
+        self._ni_days.setSuffix(K.FAIL_LOGS_DAYS_SUFFIX)
+        self._ni_days.setFixedWidth(84)
+        nrow.addWidget(_label(K.FAIL_LOGS_DAYS_PREFIX, "muted", ncard))
+        nrow.addWidget(self._ni_days)
+        nrow.addStretch(1)
+        nl.addLayout(nrow)
+        nact = QHBoxLayout()
+        self._ni_status = _label("", "muted", ncard, wrap=True)
+        self._b_ni_run = make_button(K.NO_IMAGE_RUN, "primary", ncard)
+        nact.addWidget(self._b_ni_run)
+        nact.addWidget(self._ni_status, 1)
+        nl.addLayout(nact)
+        self._top_cards.addWidget(ncard)        # 맨 위 조사 카드 줄(Review 이미지 조사 아래) — 이슈가 풀리면 카드와 함께 지운다
         self._sec_dev = Collapsible(K.COLLECT_SEC_DEV, dev, body)
         lay.addWidget(self._sec_dev)
         self._wl_worker: Optional[wafer_logs.WaferLogsWorker] = None
@@ -624,6 +645,8 @@ class CollectPage(QWidget):
         self._b_fl_browse.clicked.connect(self._browse_fl_out)
         self._b_is_run.clicked.connect(self._on_image_survey)
         self._is_days.valueChanged.connect(lambda v: prefs.patch(image_survey_days=int(v)))
+        self._b_ni_run.clicked.connect(self._on_no_image)
+        self._ni_days.valueChanged.connect(lambda v: prefs.patch(no_image_days=int(v)))
         self._fl_days.valueChanged.connect(lambda v: prefs.patch(fail_log_days=int(v)))
         self._pick("normal")
         self.refresh_result()
@@ -1063,10 +1086,40 @@ class CollectPage(QWidget):
         self.append_log(text)
 
     def _set_image_survey_running(self, on: bool) -> None:
-        for w in (self._b_is_run, self._is_days, self._b_fl_run, self._fl_days, self._fl_out, self._b_fl_browse):
+        for w in (self._b_is_run, self._is_days, self._b_ni_run, self._ni_days, self._b_fl_run, self._fl_days, self._fl_out, self._b_fl_browse):
             w.setEnabled(not on)
         self._b_run.setEnabled(not on and not self._running and self._wl_worker is None)
         self._b_wl_run.setEnabled(not on and not self._running and self._wl_worker is None)
+
+    # ── No image 점검(10/22) — 저장 위치는 실패 로그와 같은 폴더 ──
+    def _on_no_image(self) -> None:
+        if self._fl_worker is not None or self._wl_worker is not None:
+            return
+        if self._running:
+            self.error.emit(K.NO_IMAGE_TITLE, K.WAFER_LOGS_BUSY)
+            return
+        out = self._fl_out.text().strip() or str(paths.data_root() / "fail_logs")
+        w = no_image.NoImageWorker(prefs.to_collect_cfg(prefs.load()), int(self._ni_days.value()), out, self)
+        w.log.connect(self.append_log)
+        w.done.connect(self._on_no_image_done)
+        w.finished.connect(lambda w=w: self._worker_done("_fl_worker", w))
+        self._fl_worker = w
+        self._set_no_image_running(True)
+        self._ni_status.setText(K.NO_IMAGE_RUNNING)
+        w.start()
+
+    def _on_no_image_done(self, result, err: str) -> None:
+        self._set_no_image_running(False)
+        if result:
+            text = K.NO_IMAGE_DONE_FMT.format(n=result.get("items", 0), mb=result.get("size", 0) / 1e6, path=result.get("path", ""))
+        else:
+            text = err
+            self.error.emit(K.NO_IMAGE_TITLE, err)
+        self._ni_status.setText(text)
+        self.append_log(text)
+
+    def _set_no_image_running(self, on: bool) -> None:
+        self._set_image_survey_running(on)
 
     def _browse_fl_out(self) -> None:
         chosen = QFileDialog.getExistingDirectory(self, K.WAFER_LOGS_OUT, self._fl_out.text())
@@ -1096,6 +1149,7 @@ class CollectPage(QWidget):
         self._b_wl_run.setEnabled(not running and self._wl_worker is None and self._fl_worker is None)
         self._b_fl_run.setEnabled(not running and self._fl_worker is None and self._wl_worker is None)
         self._b_is_run.setEnabled(not running and self._fl_worker is None and self._wl_worker is None)
+        self._b_ni_run.setEnabled(not running and self._fl_worker is None and self._wl_worker is None)
         if hasattr(self, "_b_pzip"):
             self._b_pzip.setEnabled(not running and self._pz_worker is None)
         self._b_stop.setVisible(running)
