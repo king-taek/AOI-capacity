@@ -472,3 +472,13 @@ FAIL_LOGS_RUNNING = "모으는 중…"
 FAIL_LOGS_DONE_FMT = "끝났습니다 — 실패 항목 {n}개 · {path}"
 FAIL_LOGS_NONE_FMT = "끝났습니다 — 지난 {days}일 안에 찾은 실패가 없습니다 · {path}"
 FAIL_LOGS_FAIL_FMT = "실패 로그를 모으지 못했습니다: {error}"
+
+# ── Review 이미지 순서 조사(10/22) ──────────────────────────────────────────
+IMG_SURVEY_TITLE = "Review 이미지 순서 조사"
+IMG_SURVEY_WHEN = ("Review 에서 Color image 보다 Scan image 가 먼저 나오는 현상을 조사하려고, 최근 Report 에서 Wafer 를 표본(PI 우선, 장비마다 PI 3장 · 그 밖 1장)으로 골라 "
+                   "그 Wafer 폴더 안의 파일 목록 · 하위 폴더 항목의 수정 시각 · 이미지/검토 관련 ini · txt 를 zip 한 장으로 모읍니다. NAS 는 **읽기 전용**이고 수집 범위 밖 장비는 보지 않습니다. "
+                   "이미지 파일 자체는 담지 않습니다. 파일 내용에 Lot · Job 이름이 있으니 공유 범위는 직접 판단하세요.")
+IMG_SURVEY_RUN = "Review 이미지 조사"
+IMG_SURVEY_RUNNING = "표본을 읽는 중…"
+IMG_SURVEY_DONE_FMT = "끝났습니다 — 표본 {n}장 · {path}"
+IMG_SURVEY_FAIL_FMT = "Review 이미지 조사를 하지 못했습니다: {error}"

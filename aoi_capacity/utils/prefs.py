@@ -40,6 +40,7 @@ class Prefs:
     scope_devices: List[str] = field(default_factory=lambda: list(_scope.DEFAULT_SCOPE))  # ★ 수집 허용 장비
     refresh_pick_days: int = 3        # 수집 페이지 '최근 N일 다시 읽기' 카드의 N(고를 때만 refresh_window_days 로 들어간다)
     fail_log_days: int = 3            # 수집 페이지 '실패 로그 수집' 카드의 검사 일수(1~90, 10/20)
+    image_survey_days: int = 7        # 수집 페이지 'Review 이미지 순서 조사' 카드의 표본 기간 일수(1~90, 10/22)
     html_days: int = 30               # 수집 뒤 결과 HTML 에 담을 최근 일수(0 = 전부, 기본 1달 — 10/5 사용자). 전체 기간은 수집 창 버튼
     refresh_window_days: int = 0      # D60: 최근 N일 안의 Report 는 캐시에 있어도 다시 읽기(0 = 끔). 수집 페이지 체크박스가 켜고 끈다
     prefs_version: int = PREFS_VERSION
