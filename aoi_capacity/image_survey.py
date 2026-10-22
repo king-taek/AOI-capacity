@@ -191,6 +191,7 @@ def gather(cfg: dict, days: int, *, log: LogFn, should_stop: Optional[Callable[[
     log(f"Review 이미지 순서 조사 — 지난 {days}일({cutoff:%m/%d %H:%M} ~) 표본")
     cache = collect._load_cache(cfg, rederive=False, dirty=collect._Dirty())
     probe = failures.probe_devices(cfg, log, stop, resolver)
+    collect._assign_device_keys(cache, probe["ok"], cfg, collect._Dirty(), log)      # 장비 dict 에 안정 키(d["key"]) 를 붙인다 — 메모리 안에서만, 캐시 파일은 쓰지 않는다
     samples = pick_samples(cache, cfg, probe["ok"], cutoff, **kw)
     log(f"표본 {len(samples)}장(PI {sum(1 for s in samples if s['pi'])}) — 장비 {len({s['device'] for s in samples})}대")
     allowed = lambda n: scope.is_allowed(cfg, n)  # noqa: E731

@@ -116,3 +116,18 @@ def test_card_remembers_days_runs_and_blocks_collect(styled_qapp, fake_nas, tmp_
     assert list((tmp_path / "is").glob("AOI_review_image_*.zip")), page._is_status.text()
     w.close()
     _pump(styled_qapp)
+
+
+def test_gather_gives_devices_their_stable_key(tmp_path, fake_nas, monkeypatch):
+    """resolve_devices 가 돌려준 장비에는 `key` 가 없다 — 수집과 같이 안정 키를 붙여야 캐시의 Report 와 이어진다(현장 KeyError 'key')."""
+    nas, csv_path = fake_nas
+    from conftest import make_cfg
+    cfg = make_cfg(tmp_path, csv_path)
+    root = nas / "X" / "AOI-9"
+    cache = {"reports": {"dev:AOI-9|r.htm": {"rows": [_row("R_TB500_LIVE_PI4", "L1", "W1", 21)]}}, "failed": {}, "devices": {"dev:AOI-9": {"name": "AOI-9", "ids": [str(root)], "aliases": []}},
+             "last_mtime": {}, "kla": {}}
+    monkeypatch.setattr(image_survey.collect, "_load_cache", lambda *a, **k: cache)
+    g = image_survey.gather(cfg, 7, log=lambda m: None, now=NOW,
+                            resolver=lambda c, log=None, should_stop=None: [{"name": "AOI-9", "path": str(root), "id": str(root)}])
+    assert g["probe"]["ok"][0]["key"] == "dev:AOI-9"
+    assert len(g["samples"]) == 1 and g["samples"][0]["pi"]
