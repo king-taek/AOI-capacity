@@ -834,7 +834,7 @@ def rdl2_page(page_factory, tmp_path):
 
 def test_rdl_tab_lot_stat_outlier_x5_rule_and_wording(rdl_page):
     pg, errors = rdl_page
-    assert [t.strip() for t in pg.locator("nav button").all_inner_texts()] == ["가동률", "Error", "TB500 · Kendall", "RDL 단일스캔", "LOT 추적", "파라미터"]
+    assert [t.strip() for t in pg.locator("nav button").all_inner_texts()] == ["가동률", "Error", "TB500 · Kendall", "RDL 단일스캔", "LOT 추적"]
     pg.locator('button[data-fk="nav:recipe"]').click()
     pg.wait_for_selector('main[data-key="view:recipe"]')
     pg.wait_for_timeout(400)
@@ -1018,7 +1018,9 @@ def test_param_tab_unpacks_a_job_on_demand_and_marks_differing_cells(page_factor
     pg.on("request", lambda r: requests.append(r.url) if not r.url.startswith(("file:", "data:", "blob:")) else None)
     pg.goto(out.as_uri())
     pg.wait_for_selector('main[data-key^="view:"]')
-    pg.locator('button[data-fk="nav:param"]').click()
+    pg.keyboard.press("Control+Shift+D")
+    pg.locator('button[data-fk="set:btn"]').click()
+    pg.get_by_role("menuitem", name="파라미터").click()
     pg.wait_for_selector("table.ptab")
     assert pg.locator(".ptab td.dif").all_inner_texts() == ["9"]                       # Threshold — AOI-7 만 다름
     body = pg.locator('main[data-key="view:param"]').inner_text()

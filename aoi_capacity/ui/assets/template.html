@@ -485,6 +485,7 @@ button.dbrow:focus-visible{outline:2px solid var(--nav-on);outline-offset:-2px}
 }
 /* 10/6 handoff C8 — 날짜 두 줄 */
 .hdr .hacts{display:flex;align-items:center;gap:8px}
+.hdr .setwrap{position:relative}.hdr .setpop{position:absolute;right:0;top:calc(100% + 6px);z-index:30;min-width:180px;display:flex;flex-direction:column;gap:6px;padding:10px;background:#fff;border:1px solid var(--line);border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,.14)}.hdr .setpop b{font-size:12px;color:var(--mut,#667)}.hdr .setpop .btn{text-align:left}.hdr .setnone{font-size:12px;color:#889}
 .date-controls{flex-basis:100%;display:flex;flex-direction:column;gap:6px;padding:8px 0 10px;border-top:1px solid #EDF1F5}
 .date-control-row{display:flex;align-items:center;gap:8px;flex-wrap:wrap;min-width:0}
 .date-control-row .dcl{font-size:12px;font-weight:600;color:var(--ink-2);min-width:64px}
@@ -1033,7 +1034,8 @@ const PROPS={attentionUtil:40,attentionErr:3};   /* 살펴볼 장비 문턱 — 
 function applySettings(m){const o=(m&&m.dashboard_settings)||{};for(const k of Object.keys(PROPS)){const v=Number(o[k]);if(o[k]!==undefined&&Number.isFinite(v)&&v>=0)PROPS[k]=v;}}
 let D=null;
 const VIEWS=["home","errors","report","recipe","lot","param"];   /* 10/5: KLA 탭 · 추이 탭은 없앴다(KLA 는 가동률의 구분 필터로) */
-const state={view:"home",dayI:null,sort:"name",floor:"all",maker:"all",span:0,vp:"all",unit:"day",metric:"min",pickDay:undefined,
+const HIDDEN_TABS=[["param","파라미터"]];   /* 평소 탭 줄에서 숨기는 탭 — Ctrl+Shift+D 로 켠 ⚙ 설정에서 꺼내 쓴다(10/22) */
+const state={devOn:false,setOpen:false,unhid:[],view:"home",dayI:null,sort:"name",floor:"all",maker:"all",span:0,vp:"all",unit:"day",metric:"min",pickDay:undefined,
   modalDev:null,modalDayI:null,modalType:null,modalJob:null,selLot:null,lotFilter:"all",showMembers:false,
   stack:[],                                  /* 열린 팝업의 순서(type · dev · err) — 마지막이 맨 위, 나머지는 뒤로 물러난다 */
   errDays:null,errFType:null,errFJob:null,   /* Error 팝업의 기간(여러 날) · Error 탭의 유형/Job 필터 */
@@ -1096,7 +1098,9 @@ function init(){
     document.addEventListener("mouseout",e=>{const d=e.target.closest?e.target.closest(".dlg [data-lk]"):null;if(d&&!(e.relatedTarget&&e.relatedTarget.closest&&e.relatedTarget.closest(".dlg [data-lk]")))sameLot(d.closest(".dlg"),null);});
     document.addEventListener("mouseout",e=>{const d=e.target.closest?e.target.closest(".sd[data-dev]"):null;if(d&&!(e.relatedTarget&&e.relatedTarget.closest&&e.relatedTarget.closest(".sd[data-dev]")))sameDev(d.closest(".dlg"),"",false);});
   }
-  document.addEventListener("keydown",e=>{if(e.key==="Tab"){trapTab(e);return;}if(e.key!=="Escape")return;closeTop();});
+  document.addEventListener("keydown",e=>{if(e.key==="Tab"){trapTab(e);return;}
+    if((e.ctrlKey||e.metaKey)&&e.shiftKey&&(e.key==="D"||e.key==="d")){e.preventDefault();setState({devOn:!state.devOn,setOpen:false});return;}
+    if(e.key!=="Escape")return;if(state.setOpen&&!state.stack.length){setState({setOpen:false});return;}closeTop();});
   document.addEventListener("input",e=>{const el=e.target;const k=el&&el.dataset?el.dataset.in:null;if(k&&INPUT_KEYS.has(k))setState({[k]:el.value});});
   document.addEventListener("change",e=>{const el=e.target;if(el&&el.id==="rgFile"&&el.files&&el.files[0])rgImportFile(el.files[0]);
     const k=el&&el.dataset?el.dataset.in:null;
@@ -1658,12 +1662,15 @@ function headerHtml(V){
   let stampTxt=gen?gen+" 수집 기준":"";
   if(meta.mode==="saved")stampTxt+=" · 사본";
   if(!fixed&&gen)stampTxt+=" · 수집 시각 정보 없음";
-  const nav=[["home","가동률"],["errors","Error"],["report","TB500 · Kendall"],["recipe","RDL 단일스캔"],["lot","LOT 추적"],["param","파라미터"]];
+  const nav=[["home","가동률"],["errors","Error"],["report","TB500 · Kendall"],["recipe","RDL 단일스캔"],["lot","LOT 추적"],...HIDDEN_TABS.filter(([k])=>state.unhid.includes(k)||V===k)];
+  const hid=HIDDEN_TABS.filter(([k])=>!state.unhid.includes(k)&&V!==k);
+  const setBtn=state.devOn?`<span class="setwrap"><button class="btn${state.setOpen?" on":""}" data-h="${h(()=>setState({setOpen:!state.setOpen}))}" data-fk="set:btn" aria-haspopup="true" aria-expanded="${state.setOpen}" title="숨긴 탭 설정">⚙ 설정</button>${state.setOpen?`<div class="setpop" role="menu"><b>숨긴 탭</b>${hid.length?hid.map(([k,l])=>`<button class="btn" role="menuitem" data-h="${h(()=>{setState({unhid:[...state.unhid,k],setOpen:false});S.go(k)();})}" title="탭 줄로 복귀하고 엽니다">${l}</button>`).join(""):`<span class="setnone">숨긴 탭이 없습니다</span>`}</div>`:""}</span>`:"";
   return `<header class="hdr" data-key="hdr"><div class="brand"><span class="lt" data-lottie="scan" data-loop="1" data-static aria-hidden="true"></span>AOI 가동 현황</div>
     <nav class="nav"><i class="ind" data-key="ind" data-static aria-hidden="true"><b class="l"></b><b class="m"></b><b class="r"></b><b class="s"></b></i>${nav.map(([k,l])=>`<button class="${V===k?"on":""}" data-h="${h(S.go(k))}" data-fk="nav:${k}">${l}</button>`).join("")}</nav>
     <div class="spacer"></div>
     ${hasD?`<div class="hacts"><button class="btn" data-h="${h(saveHtml)}" title="지금 데이터를 담은 HTML 사본을 내려받습니다">사본 저장</button>
       <button class="btn" data-h="${h(()=>setState({stack:pushTop("recipe")}))}" data-fk="rg:open" title="같은 레시피인 Job 을 묶어 이름을 붙입니다">레시피 묶음</button></div>`:""}
+    ${setBtn}
     ${partChip()}<span class="stamp ${fixed?"":"unfixed"}" title="${(fixed?"집계 기준시각 = 수집 시각(며칠 뒤 열어도 같은 숫자)":"수집 시각 정보가 없어 모든 날의 분모를 24시간으로 둡니다(열람 시각은 쓰지 않습니다)")+(meta.version?" · 수집기 v"+esc(meta.version):"")}">${esc(stampTxt)}</span>
     ${hasD?dateControlsHtml(V,day):""}</header>`;
 }
