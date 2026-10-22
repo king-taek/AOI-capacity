@@ -482,13 +482,3 @@ IMG_SURVEY_RUN = "Review 이미지 조사"
 IMG_SURVEY_RUNNING = "표본을 읽는 중…"
 IMG_SURVEY_DONE_FMT = "끝났습니다 — 표본 {n}장 · {path}"
 IMG_SURVEY_FAIL_FMT = "Review 이미지 조사를 하지 못했습니다: {error}"
-
-# ── No image 점검(10/22) ────────────────────────────────────────────────────
-NO_IMAGE_TITLE = "No image 점검"
-NO_IMAGE_WHEN = ("스캔은 끝났는데 이미지가 안 나와 다시 스캔한 Lot(이름에 NO IMAGE)을 조사하려고, 그 재스캔 Wafer 와 같은 Wafer ID 의 원래 스캔 Wafer 폴더를 나란히 모읍니다. "
-                 "폴더 목록 · 하위 폴더 항목의 수정 시각 · ini · txt 를 **zip 한 장(최대 8MB)** 으로 담고 이미지 파일 자체는 담지 않습니다. NAS 는 **읽기 전용**이고 수집 범위 밖 장비는 보지 않습니다. "
-                 "파일 내용에 Lot · Job 이름이 있으니 공유 범위는 직접 판단하세요.")
-NO_IMAGE_RUN = "No image 점검 수집"
-NO_IMAGE_RUNNING = "재스캔과 원래 스캔을 읽는 중…"
-NO_IMAGE_DONE_FMT = "끝났습니다 — 재스캔 Wafer {n}장 · {mb:.1f}MB · {path}"
-NO_IMAGE_FAIL_FMT = "No image 점검을 하지 못했습니다: {error}"
