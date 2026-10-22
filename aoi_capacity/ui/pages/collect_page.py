@@ -22,6 +22,7 @@ from PyQt6.QtWidgets import (QCheckBox, QFileDialog, QFrame, QGridLayout, QHBoxL
 
 from ... import collect, i18n, nas_guard
 from ...utils import paths, prefs, results
+from ... import image_survey as image_survey_mod
 from ...workers import failure_logs, image_survey, wafer_logs
 from ..widgets.buttons import make_button
 from ..widgets.collapsible import Collapsible
@@ -551,6 +552,12 @@ class CollectPage(QWidget):
         irow.addWidget(self._is_days)
         irow.addStretch(1)
         il.addLayout(irow)
+        trow = QHBoxLayout()
+        self._is_terms = QLineEdit(icard)
+        self._is_terms.setPlaceholderText(K.IMG_SURVEY_TERMS_HINT)
+        trow.addWidget(QLabel(K.IMG_SURVEY_TERMS_LABEL, icard))
+        trow.addWidget(self._is_terms, 1)
+        il.addLayout(trow)
         iact = QHBoxLayout()
         self._is_status = _label("", "muted", icard, wrap=True)
         self._b_is_run = make_button(K.IMG_SURVEY_RUN, "primary", icard)
@@ -1043,7 +1050,8 @@ class CollectPage(QWidget):
             self.error.emit(K.IMG_SURVEY_TITLE, K.WAFER_LOGS_BUSY)
             return
         out = self._fl_out.text().strip() or str(paths.data_root() / "fail_logs")
-        w = image_survey.ImageSurveyWorker(prefs.to_collect_cfg(prefs.load()), int(self._is_days.value()), out, self)
+        w = image_survey.ImageSurveyWorker(prefs.to_collect_cfg(prefs.load()), int(self._is_days.value()), out, self,
+                                        terms=image_survey_mod.parse_terms(self._is_terms.text()))
         w.log.connect(self.append_log)
         w.done.connect(self._on_image_survey_done)
         w.finished.connect(lambda w=w: self._worker_done("_fl_worker", w))
@@ -1063,7 +1071,7 @@ class CollectPage(QWidget):
         self.append_log(text)
 
     def _set_image_survey_running(self, on: bool) -> None:
-        for w in (self._b_is_run, self._is_days, self._b_fl_run, self._fl_days, self._fl_out, self._b_fl_browse):
+        for w in (self._b_is_run, self._is_days, self._is_terms, self._b_fl_run, self._fl_days, self._fl_out, self._b_fl_browse):
             w.setEnabled(not on)
         self._b_run.setEnabled(not on and not self._running and self._wl_worker is None)
         self._b_wl_run.setEnabled(not on and not self._running and self._wl_worker is None)

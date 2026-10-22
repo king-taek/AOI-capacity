@@ -18,7 +18,7 @@ from . import collect, failures, nas_guard, scope
 LogFn = Callable[[str], None]
 DEFAULT_DAYS, MIN_DAYS, MAX_DAYS = 7, 1, 90
 PER_DEVICE_PI, PER_DEVICE_OTHER, MAX_TOTAL = 3, 1, 80
-MAX_FILE_BYTES = 512 * 1024
+MAX_FILE_BYTES = 2 * 1024 * 1024
 MAX_SUBDIRS = 12
 STAT_FIRST, STAT_LAST, STAT_SPREAD = 100, 100, 100          # 하위 폴더 항목이 많으면 이만큼만 시각을 잰다(SMB 왕복)
 TEXT_EXT = {".ini", ".txt", ".json", ".xml", ".log", ".org", ".csv"}
@@ -76,6 +76,50 @@ def pick_samples(cache: dict, cfg: dict, devs: List[dict], cutoff: dt.datetime, 
                 break                                   # Report 하나에서 Wafer 하나
         cands.sort(key=lambda c: c["end"])
         out += _spread([c for c in cands if c["pi"]], per_pi) + _spread([c for c in cands if not c["pi"]], per_other)
+    return out[:max_total]
+
+
+def parse_terms(text: str) -> List[List[str]]:
+    """'TB500.INT556 FTL, TB500.INT808 LNY' → 줄·쉼표·세미콜론으로 나눈 항목마다 공백으로 나눈 낱말(대소문자 무시)."""
+    out = []
+    for part in re.split(r"[,;\n]+", text or ""):
+        words = [w.lower() for w in part.split() if w.strip()]
+        if words:
+            out.append(words)
+    return out
+
+
+def pick_by_terms(cache: dict, cfg: dict, devs: List[dict], terms: List[List[str]], *, per_term_reports=3, per_report=6,
+                  max_total=MAX_TOTAL) -> List[dict]:
+    """사용자가 적은 Lot 이름으로 캐시의 Report 를 찾는다(기간 제한 없음) — 항목의 낱말이 모두 Lot · Job · Setup · Wafer · Report 이름 안에 있으면 맞다.
+    항목마다 가장 최근 Report per_term_reports 개, Report 마다 EXACT Wafer per_report 장을 고르게. 캐시만 본다."""
+    out: List[dict] = []
+    for words in terms:
+        found: List[tuple] = []
+        for d in devs:
+            if d.get("kind") == "kla" or not scope.is_allowed(cfg, str(d["name"])):
+                continue
+            scan_root = os.path.join(str(d["path"]), str(d.get("scan_dir") or cfg["scan_dir"]))
+            backups = collect._backup_roots(d, scan_root)
+            for key, e in (cache.get("reports") or {}).items():
+                if e.get("superseded_by") or key.split("|", 1)[0] != str(d["key"]):
+                    continue
+                rows = [r for r in e.get("rows") or () if not r.get("kind") and r.get("ini_match") == "EXACT"]
+                if not rows:
+                    continue
+                hay = " ".join(str(rows[0].get(k) or "") for k in ("lot", "job", "setup", "report")).lower()
+                hay += " " + " ".join(str(r.get("wafer_id") or "") for r in rows).lower()
+                if not all(w in hay for w in words):
+                    continue
+                end = collect.parse_dt(rows[0].get("batch_end") or rows[0].get("batch_start")) or dt.datetime.min
+                found.append((end, d, scan_root, backups, rows))
+        found.sort(key=lambda f: f[0], reverse=True)
+        for end, d, scan_root, backups, rows in found[:per_term_reports]:
+            for r in _spread(rows, per_report):
+                w = collect._rdl_wafer_dir(r, scan_root, backups)
+                if w:
+                    out.append({"device": str(d["name"]), "root": str(d["path"]), "wafer_dir": w, "row": r, "end": end,
+                                "pi": is_pi(str(r.get("job") or "")), "term": " ".join(words)})
     return out[:max_total]
 
 
@@ -183,7 +227,7 @@ def survey_wafer(s: dict, allowed: Callable[[str], bool]) -> dict:
 
 
 def gather(cfg: dict, days: int, *, log: LogFn, should_stop: Optional[Callable[[], bool]] = None, now: Optional[dt.datetime] = None,
-           resolver=None, **kw) -> dict:
+           resolver=None, terms: Optional[List[List[str]]] = None, **kw) -> dict:
     now = now or dt.datetime.now()
     days = clamp_days(days)
     cutoff = now - dt.timedelta(days=days)
@@ -192,7 +236,11 @@ def gather(cfg: dict, days: int, *, log: LogFn, should_stop: Optional[Callable[[
     cache = collect._load_cache(cfg, rederive=False, dirty=collect._Dirty())
     probe = failures.probe_devices(cfg, log, stop, resolver)
     collect._assign_device_keys(cache, probe["ok"], cfg, collect._Dirty(), log)      # 장비 dict 에 안정 키(d["key"]) 를 붙인다 — 메모리 안에서만, 캐시 파일은 쓰지 않는다
-    samples = pick_samples(cache, cfg, probe["ok"], cutoff, **kw)
+    if terms:
+        samples = pick_by_terms(cache, cfg, probe["ok"], terms)
+        log(f"Lot 지정 {len(terms)}개 — 맞는 Wafer {len(samples)}장")
+    else:
+        samples = pick_samples(cache, cfg, probe["ok"], cutoff, **kw)
     log(f"표본 {len(samples)}장(PI {sum(1 for s in samples if s['pi'])}) — 장비 {len({s['device'] for s in samples})}대")
     allowed = lambda n: scope.is_allowed(cfg, n)  # noqa: E731
     for i, s in enumerate(samples, 1):
@@ -245,6 +293,7 @@ def write_report(cfg: dict, g: dict, out_dir: str) -> str:
 
 
 def run(cfg: dict, days: int, out_dir: str, *, log: LogFn, should_stop: Optional[Callable[[], bool]] = None, **kw) -> dict:
+    """kw 의 `terms`(parse_terms 결과)가 있으면 기간 표본 대신 그 Lot 들만 본다."""
     nas_guard.assert_local(out_dir, nas_guard.roots_for_cfg(cfg))       # NAS 를 읽기 전에 저장 위치부터 확인
     g = gather(cfg, days, log=log, should_stop=should_stop, **kw)
     path = write_report(cfg, g, out_dir)

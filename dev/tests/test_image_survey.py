@@ -131,3 +131,20 @@ def test_gather_gives_devices_their_stable_key(tmp_path, fake_nas, monkeypatch):
                             resolver=lambda c, log=None, should_stop=None: [{"name": "AOI-9", "path": str(root), "id": str(root)}])
     assert g["probe"]["ok"][0]["key"] == "dev:AOI-9"
     assert len(g["samples"]) == 1 and g["samples"][0]["pi"]
+
+
+def test_parse_terms_and_pick_by_terms_ignores_the_day_window(tmp_path):
+    assert image_survey.parse_terms("TB500.INT556  FTL,\nTB500.INT808 LNY") == [["tb500.int556", "ftl"], ["tb500.int808", "lny"]]
+    assert image_survey.parse_terms("  ") == []
+    root = tmp_path / "AOI-9"
+    reports = {
+        "dev:AOI-9|a.htm": {"rows": [_row("R_TB500_LIVE_PI2", "TB500.INT556 FTL", f"W{i}", 1) for i in range(10)]},   # 기간 밖이어도 찾는다
+        "dev:AOI-9|b.htm": {"rows": [_row("R_TB500_LIVE_PI2", "TB500.INT808 LNY", "W1", 20)]},
+        "dev:AOI-9|c.htm": {"rows": [_row("R_TB500_LIVE_PI2", "OTHER", "W1", 20)]},
+    }
+    cfg = {"scan_dir": "Scanresult", "scope_devices": ["AOI-9"]}
+    devs = [{"name": "AOI-9", "key": "dev:AOI-9", "path": str(root)}]
+    got = image_survey.pick_by_terms({"reports": reports}, cfg, devs, image_survey.parse_terms("TB500.INT556 FTL, TB500.INT808 LNY"))
+    assert {g["row"]["lot"] for g in got} == {"TB500.INT556 FTL", "TB500.INT808 LNY"}
+    assert sum(g["row"]["lot"] == "TB500.INT556 FTL" for g in got) == image_survey.PER_DEVICE_PI * 2     # Report 마다 6장
+    assert not image_survey.pick_by_terms({"reports": reports}, {"scan_dir": "Scanresult", "scope_devices": ["AOI-10"]}, devs, [["ftl"]])   # 범위 밖 장비
