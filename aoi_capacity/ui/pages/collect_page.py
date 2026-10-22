@@ -297,6 +297,11 @@ class CollectPage(QWidget):
         head.addWidget(_label(K.COLLECT_PAGE_SUB, "sub", body, wrap=True))
         lay.addLayout(head)
 
+        # 맨 위 조사용 카드 줄(10/22 사용자 요청) — Review 이미지 순서 조사 · No image 수집 같은 임시 조사 버튼. 이슈가 풀리면 카드와 이 줄을 지운다
+        self._top_cards = QVBoxLayout()
+        self._top_cards.setSpacing(14)
+        lay.addLayout(self._top_cards)
+
         # 상황 카드 + 실행
         pick, pl = _card(body, K.COLLECT_PICK_TITLE)
         self._cards: Dict[str, ModeCard] = {}
@@ -552,7 +557,7 @@ class CollectPage(QWidget):
         iact.addWidget(self._b_is_run)
         iact.addWidget(self._is_status, 1)
         il.addLayout(iact)
-        dl.addWidget(icard)
+        self._top_cards.addWidget(icard)
         self._sec_dev = Collapsible(K.COLLECT_SEC_DEV, dev, body)
         lay.addWidget(self._sec_dev)
         self._wl_worker: Optional[wafer_logs.WaferLogsWorker] = None
@@ -1058,8 +1063,6 @@ class CollectPage(QWidget):
         self.append_log(text)
 
     def _set_image_survey_running(self, on: bool) -> None:
-        if on:
-            self._sec_dev.set_open(True)
         for w in (self._b_is_run, self._is_days, self._b_fl_run, self._fl_days, self._fl_out, self._b_fl_browse):
             w.setEnabled(not on)
         self._b_run.setEnabled(not on and not self._running and self._wl_worker is None)
