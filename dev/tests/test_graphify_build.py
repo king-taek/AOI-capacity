@@ -233,7 +233,7 @@ def test_tests_workflow_contract_textually():
     assert "import yaml, PyQt6" in text and "node --version" in text, "사전 점검: 필수 의존성이 없으면 실패"
     assert re.search(r"python -m pytest -q (-n auto --dist loadfile )?--durations=15", text), "전체 스위트(slow 포함) — pytest.ini 의 -q 그대로(병렬은 파일 단위)"
     assert 'QT_QPA_PLATFORM: offscreen' in text
-    assert "playwright install --with-deps chromium" in text and "-m browser" in text
+    assert "playwright install-deps chromium" in text and "playwright install chromium" in text and "-m browser" in text
     assert re.search(r'-eq 5', text), "browser 테스트가 아직 없으면 exit 5 를 통과로 처리"
     assert "-m \"not slow\"" not in text and "-m 'not slow'" not in text and "not slow" not in text
     # S14: PR 에서 코드 변경에 진행상황.md 동반 검사 — merge-base 를 구하려면 전체 이력, 규칙은 도구 한 곳

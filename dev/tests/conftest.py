@@ -82,7 +82,23 @@ def styled_qapp(_qt_app):
     return _qt_app
 
 
+def shard_pick(items, spec):
+    """`AOI_SHARD="2/3"`(CI 조각 나누기) → 이름순으로 줄 세운 테스트 중 n 번째마다 하나씩 고른 부분집합. 조각들을 합치면 정확히 전체다.
+    spec 이 비었으면 전부."""
+    if not spec:
+        return list(items)
+    i, n = (int(x) for x in str(spec).split("/"))
+    assert 1 <= i <= n, f"AOI_SHARD={spec!r}"
+    ordered = sorted(items, key=lambda it: it.nodeid)
+    return [it for k, it in enumerate(ordered) if k % n == i - 1]
+
+
 def pytest_collection_modifyitems(config, items):
+    keep = shard_pick(items, os.environ.get("AOI_SHARD", ""))
+    if len(keep) != len(items):
+        kept = set(id(it) for it in keep)
+        config.hook.pytest_deselected(items=[it for it in items if id(it) not in kept])
+        items[:] = [it for it in items if id(it) in kept]
     for item in items:
         if {"qapp", "styled_qapp"} & set(getattr(item, "fixturenames", ())):
             item.add_marker(pytest.mark.ui)
