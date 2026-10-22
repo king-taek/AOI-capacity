@@ -436,7 +436,9 @@ def test_header_has_four_tabs_and_each_popup_renders_an_accessible_dialog():
         ["devPopupHtml"], ["errPopupHtml"], ["typePopupHtml"],
         ["errorsHtml"], ["typePopupHtml"]],
         state={"modalDev": "AOI-1", "modalDayI": 0, "errDev": "AOI-1", "errDayI": 0})
-    assert re.findall(r'data-fk="nav:([a-z]+)"', head) == ["home", "errors", "report", "recipe", "lot", "param"]   # 10/5: KLA 탭 · 추이 탭 없음, 10/11 LOT 추적 · 파라미터
+    assert re.findall(r'data-fk="nav:([a-z]+)"', head) == ["home", "errors", "report", "recipe", "lot"]   # 10/5: KLA 탭 · 추이 탭 없음, 10/11 LOT 추적, 10/22 파라미터 탭은 기본 숨김(HIDDEN_TABS)
+    shown, = screen(rows, meta("AOI-1"), [["headerHtml", "home"]], state={"unhid": ["param"]})
+    assert re.findall(r'data-fk="nav:([a-z]+)"', shown)[-1] == "param"   # 설정 버튼에서 꺼내면 탭 줄 맨 뒤로 돌아온다
     for label in (">가동률<", ">Error<", ">TB500 · Kendall<", ">RDL 단일스캔<", ">사본 저장<"):
         assert label in head, label
     assert ">추이<" not in head and ">KLA<" not in head
