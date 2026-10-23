@@ -17,9 +17,9 @@ class ImageSurveyWorker(QThread):
     log = pyqtSignal(str)
     done = pyqtSignal(object, str)      # 결과 dict(path · items · days · out_dir) | None, 오류 문구
 
-    def __init__(self, cfg: dict, days: int, out_dir: str, parent=None, terms=None):
+    def __init__(self, cfg: dict, days: int, out_dir: str, parent=None, terms=None, pixel=False):
         super().__init__(parent)
-        self.cfg, self.days, self.out_dir, self.terms = cfg, days, out_dir, terms or []
+        self.cfg, self.days, self.out_dir, self.terms, self.pixel = cfg, days, out_dir, terms or [], pixel
         self._stop = threading.Event()
 
     def stop(self) -> None:
@@ -27,7 +27,10 @@ class ImageSurveyWorker(QThread):
 
     def run(self) -> None:  # noqa: D401
         try:
-            result = image_survey.run(self.cfg, self.days, self.out_dir, log=self.log.emit, should_stop=self._stop.is_set, terms=self.terms)
+            if self.pixel:
+                result = image_survey.run_pixel(self.cfg, self.days, self.out_dir, log=self.log.emit, should_stop=self._stop.is_set)
+            else:
+                result = image_survey.run(self.cfg, self.days, self.out_dir, log=self.log.emit, should_stop=self._stop.is_set, terms=self.terms)
             self.done.emit(result, "")
         except nas_guard.NasWriteRefused as ex:
             self.done.emit(None, str(ex))

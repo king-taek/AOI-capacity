@@ -561,7 +561,10 @@ class CollectPage(QWidget):
         iact = QHBoxLayout()
         self._is_status = _label("", "muted", icard, wrap=True)
         self._b_is_run = make_button(K.IMG_SURVEY_RUN, "primary", icard)
+        self._b_is_pixel = make_button(K.IMG_SURVEY_PIXEL_RUN, "default", icard)
+        self._b_is_pixel.setToolTip(K.IMG_SURVEY_PIXEL_HINT)
         iact.addWidget(self._b_is_run)
+        iact.addWidget(self._b_is_pixel)
         iact.addWidget(self._is_status, 1)
         il.addLayout(iact)
         self._top_cards.addWidget(icard)
@@ -630,6 +633,7 @@ class CollectPage(QWidget):
         self._b_fl_open.clicked.connect(lambda: QDesktopServices.openUrl(QUrl.fromLocalFile(self._fl_out.text().strip())))
         self._b_fl_browse.clicked.connect(self._browse_fl_out)
         self._b_is_run.clicked.connect(self._on_image_survey)
+        self._b_is_pixel.clicked.connect(lambda: self._on_image_survey(pixel=True))
         self._is_days.valueChanged.connect(lambda v: prefs.patch(image_survey_days=int(v)))
         self._fl_days.valueChanged.connect(lambda v: prefs.patch(fail_log_days=int(v)))
         self._pick("normal")
@@ -1043,7 +1047,7 @@ class CollectPage(QWidget):
         self._b_wl_run.setEnabled(not on and not self._running and self._wl_worker is None)
 
     # ── Review 이미지 순서 조사(10/22) — 저장 위치는 실패 로그와 같은 폴더 ──
-    def _on_image_survey(self) -> None:
+    def _on_image_survey(self, pixel: bool = False) -> None:
         if self._fl_worker is not None or self._wl_worker is not None:
             return
         if self._running:
@@ -1051,7 +1055,7 @@ class CollectPage(QWidget):
             return
         out = self._fl_out.text().strip() or str(paths.data_root() / "fail_logs")
         w = image_survey.ImageSurveyWorker(prefs.to_collect_cfg(prefs.load()), int(self._is_days.value()), out, self,
-                                        terms=image_survey_mod.parse_terms(self._is_terms.text()))
+                                        terms=image_survey_mod.parse_terms(self._is_terms.text()), pixel=pixel)
         w.log.connect(self.append_log)
         w.done.connect(self._on_image_survey_done)
         w.finished.connect(lambda w=w: self._worker_done("_fl_worker", w))
@@ -1071,7 +1075,7 @@ class CollectPage(QWidget):
         self.append_log(text)
 
     def _set_image_survey_running(self, on: bool) -> None:
-        for w in (self._b_is_run, self._is_days, self._is_terms, self._b_fl_run, self._fl_days, self._fl_out, self._b_fl_browse):
+        for w in (self._b_is_run, self._b_is_pixel, self._is_days, self._is_terms, self._b_fl_run, self._fl_days, self._fl_out, self._b_fl_browse):
             w.setEnabled(not on)
         self._b_run.setEnabled(not on and not self._running and self._wl_worker is None)
         self._b_wl_run.setEnabled(not on and not self._running and self._wl_worker is None)
@@ -1104,6 +1108,7 @@ class CollectPage(QWidget):
         self._b_wl_run.setEnabled(not running and self._wl_worker is None and self._fl_worker is None)
         self._b_fl_run.setEnabled(not running and self._fl_worker is None and self._wl_worker is None)
         self._b_is_run.setEnabled(not running and self._fl_worker is None and self._wl_worker is None)
+        self._b_is_pixel.setEnabled(not running and self._fl_worker is None and self._wl_worker is None)
         if hasattr(self, "_b_pzip"):
             self._b_pzip.setEnabled(not running and self._pz_worker is None)
         self._b_stop.setVisible(running)

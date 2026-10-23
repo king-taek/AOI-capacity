@@ -152,3 +152,41 @@ def test_parse_terms_and_pick_by_terms_ignores_the_day_window(tmp_path):
 
 def test_default_terms_parse_to_the_two_reported_lots():
     assert image_survey.parse_terms(image_survey.DEFAULT_TERMS_TEXT) == [["ftl-pids7"], ["lny-pids7"]]
+
+
+def test_pixel_survey_reads_only_two_inis_and_names_and_flags_zero(tmp_path, fake_nas):
+    nas, csv_path = fake_nas
+    from conftest import make_cfg
+    cfg = make_cfg(tmp_path, csv_path)
+    assert image_survey.pixel_is_zero("0|0") and not image_survey.pixel_is_zero("0|0.4645") and not image_survey.pixel_is_zero("")
+    root = tmp_path / "AOI-9"
+    w = root / "Scanresult" / "job" / "S1" / "L1" / "W1"
+    w.mkdir(parents=True)
+    (w / "RecipesInfo.ini").write_text("[Recipe-1]\nColorPixelSize=0\nVerCam=4\nVerMag=7.5\n[Recipe-2]\nColorPixelSize=0\nVerCam=4\nVerMag=7.5\n", encoding="utf-8")
+    (w / "ColorImageGrabingInfo.ini").write_text("[a.c.1.jpeg]\nRecipeNumber=0\n", encoding="utf-8")
+    (w / "5.6.c.7.jpeg").write_bytes(b"x")
+    (w / "1.2.t.1.jpeg").write_bytes(b"x")
+    (w / "Secret.dat").write_bytes(b"\0")
+    s = {"device": "AOI-9", "root": str(root), "wafer_dir": str(w)}
+    x = image_survey.read_pixel(s, lambda n: True)
+    assert x["color_pixel"] == "0|0" and x["ver"] == "4|7.5|4|7.5" and x["cg_recipes"] == "0" and (x["n_scan"], x["n_color"]) == (1, 1)
+    assert image_survey.read_pixel(s, lambda n: False)["color_pixel"] == ""                      # 범위 밖 장비
+    g = {"now": NOW, "days": 14, "cutoff": NOW, "probe": {}, "samples": [{"device": "AOI-9", "pi": True, "wafer_dir": str(w),
+         "row": _row("R_TB500_LIVE_PI2 - Enhanced", "L1", "W1", 20, faults="5"), "result": x}]}
+    path = image_survey.write_pixel_report(cfg, g, str(tmp_path / "out"))
+    with zipfile.ZipFile(path) as z:
+        assert "0 인 것 1장" in z.read("요약.txt").decode() and "Lot L1" in z.read("요약.txt").decode()
+        assert "R_TB500_LIVE_PI2 - Enhanced" in z.read("픽셀.tsv").decode()
+    with pytest.raises(nas_guard.NasWriteRefused):
+        image_survey.write_pixel_report(cfg, g, str(nas / "X"))
+
+
+def test_pick_pixel_samples_spreads_lots_per_job_and_prefers_defects(tmp_path):
+    root = tmp_path / "AOI-9"
+    reports = {f"dev:AOI-9|p{i}.htm": {"rows": [_row("JOB_A", f"L{i}", "W0", 15 + i, faults="0"), _row("JOB_A", f"L{i}", "W1", 15 + i, faults="3")]} for i in range(6)}
+    reports["dev:AOI-9|b.htm"] = {"rows": [_row("JOB_B", "LB", "W1", 20, faults="2")]}
+    cfg = {"scan_dir": "Scanresult", "scope_devices": ["AOI-9"]}
+    devs = [{"name": "AOI-9", "key": "dev:AOI-9", "path": str(root)}]
+    got = image_survey.pick_pixel_samples({"reports": reports}, cfg, devs, NOW - dt.timedelta(days=14))
+    assert sum(g["row"]["job"] == "JOB_A" for g in got) == 3 and sum(g["row"]["job"] == "JOB_B" for g in got) == 1
+    assert all(g["row"]["wafer_id"] == "W1" for g in got)                                         # Defect 있는 Wafer 우선

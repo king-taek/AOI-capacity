@@ -300,3 +300,151 @@ def run(cfg: dict, days: int, out_dir: str, *, log: LogFn, should_stop: Optional
     g = gather(cfg, days, log=log, should_stop=should_stop, **kw)
     path = write_report(cfg, g, out_dir)
     return {"path": path, "items": len(g["samples"]), "days": g["days"], "out_dir": out_dir}
+
+
+# ── Color 픽셀 크기 조사(10/23) — `RecipesInfo.ini ColorPixelSize` 가 0 인 Wafer 가 Review 에서 Scan 먼저 나오는 것과 맞는지 보려고 넓게 훑는다 ──
+PIXEL_PER_GROUP, PIXEL_MAX_TOTAL, PIXEL_DEFAULT_DAYS = 3, 400, 14
+_CPS = re.compile(r"^ColorPixelSize=(\S+)", re.M)
+_VER = re.compile(r"^Ver(?:Cam|Mag)=(\S+)", re.M)
+_RECNO = re.compile(r"^RecipeNumber=(\d+)", re.M)
+
+
+def pick_pixel_samples(cache: dict, cfg: dict, devs: List[dict], cutoff: dt.datetime, *, per_group=PIXEL_PER_GROUP,
+                       max_total=PIXEL_MAX_TOTAL) -> List[dict]:
+    """(장비, Job) 마다 기간 안 EXACT Report 를 per_group 개(고르게), Report 마다 Defect 가 있는 Wafer 하나 — Lot 과 Job 을 넓게 본다. 캐시만 본다."""
+    out: List[dict] = []
+    for d in devs:
+        if d.get("kind") == "kla" or not scope.is_allowed(cfg, str(d["name"])):
+            continue
+        scan_root = os.path.join(str(d["path"]), str(d.get("scan_dir") or cfg["scan_dir"]))
+        backups = collect._backup_roots(d, scan_root)
+        groups: Dict[str, List[dict]] = {}
+        for key, e in (cache.get("reports") or {}).items():
+            if e.get("superseded_by") or key.split("|", 1)[0] != str(d["key"]):
+                continue
+            rows = [r for r in e.get("rows") or () if not r.get("kind") and r.get("ini_match") == "EXACT"]
+            if not rows:
+                continue
+            with_def = [r for r in rows if str(r.get("faults") or "0").strip() not in ("", "0")]
+            r = (with_def or rows)[0]
+            end = collect.parse_dt(r.get("batch_end") or r.get("batch_start"))
+            if end is None or end < cutoff:
+                continue
+            w = collect._rdl_wafer_dir(r, scan_root, backups)
+            if w:
+                groups.setdefault(str(r.get("job") or ""), []).append(
+                    {"device": str(d["name"]), "root": str(d["path"]), "wafer_dir": w, "row": r, "end": end, "pi": is_pi(str(r.get("job") or ""))})
+        for cands in groups.values():
+            cands.sort(key=lambda c: c["end"])
+            out += _spread(cands, per_group)
+    return out[:max_total]
+
+
+def read_pixel(s: dict, allowed: Callable[[str], bool]) -> dict:
+    """표본 Wafer 폴더에서 RecipesInfo.ini · ColorImageGrabingInfo.ini 와 맨 위 이름(Scan `.t.` · Color `.c.` 개수)만 읽는다. 이름만 읽고 시각은 재지 않는다."""
+    res: dict = {"note": "", "color_pixel": "", "ver": "", "cg_recipes": "", "n_scan": "", "n_color": "", "has_list": ""}
+    w = s["wafer_dir"]
+    if not allowed(s["device"]):
+        res["note"] = "수집 범위 밖 장비라 읽지 않음"
+        return res
+    if not nas_guard.is_under(w, s["root"]):
+        res["note"] = "장비 폴더 밖 경로라 읽지 않음"
+        return res
+    try:
+        with nas_guard.scandir(w) as it:
+            names = [e.name for e in it]
+    except OSError as ex:
+        res["note"] = f"Wafer 폴더를 못 읽음 — {type(ex).__name__}: {ex}"
+        return res
+    low = {n.lower(): n for n in names}
+    res["n_scan"] = sum(1 for n in names if re.search(r"\.t\.\d*\.jpe?g$", n, re.I))
+    res["n_color"] = sum(1 for n in names if re.search(r"\.c\.-?\d+\.jpe?g$", n, re.I))
+    res["has_list"] = int("scanresultimagelist.txt" in low)
+    if "recipesinfo.ini" in low:
+        data = _read_small(os.path.join(w, low["recipesinfo.ini"]))
+        text = (data or b"").decode("utf-8", "replace")
+        res["color_pixel"] = "|".join(_CPS.findall(text))
+        res["ver"] = "|".join(_VER.findall(text))
+    if "colorimagegrabinginfo.ini" in low:
+        data = _read_small(os.path.join(w, low["colorimagegrabinginfo.ini"]))
+        nums = sorted(set(_RECNO.findall((data or b"").decode("utf-8", "replace"))))
+        res["cg_recipes"] = "|".join(nums)
+    return res
+
+
+def pixel_is_zero(color_pixel: str) -> bool:
+    vals = [v for v in color_pixel.split("|") if v != ""]
+    try:
+        return bool(vals) and all(float(v) == 0 for v in vals)
+    except ValueError:
+        return False
+
+
+def gather_pixel(cfg: dict, days: int, *, log: LogFn, should_stop: Optional[Callable[[], bool]] = None, now: Optional[dt.datetime] = None,
+                 resolver=None, **kw) -> dict:
+    now = now or dt.datetime.now()
+    days = clamp_days(days)
+    cutoff = now - dt.timedelta(days=days)
+    stop = should_stop or (lambda: False)
+    log(f"Color 픽셀 크기 조사 — 지난 {days}일({cutoff:%m/%d %H:%M} ~)")
+    cache = collect._load_cache(cfg, rederive=False, dirty=collect._Dirty())
+    probe = failures.probe_devices(cfg, log, stop, resolver)
+    collect._assign_device_keys(cache, probe["ok"], cfg, collect._Dirty(), log)
+    samples = pick_pixel_samples(cache, cfg, probe["ok"], cutoff, **kw)
+    log(f"Wafer {len(samples)}장 — 장비 {len({s['device'] for s in samples})}대 · Job {len({s['row'].get('job') for s in samples})}종")
+    allowed = lambda n: scope.is_allowed(cfg, n)  # noqa: E731
+    for i, s in enumerate(samples, 1):
+        if stop():
+            log("멈춤 요청 — 지금까지 읽은 것으로 마무리합니다")
+            break
+        s["result"] = read_pixel(s, allowed)
+        if i % 25 == 0 or i == len(samples):
+            log(f"[{i}/{len(samples)}] 읽는 중")
+    return {"now": now, "days": days, "cutoff": cutoff, "samples": samples, "probe": probe}
+
+
+def render_pixel_summary(g: dict) -> str:
+    done = [s for s in g["samples"] if s.get("result") and not s["result"]["note"]]
+    zero = [s for s in done if pixel_is_zero(s["result"]["color_pixel"])]
+    lines = [f"Color 픽셀 크기 조사 — {g['now']:%Y-%m-%d %H:%M} 기준 지난 {g['days']}일", "",
+             f"읽은 Wafer {len(done)}장 중 ColorPixelSize 가 모든 레시피에서 0 인 것 {len(zero)}장", "",
+             "■ 0 인 Wafer 의 (장비 · Job · Lot) — 이 Lot 들의 Review 에서 Scan 이 먼저 나오는지 확인하세요(Defect 가 있는 것 위주)"]
+    seen = set()
+    for s in sorted(zero, key=lambda s: (s["device"], str(s["row"].get("job")), str(s["row"].get("lot")))):
+        r = s["row"]
+        k = (s["device"], r.get("job"), r.get("lot"))
+        if k in seen:
+            continue
+        seen.add(k)
+        lines.append(f"  · {s['device']}  {r.get('job', '')}  Lot {r.get('lot', '')}  Wafer {r.get('wafer_id', '')}  Defect {r.get('faults', '')}  Color 이미지 {s['result']['n_color']}장")
+    nz = [s for s in done if not pixel_is_zero(s["result"]["color_pixel"]) and s["result"]["color_pixel"]]
+    lines += ["", f"■ 값이 있는 Wafer {len(nz)}장 (대조군) — 표는 픽셀.tsv", "",
+              "파일 내용에는 Lot · Job 이름이 들어 있습니다 — 공유 범위는 직접 판단해 주세요."]
+    return "\n".join(lines) + "\n"
+
+
+def write_pixel_report(cfg: dict, g: dict, out_dir: str) -> str:
+    nas_guard.assert_local(out_dir, nas_guard.roots_for_cfg(cfg))
+    os.makedirs(out_dir, exist_ok=True)
+    out = os.path.join(out_dir, f"AOI_color_pixel_{g['now']:%Y%m%d_%H%M}.zip")
+    rows = [["장비", "PI", "Job", "Setup", "Lot", "Wafer", "Report", "레시피", "Defect", "배치 시작", "ColorPixelSize(레시피별)", "VerCam|VerMag",
+             "Color 이미지의 RecipeNumber", "Scan jpg", "Color jpg", "이미지 목록 파일", "픽셀 0", "비고"]]
+    for s in g["samples"]:
+        r, x = s["row"], s.get("result") or {"note": "건너뜀"}
+        rows.append([s["device"], "PI" if s["pi"] else "", r.get("job", ""), r.get("setup", ""), r.get("lot", ""), r.get("wafer_id", ""), r.get("report", ""),
+                     r.get("recipe", ""), r.get("faults", ""), r.get("batch_start", ""), x.get("color_pixel", ""), x.get("ver", ""), x.get("cg_recipes", ""),
+                     x.get("n_scan", ""), x.get("n_color", ""), x.get("has_list", ""), int(pixel_is_zero(x.get("color_pixel", ""))), x.get("note", "")])
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as z:
+        z.writestr("요약.txt", render_pixel_summary(g))
+        z.writestr("픽셀.tsv", _tsv(rows))
+    with open(out, "wb") as fh:
+        fh.write(buf.getvalue())
+    return out
+
+
+def run_pixel(cfg: dict, days: int, out_dir: str, *, log: LogFn, should_stop: Optional[Callable[[], bool]] = None, **kw) -> dict:
+    nas_guard.assert_local(out_dir, nas_guard.roots_for_cfg(cfg))
+    g = gather_pixel(cfg, days, log=log, should_stop=should_stop, **kw)
+    path = write_pixel_report(cfg, g, out_dir)
+    return {"path": path, "items": len(g["samples"]), "days": g["days"], "out_dir": out_dir}
