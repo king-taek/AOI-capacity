@@ -183,10 +183,23 @@ def test_pixel_survey_reads_only_two_inis_and_names_and_flags_zero(tmp_path, fak
 
 def test_pick_pixel_samples_spreads_lots_per_job_and_prefers_defects(tmp_path):
     root = tmp_path / "AOI-9"
-    reports = {f"dev:AOI-9|p{i}.htm": {"rows": [_row("JOB_A", f"L{i}", "W0", 15 + i, faults="0"), _row("JOB_A", f"L{i}", "W1", 15 + i, faults="3")]} for i in range(6)}
-    reports["dev:AOI-9|b.htm"] = {"rows": [_row("JOB_B", "LB", "W1", 20, faults="2")]}
+    reports = {f"dev:AOI-9|p{i}.htm": {"rows": [_row("JOB_A", f"L{i}", "W0", 15 + i, faults="0", scan_mode="MULTI"), _row("JOB_A", f"L{i}", "W1", 15 + i, faults="3", scan_mode="MULTI")]} for i in range(6)}
+    reports["dev:AOI-9|b.htm"] = {"rows": [_row("JOB_B", "LB", "W1", 20, faults="2", scan_mode="MULTI")]}
     cfg = {"scan_dir": "Scanresult", "scope_devices": ["AOI-9"]}
     devs = [{"name": "AOI-9", "key": "dev:AOI-9", "path": str(root)}]
     got = image_survey.pick_pixel_samples({"reports": reports}, cfg, devs, NOW - dt.timedelta(days=14))
     assert sum(g["row"]["job"] == "JOB_A" for g in got) == 3 and sum(g["row"]["job"] == "JOB_B" for g in got) == 1
     assert all(g["row"]["wafer_id"] == "W1" for g in got)                                         # Defect 있는 Wafer 우선
+
+
+def test_pick_pixel_samples_skips_non_multi_and_round_robins_devices(tmp_path):
+    reports = {}
+    for dn in ("AOI-1", "AOI-2"):
+        for i in range(5):
+            reports[f"dev:{dn}|p{i}.htm"] = {"rows": [_row(f"R_PI4_{i}", f"L{i}", "W1", 20, faults="3")]}                # Job 이 달라 5그룹 × 장비
+        reports[f"dev:{dn}|2d.htm"] = {"rows": [_row("2D@R2-X", "LX", "W1", 20, faults="3")]}                           # 단일 · 2D — 제외
+    cfg = {"scan_dir": "Scanresult", "scope_devices": ["AOI-1", "AOI-2"]}
+    devs = [{"name": n, "key": f"dev:{n}", "path": str(tmp_path / n)} for n in ("AOI-1", "AOI-2")]
+    got = image_survey.pick_pixel_samples({"reports": reports}, cfg, devs, NOW - dt.timedelta(days=14), max_total=4)
+    assert not any(g["row"]["job"].startswith("2D") for g in got)
+    assert {g["device"] for g in got} == {"AOI-1", "AOI-2"} and len(got) == 4                                       # 상한이어도 두 장비 모두

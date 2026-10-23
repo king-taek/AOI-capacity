@@ -11,6 +11,7 @@ import io
 import os
 import re
 import zipfile
+from itertools import zip_longest
 from typing import Callable, Dict, List, Optional
 
 from . import collect, failures, nas_guard, scope
@@ -312,7 +313,7 @@ _RECNO = re.compile(r"^RecipeNumber=(\d+)", re.M)
 def pick_pixel_samples(cache: dict, cfg: dict, devs: List[dict], cutoff: dt.datetime, *, per_group=PIXEL_PER_GROUP,
                        max_total=PIXEL_MAX_TOTAL) -> List[dict]:
     """(장비, Job) 마다 기간 안 EXACT Report 를 per_group 개(고르게), Report 마다 Defect 가 있는 Wafer 하나 — Lot 과 Job 을 넓게 본다. 캐시만 본다."""
-    out: List[dict] = []
+    per_dev: List[List[dict]] = []
     for d in devs:
         if d.get("kind") == "kla" or not scope.is_allowed(cfg, str(d["name"])):
             continue
@@ -330,13 +331,18 @@ def pick_pixel_samples(cache: dict, cfg: dict, devs: List[dict], cutoff: dt.date
             end = collect.parse_dt(r.get("batch_end") or r.get("batch_start"))
             if end is None or end < cutoff:
                 continue
+            if not (is_pi(str(r.get("job") or "")) or r.get("scan_mode") == "MULTI"):
+                continue                              # Scan 이미지가 있는 것은 멀티 레시피(PI · RDL 멀티)뿐 — 2D · 단일은 Color 만이라 비교 대상이 아니다
             w = collect._rdl_wafer_dir(r, scan_root, backups)
             if w:
                 groups.setdefault(str(r.get("job") or ""), []).append(
                     {"device": str(d["name"]), "root": str(d["path"]), "wafer_dir": w, "row": r, "end": end, "pi": is_pi(str(r.get("job") or ""))})
+        picked: List[dict] = []
         for cands in groups.values():
             cands.sort(key=lambda c: c["end"])
-            out += _spread(cands, per_group)
+            picked += _spread(cands, per_group)
+        per_dev.append(picked)
+    out = [x for batch in zip_longest(*per_dev) for x in batch if x]      # 장비를 돌아가며 — 상한에서 뒤 장비가 통째로 잘리지 않게
     return out[:max_total]
 
 
