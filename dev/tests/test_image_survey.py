@@ -148,3 +148,7 @@ def test_parse_terms_and_pick_by_terms_ignores_the_day_window(tmp_path):
     assert {g["row"]["lot"] for g in got} == {"TB500.INT556 FTL", "TB500.INT808 LNY"}
     assert sum(g["row"]["lot"] == "TB500.INT556 FTL" for g in got) == image_survey.PER_DEVICE_PI * 2     # Report 마다 6장
     assert not image_survey.pick_by_terms({"reports": reports}, {"scan_dir": "Scanresult", "scope_devices": ["AOI-10"]}, devs, [["ftl"]])   # 범위 밖 장비
+
+
+def test_default_terms_parse_to_the_two_reported_lots():
+    assert image_survey.parse_terms(image_survey.DEFAULT_TERMS_TEXT) == [["ftl-pids7"], ["lny-pids7"]]

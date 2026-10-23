@@ -18,6 +18,8 @@ from . import collect, failures, nas_guard, scope
 LogFn = Callable[[str], None]
 DEFAULT_DAYS, MIN_DAYS, MAX_DAYS = 7, 1, 90
 PER_DEVICE_PI, PER_DEVICE_OTHER, MAX_TOTAL = 3, 1, 80
+#: 카드 'Lot 지정' 칸의 기본값 — 현상이 나는 Lot(AOI-17 · AOI-25 의 PI2, 사용자 10/23). 이슈가 풀리면 카드와 함께 지운다.
+DEFAULT_TERMS_TEXT = "FTL-PIDS7, LNY-PIDS7"
 MAX_FILE_BYTES = 2 * 1024 * 1024
 MAX_SUBDIRS = 12
 STAT_FIRST, STAT_LAST, STAT_SPREAD = 100, 100, 100          # 하위 폴더 항목이 많으면 이만큼만 시각을 잰다(SMB 왕복)

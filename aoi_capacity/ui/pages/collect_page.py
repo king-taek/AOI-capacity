@@ -553,7 +553,7 @@ class CollectPage(QWidget):
         irow.addStretch(1)
         il.addLayout(irow)
         trow = QHBoxLayout()
-        self._is_terms = QLineEdit(icard)
+        self._is_terms = QLineEdit(image_survey_mod.DEFAULT_TERMS_TEXT, icard)
         self._is_terms.setPlaceholderText(K.IMG_SURVEY_TERMS_HINT)
         trow.addWidget(QLabel(K.IMG_SURVEY_TERMS_LABEL, icard))
         trow.addWidget(self._is_terms, 1)
