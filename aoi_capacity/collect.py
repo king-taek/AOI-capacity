@@ -302,6 +302,13 @@ class RunPlan:
     params_to: str = ""
     span_from: str = ""        # 수집된 기간(캐시의 첫 · 끝 날짜)
     span_to: str = ""
+    sec_missing: int = 0       # 스캔 비율(scan_sec)이 빈 장 수 · 그 Report 수 · 장비 수 · 첫/끝 날짜(10/24 '옛 기간 빈칸 채우기', 캐시만 보고 센다)
+    sec_reports: int = 0
+    sec_devices: int = 0
+    sec_from: str = ""
+    sec_to: str = ""
+    sec_have: int = 0          # 이미 값이 있는 장 수 — 채워진 비율 막대
+    rdl_have: int = 0          # 판정이 끝난(또는 해 본) RDL Report 수
     etas: Optional[Dict[str, Tuple[Optional[int], bool]]] = None   # 모드 → (예상 초 | None, 대략 여부) — 지난 실측으로(10/11)
     resumable: str = ""        # 중간에 멈춘 같은 일이 있으면 "rebuild" · "refresh"(10/11) — 다시 누르면 이어서 한다
     # 새로 생긴 Report 수는 NAS 를 봐야 알 수 있어 여기 없다(계획 조회는 NAS 에 접근하지 않는다).
@@ -720,7 +727,7 @@ def _patch_rdl_modes(cfg, cache, devs, should_stop, log, progress, stats, dirty,
 # ----------------------------------------------------------------------------- 예상 시간(10/11) · 파라미터 빈 구간
 #: 이 PC 에서 아직 한 번도 안 돌린 작업의 대략값(초) — 실측이 쌓이면 쓰이지 않는다. 화면은 '대략' 이라고 적는다.
 ETA_DEFAULT_FIXED_SEC = 60.0          # 장비 확인 + 목록
-ETA_DEFAULT_PER_UNIT = {"read": 1.0, "rdl_patch": 0.3, "params_fill": 2.0}
+ETA_DEFAULT_PER_UNIT = {"read": 1.0, "rdl_patch": 0.3, "params_fill": 2.0, "sec_fill": 0.02}
 PARAMS_FILL_CHUNK = 500              # 파라미터 빈 구간 채우기는 이만큼 읽을 때마다 캐시를 저장한다
 ETA_KEEP = 5                          # 모드마다 최근 몇 번의 실측을 남길지
 
@@ -744,7 +751,7 @@ def estimate_sec(eta: dict, mode: str, units: int, kind: str = "read") -> Tuple[
     """예상 걸리는 시간 → (초, 대략 여부). 고정 시간 + 개수 × 개수당 시간(최근 실측의 중앙값).
     `kind` 가 read 인 모드(수집 계열)는 서로의 실측을 같이 쓴다 — Report 하나를 읽는 비용이 비슷하기 때문. 실측이 없으면 기본값이고 대략=True."""
     eta = eta if isinstance(eta, dict) else {}
-    pool = ([x for k, v in eta.items() if k not in ("rdl_patch", "params_fill") for x in v] if kind == "read" else list(eta.get(mode, [])))
+    pool = ([x for k, v in eta.items() if k not in ("rdl_patch", "params_fill", "sec_fill") for x in v] if kind == "read" else list(eta.get(mode, [])))
     pool = [h for h in pool if isinstance(h, list) and len(h) == 3 and h[0] > 0]
     own = [h for h in eta.get(mode, []) if isinstance(h, list) and len(h) == 3]
     per = _median([h[1] / h[0] for h in pool]) if pool else ETA_DEFAULT_PER_UNIT[kind]
@@ -776,17 +783,31 @@ def fill_params(cfg: dict, log: Optional[LogFn] = None, progress: Optional[Progr
     """'파라미터 빈 구간 채우기'(10/11) — 캐시에 Report 는 있는데 파라미터 스냅숏이 없는 것마다, 처음 INI 를 찾은 Wafer 폴더 **안**만 정확 경로로 읽는다.
     Report 폴더 나열 · Report 읽기 · 재귀 검색 · 범위 밖 장비 · KLA 는 없다. 폴더가 사라졌으면 빈 스냅숏으로 남겨 다시 열지 않는다.
     스레드는 읽기만, 캐시에 넣는 일은 메인 스레드가 입력 순서로. 중간에 멈춰도 그때까지 읽은 것은 저장한다."""
+    cache, devs, fixed = _fill_setup(cfg, log, should_stop)
+    return _fill_params_into(cfg, cache, devs, fixed, log, progress or (lambda d, t, p: None), should_stop)
+
+
+def _fill_setup(cfg: dict, log: Optional[LogFn], should_stop) -> Tuple[dict, List[dict], float]:
+    """빈칸 채우기들의 공통 준비 — 설정 검사(fail closed) · 캐시 · 범위 게이트를 지난 장비 · 안정 키. → (캐시, 장비, 준비에 걸린 초)."""
     cfg = config_mod.check_or_raise(cfg)
     nas_guard.check_cfg(cfg)
-    progress = progress or (lambda d, t, p: None)
     t0 = time.perf_counter()
     dirty = _Dirty()
     cache = _load_cache(cfg, log=log, dirty=dirty)
-    store = cache.setdefault("params", params_mod.empty_store())
     devs = devices_mod.resolve_devices(cfg, log, should_stop=should_stop)
     _assign_device_keys(cache, devs, cfg, dirty, log)         # 장비마다 안정 키(d["key"]) — 캐시 대응표로 영속, 수집과 같다
-    by_key = {str(d["key"]): d for d in devs if d.get("kind") != "kla"}
-    fixed = time.perf_counter() - t0
+    if dirty:
+        _save_cache(cfg, cache)
+    return cache, devs, time.perf_counter() - t0
+
+
+def _cam_by_key(devs: List[dict]) -> Dict[str, dict]:
+    return {str(d["key"]): d for d in devs if d.get("kind") != "kla"}
+
+
+def _fill_params_into(cfg: dict, cache: dict, devs: List[dict], fixed: float, log, progress, should_stop) -> Dict[str, int]:
+    store = cache.setdefault("params", params_mod.empty_store())
+    by_key = _cam_by_key(devs)
     tasks, no_dev = [], 0
     for key, e in _params_targets(cache):
         d = by_key.get(key.split("|", 1)[0])
@@ -818,7 +839,7 @@ def fill_params(cfg: dict, log: Optional[LogFn] = None, progress: Optional[Progr
         return files, err
 
     st = {"targets": total, "added": 0, "empty": 0, "no_device": no_dev, "stopped": 0}
-    t1, n_done = time.perf_counter(), 0
+    t1, n_done, dirty = time.perf_counter(), 0, _Dirty()
     for lo in range(0, total, PARAMS_FILL_CHUNK):                  # 덩어리마다 저장 — 멈추거나 끊겨도 읽은 만큼은 남는다
         chunk = tasks[lo:lo + PARAMS_FILL_CHUNK]
         try:
@@ -841,6 +862,118 @@ def fill_params(cfg: dict, log: Optional[LogFn] = None, progress: Optional[Progr
             dirty = _Dirty()
     _say(log, "파라미터 빈 구간 채우기: " + " · ".join(f"{k}={v}" for k, v in st.items()))
     return st
+
+
+# ----------------------------------------------------------------------------- 스캔 비율 빈칸(10/24)
+SEC_FILL_CHUNK = 2000                # 스캔 비율 채우기는 이만큼(장) 읽을 때마다 캐시를 저장한다
+
+
+def _needs_sec(r: dict) -> bool:
+    return r.get("ini_match") == "EXACT" and not r.get("kind") and not str(r.get("scan_sec") or "").strip()
+
+
+def _sec_targets(cache: dict) -> List[Tuple[str, dict]]:
+    """스캔 비율(`scan_sec`)이 빈 Report — INI 를 찾은 장(EXACT)인데 값이 없고, 아직 채우기를 해 보지 않은 것(`sec_checked`). KLA 는 Report 가 없어 들지 않는다."""
+    return [(k, e) for k, e in (cache.get("reports") or {}).items()
+            if not e.get("superseded_by") and not e.get("sec_checked") and any(_needs_sec(r) for r in e.get("rows") or ())]
+
+
+def _fill_scan_sec_into(cfg: dict, cache: dict, devs: List[dict], fixed: float, log, progress, should_stop) -> Dict[str, int]:
+    """'옛 기간 빈칸 채우기' 의 스캔 비율 — 값이 빈 장마다 처음 INI 를 찾은 Wafer 폴더(행의 코드로 되짚음)에서 ScanLog.ini · RecipesInfo.ini
+    (멀티면 둘째 레시피 ExtendedScanMetaData 하나)만 정확 경로로 연다. Report 나열 · 읽기 없음, 범위 밖 장비 · KLA 접근 0.
+    ScanLog 의 시작이 그 장의 INI 시각 안에 있을 때만 값을 쓴다(`scan_seconds`) — 나중 검사로 폴더가 다시 쓰였으면 빈 채로 둔다(지어내지 않는다).
+    해 본 Report 에는 `sec_checked` 를 남겨 다시 열지 않는다(Report 를 다시 읽으면 새 행이라 표시도 사라진다)."""
+    by_key = _cam_by_key(devs)
+    tasks, rep_left, no_dev, marked = [], {}, 0, False
+    for key, e in _sec_targets(cache):
+        d = by_key.get(key.split("|", 1)[0])
+        if d is None:
+            no_dev += 1
+            continue
+        scan_root = os.path.join(d["path"], str(d.get("scan_dir") or cfg["scan_dir"]))
+        backups = _backup_roots(d, scan_root)
+        mine = [(e, r, w, d["name"]) for r in e.get("rows") or () if _needs_sec(r)
+                for w in [_rdl_wafer_dir(r, scan_root, backups)] if w]
+        if mine:
+            tasks.extend(mine)
+            rep_left[id(e)] = len(mine)
+        else:
+            e["sec_checked"] = marked = True            # 되짚을 폴더가 없다 — 다음에도 마찬가지
+    _say(log, f"스캔 비율 채우기: 대상 {len(tasks)}장 · Report {len(rep_left)}개 · 장비 {len({t[3] for t in tasks})}대 — Report 는 다시 읽지 않습니다")
+    memo, done, total = _IniMemo(), _Counter(), len(tasks)
+
+    def one(t):
+        _check(should_stop)
+        _e, r, w, name = t
+        st_, en_ = parse_dt(r.get("wafer_start_time")), parse_dt(r.get("wafer_end_time"))
+        lk, lv = memo.sub("scanlog", read_scan_log, os.path.join(w, "ScanLog.ini"))
+        out = None
+        if lk == "ok":
+            rk, names = memo.recipes(os.path.join(w, "RecipesInfo.ini"))
+            second = None
+            if rk == "ok" and names and len(names) > 1:
+                ek, ev = memo.sub("extmeta", read_ext_meta, os.path.join(w, f"ExtendedScanMetaData_{names[1]}.json"))
+                second = ev if ek == "ok" else None
+            out = scan_seconds(st_, en_, lv, second)
+        progress(done.bump(), total, i18n.KO.GAPS_PHASE_SEC_FMT.format(device=name))
+        return out
+
+    st = {"targets": total, "filled": 0, "empty": 0, "no_device": no_dev, "stopped": 0}
+    t1, n_done = time.perf_counter(), 0
+    for lo in range(0, total, SEC_FILL_CHUNK):
+        chunk = tasks[lo:lo + SEC_FILL_CHUNK]
+        try:
+            results = _run(cfg, chunk, one, should_stop, group=lambda t: nas_group(t[2]))
+        except CollectCancelled:
+            st["stopped"] = 1
+            break
+        for (e, r, _w, _n), sec in zip(chunk, results):
+            if sec is not None:
+                r["scan_sec"] = str(sec)
+                st["filled"] += 1
+            else:
+                st["empty"] += 1
+            rep_left[id(e)] -= 1
+            if rep_left[id(e)] <= 0:
+                e["sec_checked"] = True
+        n_done += len(chunk)
+        if n_done >= total:
+            record_eta(cache, "sec_fill", n_done, time.perf_counter() - t1, fixed)
+        _save_cache(cfg, cache)
+    if marked and n_done == 0 and not st["stopped"]:
+        _save_cache(cfg, cache)                              # 되짚을 폴더가 없어 표시만 남긴 Report
+    _say(log, "스캔 비율 채우기: " + " · ".join(f"{k}={v}" for k, v in st.items()))
+    return st
+
+
+def fill_gaps(cfg: dict, log: Optional[LogFn] = None, progress: Optional[ProgressFn] = None,
+              should_stop: Optional[Callable[[], bool]] = None) -> Dict[str, object]:
+    """'옛 기간 빈칸 채우기'(10/24) — 수집기가 나중에 모으기 시작한 값이 옛 Report 에 비어 있는 곳을 한 번에 채운다:
+    ① RDL 멀티/단일 판정(`_patch_rdl_modes`) ② 스캔 비율(`_fill_scan_sec_into`) ③ 파라미터(`_fill_params_into`).
+    셋 다 캐시 행이 가리키는 Wafer 폴더 **안**만 정확 경로로 읽는다(규칙 4 · Report 나열 · 읽기 없음 · 범위 밖 장비 0). 중지하면 그때까지 읽은 것을 저장하고
+    다시 누르면 남은 것부터 한다. 결과 HTML 은 부르는 쪽이 `html_from_cache` 로 만든다."""
+    progress = progress or (lambda d, t, p: None)
+    cache, devs, fixed = _fill_setup(cfg, log, should_stop)
+    out: Dict[str, object] = {"stopped": 0}
+    stats: Dict[str, int] = {}
+    dirty = _Dirty()
+    try:
+        _patch_rdl_modes(cfg, cache, devs, should_stop, log, progress, stats, dirty)
+    except CollectCancelled:
+        out["stopped"] = 1
+    if dirty:
+        _save_cache(cfg, cache)
+    out["rdl"] = {"targets": int(stats.get("rdl_rows", 0)), "filled": int(stats.get("rdl_patched", 0))}
+    if out["stopped"]:
+        return out
+    out["sec"] = _fill_scan_sec_into(cfg, cache, devs, fixed, log, progress, should_stop)
+    if out["sec"].get("stopped"):
+        out["stopped"] = 1
+        return out
+    if bool(cfg.get("collect_params", True)):
+        out["params"] = _fill_params_into(cfg, cache, devs, fixed, log, progress, should_stop)
+        out["stopped"] = int(out["params"].get("stopped", 0))
+    return out
 
 
 
@@ -1907,6 +2040,7 @@ def _cache_summary(path: str) -> dict:
     """계획 조회에 필요한 것만 — Report 수 · 장비 커서 수 · 누락 복구 대상 수 · Report 수정시각 목록(refresh 창 계산용).
     행은 재분류하지 않는다(수집 워커가 한다)."""
     empty = {"n_reports": 0, "known_devices": 0, "n_recover": 0, "n_rdl": 0, "rdl_devices": 0, "mtimes": [], "resume_sig": "", "eta": {},
+             "n_sec": 0, "sec_reports": 0, "sec_devices": 0, "sec_from": "", "sec_to": "", "sec_have": 0, "rdl_have": 0,
              "n_params": 0, "n_params_have": 0, "params_devices": 0, "params_from": "", "params_to": "", "span_from": "", "span_to": ""}
     if not path or not os.path.isfile(path):
         return empty
@@ -1920,9 +2054,17 @@ def _cache_summary(path: str) -> dict:
         return hit[1]
     cache = _load_cache({"cache_file": path}, rederive=False)
     ptargets = _params_targets(cache)
+    stargets = _sec_targets(cache)
+    sdays = sorted(x for x in (_first_day(e) for _k, e in stargets) if x)
+    live = [e for e in cache.get("reports", {}).values() if not e.get("superseded_by")]
     pdays = sorted(x for x in (_first_day(e) for _k, e in ptargets) if x)
     alld = sorted(x for x in (_first_day(e) for e in cache.get("reports", {}).values() if not e.get("superseded_by")) if x)
     summary = {"n_reports": len(cache.get("reports", {})), "eta": cache.get("eta") if isinstance(cache.get("eta"), dict) else {},
+               "n_sec": sum(1 for _k, e in stargets for r in e.get("rows") or () if _needs_sec(r)), "sec_reports": len(stargets),
+               "sec_devices": len({k.split("|", 1)[0] for k, _e in stargets}),
+               "sec_from": sdays[0] if sdays else "", "sec_to": sdays[-1] if sdays else "",
+               "sec_have": sum(1 for e in live for r in e.get("rows") or () if r.get("ini_match") == "EXACT" and not r.get("kind") and str(r.get("scan_sec") or "").strip()),
+               "rdl_have": sum(1 for e in live if not _needs_rdl_patch(e) and any(r.get("ini_match") == "EXACT" and is_rdl_job(r.get("job")) for r in e.get("rows") or ())),
                "n_params": len(ptargets), "n_params_have": len((cache.get("params") or {}).get("snaps") or {}),
                "params_devices": len({k.split("|", 1)[0] for k, _e in ptargets}),
                "params_from": pdays[0] if pdays else "", "params_to": pdays[-1] if pdays else "",
@@ -1963,6 +2105,7 @@ def _plan_etas(s: dict, n_reports: int, reread: int, n_recover: int, n_rdl: int,
     out["rebuild"] = estimate_sec(eta, "rebuild", n_reports)
     out["rdl"] = estimate_sec(eta, "rdl_patch", n_rdl, kind="rdl_patch")
     out["params"] = estimate_sec(eta, "params_fill", n_params, kind="params_fill")
+    out["sec"] = estimate_sec(eta, "sec_fill", int(s.get("n_sec", 0)), kind="sec_fill")
     return out
 
 
@@ -2000,6 +2143,8 @@ def plan_run(cfg: dict, full: bool = False, backfill: bool = False, recover: boo
                    rdl_reports=s.get("n_rdl", 0), rdl_devices=s.get("rdl_devices", 0),
                    params_missing=s["n_params"], params_have=s["n_params_have"], params_devices=s["params_devices"],
                    params_from=s["params_from"], params_to=s["params_to"], span_from=s["span_from"], span_to=s["span_to"],
+                   sec_missing=s.get("n_sec", 0), sec_reports=s.get("sec_reports", 0), sec_devices=s.get("sec_devices", 0),
+                   sec_from=s.get("sec_from", ""), sec_to=s.get("sec_to", ""), sec_have=s.get("sec_have", 0), rdl_have=s.get("rdl_have", 0),
                    etas=_plan_etas(s, n, reread, s["n_recover"], s.get("n_rdl", 0), s["n_params"]))
 
 

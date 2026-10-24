@@ -18,7 +18,7 @@ from typing import Dict, Optional
 from PyQt6.QtCore import QDate, QThread, Qt, QUrl, pyqtSignal
 from PyQt6.QtGui import QDesktopServices
 from PyQt6.QtWidgets import (QCheckBox, QFileDialog, QFrame, QGridLayout, QHBoxLayout, QLabel, QLineEdit,
-                             QPlainTextEdit, QScrollArea, QSizePolicy, QVBoxLayout, QWidget)
+                             QPlainTextEdit, QProgressBar, QScrollArea, QSizePolicy, QVBoxLayout, QWidget)
 
 from ... import collect, i18n, nas_guard
 from ...utils import paths, prefs, results
@@ -33,10 +33,10 @@ MAX_LOG_LINES = 1000
 K = i18n.KO
 
 #: 상황 카드의 열쇠 → 워커 인자(full, backfill, recover). refresh 는 prefs.refresh_window_days 로 간다(D60).
-MODES = ("normal", "rdl", "backfill", "refresh", "recover", "rebuild", "range")
+MODES = ("normal", "backfill", "refresh", "recover", "rebuild", "range")
 _ARGS = {"normal": (False, False, False), "backfill": (False, True, False), "refresh": (False, False, False),
-         "recover": (False, False, True), "rebuild": (True, False, False), "range": (False, False, False),
-         "rdl": (False, False, False)}   # rdl 은 MainWindow 가 mode() 로 rdl_patch 를 넘긴다   # range 는 refresh_range() 로
+         "recover": (False, False, True), "rebuild": (True, False, False), "range": (False, False, False)}   # range 는 refresh_range() 로
+# 10/24: 'RDL 영역 INI 패치' 카드는 '옛 기간 빈칸 채우기' 로 합쳤다(같은 일 — Wafer 폴더 안만 읽는다). CLI 의 rdl_patch 는 그대로.
 
 
 def _repolish(w: QWidget) -> None:
@@ -137,10 +137,11 @@ class _ParamZipWorker(QThread):
             self.done.emit(None, f"{type(ex).__name__}: {ex}")
 
 
-class _ParamFillWorker(QThread):
-    """파라미터 빈 구간 채우기(10/11) — 캐시에서 빈 Report 를 찾아 그 Wafer 폴더 안만 읽는다. 끝나면 (통계 | None, 오류 문구)."""
+class _GapFillWorker(QThread):
+    """옛 기간 빈칸 채우기(10/24) — `collect.fill_gaps` 로 캐시 행이 가리키는 Wafer 폴더 안만 읽고, 끝나면 가진 데이터로 결과 HTML 을 다시 만든다.
+    끝나면 (통계 | None, 오류 문구). 중지는 읽던 것만 마치고 저장한다."""
     log = pyqtSignal(str)
-    progress = pyqtSignal(int, int)
+    progress = pyqtSignal(int, int, str)
     done = pyqtSignal(object, str)
 
     def __init__(self, cfg: dict, parent=None):
@@ -153,8 +154,10 @@ class _ParamFillWorker(QThread):
 
     def run(self) -> None:  # noqa: D401
         try:
-            st = collect.fill_params(self._cfg, log=self.log.emit, progress=lambda d, t, p: self.progress.emit(d, t),
-                                     should_stop=lambda: self._stop)
+            st = collect.fill_gaps(self._cfg, log=self.log.emit, progress=lambda d, t, p: self.progress.emit(int(d), int(t), str(p)),
+                                   should_stop=lambda: self._stop)
+            if not st.get("stopped"):
+                st["html"] = collect.html_from_cache(self._cfg, log=self.log.emit)
             self.done.emit(st, "")
         except Exception as ex:  # noqa: BLE001
             self.done.emit(None, f"{type(ex).__name__}: {ex}")
@@ -169,7 +172,8 @@ def eta_text(sec, rough: bool = False) -> str:
 
 
 class ModeCard(QFrame):
-    """상황 카드 하나 — 누르면(또는 Space/Enter) 고른다. 고른 카드는 파란 테두리와 채운 점."""
+    """상황 카드 하나 — 누르면(또는 Space/Enter) 고른다. 고른 카드는 파란 테두리와 채운 점.
+    10/24: 제목 · 한 줄('이럴 때')만 보이고 '무엇을 하나' 는 마우스를 올리면(툴팁) — 화면의 글자를 줄였다(사용자: 글자가 너무 많다)."""
     picked = pyqtSignal(str)
 
     def __init__(self, key: str, title: str, when: str, what: str, parent: QWidget):
@@ -182,10 +186,10 @@ class ModeCard(QFrame):
         self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
         self.setAccessibleName(title)
         lay = QVBoxLayout(self)
-        lay.setContentsMargins(16, 13, 16, 14)
-        lay.setSpacing(5)
+        lay.setContentsMargins(14, 11, 14, 11)
+        lay.setSpacing(4)
         top = QHBoxLayout()
-        top.setSpacing(9)
+        top.setSpacing(8)
         self._dot = _label("", "dot", self)
         self._dot.setFixedSize(14, 14)
         self._title = _label(title, "modeTitle", self)
@@ -197,16 +201,21 @@ class ModeCard(QFrame):
         top.addLayout(self._badges)
         lay.addLayout(top)
         self._when = _label(when, "modeWhen", self, wrap=True)
-        self._what = _label(what, "modeWhat", self, wrap=True)
+        self._when.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
+        self._when.setContentsMargins(22, 0, 0, 0)
         lay.addWidget(self._when)
-        lay.addWidget(self._what)
         self.extra = QHBoxLayout()
         self.extra.setSpacing(6)
+        self.extra.setContentsMargins(22, 2, 0, 0)
         lay.addLayout(self.extra)
         lay.addStretch(1)                               # 격자에서 카드 높이가 맞춰질 때 글자는 위에 모여 있게
-        for lb in (self._when, self._what):
-            lb.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
+        self._what = what
+        self._why = ""
         self._enabled = True
+        self._apply_tip()
+
+    def _apply_tip(self) -> None:
+        self.setToolTip(self._what if self._enabled else self._why)
 
     def set_texts(self, title: Optional[str] = None, when: Optional[str] = None, what: Optional[str] = None) -> None:
         if title is not None:
@@ -215,7 +224,8 @@ class ModeCard(QFrame):
         if when is not None:
             self._when.setText(when)
         if what is not None:
-            self._what.setText(what)
+            self._what = what
+            self._apply_tip()
 
     def title(self) -> str:
         return self._title.text()
@@ -240,9 +250,10 @@ class ModeCard(QFrame):
 
     def set_available(self, on: bool, why: str = "") -> None:
         self._enabled = on
+        self._why = why
         self.setProperty("enabled", "true" if on else "false")
         self.setCursor(Qt.CursorShape.PointingHandCursor if on else Qt.CursorShape.ArrowCursor)
-        self.setToolTip("" if on else why)
+        self._apply_tip()
         for i in range(self.extra.count()):
             w = self.extra.itemAt(i).widget()
             if w is not None:
@@ -266,7 +277,85 @@ class ModeCard(QFrame):
         super().keyPressEvent(ev)
 
 
+def _tool(parent: QWidget, title: str, short: str, tip: str) -> tuple:
+    """조사 도구 한 칸(10/24) — 굵은 제목 + 한 줄 설명, 긴 설명은 제목 옆 ⓘ 에 마우스를 올리면. → (틀, 세로 레이아웃)"""
+    f = QFrame(parent)
+    f.setProperty("role", "tool")
+    lay = QVBoxLayout(f)
+    lay.setContentsMargins(16, 12, 16, 12)
+    lay.setSpacing(8)
+    head = QHBoxLayout()
+    head.setSpacing(8)
+    head.addWidget(_label(title, "toolTitle", f))
+    if short:
+        head.addWidget(_label(short, "muted", f))
+    if tip:
+        info = _label("ⓘ", "info", f)
+        info.setToolTip(tip)
+        info.setCursor(Qt.CursorShape.WhatsThisCursor)
+        head.addWidget(info)
+    head.addStretch(1)
+    lay.addLayout(head)
+    return f, lay
+
+
+def _date_edit(parent: QWidget, d: QDate) -> QDateEdit:
+    w = QDateEdit(parent)
+    w.setCalendarPopup(True)
+    w.setDisplayFormat("yyyy-MM-dd")
+    w.setDate(d)
+    w.setMinimumWidth(124)
+    return w
+
+
+def _row(*items, stretch: bool = True, spacing: int = 8) -> QHBoxLayout:
+    r = QHBoxLayout()
+    r.setSpacing(spacing)
+    for it in items:
+        if isinstance(it, int):
+            r.addSpacing(it)
+        elif isinstance(it, QHBoxLayout):
+            r.addLayout(it)
+        else:
+            r.addWidget(it)
+    if stretch:
+        r.addStretch(1)
+    return r
+
+
+class _GapRow:
+    """빈칸 채우기 카드의 한 줄 — 이름 · 채워진 비율 막대 · 비어 있는 수 · 기간/예상."""
+
+    def __init__(self, parent: QWidget, grid: QGridLayout, row: int, name: str, tip: str):
+        self.name = _label(name, "gapName", parent)
+        self.name.setToolTip(tip)
+        self.bar = QProgressBar(parent)
+        self.bar.setRange(0, 1000)
+        self.bar.setTextVisible(False)
+        self.bar.setFixedSize(120, 6)
+        self.count = _label("", "gapCount", parent)
+        self.note = _label("", "muted", parent)
+        for c, w in enumerate((self.name, self.bar, self.count, self.note)):
+            grid.addWidget(w, row, c, Qt.AlignmentFlag.AlignVCenter)
+        self._ws = (self.name, self.bar, self.count, self.note)
+
+    def set(self, missing: int, have: int, text: str, note: str) -> None:
+        total = missing + have
+        self.bar.setValue(int(1000 * have / total) if total else 1000)
+        self.count.setText(text)
+        self.count.setProperty("kind", "warn" if missing else "ok")
+        _repolish(self.count)
+        self.note.setText(note)
+
+    def set_visible(self, on: bool) -> None:
+        for w in self._ws:
+            w.setVisible(on)
+
+
 class CollectPage(QWidget):
+    """10/24 다시 짬(사용자: "정보가 너무 많고 글자가 많고 가독성이 부족하다") — 위에서 아래로 쓰는 빈도 순:
+    ① 수집(평소 수집 카드 · 다른 방법 접기 · 실행 줄) ② 옛 기간 빈칸 채우기(빈칸이 있을 때만) ③ 결과 파일만 다시 만들기 · 조사 도구 · 설정 · 로그(전부 접힘).
+    설명 문단은 한 줄로 줄이고 긴 설명은 툴팁(ⓘ)으로 옮겼다. 위젯 이름(`_b_run` · `_cards` …)은 그대로다."""
     collect_requested = pyqtSignal(bool, bool, bool)   # full, backfill, recover
     stop_requested = pyqtSignal()
     error = pyqtSignal(str, str)
@@ -287,327 +376,247 @@ class CollectPage(QWidget):
         scroll.setWidget(body)
         outer.addWidget(scroll)
         lay = QVBoxLayout(body)
-        lay.setContentsMargins(0, 0, 6, 0)
-        lay.setSpacing(14)
+        lay.setContentsMargins(0, 0, 6, 12)
+        lay.setSpacing(12)
         p = prefs.load()
+        today = QDate.currentDate()
 
-        # 머리
-        head = QVBoxLayout()
-        head.setSpacing(2)
-        head.addWidget(_label(K.COLLECT_PAGE_TITLE, "h1", body))
-        head.addWidget(_label(K.COLLECT_PAGE_SUB, "sub", body, wrap=True))
-        lay.addLayout(head)
+        # ── 머리: 제목 · 결과 열기 ──
+        self._b_open = make_button(K.BTN_OPEN_RESULT, "default", body)
+        self._b_folder = make_button(K.BTN_OPEN_RESULT_FOLDER, "ghost", body)
+        lay.addLayout(_row(_label(K.COLLECT_PAGE_TITLE, "h1", body), stretch=False))
+        lay.itemAt(lay.count() - 1).layout().addStretch(1)
+        lay.itemAt(lay.count() - 1).layout().addWidget(self._b_open)
+        lay.itemAt(lay.count() - 1).layout().addWidget(self._b_folder)
 
-        # 맨 위 조사용 카드 줄(10/22 사용자 요청) — Review 이미지 순서 조사 · No image 수집 같은 임시 조사 버튼. 이슈가 풀리면 카드와 이 줄을 지운다
-        self._top_cards = QVBoxLayout()
-        self._top_cards.setSpacing(14)
-        lay.addLayout(self._top_cards)
-
-        # 상황 카드 + 실행
-        pick, pl = _card(body, K.COLLECT_PICK_TITLE)
+        # ── ① 수집 ──
+        pick, pl = _card(body)
         self._cards: Dict[str, ModeCard] = {}
         self._cards["normal"] = ModeCard("normal", K.MODE_NORMAL_TITLE, K.MODE_NORMAL_WHEN, K.MODE_NORMAL_WHAT, pick)
         pl.addWidget(self._cards["normal"])
-        # 10/11: 매일 쓰는 건 '평소 수집' 하나 — 나머지 복구 카드는 접이식 구역 안으로(사용자: 버튼이 너무 중구난방)
         trouble = QWidget(pick)
-        tl = QVBoxLayout(trouble)
-        tl.setContentsMargins(0, 0, 0, 0)
-        tl.setSpacing(10)
-        # 10/5: 업데이트 전에 읽은 RDL Report 의 멀티/단일 판정을 채운다(RDL 이 있는 장비만)
-        self._cards["rdl"] = ModeCard("rdl", K.MODE_RDL_TITLE, K.MODE_RDL_WHEN, K.MODE_RDL_WHAT, pick)
-        tl.addWidget(self._cards["rdl"])
-        grid = QGridLayout()
+        grid = QGridLayout(trouble)
+        grid.setContentsMargins(0, 0, 0, 0)
         grid.setHorizontalSpacing(10)
         grid.setVerticalSpacing(10)
         self._cards["backfill"] = ModeCard("backfill", K.MODE_BACKFILL_TITLE, K.MODE_BACKFILL_WHEN, "", pick)
         self._cards["refresh"] = ModeCard("refresh", K.MODE_REFRESH_TITLE, K.MODE_REFRESH_WHEN, K.MODE_REFRESH_WHAT, pick)
         self._cards["recover"] = ModeCard("recover", K.MODE_RECOVER_TITLE, K.MODE_RECOVER_WHEN, K.MODE_RECOVER_WHAT, pick)
-        self._cards["rebuild"] = ModeCard("rebuild", K.MODE_REBUILD_TITLE, K.MODE_REBUILD_WHEN, "", pick)
-        for i, key in enumerate(("backfill", "refresh", "recover", "rebuild")):
-            grid.addWidget(self._cards[key], i // 2, i % 2)
-        # 10/5: '전체 다시 만들기' 밑에 — 고른 기간만 다시 읽기(그 기간에 끝난 Report · 시작한 KLA Wafer, 기간 밖 이력은 그대로)
         self._cards["range"] = ModeCard("range", K.MODE_RANGE_TITLE, K.MODE_RANGE_WHEN, K.MODE_RANGE_WHAT, pick)
-        grid.addWidget(self._cards["range"], 2, 0, 1, 2)
-        today = QDate.currentDate()
-        self._r_from, self._r_to = QDateEdit(self._cards["range"]), QDateEdit(self._cards["range"])
-        for w, d in ((self._r_from, today.addDays(-6)), (self._r_to, today)):
-            w.setCalendarPopup(True)
-            w.setDisplayFormat("yyyy-MM-dd")
-            w.setMaximumDate(today)
-            w.setDate(d)
-            w.setMinimumWidth(130)
-        rx = self._cards["range"].extra
-        rx.addWidget(_label(K.HTML_ONLY_FROM, "muted", self._cards["range"]))
-        rx.addWidget(self._r_from)
-        rx.addWidget(_label(K.HTML_ONLY_TO, "muted", self._cards["range"]))
-        rx.addWidget(self._r_to)
-        rx.addStretch(1)
-        # 10/22: '빠진 날 채우기' 의 시작일 — 이 날부터 오늘까지 아직 읽지 않은 것만 읽는다(기본 = 오늘 − backfill_days)
-        self._b_from = QDateEdit(self._cards["backfill"])
-        self._b_from.setCalendarPopup(True)
-        self._b_from.setDisplayFormat("yyyy-MM-dd")
-        self._b_from.setMaximumDate(today)
-        self._b_from.setDate(today.addDays(-int(prefs.load().backfill_days or 30)))
-        self._b_from.setMinimumWidth(130)
-        bx = self._cards["backfill"].extra
-        bx.addWidget(_label(K.BACKFILL_FROM, "muted", self._cards["backfill"]))
-        bx.addWidget(self._b_from)
-        bx.addStretch(1)
+        self._cards["rebuild"] = ModeCard("rebuild", K.MODE_REBUILD_TITLE, K.MODE_REBUILD_WHEN, "", pick)
+        for i, key in enumerate(("backfill", "refresh", "recover", "range")):
+            grid.addWidget(self._cards[key], i // 2, i % 2)
+        grid.addWidget(self._cards["rebuild"], 2, 0, 1, 2)
         grid.setColumnStretch(0, 1)
         grid.setColumnStretch(1, 1)
-        tl.addLayout(grid)
-        self._trouble = Collapsible(K.COLLECT_SEC_TROUBLE, trouble, pick)
-        pl.addWidget(self._trouble)
-        # '최근 며칠' 의 며칠 — 카드 안에서 바로 고른다(예전엔 '처음 수집 기간' 30일을 그대로 써서 무거웠다)
+        # 카드 안 입력 — 빠진 날의 시작일(10/22) · 최근 며칠 · 다시 읽을 기간(10/5)
+        self._b_from = _date_edit(self._cards["backfill"], today.addDays(-int(p.backfill_days or 30)))
+        self._b_from.setMaximumDate(today)
+        self._cards["backfill"].extra.addWidget(_label(K.BACKFILL_FROM, "muted", self._cards["backfill"]))
+        self._cards["backfill"].extra.addWidget(self._b_from)
+        self._cards["backfill"].extra.addStretch(1)
         self._refresh_days = QSpinBox(self._cards["refresh"])
         self._refresh_days.setRange(1, 90)
         self._refresh_days.setValue(max(1, int(p.refresh_pick_days or 3)))
         self._refresh_days.setSuffix(K.MODE_REFRESH_DAYS_SUFFIX)
         self._refresh_days.setFixedWidth(84)
-        rc = self._cards["refresh"].extra
-        rc.addWidget(_label(K.MODE_REFRESH_DAYS_PREFIX, "muted", self._cards["refresh"]))
-        rc.addWidget(self._refresh_days)
-        rc.addStretch(1)
-        self._cards["normal"].set_badges([(K.MODE_BADGE_REC, "rec"), (K.MODE_BADGE_FAST, "slow")])
-        self._cards["backfill"].set_badges([(K.MODE_BADGE_MEDIUM, "slow")])
-        self._cards["refresh"].set_badges([(K.MODE_BADGE_MEDIUM, "slow")])
-        self._cards["recover"].set_badges([(K.MODE_BADGE_MEDIUM, "slow")])
+        self._cards["refresh"].extra.addWidget(_label(K.MODE_REFRESH_DAYS_PREFIX, "muted", self._cards["refresh"]))
+        self._cards["refresh"].extra.addWidget(self._refresh_days)
+        self._cards["refresh"].extra.addStretch(1)
+        self._r_from = _date_edit(self._cards["range"], today.addDays(-6))
+        self._r_to = _date_edit(self._cards["range"], today)
+        for w in (self._r_from, self._r_to):
+            w.setMaximumDate(today)
+        rx = self._cards["range"].extra
+        rx.addWidget(self._r_from)
+        rx.addWidget(_label("~", "muted", self._cards["range"]))
+        rx.addWidget(self._r_to)
+        rx.addStretch(1)
+        self._trouble = Collapsible(K.COLLECT_SEC_TROUBLE, trouble, pick)
+        pl.addWidget(self._trouble)
+        self._cards["normal"].set_badges([(K.MODE_BADGE_REC, "rec")])
+        for k in ("backfill", "refresh", "recover", "range"):
+            self._cards[k].set_badges([(K.MODE_BADGE_MEDIUM, "slow")])
         self._cards["rebuild"].set_badges([(K.MODE_BADGE_SLOW, "warn")])
-        self._cards["range"].set_badges([(K.MODE_BADGE_MEDIUM, "slow")])
-        self._cards["rdl"].set_badges([(K.MODE_BADGE_MEDIUM, "slow")])
 
         rule = QFrame(pick)
         rule.setProperty("role", "rule")
-        pl.addSpacing(4)
         pl.addWidget(rule)
         self._resume = _label("", "help", pick, wrap=True)      # 멈춘 수집이 있을 때만 — 계획 줄과 따로 한 줄(10/11)
         self._resume.setStyleSheet("font-weight:600;")
         self._resume.hide()
         pl.addWidget(self._resume)
-        act = QHBoxLayout()
-        act.setSpacing(10)
-        self._plan = _label("", "help", pick, wrap=True)
+        self._plan = _label("", "muted", pick, wrap=True)
         self._plan.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
         self._status = _label(K.COLLECT_IDLE, "muted", pick)
         self._b_stop = make_button(K.BTN_STOP, "default", pick)
         self._b_stop.hide()
         self._b_run = make_button(K.BTN_COLLECT_NOW, "primary", pick)
         self._b_run.setProperty("size", "lg")
-        act.addWidget(self._plan, 1)
+        act = _row(self._plan, stretch=False, spacing=10)
+        act.setStretch(0, 1)
         act.addWidget(self._status)
         act.addWidget(self._b_stop)
         act.addWidget(self._b_run)
         pl.addLayout(act)
         lay.addWidget(pick)
 
-        # 결과 화면(HTML) — 더블클릭이 기본, 버튼은 편의
-        rcard, rl = _card(body, K.COLLECT_RESULT_TITLE)
-        self._result = _label("", "mono", rcard, wrap=True)
-        self._result.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
-        hint = _label(K.COLLECT_RESULT_HINT, "help", rcard, wrap=True)
-        rrow = QHBoxLayout()
-        self._b_open = make_button(K.BTN_OPEN_RESULT, "primary", rcard)
-        self._b_folder = make_button(K.BTN_OPEN_RESULT_FOLDER, "default", rcard)
-        rrow.addWidget(self._b_open)
-        rrow.addWidget(self._b_folder)
-        rrow.addStretch(1)
-        rl.addWidget(self._result)
-        rl.addWidget(hint)
-        rl.addLayout(rrow)
-        lay.addWidget(rcard)
+        # ── ② 옛 기간 빈칸 채우기(10/24) — 빈칸이 있을 때만 보인다 ──
+        self._gaps, gl = _card(body)
+        gtitle = _label(K.GAPS_TITLE, "cardTitle", self._gaps)
+        ginfo = _label("ⓘ", "info", self._gaps)
+        ginfo.setToolTip(K.GAPS_TIP)
+        self._gap_eta = _label("", "badge", self._gaps)
+        self._gap_eta.setProperty("kind", "slow")
+        gl.addLayout(_row(gtitle, ginfo, stretch=False))
+        gl.itemAt(gl.count() - 1).layout().addStretch(1)
+        gl.itemAt(gl.count() - 1).layout().addWidget(self._gap_eta)
+        gg = QGridLayout()
+        gg.setHorizontalSpacing(14)
+        gg.setVerticalSpacing(6)
+        gg.setColumnStretch(3, 1)
+        self._gap_rows = {"sec": _GapRow(self._gaps, gg, 0, K.GAPS_ROW_SEC, K.GAPS_ROW_SEC_TIP),
+                          "params": _GapRow(self._gaps, gg, 1, K.GAPS_ROW_PARAMS, K.GAPS_ROW_PARAMS_TIP),
+                          "rdl": _GapRow(self._gaps, gg, 2, K.GAPS_ROW_RDL, K.GAPS_ROW_RDL_TIP)}
+        gl.addLayout(gg)
+        self._b_gaps = make_button(K.GAPS_RUN, "primary", self._gaps)
+        self._b_gaps.setEnabled(False)
+        self._gap_status = _label("", "muted", self._gaps, wrap=True)
+        gl.addLayout(_row(self._b_gaps, self._gap_status, stretch=False))
+        gl.itemAt(gl.count() - 1).layout().setStretch(1, 1)
+        self._gaps.hide()
+        self._gap_n = 0
+        self._gap_worker: Optional[_GapFillWorker] = None
+        lay.addWidget(self._gaps)
 
-        # HTML 만 다시 만들기(10/5) — 수집 없이 가진 데이터로, 기간을 골라서
-        hcard, hl = _card(body, K.HTML_ONLY_TITLE)
-        hl.addWidget(_label(K.HTML_ONLY_WHEN, "help", hcard, wrap=True))
-        self._have = _label(K.COLLECT_PLAN_LOADING, "muted", hcard, wrap=True)
-        hl.addWidget(self._have)
-        hrow = QHBoxLayout()
-        self._d_from = QDateEdit(hcard)
-        self._d_to = QDateEdit(hcard)
-        for w in (self._d_from, self._d_to):
-            w.setCalendarPopup(True)
-            w.setDisplayFormat("yyyy-MM-dd")
-            w.setDate(QDate.currentDate())
-        self._b_html = make_button(K.HTML_ONLY_RUN, "default", hcard)
+        # ── ③ 결과 파일만 다시 만들기(10/5) — 수집 없이 가진 데이터로 ──
+        hbox = QWidget(body)
+        hl = QVBoxLayout(hbox)
+        hl.setContentsMargins(4, 0, 0, 4)
+        hl.setSpacing(8)
+        self._have = _label(K.COLLECT_PLAN_LOADING, "muted", hbox, wrap=True)
+        self._have.setToolTip(K.HTML_ONLY_WHEN)
+        self._d_from, self._d_to = _date_edit(hbox, today), _date_edit(hbox, today)
+        self._b_html = make_button(K.HTML_ONLY_RUN, "default", hbox)
         self._b_html.setEnabled(False)
-        # 10/5: 수집 뒤 HTML 은 기본 1달 — 가진 데이터 전부는 이 버튼 한 번으로(사용자 요청)
-        self._b_all = make_button(K.HTML_ONLY_ALL, "primary", hcard)
+        self._b_all = make_button(K.HTML_ONLY_ALL, "ghost", hbox, tooltip=K.HTML_ONLY_ALL_HELP)
         self._b_all.setEnabled(False)
         self._span: Optional[tuple] = None
-        hrow.addWidget(QLabel(K.HTML_ONLY_FROM, hcard))
-        hrow.addWidget(self._d_from)
-        hrow.addWidget(QLabel(K.HTML_ONLY_TO, hcard))
-        hrow.addWidget(self._d_to)
-        hrow.addWidget(self._b_html)
-        hrow.addStretch(1)
-        hl.addLayout(hrow)
-        arow = QHBoxLayout()
-        arow.addWidget(self._b_all)
-        arow.addWidget(_label(K.HTML_ONLY_ALL_HELP, "muted", hcard, wrap=True), 1)
-        hl.addLayout(arow)
-        self._sec_html = Collapsible(K.COLLECT_SEC_HTML, hcard, body)
+        hl.addWidget(self._have)
+        hl.addLayout(_row(self._d_from, _label("~", "muted", hbox), self._d_to, self._b_html, self._b_all))
+        self._sec_html = Collapsible(K.COLLECT_SEC_HTML, hbox, body)
         lay.addWidget(self._sec_html)
         self._days_worker: Optional[_DaysWorker] = None
         self._html_worker: Optional[_HtmlOnlyWorker] = None
 
-        # 파라미터 이력 채우기(D89, 10/11 사용자 Q9) — 30일 Wafer 로그 zip 폴더를 골라 한 번. 캐시를 고치므로 수집과 동시에 돌지 않는다.
-        pcard, pl = _card(body, K.PARAM_ZIP_TITLE)
-        pl.addWidget(_label(K.PARAM_ZIP_WHEN, "help", pcard, wrap=True))
-        # 빈 구간 채우기(10/11) — 수집된 기간 중 파라미터가 비어 있는 곳을 NAS 에서 바로. 한 줄 요약 + 예상 시간.
-        self._pf_sum = _label("", "mono", pcard, wrap=True)
-        self._pf_help = _label("", "muted", pcard, wrap=True)
-        self._pf_status = _label("", "muted", pcard, wrap=True)
-        self._b_pfill = make_button(K.PARAMS_FILL_RUN, "primary", pcard)
-        self._b_pfill.setEnabled(False)
-        self._b_pfill.clicked.connect(self._on_param_fill)
-        pfrow = QHBoxLayout()
-        pfrow.addWidget(self._b_pfill)
-        pfrow.addWidget(self._pf_status, 1)
-        pl.addWidget(self._pf_sum)
-        pl.addWidget(self._pf_help)
-        pl.addLayout(pfrow)
-        self._pf_n = 0
-        self._pf_worker: Optional[_ParamFillWorker] = None
-        self._pf_t0 = 0.0
-        prow = QHBoxLayout()
-        self._b_pzip = make_button(K.PARAM_ZIP_RUN, "default", pcard)
-        self._b_pzip.clicked.connect(self._on_param_zip)
-        prow.addWidget(self._b_pzip)
-        prow.addStretch(1)
-        pl.addLayout(prow)
+        # ── 조사 도구 — 개발자에게 보낼 자료 · 현상 조사(NAS 는 읽기만). 가동률 수집과 동시에 돌지 않는다 ──
         dev = QWidget(body)
         dl = QVBoxLayout(dev)
         dl.setContentsMargins(0, 0, 0, 0)
-        dl.setSpacing(12)
-        dl.addWidget(pcard)
-        self._pz_worker: Optional[_ParamZipWorker] = None
+        dl.setSpacing(8)
 
-        # Wafer 로그 30일 전체 수집(10/9 1차 → 10/10 2차 → 10/10 30일 전체로 교체) — 개발자 조사용. 가동률 수집과 따로 돌고, 둘이 동시에 NAS 를 읽지 않게 서로 막는다.
-        wcard, wl = _card(body, K.WAFER_LOGS_TITLE)
-        wl.addWidget(_label(K.WAFER_LOGS_WHEN, "help", wcard, wrap=True))
-        wrow = QHBoxLayout()
-        self._wl_out = QLineEdit(wafer_logs.default_out_dir(), wcard)
-        self._wl_out.setProperty("role", "mono")
-        self._b_wl_browse = make_button(K.BTN_BROWSE, parent=wcard)
-        wrow.addWidget(QLabel(K.WAFER_LOGS_OUT, wcard))
-        wrow.addWidget(self._wl_out, 1)
-        wrow.addWidget(self._b_wl_browse)
-        wl.addLayout(wrow)
-        wact = QHBoxLayout()
-        self._wl_status = _label("", "muted", wcard, wrap=True)
-        self._b_wl_run = make_button(K.WAFER_LOGS_RUN, "default", wcard)
-        self._b_wl_stop = make_button(K.WAFER_LOGS_STOP, "default", wcard)
-        self._b_wl_stop.hide()
-        self._b_wl_open = make_button(K.WAFER_LOGS_OPEN, "default", wcard)
-        wact.addWidget(self._b_wl_run)
-        wact.addWidget(self._b_wl_stop)
-        wact.addWidget(self._b_wl_open)
-        wact.addWidget(self._wl_status, 1)
-        wl.addLayout(wact)
-        dl.addWidget(wcard)
-
-        # 실패 로그 수집(10/20) — 수집이 안 된 장비 · 읽지 못한 파일의 원인 · 로그 · 파일 내용을 지난 N일치로 모아 zip 한 장(NAS 는 읽기만)
-        fcard, fl = _card(body, K.FAIL_LOGS_TITLE)
-        fl.addWidget(_label(K.FAIL_LOGS_WHEN, "help", fcard, wrap=True))
-        frow = QHBoxLayout()
+        # 실패 로그 수집(10/20)
+        fcard, fl = _tool(dev, K.FAIL_LOGS_TITLE, K.FAIL_LOGS_SHORT, K.FAIL_LOGS_WHEN)
         self._fl_days = QSpinBox(fcard)
         self._fl_days.setRange(1, 90)
         self._fl_days.setValue(max(1, min(90, int(p.fail_log_days or 3))))
         self._fl_days.setSuffix(K.FAIL_LOGS_DAYS_SUFFIX)
         self._fl_days.setFixedWidth(84)
-        frow.addWidget(_label(K.FAIL_LOGS_DAYS_PREFIX, "muted", fcard))
-        frow.addWidget(self._fl_days)
-        frow.addWidget(_label(K.FAIL_LOGS_DAYS_HINT, "muted", fcard))
-        frow.addStretch(1)
-        fl.addLayout(frow)
-        frow2 = QHBoxLayout()
         self._fl_out = QLineEdit(str(paths.data_root() / "fail_logs"), fcard)
         self._fl_out.setProperty("role", "mono")
         self._b_fl_browse = make_button(K.BTN_BROWSE, parent=fcard)
-        frow2.addWidget(QLabel(K.WAFER_LOGS_OUT, fcard))
-        frow2.addWidget(self._fl_out, 1)
-        frow2.addWidget(self._b_fl_browse)
-        fl.addLayout(frow2)
-        fact = QHBoxLayout()
         self._fl_status = _label("", "muted", fcard, wrap=True)
         self._b_fl_run = make_button(K.FAIL_LOGS_RUN, "primary", fcard)
-        self._b_fl_open = make_button(K.FAIL_LOGS_OPEN, "default", fcard)
-        fact.addWidget(self._b_fl_run)
-        fact.addWidget(self._b_fl_open)
-        fact.addWidget(self._fl_status, 1)
-        fl.addLayout(fact)
+        self._b_fl_open = make_button(K.FAIL_LOGS_OPEN, "ghost", fcard)
+        r = _row(_label(K.FAIL_LOGS_DAYS_PREFIX, "muted", fcard), self._fl_days, 12, _label(K.WAFER_LOGS_OUT, "muted", fcard), self._fl_out,
+                 self._b_fl_browse, stretch=False)
+        r.setStretch(4, 1)
+        fl.addLayout(r)
+        fl.addLayout(_row(self._b_fl_run, self._b_fl_open, self._fl_status))
         dl.addWidget(fcard)
         self._fl_worker: Optional[QThread] = None        # 실패 로그 · Review 이미지 조사가 같은 자리를 쓴다(둘 다 NAS 읽기라 동시에 돌지 않음)
 
-        # Review 이미지 순서 조사(10/22) — Color image 보다 Scan image 가 먼저 나오는 현상 조사용 표본 수집(NAS 는 읽기만)
-        icard, il = _card(body, K.IMG_SURVEY_TITLE)
-        il.addWidget(_label(K.IMG_SURVEY_WHEN, "help", icard, wrap=True))
-        irow = QHBoxLayout()
+        # Review 이미지 순서 조사(10/22) — 저장 위치는 실패 로그와 같은 폴더
+        icard, il = _tool(dev, K.IMG_SURVEY_TITLE, K.IMG_SURVEY_SHORT, K.IMG_SURVEY_WHEN)
         self._is_days = QSpinBox(icard)
         self._is_days.setRange(1, 90)
         self._is_days.setValue(max(1, min(90, int(p.image_survey_days or 7))))
         self._is_days.setSuffix(K.FAIL_LOGS_DAYS_SUFFIX)
         self._is_days.setFixedWidth(84)
-        irow.addWidget(_label(K.FAIL_LOGS_DAYS_PREFIX, "muted", icard))
-        irow.addWidget(self._is_days)
-        irow.addStretch(1)
-        il.addLayout(irow)
-        trow = QHBoxLayout()
         self._is_terms = QLineEdit(image_survey_mod.DEFAULT_TERMS_TEXT, icard)
         self._is_terms.setPlaceholderText(K.IMG_SURVEY_TERMS_HINT)
-        trow.addWidget(QLabel(K.IMG_SURVEY_TERMS_LABEL, icard))
-        trow.addWidget(self._is_terms, 1)
-        il.addLayout(trow)
-        iact = QHBoxLayout()
+        self._is_terms.setToolTip(K.IMG_SURVEY_TERMS_HINT)
+        r = _row(_label(K.FAIL_LOGS_DAYS_PREFIX, "muted", icard), self._is_days, 12, _label(K.IMG_SURVEY_TERMS_LABEL, "muted", icard),
+                 self._is_terms, stretch=False)
+        r.setStretch(4, 1)
+        il.addLayout(r)
         self._is_status = _label("", "muted", icard, wrap=True)
         self._b_is_run = make_button(K.IMG_SURVEY_RUN, "primary", icard)
-        self._b_is_pixel = make_button(K.IMG_SURVEY_PIXEL_RUN, "default", icard)
-        self._b_is_pixel.setToolTip(K.IMG_SURVEY_PIXEL_HINT)
-        iact.addWidget(self._b_is_run)
-        iact.addWidget(self._b_is_pixel)
-        iact.addWidget(self._is_status, 1)
-        il.addLayout(iact)
-        self._top_cards.addWidget(icard)
-        self._sec_dev = Collapsible(K.COLLECT_SEC_DEV, dev, body)
-        lay.addWidget(self._sec_dev)
+        self._b_is_pixel = make_button(K.IMG_SURVEY_PIXEL_RUN, "default", icard, tooltip=K.IMG_SURVEY_PIXEL_HINT)
+        il.addLayout(_row(self._b_is_run, self._b_is_pixel, self._is_status))
+        dl.addWidget(icard)
+
+        # Wafer 로그 30일 전체 수집(10/10) — 개발자 조사용
+        wcard, wl = _tool(dev, K.WAFER_LOGS_TITLE, K.WAFER_LOGS_SHORT, K.WAFER_LOGS_WHEN)
+        self._wl_out = QLineEdit(wafer_logs.default_out_dir(), wcard)
+        self._wl_out.setProperty("role", "mono")
+        self._b_wl_browse = make_button(K.BTN_BROWSE, parent=wcard)
+        r = _row(_label(K.WAFER_LOGS_OUT, "muted", wcard), self._wl_out, self._b_wl_browse, stretch=False)
+        r.setStretch(1, 1)
+        wl.addLayout(r)
+        self._wl_status = _label("", "muted", wcard, wrap=True)
+        self._b_wl_run = make_button(K.WAFER_LOGS_RUN, "default", wcard)
+        self._b_wl_stop = make_button(K.WAFER_LOGS_STOP, "default", wcard)
+        self._b_wl_stop.hide()
+        self._b_wl_open = make_button(K.WAFER_LOGS_OPEN, "ghost", wcard)
+        wl.addLayout(_row(self._b_wl_run, self._b_wl_stop, self._b_wl_open, self._wl_status))
+        dl.addWidget(wcard)
         self._wl_worker: Optional[wafer_logs.WaferLogsWorker] = None
 
-        # 저장 위치
-        scard, sl = _card(body, K.COLLECT_SAVE_TITLE)
-        g = QGridLayout()
-        g.setHorizontalSpacing(10)
-        g.setVerticalSpacing(6)
-        self._out = QLineEdit(p.output_dir, scard)
-        self._out.setProperty("role", "mono")
-        self._out.setPlaceholderText(str(paths.data_root()))
-        self._b_out = make_button(K.BTN_BROWSE, parent=scard)
-        self._csv = QCheckBox(K.COLLECT_WRITE_CSV, scard)
-        self._csv.setChecked(bool(p.write_csv))
-        g.addWidget(QLabel(K.COLLECT_OUTPUT_DIR, scard), 0, 0)
-        g.addWidget(self._out, 0, 1)
-        g.addWidget(self._b_out, 0, 2)
-        g.addWidget(_label(K.COLLECT_OUTPUT_DEFAULT_HINT, "muted", scard, wrap=True), 1, 1, 1, 2)
-        g.addWidget(self._csv, 2, 1, 1, 2)
-        g.setColumnStretch(1, 1)
-        sl.addLayout(g)
+        # 파라미터 이력 — 30일 로그 zip 으로(D89). 이 PC 의 zip 만 읽는다
+        pcard, pzl = _tool(dev, K.PARAM_ZIP_TITLE, K.PARAM_ZIP_SHORT, K.PARAM_ZIP_WHEN)
+        self._b_pzip = make_button(K.PARAM_ZIP_RUN, "default", pcard)
+        self._b_pzip.clicked.connect(self._on_param_zip)
+        pzl.addLayout(_row(self._b_pzip))
+        dl.addWidget(pcard)
+        self._pz_worker: Optional[_ParamZipWorker] = None
+        self._sec_dev = Collapsible(K.COLLECT_SEC_DEV, dev, body)
+        lay.addWidget(self._sec_dev)
+
+        # ── 설정 — 저장 위치 · 화면 · 기간 · 버전(10/11 설정 탭을 이리로) ──
         sec = QWidget(body)
         sv = QVBoxLayout(sec)
         sv.setContentsMargins(0, 0, 0, 0)
-        sv.setSpacing(12)
-        sv.addWidget(scard)
-        self.settings_page = SettingsPage(sec)           # 10/11: 설정 탭을 없애고 수집 탭 맨 아래로
+        sv.setSpacing(0)
+        self.settings_page = SettingsPage(sec)
+        f = self.settings_page.top_form
+        self._out = QLineEdit(p.output_dir, sec)
+        self._out.setProperty("role", "mono")
+        self._out.setPlaceholderText(str(paths.data_root()))
+        self._out.setToolTip(K.COLLECT_OUTPUT_DEFAULT_HINT)
+        self._b_out = make_button(K.BTN_BROWSE, parent=sec)
+        self._csv = QCheckBox(K.COLLECT_WRITE_CSV, sec)
+        self._csv.setChecked(bool(p.write_csv))
+        self._result = _label("", "mono", sec, wrap=True)
+        self._result.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
+        r = _row(self._out, self._b_out, stretch=False)
+        r.setStretch(0, 1)
+        self.settings_page.add_row(K.COLLECT_OUTPUT_DIR, r)
+        self.settings_page.add_row("", self._csv)
+        self.settings_page.add_row(K.COLLECT_RESULT_TITLE, self._result)
         sv.addWidget(self.settings_page)
         self._sec_settings = Collapsible(K.COLLECT_SEC_SETTINGS, sec, body)
         lay.addWidget(self._sec_settings)
 
-        # 로그
-        lay.addWidget(_label(K.COLLECT_LOG_TITLE, "eyebrow", body))
+        # ── 로그 ──
         self._log = QPlainTextEdit(body)
         self._log.setProperty("role", "console")
         self._log.setReadOnly(True)
         self._log.setMaximumBlockCount(MAX_LOG_LINES)
-        self._log.setMinimumHeight(180)
-        lay.addWidget(self._log, 1)
+        self._log.setMinimumHeight(220)
+        self._sec_log = Collapsible(K.COLLECT_LOG_TITLE, self._log, body)
+        lay.addWidget(self._sec_log)
+        lay.addStretch(1)
 
         for c in self._cards.values():
             c.picked.connect(self._pick)
@@ -615,6 +624,7 @@ class CollectPage(QWidget):
         self._b_folder.clicked.connect(lambda: QDesktopServices.openUrl(
             QUrl.fromLocalFile(str(paths.output_dir(prefs.load().output_dir)))))
         self._b_run.clicked.connect(self._on_run)
+        self._b_gaps.clicked.connect(self._on_gaps)
         self._b_html.clicked.connect(self._on_html_only)
         self._b_all.clicked.connect(self._on_html_all)
         self._b_stop.clicked.connect(self.stop_requested.emit)
@@ -755,50 +765,82 @@ class CollectPage(QWidget):
             self.append_log(K.HTML_ONLY_FAIL_FMT.format(error=err))
             self.error.emit(K.HTML_ONLY_TITLE, K.HTML_ONLY_FAIL_FMT.format(error=err))
 
-    def _on_param_fill(self) -> None:
-        if self._pf_worker is not None:                       # 실행 중에 다시 누르면 멈춤
-            self._pf_worker.stop()
-            self._b_pfill.setEnabled(False)
+    # ── 옛 기간 빈칸 채우기(10/24) ──
+    def _nas_busy(self) -> bool:
+        return (self._running or self._wl_worker is not None or self._fl_worker is not None or self._pz_worker is not None
+                or self._gap_worker is not None)
+
+    def _on_gaps(self) -> None:
+        if self._gap_worker is not None:                      # 도는 중에 다시 누르면 멈춤
+            self._gap_worker.stop()
+            self._b_gaps.setEnabled(False)
+            self._gap_status.setText(K.WAFER_LOGS_STOPPING)
             return
-        if self._pz_worker is not None or self._running or self._wl_worker is not None or not self._pf_n:
+        if self._nas_busy() or not self._gap_n:
             return
-        w = _ParamFillWorker(prefs.to_collect_cfg(prefs.load()), self)
+        w = _GapFillWorker(prefs.to_collect_cfg(prefs.load()), self)
         w.log.connect(self.append_log)
-        w.progress.connect(self._on_param_fill_progress)
-        w.done.connect(self._on_param_fill_done)
-        w.finished.connect(lambda w=w: self._worker_done("_pf_worker", w))
-        self._pf_worker = w
-        self._pf_t0 = time.monotonic()
-        self._b_pfill.setText(K.BTN_STOP)
-        self._b_pzip.setEnabled(False)
+        w.progress.connect(self._on_gaps_progress)
+        w.done.connect(self._on_gaps_done)
+        w.finished.connect(lambda w=w: self._worker_done("_gap_worker", w))
+        self._gap_worker = w
+        self._gap_t0 = time.monotonic()
+        self._b_gaps.setText(K.BTN_STOP)
+        self._gap_status.setText(K.GAPS_RUNNING)
         self._b_run.setEnabled(False)
-        self.append_log(K.PARAMS_FILL_START_FMT.format(n=self._pf_n))
+        self._b_pzip.setEnabled(False)
         w.start()
 
-    def _on_param_fill_progress(self, done: int, total: int) -> None:
-        el = time.monotonic() - self._pf_t0
-        if total <= 0:
-            return
-        left = el * (total - done) / done if done >= 3 and el >= 5 else None
-        self._pf_status.setText(K.PARAMS_FILL_PROGRESS_FMT.format(done=done, total=total, t=eta_text(left)) if left is not None
-                                else K.PARAMS_FILL_PROGRESS_FMT.format(done=done, total=total, t="…"))
+    def _on_gaps_progress(self, done: int, total: int, phase: str) -> None:
+        if total > 0:
+            self._gap_status.setText(K.GAPS_PROGRESS_FMT.format(done=done, total=total, phase=phase))
 
-    def _on_param_fill_done(self, st, err: str) -> None:
-        self._b_pfill.setText(K.PARAMS_FILL_RUN)
-        self._b_pzip.setEnabled(not self._running)
+    def _on_gaps_done(self, st, err: str) -> None:
+        self._b_gaps.setText(K.GAPS_RUN)
+        self._b_gaps.setEnabled(True)
         self._b_run.setEnabled(not self._running and self._wl_worker is None)
-        if st is not None:
-            msg = (K.PARAMS_FILL_STOPPED_FMT if st.get("stopped") else K.PARAMS_FILL_DONE_FMT).format(added=st.get("added", 0), empty=st.get("empty", 0))
-            self.append_log(msg)
-            self._status.setText(msg)
-            self._pf_status.setText(msg)
+        self._b_pzip.setEnabled(not self._running)
+        if st is None:
+            msg = K.GAPS_FAIL_FMT.format(error=err)
+            self.error.emit(K.GAPS_TITLE, msg)
+        elif st.get("stopped"):
+            msg = K.GAPS_STOPPED
         else:
-            self.append_log(K.PARAMS_FILL_FAIL_FMT.format(error=err))
-            self.error.emit(K.PARAM_ZIP_TITLE, K.PARAMS_FILL_FAIL_FMT.format(error=err))
+            msg = K.GAPS_DONE_FMT.format(sec=int((st.get("sec") or {}).get("filled", 0)), params=int((st.get("params") or {}).get("added", 0)),
+                                         rdl=int((st.get("rdl") or {}).get("filled", 0)))
+        self._gap_status.setText(msg)
+        self.append_log(msg)
+        self.refresh_result()
         self.refresh_plan()
 
+    def _update_gaps(self, plan) -> None:
+        """빈칸 카드 — 캐시만 보고 센다(NAS 접근 없음). 빈칸이 하나도 없으면 카드를 숨긴다(도는 중·방금 끝난 결과는 보인다)."""
+        et = plan.etas or {}
+        n = plan.sec_missing + plan.params_missing + plan.rdl_reports
+        self._gap_n = n
+        if self._gap_worker is None:
+            self._gaps.setVisible(bool(plan.total_reports) and (n > 0 or bool(self._gap_status.text())))
+            self._b_gaps.setEnabled(n > 0 and not self._nas_busy())
+        rows = (("sec", plan.sec_missing, plan.sec_have, K.GAPS_MISSING_WAFER_FMT, plan.sec_from, plan.sec_to),
+                ("params", plan.params_missing, plan.params_have, K.GAPS_MISSING_REPORT_FMT, plan.params_from, plan.params_to),
+                ("rdl", plan.rdl_reports, plan.rdl_have, K.GAPS_MISSING_REPORT_FMT, "", ""))
+        total_sec, rough_any = 0, False
+        for key, miss, have, fmt, a, b in rows:
+            sec, rough = et.get(key, (None, True))
+            if miss and sec:
+                total_sec += sec
+                rough_any = rough_any or rough
+            note = " · ".join(x for x in ((K.GAPS_SPAN_FMT.format(a=a, b=b) if a and a != b else a),
+                                          (K.GAPS_ETA_FMT.format(t=eta_text(sec, rough)) if miss and sec is not None else "")) if x)
+            g = self._gap_rows[key]
+            g.set(miss, have, fmt.format(n=miss) if miss else K.GAPS_FULL, note)
+            g.set_visible(bool(miss or have))
+        self._gap_eta.setText(K.GAPS_ETA_FMT.format(t=eta_text(total_sec, rough_any)) if n else "")
+        self._gap_eta.setVisible(bool(n))
+        self._gap_eta.setToolTip(K.ETA_BASIS_TIP)
+
     def _on_param_zip(self) -> None:
-        if self._pz_worker is not None or self._running or self._wl_worker is not None or self._pf_worker is not None:
+        if self._pz_worker is not None or self._running or self._wl_worker is not None or self._gap_worker is not None:
             return
         folder = QFileDialog.getExistingDirectory(self, K.PARAM_ZIP_PICK, str(paths.data_root()))
         if not folder:
@@ -874,12 +916,9 @@ class CollectPage(QWidget):
             self._resume.hide()
             return
         self._update_cards(plan, n_recover)
-        self._update_param_fill(plan)
+        self._update_gaps(plan)
         if self._mode == "rebuild":
             text = K.COLLECT_PLAN_FULL_FMT.format(days=_days_text(plan.retention_days))
-        elif self._mode == "rdl":
-            text = (K.COLLECT_PLAN_RDL_FMT.format(n=plan.rdl_reports, devs=plan.rdl_devices) if plan.rdl_reports
-                    else K.COLLECT_PLAN_RDL_NONE)
         elif self._mode == "range":
             a, b = self.refresh_range()
             text = K.COLLECT_PLAN_RANGE_FMT.format(a=a, b=b)
@@ -899,31 +938,12 @@ class CollectPage(QWidget):
         self._resume.setVisible(bool(note))
         self._plan.setText(text)
 
-    def _update_param_fill(self, plan) -> None:
-        """파라미터 카드 한 줄 요약 · 예상 시간 · 버튼 — 캐시만 보고 쓴다(NAS 접근 없음)."""
-        self._pf_n = plan.params_missing
-        busy = self._pf_worker is not None
-        if not plan.total_reports:
-            self._pf_sum.setText(K.PARAMS_FILL_NO_CACHE)
-            self._pf_help.setText("")
-        elif not plan.params_missing:
-            self._pf_sum.setText(K.PARAMS_FILL_NONE_FMT.format(a=plan.span_from, b=plan.span_to, total=plan.total_reports))
-            self._pf_help.setText("")
-        else:
-            sec, rough = (plan.etas or {}).get("params", (None, True))
-            self._pf_sum.setText(K.PARAMS_FILL_SUMMARY_FMT.format(a=plan.span_from, b=plan.span_to, total=plan.total_reports, missing=plan.params_missing,
-                                                                 devs=plan.params_devices, fa=plan.params_from, fb=plan.params_to))
-            self._pf_help.setText(K.PARAMS_FILL_HELP_FMT.format(n=plan.params_missing, t=eta_text(sec, rough)))
-            self._pf_help.setToolTip(K.ETA_BASIS_TIP)
-        if not busy:
-            self._b_pfill.setEnabled(bool(plan.params_missing) and not self._running and self._pz_worker is None and self._wl_worker is None)
-
     def _update_cards(self, plan, n_recover) -> None:
         """캐시로 아는 사실을 카드에 적는다: 처음이면 '처음 수집' 하나만, 복구 대상 수, 마지막 수집이 오래됐는지."""
         first = plan.total_reports == 0 and self._mode != "rebuild"
         if first != self._first_run:
             self._first_run = first
-            for k in ("rdl", "backfill", "refresh", "recover", "rebuild", "range"):
+            for k in ("backfill", "refresh", "recover", "rebuild", "range"):
                 self._cards[k].set_available(not first, K.MODE_DISABLED_FIRST)
         n = self._cards["normal"]
         if first:
@@ -932,9 +952,9 @@ class CollectPage(QWidget):
         else:
             last = results.last_collect_time()
             days = int((time.time() - last) // 86400) if last else 0
-            what = K.MODE_NORMAL_WHAT + ("\n" + K.MODE_STALE_FMT.format(days=days) if days > collect.PATTERN_MAX_DAYS else "")
-            n.set_texts(title=K.MODE_NORMAL_TITLE, when=K.MODE_NORMAL_WHEN, what=what)
-            n.set_badges([(K.MODE_BADGE_REC, "rec"), (K.MODE_BADGE_FAST, "slow")])
+            stale = days > collect.PATTERN_MAX_DAYS
+            n.set_texts(title=K.MODE_NORMAL_TITLE, when=K.MODE_STALE_FMT.format(days=days) if stale else K.MODE_NORMAL_WHEN, what=K.MODE_NORMAL_WHAT)
+            n.set_badges([(K.MODE_BADGE_REC, "rec")])
         if self._mode == "normal":
             self._b_run.setText(K.MODE_RUN_FMT.format(title=n.title()))
         et = plan.etas or {}
@@ -955,16 +975,14 @@ class CollectPage(QWidget):
         if n_recover is not None and not first:
             self._cards["recover"].set_badges([(K.MODE_BADGE_TARGET_ETA_FMT.format(n=n_recover, t=eta("recover")), "warn") if n_recover
                                                else (K.MODE_BADGE_NONE, "slow")])
-        if not first:
-            self._cards["rdl"].set_badges([(K.MODE_BADGE_TARGET_ETA_FMT.format(n=plan.rdl_reports, t=eta("rdl")), "warn")
-                                           if plan.rdl_reports else (K.MODE_BADGE_NONE, "slow")])
 
     # ── Wafer 폴더 로그 모으기(10/9) ──
     def wafer_logs_running(self) -> bool:
-        return self._wl_worker is not None or self._fl_worker is not None      # 실패 로그도 NAS 를 읽으니 가동률 수집과 겹치지 않게
+        # 실패 로그 · 빈칸 채우기도 NAS 를 읽으니 가동률 수집과 겹치지 않게
+        return self._wl_worker is not None or self._fl_worker is not None or self._gap_worker is not None
 
     def _on_wafer_logs(self) -> None:
-        if self._wl_worker is not None or self._fl_worker is not None:
+        if self._wl_worker is not None or self._fl_worker is not None or self._gap_worker is not None:
             return
         if self._running:
             self.error.emit(K.WAFER_LOGS_TITLE, K.WAFER_LOGS_BUSY)
@@ -1011,7 +1029,7 @@ class CollectPage(QWidget):
 
     # ── 실패 로그 수집(10/20) ──
     def _on_fail_logs(self) -> None:
-        if self._fl_worker is not None or self._wl_worker is not None:
+        if self._fl_worker is not None or self._wl_worker is not None or self._gap_worker is not None:
             return
         if self._running:
             self.error.emit(K.FAIL_LOGS_TITLE, K.WAFER_LOGS_BUSY)
@@ -1048,7 +1066,7 @@ class CollectPage(QWidget):
 
     # ── Review 이미지 순서 조사(10/22) — 저장 위치는 실패 로그와 같은 폴더 ──
     def _on_image_survey(self, pixel: bool = False) -> None:
-        if self._fl_worker is not None or self._wl_worker is not None:
+        if self._fl_worker is not None or self._wl_worker is not None or self._gap_worker is not None:
             return
         if self._running:
             self.error.emit(K.IMG_SURVEY_TITLE, K.WAFER_LOGS_BUSY)
@@ -1092,7 +1110,7 @@ class CollectPage(QWidget):
 
     def shutdown(self, ms: int = 15_000) -> None:
         """창을 닫을 때 — 로그 모으기를 멈추고(지금까지 담은 것으로 zip 마무리) 기다린다."""
-        for attr in ("_wl_worker", "_fl_worker"):
+        for attr in ("_wl_worker", "_fl_worker", "_gap_worker"):
             w = getattr(self, attr, None)
             if w is None:
                 continue
@@ -1109,8 +1127,9 @@ class CollectPage(QWidget):
         self._b_fl_run.setEnabled(not running and self._fl_worker is None and self._wl_worker is None)
         self._b_is_run.setEnabled(not running and self._fl_worker is None and self._wl_worker is None)
         self._b_is_pixel.setEnabled(not running and self._fl_worker is None and self._wl_worker is None)
-        if hasattr(self, "_b_pzip"):
-            self._b_pzip.setEnabled(not running and self._pz_worker is None)
+        self._b_pzip.setEnabled(not running and self._pz_worker is None and self._gap_worker is None)
+        if self._gap_worker is None:
+            self._b_gaps.setEnabled(not running and bool(self._gap_n))
         self._b_stop.setVisible(running)
         self._b_stop.setEnabled(running)
         for w in (*self._cards.values(), self._refresh_days, self._r_from, self._r_to, self._out, self._b_out, self._csv, self._b_html, self._b_all):

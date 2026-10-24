@@ -45,6 +45,20 @@ QFrame[role="mode"] QLabel[role="modeWhat"] { color: $ink_3; font-size: 12px; }
 QLabel[role="dot"] { border: 2px solid $line_2; border-radius: 7px; background: $surface; }
 QLabel[role="dot"][on="true"] { border: 4px solid $accent; }
 
+/* 10/24: 접는 구역 머리 · 조사 도구 칸 · 빈칸 카드 · 설정 줄 */
+QPushButton[role="section"] { background: transparent; border: none; text-align: left; color: $ink_2; font-size: 13.5px; font-weight: 700; padding: 6px 4px; }
+QPushButton[role="section"]:hover { color: $ink; }
+QPushButton[role="section"]:checked { color: $ink; }
+QFrame[role="tool"] { background: $surface; border: 1px solid $line; border-radius: 11px; }
+QLabel[role="toolTitle"] { font-size: 13.5px; font-weight: 700; }
+QLabel[role="info"] { color: $ink_3; font-size: 13px; }
+QLabel[role="info"]:hover { color: $accent; }
+QLabel[role="gapName"] { font-size: 13px; font-weight: 600; color: $ink; }
+QLabel[role="gapCount"] { font-size: 13px; font-weight: 700; }
+QLabel[role="gapCount"][kind="warn"] { color: $warn_ink; }
+QLabel[role="gapCount"][kind="ok"] { color: $good_ink; }
+QLabel[role="formLabel"] { color: $ink_3; font-size: 12.5px; }
+
 /* 알약(HTML .pill · .st) */
 QLabel[role="badge"] { border-radius: 9px; padding: 1px 8px; font-size: 11.5px; font-weight: 700; background: $accent_soft; color: $nav_on; }
 QLabel[role="badge"][kind="rec"] { background: $good_soft; color: $good_ink; }

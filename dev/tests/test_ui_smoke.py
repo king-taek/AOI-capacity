@@ -249,10 +249,9 @@ def test_mode_cards_pick_one_situation_and_map_to_worker_options(window, styled_
     assert prefs.load().refresh_window_days == 0
     page._pick("normal")
     assert page.refresh_range() is None
-    # 10/5 'RDL 영역 INI 패치' — 평소 수집 바로 밑, 고르면 MainWindow 가 rdl_patch 로 넘긴다
+    # 10/24 RDL 영역 INI 패치 카드는 '옛 기간 빈칸 채우기' 로 합쳤다 — 상황 카드에서는 고를 수 없다
     page._pick("rdl")
-    assert page.mode() == "rdl" and page.options() == (False, False, False) and page._cards["rdl"].available()
-    page._pick("normal")
+    assert page.mode() == "normal" and "rdl" not in page._cards
     page._pick("recover")
     page.set_running(True)
     page.set_running(False)
@@ -273,3 +272,27 @@ def test_number_boxes_ignore_the_mouse_wheel(window):
 def test_settings_live_inside_the_collect_page(window):
     assert window.settings_page.parent() is not None
     assert window.collect_page.isAncestorOf(window.settings_page)
+
+
+def test_gap_card_shows_missing_counts_and_fills_them(window, styled_qapp):
+    """10/24 옛 기간 빈칸 채우기 — 수집 뒤 빈칸(이 가짜 NAS 는 ScanLog 가 없어 스캔 비율이 빈다)이 있으면 카드가 보이고, 누르면 채운 뒤 결과 파일을 다시 만든다."""
+    from aoi_capacity import i18n
+
+    page = window.collect_page
+    window._start_collect(False, False)
+    t0 = time.time()
+    while window.is_collecting() and time.time() - t0 < 20:
+        _pump(styled_qapp)
+    page.wait_for_plan()
+    _pump(styled_qapp, 0.3)
+    assert not page._gaps.isHidden() and page._b_gaps.isEnabled()
+    assert page._gap_rows["sec"].count.text().endswith(i18n.KO.GAPS_MISSING_WAFER_FMT.split("}")[-1])
+    page._b_gaps.click()
+    assert page.wafer_logs_running() and not page._b_run.isEnabled()        # 도는 동안 가동률 수집과 겹치지 않는다
+    t0 = time.time()
+    while page._gap_worker is not None and time.time() - t0 < 20:
+        _pump(styled_qapp)
+    page.wait_for_plan()
+    _pump(styled_qapp, 0.3)
+    assert page._gap_status.text().startswith(i18n.KO.GAPS_DONE_FMT.split("{")[0]), page._gap_status.text()
+    assert page._gap_rows["sec"].count.text() == i18n.KO.GAPS_FULL and not page._b_gaps.isEnabled()

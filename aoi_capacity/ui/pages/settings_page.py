@@ -5,7 +5,7 @@ from __future__ import annotations
 
 from typing import Optional
 
-from PyQt6.QtCore import QUrl, pyqtSignal
+from PyQt6.QtCore import Qt, QUrl, pyqtSignal
 from PyQt6.QtGui import QDesktopServices
 from PyQt6.QtWidgets import QCheckBox, QFrame, QGridLayout, QHBoxLayout, QLabel, QVBoxLayout, QWidget
 
@@ -13,18 +13,6 @@ from ... import i18n
 from ...utils import paths, prefs
 from ..widgets.buttons import make_button
 from ..widgets.inputs import NoWheelSpinBox as QSpinBox
-
-
-def _card(parent: QWidget, title: str) -> tuple:
-    f = QFrame(parent)
-    f.setProperty("role", "card")
-    lay = QVBoxLayout(f)
-    lay.setContentsMargins(18, 14, 18, 14)
-    lay.setSpacing(8)
-    t = QLabel(title, f)
-    t.setProperty("role", "cardTitle")
-    lay.addWidget(t)
-    return f, lay
 
 
 class SettingsPage(QWidget):
@@ -35,113 +23,94 @@ class SettingsPage(QWidget):
     def __init__(self, parent: Optional[QWidget] = None):
         super().__init__(parent)
         p = prefs.load()
-        # 10/11: 설정은 수집 탭 맨 아래 접이식 구역에 들어간다 — 스크롤은 수집 페이지가 맡으므로 여기엔 없다
+        K = i18n.KO
+        # 10/24: 카드 넷 · 설명 문단 셋 → 카드 하나에 '이름 | 값' 줄. 긴 설명은 툴팁으로(사용자: 글자가 너무 많다)
         lay = QVBoxLayout(self)
         lay.setContentsMargins(0, 0, 0, 0)
-        lay.setSpacing(12)
+        lay.setSpacing(0)
+        card = QFrame(self)
+        card.setProperty("role", "card")
+        cl = QVBoxLayout(card)
+        cl.setContentsMargins(20, 14, 20, 14)
+        cl.setSpacing(6)
+        self.top_form, self._grid = QGridLayout(), QGridLayout()   # 위: 수집 페이지가 넣는 줄(add_row) · 아래: 설정 — 첫 열 폭을 같게 해 줄이 맞는다
+        for g in (self.top_form, self._grid):
+            g.setHorizontalSpacing(14)
+            g.setVerticalSpacing(9)
+            g.setColumnMinimumWidth(0, 150)
+            g.setColumnStretch(1, 1)
+            cl.addLayout(g)
+        cl.insertSpacing(1, 9)
+        lay.addWidget(card)
 
-        # 표시
-        card, cl = _card(self, i18n.KO.SET_DISPLAY_TITLE)
-        self._dark = QCheckBox(i18n.KO.SET_DARK_MODE, card)
+        self._dark = QCheckBox(K.SET_DARK_MODE, card)
         self._dark.setChecked(p.color_mode != "light")
-        cl.addWidget(self._dark)
-        g = QGridLayout()
-        g.setHorizontalSpacing(8)
         self._th_util = QSpinBox(card)
         self._th_util.setRange(0, 100)
-        self._th_util.setSuffix(i18n.KO.SET_TH_UTIL_SUFFIX)
+        self._th_util.setSuffix(K.SET_TH_UTIL_SUFFIX)
         self._th_util.setValue(int(p.threshold_util))
         self._th_err = QSpinBox(card)
         self._th_err.setRange(0, 999)
-        self._th_err.setSuffix(i18n.KO.SET_TH_ERR_SUFFIX)
+        self._th_err.setSuffix(K.SET_TH_ERR_SUFFIX)
         self._th_err.setValue(int(p.threshold_err))
-        tl = QLabel(i18n.KO.SET_THRESHOLDS, card)
-        tl.setProperty("role", "eyebrow")
-        g.addWidget(tl, 0, 0, 1, 4)
-        g.addWidget(QLabel(i18n.KO.SET_TH_UTIL, card), 1, 0)
-        g.addWidget(self._th_util, 1, 1)
-        g.addWidget(QLabel(i18n.KO.SET_TH_ERR, card), 1, 2)
-        g.addWidget(self._th_err, 1, 3)
-        g.setColumnStretch(4, 1)
-        cl.addLayout(g)
-        lay.addWidget(card)
-
-        # 수집 기간 — 처음 보는 장비를 얼마나 거슬러 읽을지(장비를 새로 넣으면 이 기간이 적용된다)
-        card, cl = _card(self, i18n.KO.SET_COLLECT_RANGE)
-        g = QGridLayout()
-        g.setHorizontalSpacing(8)
         self._backfill = QSpinBox(card)
         self._backfill.setRange(1, 3650)
-        self._backfill.setSuffix(i18n.KO.SET_BACKFILL_SUFFIX)
+        self._backfill.setSuffix(K.SET_BACKFILL_SUFFIX)
         self._backfill.setValue(int(p.backfill_days))
         self._retention = QSpinBox(card)
         self._retention.setRange(0, 36500)
-        self._retention.setSpecialValueText(i18n.KO.SET_RETENTION_FOREVER)   # 0 = 기한 없이 보관(10/5)
-        self._retention.setSuffix(i18n.KO.SET_RETENTION_SUFFIX)
+        self._retention.setSpecialValueText(K.SET_RETENTION_FOREVER)   # 0 = 기한 없이 보관(10/5)
+        self._retention.setSuffix(K.SET_RETENTION_SUFFIX)
         self._retention.setValue(int(p.retention_days))
         self._workers = QSpinBox(card)
         self._workers.setRange(1, 32)
-        self._workers.setSuffix(i18n.KO.SET_READ_WORKERS_SUFFIX)
+        self._workers.setSuffix(K.SET_READ_WORKERS_SUFFIX)
         self._workers.setValue(int(p.read_workers))
-        g.setVerticalSpacing(8)                          # 10/5: 한 줄에 셋씩 붙이면 좁은 창에서 잘렸다 — 이름 · 칸을 한 줄씩
-        for r, (label, box) in enumerate(((i18n.KO.SET_BACKFILL_DAYS, self._backfill), (i18n.KO.SET_RETENTION_DAYS, self._retention),
-                                          (i18n.KO.SET_READ_WORKERS, self._workers))):
-            g.addWidget(QLabel(label, card), r, 0)
-            g.addWidget(box, r, 1)
-            box.setMinimumWidth(140)
-        # 10/5: 수집 뒤 결과 HTML 에 담을 최근 일수(0 = 전부) — 분할 설정(9/23)을 대신한다. 다른 기간은 수집 화면의 'HTML 만 다시 만들기'
         self._html_days = QSpinBox(card)
         self._html_days.setRange(0, 36500)
-        self._html_days.setSpecialValueText(i18n.KO.SET_HTML_DAYS_ALL)
-        self._html_days.setSuffix(i18n.KO.SET_HTML_DAYS_SUFFIX)
+        self._html_days.setSpecialValueText(K.SET_HTML_DAYS_ALL)
+        self._html_days.setSuffix(K.SET_HTML_DAYS_SUFFIX)
         self._html_days.setValue(int(p.html_days))
-        self._html_days.setToolTip(i18n.KO.SET_HTML_DAYS_HELP)
-        self._html_days.setMinimumWidth(140)
-        g.addWidget(QLabel(i18n.KO.SET_HTML_DAYS, card), 3, 0)
-        g.addWidget(self._html_days, 3, 1)
-        g.setColumnStretch(2, 1)
-        cl.addLayout(g)
-        shl = QLabel(i18n.KO.SET_HTML_DAYS_HELP, card)
-        shl.setProperty("role", "muted")
-        shl.setWordWrap(True)
-        cl.addWidget(shl)
-        hlp = QLabel(i18n.KO.SET_COLLECT_RANGE_HELP, card)
-        hlp.setProperty("role", "help")
-        hlp.setWordWrap(True)
-        cl.addWidget(hlp)
-        lay.addWidget(card)
-
-        # 데이터
-        card, cl = _card(self, i18n.KO.SET_DATA_DIR)
-        row = QHBoxLayout()
+        for box in (self._th_util, self._th_err, self._backfill, self._retention, self._workers, self._html_days):
+            box.setMinimumWidth(120)
+        self._backfill.setToolTip(K.SET_COLLECT_RANGE_HELP)
+        self._workers.setToolTip(K.SET_COLLECT_RANGE_HELP)
+        self._html_days.setToolTip(K.SET_HTML_DAYS_HELP)
         self._data_dir = QLabel(str(paths.data_root()), card)
         self._data_dir.setProperty("role", "mono")
-        b_open = make_button(i18n.KO.BTN_OPEN_FOLDER, parent=card)
-        b_log = make_button(i18n.KO.BTN_OPEN_LOG, "ghost", card)
-        row.addWidget(self._data_dir, 1)
-        row.addWidget(b_open)
-        row.addWidget(b_log)
-        cl.addLayout(row)
-        lay.addWidget(card)
-
-        # 정보
-        card, cl = _card(self, i18n.KO.SET_VERSION)
-        row = QHBoxLayout()
-        self._version = QLabel(i18n.KO.SET_VERSION_UNKNOWN, card)
+        b_open = make_button(K.BTN_OPEN_FOLDER, "ghost", card)
+        b_log = make_button(K.BTN_OPEN_LOG, "ghost", card)
+        self._version = QLabel(K.SET_VERSION_UNKNOWN, card)
         self._version.setProperty("role", "mono")
-        b_upd = make_button(i18n.KO.BTN_CHECK_UPDATE, parent=card)
-        row.addWidget(self._version, 1)
-        row.addWidget(b_upd)
-        cl.addLayout(row)
-        n = QLabel(i18n.KO.SET_NAS_NOTICE, card)
-        n.setProperty("role", "help")
-        n.setWordWrap(True)
-        d = QLabel(i18n.KO.SET_UTIL_DEFINITION, card)
-        d.setProperty("role", "muted")
-        d.setWordWrap(True)
-        cl.addWidget(n)
-        cl.addWidget(d)
-        lay.addWidget(card)
+        self._version.setToolTip(K.SET_NAS_NOTICE + "\n\n" + K.SET_UTIL_DEFINITION)
+        b_upd = make_button(K.BTN_CHECK_UPDATE, parent=card)
+
+        def hrow(*ws, stretch=True):
+            r = QHBoxLayout()
+            r.setSpacing(8)
+            for w in ws:
+                r.addWidget(w) if isinstance(w, QWidget) else r.addLayout(w)
+            if stretch:
+                r.addStretch(1)
+            return r
+
+        def small(text):
+            lb = QLabel(text, card)
+            lb.setProperty("role", "muted")
+            return lb
+
+        rows = [
+            (K.SET_THRESHOLDS, hrow(small(K.SET_TH_UTIL), self._th_util, small(K.SET_TH_ERR), self._th_err)),
+            (K.SET_BACKFILL_DAYS, hrow(self._backfill)),
+            (K.SET_RETENTION_DAYS, hrow(self._retention)),
+            (K.SET_HTML_DAYS, hrow(self._html_days)),
+            (K.SET_READ_WORKERS, hrow(self._workers)),
+            ("", self._dark),
+            (K.SET_DATA_DIR, hrow(self._data_dir, b_open, b_log)),
+            (K.SET_VERSION, hrow(self._version, b_upd)),
+        ]
+        for r, (label, item) in enumerate(rows):
+            self._put(self._grid, r, label, item)
 
         self._dark.toggled.connect(self._on_theme)
         self._th_util.valueChanged.connect(self._on_th)
@@ -154,6 +123,20 @@ class SettingsPage(QWidget):
         b_log.clicked.connect(lambda: QDesktopServices.openUrl(QUrl.fromLocalFile(str(paths.log_file()))))
         b_upd.clicked.connect(self.update_check_requested.emit)
         self.refresh_version()
+
+    def add_row(self, label: str, item) -> None:
+        """설정 줄들 위에 '이름 | 값' 한 줄을 더한다 — 수집 페이지의 결과 폴더 · CSV · 결과 파일."""
+        self._put(self.top_form, self.top_form.rowCount() if self.top_form.count() else 0, label, item)
+
+    def _put(self, g: QGridLayout, r: int, label: str, item) -> None:
+        if label:
+            name = QLabel(label, self)
+            name.setProperty("role", "formLabel")
+            g.addWidget(name, r, 0, Qt.AlignmentFlag.AlignVCenter)
+        if isinstance(item, QWidget):
+            g.addWidget(item, r, 1)
+        else:
+            g.addLayout(item, r, 1)
 
     def refresh_version(self) -> None:
         try:
