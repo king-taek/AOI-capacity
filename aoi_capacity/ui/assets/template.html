@@ -2467,6 +2467,10 @@ const exFam=raw=>{const c=rcpCanon(raw);if(c)return c.replace(/ Swelling$/,"");c
 function rcpExclChip(key,from,to){const M=new Map();for(const e of rcpIndex().excl){if(e.day<from||e.day>to||exFam(e.raw)!==key)continue;let E=M.get(e.raw);if(!E){E={raw:e.raw,why:e.why,n:0,devs:new Set()};M.set(e.raw,E);}E.n++;E.devs.add(e.dev);}
   if(!M.size)return"";const L=[...M.values()].sort((a,b)=>a.why.localeCompare(b.why)||a.raw.localeCompare(b.raw)),op=!!state.rcpExclOpen;
   return `<span class="rexcl${op?" open":""}" data-key="rcp:excl"><button type="button" class="jchip rexh" aria-expanded="${op}" data-fk="rcp:excl" data-h="${h(()=>setState({rcpExclOpen:!op}))}">제외 ${L.length}<i aria-hidden="true">${op?"▴":"▾"}</i></button><span class="rexb">${L.map(E=>`<p title="${esc(E.raw+"\n"+[...E.devs].sort(cmpDev).join(", "))}"><span class="mono">${esc(E.raw)}</span><em class="why ${E.why}">${RCP_EXCL_NM[E.why]}</em><span class="num">${f0(E.n)}</span></p>`).join("")}</span></span>`;}
+/* 10/24: 멀티 · 단일 판정이 어디서 왔나(D78 modeSrc) — wafer 기준 한 줄. 자기 INI · 같은 Report 의 다른 장 · 가까운 Report 추정 · 근거 없음 */
+function modeBasis(a){const n=a.w;if(!n)return"";const rep=a.mr,near=a.mn,unk=a.U.n,own=Math.max(0,n-rep-near-unk),pc=x=>Math.round(x/n*100)+"%";
+  const tip="이 기간 · 켜 둔 Job 의 wafer "+f0(n)+"장의 멀티 · 단일 판정 출처\n· 자기 Wafer 폴더 INI "+f0(own)+"\n· 같은 Report 의 다른 장 "+f0(rep)+"\n· 가까운 Report 에서 추정 "+f0(near)+"\n· 근거 없음(판정 못 함) "+f0(unk);
+  return ` · <span class="mbasis" data-tip="${esc(tip)}">판정 출처 INI ${pc(own)} · 같은 Report ${pc(rep)} · 추정 ${pc(near)} · 모름 ${pc(unk)}</span>`;}
 function rcpHtml(){
   const X=rcpIndex(),days=D.days,from=days[0],to=days[days.length-1],U=rcpU();   /* 기간은 헤더에서(10/5) */
   /* 레시피(줄기) 목록 — 사용자 순서(RDL4 · 3 · 2 · 1 · PI4 · 3 · 2). 한 줄 = 멀티 · 단일 · 판정 못 함 Job 을 합친 레시피 하나 */
@@ -2522,16 +2526,18 @@ function rcpHtml(){
       <p class="s mt1">표본 <b class="num">${f0(T.length)}</b> / ${f0(U.lot?o.lots.size:o.n)} ${U.cnt}${U.lot?"":` <span class="muted">· INI ${f0(o.sI.length)} · Report 보완 ${f0(o.rep)}</span>`}${out?` <span class="otag" title="${esc(tip)}">이상치 ${out}개 제외 ⓘ</span>`:""}</p>
       <p class="s mt2 muted">${other}</p></div>`;};
     /* 비교: 차이가 아니라 두 대상의 실제 값 → 그 밑에 어느 쪽이 더 빠른지/적은지를 작게 */
+    const perHour=v=>v>0?(U.lot?1440:60)/v:null;   /* 10/24: 비교 타일의 처리량 줄 — 중앙 시간에서 바로 계산(새로 재는 값 없음). Wafer당 = 시간당 wafer, LOT당 = 하루당 Lot(시간당이면 0.3 · 0.5 처럼 뭉개진다) */
     const pr=U.lot?A.pairedL:A.paired,mT=[qs(U.T(a.M),.5),qs(U.T(a.S),.5)],mF=[qs(U.F(a.M),.5),qs(U.F(a.S),.5)];
-    const vrow=(sc,vals,fm,unit,lowTxt)=>{const [x,y]=vals;let note;
+    const vrow=(sc,vals,fm,unit,lowTxt,hi)=>{const [x,y]=vals;let note;   /* hi: 큰 쪽이 나은 값(시간당 처리량) */
       if(x==null||y==null)note=`<span class="muted">${x==null&&y==null?"비교할 값이 없습니다":(x==null?W1:W2)+" 값이 없어 비교할 수 없습니다"}</span>`;
       else if(Math.abs(y-x)<0.05)note=`<span class="muted">차이 없음</span>`;
-      else{const k=y<x?"S":"M";note=`<span style="color:${MODE_C[k]}">${NMK(k)} ${fm(Math.abs(y-x))}${unit} ${lowTxt}</span>`;}
-      const win=x!=null&&y!=null&&Math.abs(y-x)>=0.05?(y<x?"S":"M"):"";
+      else{const k=(hi?y>x:y<x)?"S":"M";note=`<span style="color:${MODE_C[k]}">${NMK(k)} ${fm(Math.abs(y-x))}${unit} ${lowTxt}</span>`;}
+      const win=x!=null&&y!=null&&Math.abs(y-x)>=0.05?((hi?y>x:y<x)?"S":"M"):"";
       return `<div class="sc">${sc}</div><div class="vv num${win==="M"?" win":""}">${x==null?"—":fm(x)}<small>${unit}</small></div><div class="vv num${win==="S"?" win":""}">${y==null?"—":fm(y)}<small>${unit}</small></div><div class="vn">${note}</div>`;};
     const verdict=`<div class="mtile verdict"><p class="k">${W1} vs ${W2} <span class="muted" style="font-weight:500">(중앙)</span></p><div class="vtab">
         <div></div><div class="vh"><i class="sw" style="background-color:${MODE_C.M}"></i>${W1}</div><div class="vh"><i class="sw" style="background-color:${MODE_C.S}"></i>${W2}</div>
         ${vrow("전체",mT,f1,U.tu,"빠름")}
+        ${vrow(`<span data-tip="${esc(U.lot?"하루당 처리량 = 1440분 ÷ 위 '전체' 중앙 시간\nLot 하나(25 wafer 기준)의 Batch Start→End 로 잰 값 — Lot 사이 대기는 들어 있지 않습니다":"시간당 처리량 = 60분 ÷ 위 '전체' 중앙 시간\nWafer 한 장의 INI 스캔 시간으로 잰 값 — Lot 사이 대기는 들어 있지 않습니다")}">${U.lot?"하루당":"시간당"}</span>`,mT.map(perHour),f1,U.lot?"Lot/일":"wafer/h","더 많음",true)}
         ${vrow(pr?`<span title="두 방식을 다 돌린 장비끼리">같은 장비 <span class="muted">${pr.n}대</span></span>`:"같은 장비",pr?[pr.m,pr.s]:[null,null],f1,U.tu,"빠름")}
         ${vrow("Defect",mF,fD,U.fu,"적음")}
       </div></div>`;
@@ -2541,7 +2547,7 @@ function rcpHtml(){
     hero=`<div class="panel scanhero" data-key="rcp:hero">${head}${jobsRow}
       <div class="mtiles">${tile("M",a.M)+tile("S",a.S)+verdict}</div>
       <div class="srows" data-mx="${mx}">${rr("M")+rr("S")+(U.T(a.U).length?rr("U"):"")}${scale}</div>
-      <p class="hint">띠 10~90% · 눈금 = 중앙${U.lot?` · PASS ${LOT_MIN} wafer 이상 Report, ${LOT_STD} wafer 기준`:""}</p></div>`;}
+      <p class="hint">띠 10~90% · 눈금 = 중앙${U.lot?` · PASS ${LOT_MIN} wafer 이상 Report, ${LOT_STD} wafer 기준`:""}${PI?"":modeBasis(a)}</p></div>`;}
     /* 장비별 — 같은 장비 안에서 두 방식을 한 줄에. 지표(시간 | Defect)는 단추로. 행을 누르면 그 장비의 상세 팝업(10/7 — 근거 칸 · '상세 팝업' 단추는 없앴다) */
     const MET=state.rcpMetric==="defect"?"defect":"time",mu=MET==="defect"?U.fu:U.tu,mpu=MET==="defect"?"개":"분",mfm=MET==="defect"?fD:f1;
     const sel=o=>MET==="defect"?U.F(o):U.T(o),MET_L=MET==="defect"?U.fl:U.tl;
