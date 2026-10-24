@@ -11,10 +11,9 @@ class Collapsible(QWidget):
         self._title = title
         self._content = content
         self._head = QPushButton(self)
-        self._head.setProperty("role", "ghost")
+        self._head.setProperty("role", "section")
         self._head.setCursor(Qt.CursorShape.PointingHandCursor)
         self._head.setCheckable(True)
-        self._head.setStyleSheet("text-align:left;")
         lay = QVBoxLayout(self)
         lay.setContentsMargins(0, 0, 0, 0)
         lay.setSpacing(8)

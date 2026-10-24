@@ -80,6 +80,7 @@ class SheetHost(QWidget):
         self.setGeometry(self.parent().rect())
         frame = QFrame(self)
         frame.setProperty("role", "sheet")
+        frame.setProperty("kind", kind)                  # warn · error 는 위 테두리 색으로 구분(10/24)
         lay = QVBoxLayout(frame)
         lay.setContentsMargins(22, 18, 22, 16)
         lay.setSpacing(8)

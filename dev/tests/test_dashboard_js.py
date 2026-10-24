@@ -775,7 +775,11 @@ def test_scan_share_counts_only_rows_with_scan_sec_and_keeps_utilization():
             w("AOI-1", "W2", "08:20", "08:40") | {"scan_sec": "600"},       # 20분 중 10분
             w("AOI-1", "W3", "08:40", "09:00")]                              # 옛 행 — 분모에도 넣지 않는다
     t = at(run(rows), "AOI-1")
-    assert t["sc"] == [25, 40] and t["r"] == 60
-    assert "sc" not in at(run([w("AOI-1", "W3", "08:40", "09:00")]), "AOI-1")
+    assert t["sc"] == [25, 40, 2, 3] and t["r"] == 60                     # 10/24: 근거 장 수 — 3장 중 2장
+    assert at(run([w("AOI-1", "W3", "08:40", "09:00")]), "AOI-1")["sc"] == [0, 0, 0, 1]   # 옛 행만 — 비율 없음, '채우기 전'
     (pop,) = screen(rows, meta("AOI-1"), [["devPopupHtml"]], state={"modalDev": "AOI-1", "modalDayI": 0})
-    assert "그중 스캔 63%" in pop
+    assert "그중 스캔 63% · 근거 2/3장" in pop
+    (pop,) = screen(rows[:2], meta("AOI-1"), [["devPopupHtml"]], state={"modalDev": "AOI-1", "modalDayI": 0})
+    assert "그중 스캔 63%<" in pop and "근거" not in pop                    # 다 채워지면 비율만
+    (pop,) = screen(rows[2:], meta("AOI-1"), [["devPopupHtml"]], state={"modalDev": "AOI-1", "modalDayI": 0})
+    assert "스캔 비율 · 채우기 전" in pop

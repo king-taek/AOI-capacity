@@ -5,7 +5,7 @@ import os
 from typing import Dict, List, Optional
 
 from PyQt6.QtCore import Qt, QThread, pyqtSignal
-from PyQt6.QtWidgets import (QAbstractItemView, QFileDialog, QHBoxLayout, QHeaderView, QLabel, QTableWidget,
+from PyQt6.QtWidgets import (QAbstractItemView, QFileDialog, QHBoxLayout, QHeaderView, QLabel, QMenu, QTableWidget,
                              QTableWidgetItem, QVBoxLayout, QWidget)
 
 from ... import devices as devices_mod
@@ -48,13 +48,22 @@ class DevicesPage(QWidget):
         lay.setContentsMargins(0, 0, 0, 0)
         lay.setSpacing(12)
 
+        # 10/24: 설명 문단 → 한 줄 + ⓘ(긴 설명은 툴팁), 드물게 쓰는 버튼 다섯은 '더보기' 메뉴로(사용자: 글자 · 버튼이 너무 많다)
         h = QLabel(i18n.KO.DEV_PAGE_TITLE, self)
         h.setProperty("role", "h1")
-        help_ = QLabel(i18n.KO.DEV_PAGE_HELP, self)
-        help_.setProperty("role", "help")
-        help_.setWordWrap(True)
-        lay.addWidget(h)
-        lay.addWidget(help_)
+        help_ = QLabel(i18n.KO.DEV_PAGE_SHORT, self)
+        help_.setProperty("role", "muted")
+        info = QLabel("ⓘ", self)
+        info.setProperty("role", "info")
+        info.setToolTip(i18n.KO.DEV_PAGE_HELP)
+        info.setCursor(Qt.CursorShape.WhatsThisCursor)
+        head = QHBoxLayout()
+        head.setSpacing(12)
+        head.addWidget(h)
+        head.addWidget(help_, 0, Qt.AlignmentFlag.AlignBottom)
+        head.addWidget(info, 0, Qt.AlignmentFlag.AlignBottom)
+        head.addStretch(1)
+        lay.addLayout(head)
 
         bar = QHBoxLayout()
         bar.setSpacing(6)
@@ -68,8 +77,17 @@ class DevicesPage(QWidget):
         self._b_default = make_button(i18n.KO.BTN_LOAD_DEFAULT_DEVICES, "ghost", self)
         self._b_revert = make_button(i18n.KO.BTN_REVERT, "ghost", self)
         self._b_save = make_button(i18n.KO.BTN_SAVE, "primary", self)
-        for b in (self._b_add, self._b_del, self._b_browse, self._b_auto, self._b_import, self._b_export, self._b_check, self._b_default):
+        for b in (self._b_add, self._b_del, self._b_check):
             bar.addWidget(b)
+        self._b_more = make_button(i18n.KO.BTN_MORE, "ghost", self)
+        more = QMenu(self._b_more)
+        for b in (self._b_browse, self._b_auto, self._b_import, self._b_export, self._b_default):
+            b.hide()                                       # 버튼 자체는 그대로 두고(단축 · 테스트) 메뉴 항목이 누른다
+            act = more.addAction(b.text())
+            act.setToolTip(b.toolTip())
+            act.triggered.connect(lambda _c=False, b=b: b.click())
+        self._b_more.setMenu(more)
+        bar.addWidget(self._b_more)
         bar.addStretch(1)
         bar.addWidget(self._b_revert)
         bar.addWidget(self._b_save)

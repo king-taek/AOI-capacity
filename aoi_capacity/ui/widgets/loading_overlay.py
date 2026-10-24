@@ -1,12 +1,12 @@
 """수집 로딩창 — 현재 테마에 맞춰 직접 그린 카드.
 
-구성(위→아래)
-  ● 데이터 수집                      경과 01:23
-  AOI-12 · 2D@R2-…_BatchReport.htm            ← 단계(phase)
-  ▮▮▮▮▮▮▯▯▯▯▯▯▯▯▯▯▯▯▯▯▯▯▯▯▯▯▯▯▯▯      ← 장비 스트립: 장비 하나가 칸 하나(대기/읽는 중/완료/접근 불가)
+구성(위→아래, 10/24 다시 짬 — 숫자가 제목보다 크던 것 · 빈 줄 · 0 인 범례를 걷어냄)
+  ● 평소 수집                                01:23   ← 제목 = 고른 수집 방법
+  Report 읽기                  37 / 240 · 남은 약 4분   ← 단계 + 개수(총량을 모르면 '장비 16 / 41')
+  ▮▮▮▮▮▮▯▯▯▯▯▯▯▯▯▯▯▯▯▯▯▯▯▯▯▯▯▯▯▯      ← 장비 스트립: 칸 하나 = 장비 하나, 올리면 이름 · 상태
   ━━━━━━━━━━━━━━━━━━━━╸               ← 진행 막대. 총량을 모르면 빛이 흐르는 busy
-  파일명(모노, 흐림)                      37 / 240
-  범례                                          [중지]
+  AOI-15 · 파일명(모노, 흐림)                     ← 지금 읽는 것 — 없으면 줄째 숨김
+  ■ 완료 12  ■ 읽는 중 4  ■ 접근 불가 1    [중지]   ← 0 인 항목은 적지 않음, 문제 장비 이름은 툴팁
 
 계약: `set_progress(done, total, phase)` — `total<=0` 이면 busy. 애니메이션 타이머는 보이는 동안만 돈다.
 """
@@ -18,7 +18,7 @@ from typing import Dict, List, Optional
 
 from PyQt6.QtCore import QEvent, QObject, QRectF, Qt, QTimer, pyqtSignal
 from PyQt6.QtGui import QColor, QLinearGradient, QPainter, QPen
-from PyQt6.QtWidgets import QFrame, QHBoxLayout, QLabel, QSizePolicy, QVBoxLayout, QWidget
+from PyQt6.QtWidgets import QFrame, QHBoxLayout, QLabel, QSizePolicy, QToolTip, QVBoxLayout, QWidget
 
 from ... import i18n
 from .. import theme
@@ -26,6 +26,13 @@ from .buttons import make_button
 
 #: partial = 접근은 됐지만 Report 일부를 읽지 못함 — '완료(초록)' 와 구분한다
 STATES = ("wait", "listing", "parsing", "done", "partial", "error", "skipped")
+
+
+def _state_label(state: str) -> str:
+    K = i18n.KO
+    return {"wait": K.LOADING_LEGEND_WAIT, "listing": K.LOADING_LEGEND_READ, "parsing": K.LOADING_LEGEND_READ,
+            "done": K.LOADING_LEGEND_DONE, "partial": K.LOADING_LEGEND_PARTIAL, "error": K.LOADING_LEGEND_ERR,
+            "skipped": K.LOADING_LEGEND_SKIP}.get(state, state)
 
 
 def _c(key: str) -> QColor:
@@ -69,6 +76,29 @@ class DeviceStrip(QWidget):
         self._pulse = 0.0
         self.setFixedHeight(18)
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        self.setMouseTracking(True)
+
+    def _geom(self):
+        n = len(self._names)
+        gap = 3 if n <= 40 else 2
+        return gap, max(3.0, (self.width() - gap * (n - 1)) / n) if n else 0.0
+
+    def name_at(self, x: float) -> Optional[str]:
+        if not self._names:
+            return None
+        gap, cell = self._geom()
+        i = int(x // (cell + gap))
+        return self._names[i] if 0 <= i < len(self._names) else None
+
+    def mouseMoveEvent(self, ev):  # noqa: N802
+        name = self.name_at(ev.position().x())
+        if name:
+            QToolTip.showText(ev.globalPosition().toPoint(), f"{name} · {_state_label(self._state.get(name, 'wait'))}", self)
+        else:
+            QToolTip.hideText()
+
+    def names_in(self, *states: str) -> List[str]:
+        return [n for n in self._names if self._state.get(n) in states]
 
     def set_devices(self, names: List[str]) -> None:
         self._names = list(names)
@@ -101,8 +131,7 @@ class DeviceStrip(QWidget):
             p.setBrush(_c("nodata"))
             p.drawRoundedRect(QRectF(0, 4, self.width(), 10), 3, 3)
             return
-        gap = 3 if n <= 40 else 2
-        cell = max(3.0, (self.width() - gap * (n - 1)) / n)
+        gap, cell = self._geom()
         colors = {"wait": _c("nodata"), "listing": _c("accent"), "parsing": _c("accent"),
                   "done": _c("good"), "partial": _c("warn"), "error": _c("crit"), "skipped": _c("line_2")}
         x = 0.0
@@ -205,43 +234,56 @@ class LoadingOverlay(QWidget):
         self._title = QLabel(i18n.KO.LOADING_COLLECT_TITLE, self._card)
         self._title.setProperty("role", "loadTitle")
         self._elapsed = QLabel("", self._card)
-        self._elapsed.setProperty("role", "loadDetail")
+        self._elapsed.setProperty("role", "loadElapsed")
+        self._elapsed.setToolTip(i18n.KO.LOADING_ELAPSED_TIP)
         head.addWidget(self._dot)
-        head.addSpacing(6)
+        head.addSpacing(4)
         head.addWidget(self._title)
         head.addStretch(1)
         head.addWidget(self._elapsed)
         lay.addLayout(head)
+        lay.addSpacing(2)
 
+        # 단계 + 개수 한 줄 — 개수는 제목보다 작게(예전엔 22px 굵은 숫자가 제목 · 파일명을 눌렀다)
+        prow = QHBoxLayout()
+        prow.setSpacing(8)
         self._phase = QLabel("", self._card)
         self._phase.setProperty("role", "loadPhase")
-        self._phase.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
-        lay.addWidget(self._phase)
+        self._phase.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred)
+        self._count = QLabel("", self._card)
+        self._count.setProperty("role", "loadCount")
+        self._left = QLabel("", self._card)
+        self._left.setProperty("role", "loadLeft")
+        self._left.setToolTip(i18n.KO.LOADING_LEFT_TIP)
+        prow.addWidget(self._phase, 1)
+        prow.addWidget(self._count)
+        prow.addWidget(self._left)
+        lay.addLayout(prow)
 
         self._devices = DeviceStrip(self._card)
         lay.addWidget(self._devices)
         self._bar = ProgressStrip(self._card)
         lay.addWidget(self._bar)
 
-        row = QHBoxLayout()
         self._detail = QLabel("", self._card)
         self._detail.setProperty("role", "loadDetail")
-        self._detail.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
-        self._count = QLabel("", self._card)
-        self._count.setProperty("role", "loadCount")
-        row.addWidget(self._detail, 1)
-        row.addWidget(self._count)
-        lay.addLayout(row)
+        self._detail.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred)
+        self._detail.hide()
+        lay.addWidget(self._detail)
 
+        lay.addSpacing(2)
         foot = QHBoxLayout()
         self._legend = QLabel("", self._card)
         self._legend.setProperty("role", "legend")
         self._legend.setTextFormat(Qt.TextFormat.RichText)
         self._stop = make_button(i18n.KO.BTN_STOP, "default", self._card)
         self._stop.clicked.connect(self._on_stop)
+        self._stop.setMinimumHeight(self._stop.sizeHint().height())      # 위 줄들이 Ignored 라 adjustSize 가 버튼을 눌렀다
         foot.addWidget(self._legend, 1)
         foot.addWidget(self._stop)
         lay.addLayout(foot)
+        self._total = 0
+        self._eta_total = None
 
     # ── 배치 ──
     def eventFilter(self, obj: QObject, ev: QEvent) -> bool:  # noqa: N802
@@ -264,7 +306,11 @@ class LoadingOverlay(QWidget):
         self._title.setText(title or i18n.KO.LOADING_COLLECT_TITLE)
         self._phase.setText("")
         self._detail.setText("")
+        self._detail.hide()
         self._count.setText("")
+        self._left.setText("")
+        self._total = 0
+        self._eta_total = None
         self._bar.reset()
         self._devices.set_devices([])
         self._stop.setVisible(cancelable)
@@ -284,36 +330,44 @@ class LoadingOverlay(QWidget):
     def set_devices(self, names: List[str]) -> None:
         self._devices.set_devices(names)
         self._update_legend()
+        self._update_count()
 
     def set_device_state(self, name: str, state: str) -> None:
         self._devices.set_state(name, state)
         self._update_legend()
+        if self._total <= 0:
+            self._update_count()
 
     def set_progress(self, done: int, total: int, message: str = "") -> None:
-        if message:
+        if message and self._stop.isEnabled():
             fm = self._phase.fontMetrics()
-            self._phase.setText(fm.elidedText(message, Qt.TextElideMode.ElideMiddle, max(160, self._card.width() - 60)))
-        if total and total > 0:
+            self._phase.setText(fm.elidedText(message, Qt.TextElideMode.ElideMiddle, max(160, self._card.width() - 220)))
+        self._total = total if total and total > 0 else 0
+        if self._total:
             self._bar.set_fraction(done / total)
             now = time.monotonic()
-            if total != getattr(self, "_eta_total", None) or done < getattr(self, "_eta_done", 0):
+            if total != self._eta_total or done < getattr(self, "_eta_done", 0):
                 self._eta_t0, self._eta_total = now, total              # 단계(총량)가 바뀌었다 — 남은 시간은 새로 센다
             self._eta_done = done
             el = now - self._eta_t0
-            left = (i18n.KO.LOADING_LEFT_FMT.format(t=_left_text(el * (total - done) / done)) if done >= 5 and el >= 8 and done < total else "")
-            self._count.setText(i18n.KO.LOADING_COUNT_FMT.format(done=done, total=total) + left)
+            self._left.setText(i18n.KO.LOADING_LEFT_FMT.format(t=_left_text(el * (total - done) / done))
+                               if done >= 5 and el >= 8 and done < total else "")
+            self._count.setText(i18n.KO.LOADING_COUNT_FMT.format(done=done, total=total))
         else:
             self._bar.set_fraction(None)
-            self._count.setText("")
+            self._left.setText("")
+            self._update_count()
 
     def set_detail(self, text: str) -> None:
         fm = self._detail.fontMetrics()
-        self._detail.setText(fm.elidedText(text, Qt.TextElideMode.ElideMiddle, max(120, self._card.width() - 200)))
+        self._detail.setText(fm.elidedText(text, Qt.TextElideMode.ElideMiddle, max(120, self._card.width() - 56)))
+        self._detail.setVisible(bool(text))
 
     def set_stopping(self) -> None:
         self._stop.setEnabled(False)
         self._stop.setText(i18n.KO.LOADING_STOPPING)
-        self._phase.setText(i18n.KO.LOADING_STOPPING)
+        self._phase.setText(i18n.KO.LOADING_STOPPING_NOTE)
+        self._left.setText("")
 
     # ── 내부 ──
     def _on_stop(self) -> None:
@@ -327,19 +381,33 @@ class LoadingOverlay(QWidget):
         self._devices.tick(self._pulse)
         self._bar.tick()
         s = int(time.time() - self._t0)
-        self._elapsed.setText(i18n.KO.LOADING_ELAPSED_FMT.format(elapsed=f"{s // 60:02d}:{s % 60:02d}"))
+        el = f"{s // 3600}:{s // 60 % 60:02d}:{s % 60:02d}" if s >= 3600 else f"{s // 60:02d}:{s % 60:02d}"
+        self._elapsed.setText(i18n.KO.LOADING_ELAPSED_FMT.format(elapsed=el))
+
+    def _update_count(self) -> None:
+        """총량을 모르는 단계(장비 확인 · 목록)에는 장비 기준 개수를 적는다 — 빈 칸으로 두지 않는다."""
+        if self._total > 0:
+            return
+        c = self._devices.counts()
+        n = sum(c.values())
+        fin = c["done"] + c["partial"] + c["error"] + c["skipped"]
+        self._count.setText(i18n.KO.LOADING_DEVICES_FMT.format(done=fin, total=n) if n else "")
 
     def _update_legend(self) -> None:
+        """0 인 항목은 적지 않는다. 문제 장비(접근 불가 · 일부 실패)의 이름은 툴팁에."""
         c = self._devices.counts()
         col = theme.colors()
-
-        def sw(color, label, n):
-            return f'<span style="color:{color}">■</span> {label} {n}'
-
-        self._legend.setText("&nbsp;&nbsp;".join([
-            sw(col["nodata"], i18n.KO.LOADING_LEGEND_WAIT, c["wait"]),
-            sw(col["accent"], i18n.KO.LOADING_LEGEND_READ, c["listing"] + c["parsing"]),
-            sw(col["good"], i18n.KO.LOADING_LEGEND_DONE, c["done"]),
-            sw(col["warn"], i18n.KO.LOADING_LEGEND_PARTIAL, c["partial"]),
-            sw(col["crit"], i18n.KO.LOADING_LEGEND_ERR, c["error"]),
-        ]))
+        K = i18n.KO
+        items = ((col["good"], K.LOADING_LEGEND_DONE, c["done"]),
+                 (col["accent"], K.LOADING_LEGEND_READ, c["listing"] + c["parsing"]),
+                 (col["line_2"], K.LOADING_LEGEND_WAIT, c["wait"]),
+                 (col["warn"], K.LOADING_LEGEND_PARTIAL, c["partial"]),
+                 (col["crit"], K.LOADING_LEGEND_ERR, c["error"]))
+        self._legend.setText("&nbsp;&nbsp;&nbsp;".join(f'<span style="color:{color}">■</span>&nbsp;{label}&nbsp;<b>{n}</b>'
+                                                       for color, label, n in items if n))
+        tips = []
+        for state, label in (("error", K.LOADING_LEGEND_ERR), ("partial", K.LOADING_LEGEND_PARTIAL)):
+            names = self._devices.names_in(state)
+            if names:
+                tips.append(f"{label}: {', '.join(names)}")
+        self._legend.setToolTip("\n".join(tips))

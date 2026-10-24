@@ -40,7 +40,7 @@ from pathlib import Path
 TARGET = r"\\k5cifsn2\k5tsvdata$\1. Conder Scan\0. 전산 X\임현택"
 # ══════════════════════════════════════════════════════════════════════════════
 
-TOOL_API = 1
+TOOL_API = 2               # 2: parse_args · hammer(should_stop) — 수집 창 카드가 파일 경로로 불러 쓴다(10/24)
 PROBE_DIR = "_aoi_share_probe"
 MARKER = "_aoi_share_probe.json"
 SIZES_MB = (10, 30, 60)
@@ -524,8 +524,10 @@ def run(args, log=print) -> dict:
     return res
 
 
-def hammer(args, log=print) -> dict:
-    """교체 시험 — 정해진 시간 동안 시험_교체.html 을 계속 바꿔 쓴다. 팀원은 그동안 안내 페이지의 '교체 중 열기'."""
+def hammer(args, log=print, should_stop=None) -> dict:
+    """교체 시험 — 정해진 시간 동안 시험_교체.html 을 계속 바꿔 쓴다. 팀원은 그동안 안내 페이지의 '교체 중 열기'.
+    `should_stop()` 이 참이면 다음 교체 전에 멈춘다(수집 창의 '멈춤')."""
+    stop = should_stop or (lambda: False)
     probe = Probe(args.target)
     probe.open()
     end = time.time() + args.hammer
@@ -533,14 +535,18 @@ def hammer(args, log=print) -> dict:
     log(f"교체 시험 {args.hammer}초 — {HAMMER_EVERY}초마다 {HAMMER_FILE}({HAMMER_MB}MB) 교체. Ctrl+C 로 멈춤")
     try:
         n = 0
-        while time.time() < end:
+        while time.time() < end and not stop():
             n += 1
             stamp = f"{datetime.now():%H:%M:%S} #{n}"
             r = probe.publish(HAMMER_FILE, size_page("교체 시험", fake_payload(HAMMER_MB * 1_000_000, seed=n), stamp))
             out["rounds"].append({"n": n, "stamp": stamp, **{k: r[k] for k in ("write_s", "replace_s", "replace_ok", "retries", "replace_errors")}})
             log(f"  #{n} {stamp}: 쓰기 {r['write_s']}초 · 바꾸기 {'성공' if r['replace_ok'] else '실패'}"
                 + (f"(재시도 {r['retries']}: {r['replace_errors'][0]})" if r["retries"] else ""))
-            time.sleep(max(0.0, HAMMER_EVERY - r["write_s"] - r["replace_s"]))
+            wait_until = time.time() + max(0.0, HAMMER_EVERY - r["write_s"] - r["replace_s"])
+            while time.time() < wait_until and not stop():
+                time.sleep(min(0.5, max(0.0, wait_until - time.time())))
+        if stop():
+            log("  멈춤")
     except KeyboardInterrupt:
         log("  멈춤")
     out["fail"] = sum(1 for r in out["rounds"] if not r["replace_ok"])
@@ -558,7 +564,7 @@ def _save(res: dict, out_dir: Path, target: str, log=print) -> Path:
     return p
 
 
-def main(argv=None) -> int:
+def parse_args(argv=None):
     ap = argparse.ArgumentParser(description="LOT 추적 HTML 을 공유 폴더에 올릴 수 있는지 시험")
     ap.add_argument("--target", default=TARGET)
     ap.add_argument("--devices", default="", help="devices.csv (기본: %%LOCALAPPDATA%%\\AOI_Capacity\\devices.csv)")
@@ -569,7 +575,11 @@ def main(argv=None) -> int:
     ap.add_argument("--hammer", type=int, default=0, help="교체 시험 초(팀원이 그동안 '교체 중 열기')")
     ap.add_argument("--clean", action="store_true", help="이 도구가 만든 시험 파일 지우기")
     ap.add_argument("--yes", action="store_true", help="묻지 않기")
-    args = ap.parse_args(argv)
+    return ap.parse_args(argv)
+
+
+def main(argv=None) -> int:
+    args = parse_args(argv)
     try:
         if args.clean:
             gone = Probe(args.target).clean()
