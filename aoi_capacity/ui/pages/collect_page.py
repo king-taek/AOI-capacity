@@ -24,6 +24,7 @@ from ... import collect, i18n, nas_guard
 from ...utils import paths, prefs, results
 from ... import image_survey as image_survey_mod
 from ...workers import failure_logs, image_survey, wafer_logs
+from ...workers import share_probe
 from ..widgets.buttons import make_button
 from ..widgets.collapsible import Collapsible
 from ..widgets.inputs import NoWheelDateEdit as QDateEdit, NoWheelSpinBox as QSpinBox
@@ -542,6 +543,27 @@ class CollectPage(QWidget):
         dl.setContentsMargins(0, 0, 0, 0)
         dl.setSpacing(8)
 
+        # 공유 폴더 시험(10/24) — LOT 추적 화면을 팀 공유 폴더에 올리기 전. 장비 NAS 는 읽지 않아 수집과 서로 막지 않는다
+        scard, sl = _tool(dev, K.SHARE_PROBE_TITLE, K.SHARE_PROBE_SHORT, K.SHARE_PROBE_WHEN)
+        self._sp_target = QLineEdit(share_probe.default_target(), scard)
+        self._sp_target.setProperty("role", "mono")
+        r = _row(_label(K.SHARE_PROBE_TARGET, "muted", scard), self._sp_target, stretch=False)
+        r.setStretch(1, 1)
+        sl.addLayout(r)
+        self._b_sp_run = make_button(K.SHARE_PROBE_RUN, "primary", scard)
+        self._b_sp_hammer = make_button(K.SHARE_PROBE_HAMMER, "default", scard, tooltip=K.SHARE_PROBE_HAMMER_HINT)
+        self._b_sp_stop = make_button(K.SHARE_PROBE_STOP, "default", scard)
+        self._b_sp_stop.hide()
+        self._b_sp_clean = make_button(K.SHARE_PROBE_CLEAN, "ghost", scard)
+        self._b_sp_open = make_button(K.SHARE_PROBE_OPEN, "ghost", scard)
+        sl.addLayout(_row(self._b_sp_run, self._b_sp_hammer, self._b_sp_stop, self._b_sp_clean, self._b_sp_open))
+        self._sp_status = _label("", "muted", scard, wrap=True)
+        self._sp_status.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)   # 팀원에게 보낼 경로를 복사하게
+        self._sp_status.hide()
+        sl.addWidget(self._sp_status)
+        dl.addWidget(scard)
+        self._sp_worker: Optional[share_probe.ShareProbeWorker] = None
+
         # 실패 로그 수집(10/20)
         fcard, fl = _tool(dev, K.FAIL_LOGS_TITLE, K.FAIL_LOGS_SHORT, K.FAIL_LOGS_WHEN)
         self._fl_days = QSpinBox(fcard)
@@ -667,6 +689,11 @@ class CollectPage(QWidget):
         self._b_wl_open.clicked.connect(lambda: QDesktopServices.openUrl(QUrl.fromLocalFile(self._wl_out.text().strip())))
         self._b_wl_browse.clicked.connect(self._browse_wl_out)
         self._b_fl_run.clicked.connect(self._on_fail_logs)
+        self._b_sp_run.clicked.connect(lambda: self._on_share_probe("probe"))
+        self._b_sp_hammer.clicked.connect(lambda: self._on_share_probe("hammer"))
+        self._b_sp_clean.clicked.connect(lambda: self._on_share_probe("clean"))
+        self._b_sp_stop.clicked.connect(self._stop_share_probe)
+        self._b_sp_open.clicked.connect(self._open_share_probe_dir)
         self._b_fl_open.clicked.connect(lambda: QDesktopServices.openUrl(QUrl.fromLocalFile(self._fl_out.text().strip())))
         self._b_fl_browse.clicked.connect(self._browse_fl_out)
         self._b_is_run.clicked.connect(self._on_image_survey)
@@ -1068,6 +1095,57 @@ class CollectPage(QWidget):
         self._b_wl_browse.setEnabled(not on)
         self._b_run.setEnabled(not on and not self._running)     # 가동률 수집과 동시에 NAS 를 읽지 않는다
 
+    # ── 공유 폴더 시험(10/24) ──
+    def _on_share_probe(self, job: str) -> None:
+        if self._sp_worker is not None:
+            return
+        target = self._sp_target.text().strip()
+        w = share_probe.ShareProbeWorker(prefs.to_collect_cfg(prefs.load()), job, target, self)
+        w.log.connect(self.append_log)
+        w.done.connect(self._on_share_probe_done)
+        w.finished.connect(lambda w=w: self._worker_done("_sp_worker", w))
+        self._sp_worker = w
+        self._set_share_probe_running(True, job)
+        self._sp_status.setText({"probe": K.SHARE_PROBE_RUNNING, "hammer": K.SHARE_PROBE_HAMMER_RUNNING,
+                                 "clean": K.SHARE_PROBE_CLEANING}[job])
+        self._sp_status.show()
+        self._sec_log.set_open(True)
+        w.start()
+
+    def _stop_share_probe(self) -> None:
+        if self._sp_worker is not None:
+            self._sp_worker.stop()
+            self._b_sp_stop.setEnabled(False)
+
+    def _on_share_probe_done(self, job: str, result, err: str) -> None:
+        self._set_share_probe_running(False, job)
+        if result is None:
+            text = err
+            self.error.emit(K.SHARE_PROBE_TITLE, err)
+        elif job == "clean":
+            text = K.SHARE_PROBE_CLEAN_DONE_FMT.format(n=len(result.get("gone") or ()))
+        elif job == "hammer":
+            text = K.SHARE_PROBE_HAMMER_DONE_FMT.format(rounds=len(result.get("rounds") or ()), fail=result.get("fail", 0),
+                                                        retried=result.get("retried", 0), saved=result.get("saved", ""))
+        else:
+            text = K.SHARE_PROBE_DONE_FMT.format(guide=result.get("guide_unc") or result.get("guide", ""), saved=result.get("saved", ""))
+        self._sp_status.setText(text)
+        self._sp_status.show()
+        self.append_log(text)
+
+    def _set_share_probe_running(self, on: bool, job: str = "") -> None:
+        if on:
+            self._sec_dev.set_open(True)
+        for w in (self._b_sp_run, self._b_sp_hammer, self._b_sp_clean, self._sp_target):
+            w.setEnabled(not on)
+        stoppable = on and job == "hammer"
+        self._b_sp_stop.setVisible(stoppable)
+        self._b_sp_stop.setEnabled(stoppable)
+
+    def _open_share_probe_dir(self) -> None:
+        d = share_probe.result_dir()
+        QDesktopServices.openUrl(QUrl.fromLocalFile(str(d if d.is_dir() else paths.data_root())))
+
     # ── 실패 로그 수집(10/20) ──
     def _on_fail_logs(self) -> None:
         if self._fl_worker is not None or self._wl_worker is not None or self._gap_worker is not None:
@@ -1151,7 +1229,7 @@ class CollectPage(QWidget):
 
     def shutdown(self, ms: int = 15_000) -> None:
         """창을 닫을 때 — 로그 모으기를 멈추고(지금까지 담은 것으로 zip 마무리) 기다린다."""
-        for attr in ("_wl_worker", "_fl_worker", "_gap_worker"):
+        for attr in ("_wl_worker", "_fl_worker", "_gap_worker", "_sp_worker"):
             w = getattr(self, attr, None)
             if w is None:
                 continue
