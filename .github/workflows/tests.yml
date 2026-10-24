@@ -51,12 +51,21 @@ jobs:
       - name: Qt offscreen 런타임 라이브러리 (PyQt6 import 에 필요)
         timeout-minutes: 6
         run: |
+          # 10/24: 러너 이미지에 이미 깔린 것은 묻지 않는다 — 다 있으면 apt(네트워크)를 아예 건너뛴다.
+          #        잘못 건너뛰어도 아래 '사전 점검' 의 QApplication 생성에서 크게 실패한다(조용히 통과하지 않음).
+          pkgs="libegl1 libgl1 libxkbcommon0 libdbus-1-3 \
+            libxcb-cursor0 libxcb-icccm4 libxcb-image0 libxcb-keysyms1 libxcb-randr0 \
+            libxcb-render-util0 libxcb-shape0 libxcb-xinerama0 libxcb-xkb1 libxkbcommon-x11-0"
+          missing=""
+          for p in $pkgs; do
+            dpkg-query -W -f='${Status}' "$p" 2>/dev/null | grep -q "install ok installed" || missing="$missing $p"
+          done
+          if [ -z "$missing" ]; then echo "Qt 라이브러리 이미 설치됨 — apt 건너뜀"; exit 0; fi
+          echo "설치할 것:$missing"
           # apt 미러가 가끔 멈춘다(10/22 실제로 한 조각이 6분 넘게 멈춤) — 단계마다 시간 제한을 걸고 세 번까지 다시 해 본다
           for i in 1 2 3; do
-            if sudo timeout 90 apt-get install -y --no-install-recommends \
-            libegl1 libgl1 libxkbcommon0 libdbus-1-3 \
-            libxcb-cursor0 libxcb-icccm4 libxcb-image0 libxcb-keysyms1 libxcb-randr0 \
-            libxcb-render-util0 libxcb-shape0 libxcb-xinerama0 libxcb-xkb1 libxkbcommon-x11-0; then exit 0; fi
+            if sudo timeout 90 apt-get install -y --no-install-recommends $missing; then exit 0; fi
+            sudo dpkg --configure -a || true            # 시간 제한으로 끊긴 설치가 남긴 반쯤 된 상태를 정리
             sudo timeout 60 apt-get update || true      # 설치가 안 되면(목록이 낡음) 그때만 목록을 새로 받는다
           done
           exit 1
@@ -106,12 +115,21 @@ jobs:
       - name: Qt offscreen 런타임 라이브러리 (수집 모듈 테스트가 PyQt6 를 import 한다)
         timeout-minutes: 6
         run: |
+          # 10/24: 러너 이미지에 이미 깔린 것은 묻지 않는다 — 다 있으면 apt(네트워크)를 아예 건너뛴다.
+          #        잘못 건너뛰어도 아래 '사전 점검' 의 QApplication 생성에서 크게 실패한다(조용히 통과하지 않음).
+          pkgs="libegl1 libgl1 libxkbcommon0 libdbus-1-3 \
+            libxcb-cursor0 libxcb-icccm4 libxcb-image0 libxcb-keysyms1 libxcb-randr0 \
+            libxcb-render-util0 libxcb-shape0 libxcb-xinerama0 libxcb-xkb1 libxkbcommon-x11-0"
+          missing=""
+          for p in $pkgs; do
+            dpkg-query -W -f='${Status}' "$p" 2>/dev/null | grep -q "install ok installed" || missing="$missing $p"
+          done
+          if [ -z "$missing" ]; then echo "Qt 라이브러리 이미 설치됨 — apt 건너뜀"; exit 0; fi
+          echo "설치할 것:$missing"
           # apt 미러가 가끔 멈춘다(10/22 실제로 한 조각이 6분 넘게 멈춤) — 단계마다 시간 제한을 걸고 세 번까지 다시 해 본다
           for i in 1 2 3; do
-            if sudo timeout 90 apt-get install -y --no-install-recommends \
-            libegl1 libgl1 libxkbcommon0 libdbus-1-3 \
-            libxcb-cursor0 libxcb-icccm4 libxcb-image0 libxcb-keysyms1 libxcb-randr0 \
-            libxcb-render-util0 libxcb-shape0 libxcb-xinerama0 libxcb-xkb1 libxkbcommon-x11-0; then exit 0; fi
+            if sudo timeout 90 apt-get install -y --no-install-recommends $missing; then exit 0; fi
+            sudo dpkg --configure -a || true            # 시간 제한으로 끊긴 설치가 남긴 반쯤 된 상태를 정리
             sudo timeout 60 apt-get update || true      # 설치가 안 되면(목록이 낡음) 그때만 목록을 새로 받는다
           done
           exit 1
@@ -134,9 +152,16 @@ jobs:
       - name: Playwright Chromium 설치 (시스템 라이브러리는 매번, 브라우저 본체는 캐시에 없을 때만)
         timeout-minutes: 5
         run: |
-          python -m playwright install-deps chromium
+          # 10/24: install-deps 는 apt(update + install)라 미러가 느리면 2분 넘게 걸렸다(run 101) — 시간 제한 + 세 번 재시도(Qt 단계와 같은 방식).
+          #        '브라우저가 이미 뜨면 건너뛰기' 는 하지 않는다: 뜨기는 하지만 install-deps 가 까는 글꼴이 빠져 글자 폭이 달라지고
+          #        탭 표시자 물리 테스트가 떨어졌다(run 108). root 로 돌려 timeout 이 apt 자식까지 함께 끊게 한다.
+          ok=""
+          for i in 1 2 3; do
+            if sudo timeout 90 env "PATH=$PATH" python -m playwright install-deps chromium; then ok=1; break; fi
+            sudo dpkg --configure -a || true
+          done
+          [ -n "$ok" ] || exit 1
           python -m playwright install chromium
-
       - name: 사전 점검 — Playwright 가 실제로 import 되고 브라우저가 뜬다
         run: |
           set -eu

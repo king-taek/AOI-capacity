@@ -721,7 +721,9 @@ def test_lot_tab_groups_by_wafer_id_not_by_name_and_follows_devices():
     lot = next(k for k in ks if "LPT-PIDS5" in lst.split(f'lp:lot:{k}"')[1].split("</button>")[0])
     out = _lot_screen(rows, lot)
     assert out.count('class="lotatt"') == 2 and "ZZZ-1" not in out.split("검사 순서")[1]
-    assert "TYPO-RDL3" in out and "ALIGN_ERROR" in out and "↓" in out and "AOI-1 → AOI-2" in out
+    assert "TYPO-RDL3" in out and "ALIGN_ERROR" in out and '<small class="gap">+' in out   # 10/24: 간격은 시각 밑 작은 글자
+    assert out.count('<b class="same">') == 0 and 'class="lotbox"' in out and "max-height" not in out.split('class="lotbox"')[1][:40]
+    assert 'class="ix num">1<' in out and 'class="ix num">2<' in out                       # 검사 # = 격자 열 번호
     assert "확인 필요" not in out and "lotconf" not in out
     (q,) = screen(rows, meta("AOI-1", "AOI-2"), [["lotHtml"]], state={"view": "lot", "lotQ": "ewb6"})
     assert "Wafer 38135F75EWB6" in q
@@ -754,8 +756,8 @@ def test_lot_tab_ignores_slot_ids_and_parses_kla_names():
     assert "TB500.INT764" in lst and "@6322" in lst
 
 
-def test_lot_tab_tags_retries_rescans_and_groups_same_history():
-    """구분: 앞 시도가 PASS 가 아니면 재시도, PASS 였던 같은 검사는 재검사(이름 바뀜 구분), Job 이 다르면 다른 Job. 같은 이력 Wafer 는 한 줄로 묶는다."""
+def test_lot_tab_tags_retries_rescans_and_lists_every_wafer():
+    """구분: 앞 시도가 PASS 가 아니면 재시도, PASS 였던 같은 검사는 재검사(이름 바뀜 구분), Job 이 다르면 다른 Job. Wafer × 검사는 늘 Wafer 마다 한 줄(10/24 '같은 이력 묶기' 삭제)."""
     ids = [f"GRP{i:06d}X" for i in range(4)]
     rows = [w("AOI-1", i, "00:10", "00:20", lot="DBM-1", report="a.htm", status="Alignment Error.") | {"recipe": "x20"} for i in ids] + \
            [w("AOI-1", i, "02:10", "02:20", lot="DBM-1", report="b.htm") | {"recipe": "x20"} for i in ids] + \
@@ -763,9 +765,8 @@ def test_lot_tab_tags_retries_rescans_and_groups_same_history():
     lst = _lot_screen(rows)
     (k,) = _lot_keys(lst)
     out = _lot_screen(rows, k)
-    assert "재시도" in out and "재검사(이름 바뀜)" in out and "4장 같은 이력" in out
-    flat = _lot_screen(rows, k, lotGrp=False)
-    assert "4장 같은 이력" not in flat and flat.count('class="lw mono') == 4
+    assert "재시도" in out and "재검사(이름 바뀜)" in out
+    assert "같은 이력" not in out and out.count('class="lw mono') == 4
 
 
 def test_scan_share_counts_only_rows_with_scan_sec_and_keeps_utilization():

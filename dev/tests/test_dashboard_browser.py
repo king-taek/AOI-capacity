@@ -530,6 +530,9 @@ def test_recipe_tab_shows_per_device_stats_and_compares_two_periods(page):
     assert "4.0" in tiles[0] and "표본 6 / 6 wafer" in tiles[0] and "3.0" in tiles[1] and "표본 3 / 3 wafer" in tiles[1]
     v = tiles[2].replace("\n", " ")                                                   # 10/6: 차이가 아니라 두 대상의 실제 값 + 밑에 어느 쪽이 빠른지
     assert "전체 4.0분/wafer 3.0분/wafer 단일 1.0분/wafer 빠름" in v and "같은 장비 1대 4.0분/wafer 3.0분/wafer 단일 1.0분/wafer 빠름" in v and "Defect 3개/wafer 3개/wafer 차이 없음" in v
+    assert "시간당 15.0wafer/h 20.0wafer/h 단일 5.0wafer/h 더 많음" in v              # 10/24: 시간당 = 60 ÷ 중앙 시간, 큰 쪽이 낫다
+    basis = pg.locator(".scanhero .mbasis").inner_text()                              # 10/24: 판정 출처(modeSrc) 한 줄 — fixture 는 전부 자기 INI
+    assert basis.startswith("판정 출처 INI ") and "모름 0%" in basis
     assert pg.locator(".scanhero .jtog").count() == 2 and pg.locator(".scanhero .jtog[aria-pressed='true']").count() == 2   # 이 레시피로 보는 Job — 통계에 넣을지 고르는 단추
     assert [x.split("\n")[0] for x in pg.locator(".dbrow:not(.head):not(.axis)").all_inner_texts()] == ["AOI-1"]
     assert pg.locator(".dbrow .dd").count() == 2                        # 같은 장비에 멀티 · 단일 두 점
@@ -545,6 +548,7 @@ def test_recipe_tab_shows_per_device_stats_and_compares_two_periods(page):
     pg.locator(".scanhero .seg button", has_text="LOT당").click()
     pg.wait_for_timeout(300)
     assert "분/Lot" in pg.locator(".scanhero .mtile").first.inner_text() and "장비별 LOT당 시간" in pg.locator('[data-key="rcp:mdev"]').inner_text()
+    assert "하루당" in pg.locator(".scanhero .mtile.verdict").inner_text() and "시간당" not in pg.locator(".scanhero .mtile.verdict").inner_text()   # LOT당은 하루당 Lot
     pg.locator(".scanhero .seg button", has_text="Wafer당").click()
     # Job 단추로 멀티 Job 을 빼면 단일만 남는다
     pg.locator(".scanhero .jtog", has_text="RDL2-Multi").click()

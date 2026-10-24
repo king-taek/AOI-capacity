@@ -331,3 +331,48 @@ def test_loading_overlay_reads_cleanly(window, styled_qapp):
     ov.set_progress(38, 240, "Report 읽기")                             # 멈추는 중엔 단계 글자가 안내를 덮지 않는다
     assert ov._phase.text() == i18n.KO.LOADING_STOPPING_NOTE
     ov.hide_overlay()
+
+
+def test_update_recheck_runs_every_30_minutes_and_skips_when_busy(window, styled_qapp, monkeypatch):
+    """10/24: 켜 둔 동안에도 새 버전을 확인한다 — 수집 · 덮개 · 안내 창 중에는 건너뛴다."""
+    from aoi_capacity.ui import main_window as mw
+
+    _pump(styled_qapp, 0.6)
+    assert window._update_timer.isActive() and window._update_timer.interval() == mw.UPDATE_RECHECK_MS == 30 * 60 * 1000
+    calls = []
+    monkeypatch.setattr(mw.MainWindow, "_check_for_update_async", lambda self, **k: calls.append(k))
+    monkeypatch.setattr(mw.MainWindow, "is_collecting", lambda self: True)
+    window._periodic_update_check()
+    assert calls == []
+    monkeypatch.setattr(mw.MainWindow, "is_collecting", lambda self: False)
+    window._periodic_update_check()
+    assert calls == [{"periodic": True}]
+
+
+def test_periodic_update_check_only_shows_a_badge_and_badge_asks(window, styled_qapp, monkeypatch):
+    """실행 중 확인은 창을 띄우지 않고 상단 바 알림만 — 거절한 버전이 30분마다 다시 묻지 않는다. 알림을 누르면 묻는다."""
+    from aoi_capacity.ui import main_window as mw
+
+    asked, applied = [], []
+    monkeypatch.setattr(mw.sheets, "ask", lambda _w, title, body: asked.append(body) or mw.SB.No)
+    monkeypatch.setattr(mw.MainWindow, "_apply_update", lambda self, info: applied.append(info["sha"]))
+    monkeypatch.setattr(mw.MainWindow, "_updater", staticmethod(lambda: type("U", (), {"is_git_checkout": staticmethod(lambda: False)})))
+    info = {"sha": "a" * 40, "message": "새 기능", "current": True, "repo": "r", "branch": "main"}
+
+    w = mw._UpdateWorker(window._update_token, "check")
+    w.periodic = True
+    window._update_worker = w
+    window._on_update_checked(window._update_token, False, ("update", info))
+    assert asked == []
+    assert window.nav.update_text() == "새 버전 aaaaaaa 받기"
+
+    window.nav._update.click()           # 알림을 누르면 그때 묻는다
+    assert len(asked) == 1 and applied == []
+    monkeypatch.setattr(mw.sheets, "ask", lambda _w, title, body: asked.append(body) or mw.SB.Yes)
+    window.nav._update.click()
+    assert applied == ["a" * 40]
+
+    w2 = mw._UpdateWorker(window._update_token, "check")     # 시작 때 확인은 예전처럼 묻는다
+    window._update_worker = w2
+    window._on_update_checked(window._update_token, False, ("update", info))
+    assert len(asked) == 3

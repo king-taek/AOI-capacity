@@ -6,6 +6,8 @@
 - 수집은 `CollectorWorker`(QThread) 로 돌리고 창 위에 `LoadingOverlay` 를 덮는다. 시그널마다 토큰을 비교해
   옛 실행의 늦은 신호는 버린다. 취소·실패 시 이전 결과는 그대로다. 자동 주기 수집은 없다(수동 실행만).
 - 업데이트 확인은 `utils.updater` 를 지연 import 한다(M4 에서 추가). 모듈이 없어도 앱은 정상 동작한다.
+  시작할 때 한 번(새 버전이면 묻는다) + 켜 둔 동안 `UPDATE_RECHECK_MS` 마다 조용히(10/24) — 실행 중 확인은 창을 띄우지 않고
+  상단 바에 '새 버전 받기' 알림만 두며, 수집 · Wafer 로그 모으기 · 다른 안내 창이 떠 있을 때는 건너뛴다.
 - 테스트(conftest)는 `_check_for_update_async` 를 클래스 수준에서 막는다.
 """
 from __future__ import annotations
@@ -47,6 +49,7 @@ def dur_text(sec: float) -> str:
 # 살아 있는 워커를 모듈 전역에 잡아둔다 — 창이 먼저 사라져도 QThread 가 GC 로 죽지 않게.
 _LIVE_COLLECTORS: Dict[int, CollectorWorker] = {}
 STATUS_FLASH_MS = 4000
+UPDATE_RECHECK_MS = 30 * 60 * 1000      # 10/24: 켜 둔 동안 새 버전 확인 간격(GitHub 비인증 한도 시간당 60회 — 확인 한 번에 1~2회)
 
 
 class _UpdateSignals(QObject):
@@ -62,6 +65,7 @@ class _UpdateWorker(QThread):
     def __init__(self, token: int, mode: str, manual: bool = False, info: Optional[dict] = None, parent=None):
         super().__init__(parent)
         self.token, self.mode, self.manual, self.info = token, mode, manual, info or {}
+        self.periodic = False            # 켜 둔 동안의 조용한 확인(묻지 않고 상단 바 알림만)
         self.signals = _UpdateSignals()
 
     def run(self) -> None:  # noqa: D401
@@ -144,6 +148,10 @@ class MainWindow(QMainWindow):
         self.nav.set_current(start)
         self._on_nav(start)
         QTimer.singleShot(400, self._check_for_update_async)
+        self._update_timer = QTimer(self)
+        self._update_timer.setInterval(UPDATE_RECHECK_MS)
+        self._update_timer.timeout.connect(self._periodic_update_check)
+        self._update_timer.start()
 
     # ── 배선 ──
     def _wire(self) -> None:
@@ -158,6 +166,7 @@ class MainWindow(QMainWindow):
         self.devices_page.message.connect(self.flash_status)
         self.settings_page.theme_changed.connect(self._on_theme)
         self.settings_page.update_check_requested.connect(lambda: self._check_for_update_async(manual=True))
+        self.nav.update_clicked.connect(self._on_update_badge)
 
     # ── 내비게이션 ──
     def _on_nav(self, key: str) -> None:
@@ -329,7 +338,19 @@ class MainWindow(QMainWindow):
             log.info("updater unavailable: %s", exc)
             return None
 
-    def _check_for_update_async(self, manual: bool = False) -> None:
+    def _update_busy(self) -> bool:
+        """실행 중 확인을 건너뛸 때 — 수집 · Wafer 로그 모으기 · 덮개 · 다른 안내 창 · 업데이트 작업 중."""
+        if self.is_collecting() or self.collect_page.wafer_logs_running() or self.overlay.isVisible():
+            return True
+        if self._sheets.isVisible() or QApplication.activeModalWidget() is not None:
+            return True
+        return self._update_worker is not None and self._update_worker.isRunning()
+
+    def _periodic_update_check(self) -> None:
+        if not self._update_busy():
+            self._check_for_update_async(periodic=True)
+
+    def _check_for_update_async(self, manual: bool = False, periodic: bool = False) -> None:
         upd = self._updater()
         if upd is None:
             if manual:
@@ -339,6 +360,7 @@ class MainWindow(QMainWindow):
             return
         self._update_token += 1
         w = _UpdateWorker(self._update_token, "check", manual=manual, parent=self)
+        w.periodic = bool(periodic and not manual)
         w.signals.checked.connect(self._on_update_checked)
         w.signals.failed.connect(self._on_update_failed)
         self._update_worker = w
@@ -361,6 +383,11 @@ class MainWindow(QMainWindow):
                 if manual:
                     sheets.info(self, i18n.KO.UPDATE_AVAILABLE_TITLE, i18n.KO.UPDATE_GIT_HINT)
                 return
+            self._update_info = info
+            # 실행 중 확인은 묻지 않고 알림만 — 거절한 버전이 30분마다 창으로 다시 뜨지 않게
+            self.nav.set_update(i18n.KO.UPDATE_NAV_FMT.format(sha=sha))
+            if getattr(self._update_worker, "periodic", False):
+                return
             if sheets.ask(self, i18n.KO.UPDATE_AVAILABLE_TITLE, body) == SB.Yes:
                 self._apply_update(info)
         elif status == "held":
@@ -371,6 +398,16 @@ class MainWindow(QMainWindow):
         elif manual:
             sheets.info(self, i18n.KO.UPDATE_CHECK_TITLE,
                         i18n.KO.UPDATE_LATEST if status == "latest" else i18n.KO.UPDATE_UNKNOWN)
+
+    def _on_update_badge(self) -> None:
+        info = dict(self._update_info or {})
+        if not info.get("sha"):
+            return
+        sha = str(info.get("sha", ""))[:7]
+        msg = info.get("message") or ""
+        body = i18n.KO.UPDATE_AVAILABLE_BODY_FMT.format(sha=sha, message=f" · {msg}" if msg else "")
+        if sheets.ask(self, i18n.KO.UPDATE_AVAILABLE_TITLE, body) == SB.Yes:
+            self._apply_update(info)
 
     def _apply_update(self, info: dict) -> None:
         if self.is_collecting():
@@ -435,6 +472,7 @@ class MainWindow(QMainWindow):
         prefs.patch(window_width=int(g.width()), window_height=int(g.height()), window_maximized=maximized)
         self._collect_token += 1
         self._update_token += 1
+        self._update_timer.stop()
         self.collect_page.wait_for_plan(3000)
         self.collect_page.shutdown()
         for tok, w in list(_LIVE_COLLECTORS.items()):
