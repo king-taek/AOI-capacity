@@ -26,6 +26,7 @@ NAV_ITEMS: Tuple[Tuple[str, str, str], ...] = (
 
 class NavBar(QWidget):
     current_changed = pyqtSignal(str)
+    update_clicked = pyqtSignal()        # 10/24: 실행 중 확인으로 찾은 새 버전 알림을 눌렀다
 
     def __init__(self, parent: QWidget | None = None, items: Iterable[Tuple[str, str, str]] = NAV_ITEMS):
         super().__init__(parent)
@@ -59,6 +60,13 @@ class NavBar(QWidget):
             self._items[key] = b
         lay.addLayout(nav)
         lay.addStretch(1)
+        self._update = QPushButton("", self)
+        self._update.setProperty("role", "link")
+        self._update.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._update.setToolTip(i18n.KO.UPDATE_NAV_TIP)
+        self._update.clicked.connect(self.update_clicked.emit)
+        self._update.hide()
+        lay.addWidget(self._update)
         self._status = QLabel("", self)
         self._status.setProperty("role", "stamp")
         self._status.setToolTip(i18n.KO.CREDIT)
@@ -84,3 +92,11 @@ class NavBar(QWidget):
 
     def set_status(self, text: str) -> None:
         self._status.setText(text)
+
+    def set_update(self, text: str) -> None:
+        """새 버전 알림 — 빈 글자면 숨긴다. 창을 띄우지 않는 작은 알림이다(누르면 받을지 묻는다)."""
+        self._update.setText(text)
+        self._update.setVisible(bool(text))
+
+    def update_text(self) -> str:
+        return "" if self._update.isHidden() else self._update.text()
