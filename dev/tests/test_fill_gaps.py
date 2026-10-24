@@ -6,6 +6,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
+
 from aoi_capacity import collect, nas_guard
 from conftest import make_cfg
 
@@ -64,7 +66,9 @@ def test_fill_gaps_leaves_value_empty_when_folder_was_rewritten_later(tmp_path, 
     assert all(e.get("sec_checked") for e in _cache(cfg)["reports"].values() if any(r.get("ini_match") == "EXACT" for r in e["rows"]))
 
 
-def test_fill_gaps_stop_keeps_what_was_read(tmp_path, fake_nas, monkeypatch):
+@pytest.mark.parametrize("chunk", [1, 2000])
+def test_fill_gaps_stop_keeps_what_was_read(tmp_path, fake_nas, monkeypatch, chunk):
+    """멈추면 이미 읽은 장은 남는다 — 저장 단위(SEC_FILL_CHUNK)보다 작은 실행도(PR #3 리뷰: 덩어리째 버리던 것)."""
     nas, csv_path = fake_nas
     cfg = make_cfg(tmp_path, csv_path, read_workers=1, collect_params=False)
     collect.collect(cfg)
@@ -72,7 +76,7 @@ def test_fill_gaps_stop_keeps_what_was_read(tmp_path, fake_nas, monkeypatch):
         (w / "ScanLog.ini").write_text(SCANLOG, encoding="utf-8")
     total = collect.plan_run(cfg).sec_missing
     assert total >= 2
-    monkeypatch.setattr(collect, "SEC_FILL_CHUNK", 1)
+    monkeypatch.setattr(collect, "SEC_FILL_CHUNK", chunk)
     seen = []
     st = collect.fill_gaps(cfg, progress=lambda d, t, p: seen.append(p) if "스캔" in p else None, should_stop=lambda: len(seen) >= 1)
     assert st["stopped"] == 1
