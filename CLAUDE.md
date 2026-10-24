@@ -293,6 +293,8 @@ graphify 는 `--code-only` 로, template.html 인라인 JS 까지 보려면 `pyt
   셋 다 행이 가리키는 Wafer 폴더(`_rdl_wafer_dir` — issue_codes 의 백업 폴더 · Job 폴더 이름으로 되짚음) **안만** 정확 경로로, Report 나열 · 읽기 없음 · 범위 게이트(`resolve_devices`) 지난 Camtek 만. 덩어리마다 저장, 멈추면 이어서, 끝나면 `html_from_cache`. 카드 줄마다 비어 있는 수 · 채워진 비율 막대 · 예상 시간(`plan_run().sec_*` · `etas["sec"]`).
   ③ 접힌 구역: 결과 파일만 다시 만들기 · 조사 도구(실패 로그 · Review 이미지 · Wafer 로그 30일 · 파라미터 zip) · 설정(카드 하나에 '이름 | 값' 줄 — `SettingsPage.add_row`) · 로그. 결과 열기 · 폴더는 제목 오른쪽. 장비 목록은 드문 버튼 다섯을 '더보기' 메뉴로.
   `collect(rdl_patch=True)` 자체는 그대로 있다(수집 창은 빈칸 카드로 부른다). 숫자·날짜 칸은 휠 무시 `widgets/inputs.py`.
+  **10/24 오후(사용자: "로딩 화면 등 어색한 곳 모두")**: 수집이 끝난 뒤의 문제(접근 못 한 장비 · 일부 Report 실패 · CSV 못 씀)는 '확인' 을 눌러야 닫히는 팝업이 아니라 수집 카드 안 알림(`collect_page.show_outcome` — '장비 목록 확인' · '로그 보기' 단추, 다음 수집 시작 때 사라짐)이다. 수집 실패 · 업데이트 같은 다른 팝업(`sheets`)은 그대로, warn · error 는 위 색 띠.
+  로딩 화면(`LoadingOverlay`): 제목 = 고른 수집 방법(`collect_page.mode_title`), 단계 줄 오른쪽에 작은 개수(총량을 모르면 `장비 n / m`) · 남은 시간, 읽는 파일 줄은 없으면 숨김, 범례는 0 인 항목을 적지 않고 문제 장비 이름은 툴팁, 장비 칸에 올리면 이름 · 상태. 걸린 시간은 `main_window.dur_text`('12초' · '3분 20초').
 - 시각 테마의 단일 출처는 `aoi_capacity/ui/assets/template.html` 의 `:root` 토큰 두 블록(dark · light). `ui/theme.py` 는 그 값을 그대로 쓴다(가드: `test_theme.py`).
   결과 화면은 라이트 단일(D48-⑥, `<html data-theme="light">`)이고 dark 블록은 수집 창의 다크 모드 값이다. CSS 주석에 `:root{` 를 적지 않는다(파서가 첫 블록으로 오인한다 — 실측).
 - 사용자 데이터는 `%LOCALAPPDATA%\AOI_Capacity`(`utils/paths.data_root()`), 절대 `app/` 안이 아니다(업데이트가 `app/` 를 통째로 교체).

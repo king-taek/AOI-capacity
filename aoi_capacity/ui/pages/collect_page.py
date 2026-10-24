@@ -15,7 +15,7 @@ from __future__ import annotations
 import time
 from typing import Dict, Optional
 
-from PyQt6.QtCore import QDate, QThread, Qt, QUrl, pyqtSignal
+from PyQt6.QtCore import QDate, QThread, Qt, QTimer, QUrl, pyqtSignal
 from PyQt6.QtGui import QDesktopServices
 from PyQt6.QtWidgets import (QCheckBox, QFileDialog, QFrame, QGridLayout, QHBoxLayout, QLabel, QLineEdit,
                              QPlainTextEdit, QProgressBar, QScrollArea, QSizePolicy, QVBoxLayout, QWidget)
@@ -358,6 +358,7 @@ class CollectPage(QWidget):
     설명 문단은 한 줄로 줄이고 긴 설명은 툴팁(ⓘ)으로 옮겼다. 위젯 이름(`_b_run` · `_cards` …)은 그대로다."""
     collect_requested = pyqtSignal(bool, bool, bool)   # full, backfill, recover
     stop_requested = pyqtSignal()
+    devices_requested = pyqtSignal()                   # 결과 알림의 '장비 목록' — 접근 못 한 장비를 고치러 간다
     error = pyqtSignal(str, str)
 
     def __init__(self, parent: Optional[QWidget] = None):
@@ -369,7 +370,7 @@ class CollectPage(QWidget):
         self._first_run = False
         outer = QVBoxLayout(self)
         outer.setContentsMargins(0, 0, 0, 0)
-        scroll = QScrollArea(self)
+        scroll = self._scroll = QScrollArea(self)
         scroll.setWidgetResizable(True)
         scroll.setFrameShape(QFrame.Shape.NoFrame)
         body = QWidget(scroll)
@@ -459,6 +460,27 @@ class CollectPage(QWidget):
         act.addWidget(self._b_stop)
         act.addWidget(self._b_run)
         pl.addLayout(act)
+        # 수집 결과 알림(10/24) — 예전엔 끝날 때마다 '확인' 을 눌러야 닫히는 팝업이었다. 이제 카드 안에 남고 다음 수집 때 사라진다.
+        self._outcome = QFrame(pick)
+        self._outcome.setProperty("role", "outcome")
+        ol = QVBoxLayout(self._outcome)
+        ol.setContentsMargins(14, 10, 10, 10)
+        ol.setSpacing(4)
+        self._oc_title = _label("", "outcomeTitle", self._outcome)
+        self._oc_x = make_button(K.BTN_CLOSE, "ghost", self._outcome)
+        self._oc_x.clicked.connect(self._outcome.hide)
+        ol.addLayout(_row(self._oc_title, self._oc_x, stretch=False))
+        ol.itemAt(0).layout().setStretch(0, 1)
+        self._oc_body = _label("", "outcomeBody", self._outcome, wrap=True)
+        self._oc_body.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
+        ol.addWidget(self._oc_body)
+        self._oc_dev = make_button(K.OUTCOME_GO_DEVICES, "default", self._outcome)
+        self._oc_dev.clicked.connect(self.devices_requested.emit)
+        self._oc_log = make_button(K.OUTCOME_SHOW_LOG, "ghost", self._outcome)
+        self._oc_log.clicked.connect(self.show_log)
+        ol.addLayout(_row(self._oc_dev, self._oc_log))
+        self._outcome.hide()
+        pl.addWidget(self._outcome)
         lay.addWidget(pick)
 
         # ── ② 옛 기간 빈칸 채우기(10/24) — 빈칸이 있을 때만 보인다 ──
@@ -479,6 +501,11 @@ class CollectPage(QWidget):
                           "params": _GapRow(self._gaps, gg, 1, K.GAPS_ROW_PARAMS, K.GAPS_ROW_PARAMS_TIP),
                           "rdl": _GapRow(self._gaps, gg, 2, K.GAPS_ROW_RDL, K.GAPS_ROW_RDL_TIP)}
         gl.addLayout(gg)
+        self._gap_bar = QProgressBar(self._gaps)                 # 채우는 동안만 — 글자만 바뀌어서 도는지 알기 어려웠다
+        self._gap_bar.setTextVisible(False)
+        self._gap_bar.setFixedHeight(6)
+        self._gap_bar.hide()
+        gl.addWidget(self._gap_bar)
         self._b_gaps = make_button(K.GAPS_RUN, "primary", self._gaps)
         self._b_gaps.setEnabled(False)
         self._gap_status = _label("", "muted", self._gaps, wrap=True)
@@ -792,10 +819,25 @@ class CollectPage(QWidget):
         w.start()
 
     def _on_gaps_progress(self, done: int, total: int, phase: str) -> None:
-        if total > 0:
-            self._gap_status.setText(K.GAPS_PROGRESS_FMT.format(done=done, total=total, phase=phase))
+        self._gap_bar.show()
+        if total <= 0:
+            self._gap_bar.setRange(0, 0)                         # 총량 모름 — 흐르는 막대
+            if phase:
+                self._gap_status.setText(phase)
+            return
+        now = time.monotonic()
+        if total != getattr(self, "_gap_total", None) or done < getattr(self, "_gap_done", 0):
+            self._gap_t1, self._gap_total = now, total             # 단계가 바뀌었다 — 남은 시간은 새로 센다
+        self._gap_done = done
+        self._gap_bar.setRange(0, total)
+        self._gap_bar.setValue(done)
+        el = now - self._gap_t1
+        left = K.GAPS_LEFT_FMT.format(t=eta_text(el * (total - done) / done, False)) if done >= 5 and el >= 8 and done < total else ""
+        self._gap_status.setText(K.GAPS_PROGRESS_FMT.format(done=done, total=total, phase=phase) + left)
 
     def _on_gaps_done(self, st, err: str) -> None:
+        self._gap_bar.hide()
+        self._gap_total = None
         self._b_gaps.setText(K.GAPS_RUN)
         self._b_gaps.setEnabled(True)
         self._b_run.setEnabled(not self._running and self._wl_worker is None)
@@ -830,8 +872,7 @@ class CollectPage(QWidget):
             if miss and sec:
                 total_sec += sec
                 rough_any = rough_any or rough
-            note = " · ".join(x for x in ((K.GAPS_SPAN_FMT.format(a=a, b=b) if a and a != b else a),
-                                          (K.GAPS_ETA_FMT.format(t=eta_text(sec, rough)) if miss and sec is not None else "")) if x)
+            note = K.GAPS_SPAN_FMT.format(a=a, b=b) if a and a != b else a     # 예상 시간은 머리 배지 하나에만(10/24)
             g = self._gap_rows[key]
             g.set(miss, have, fmt.format(n=miss) if miss else K.GAPS_FULL, note)
             g.set_visible(bool(miss or have))
@@ -1136,11 +1177,31 @@ class CollectPage(QWidget):
             w.setEnabled(not running)
         self._b_all.setEnabled(not running and bool(self._span))
         self._status.setText(K.COLLECT_RUNNING if running else K.COLLECT_IDLE)
+        if running:
+            self._outcome.hide()
         if not running:
             self._pick("normal")                         # 문제 해결용 수집은 한 번만 — 다음엔 평소 수집으로 돌아간다
 
     def set_status(self, text: str) -> None:
         self._status.setText(text)
+
+    def mode_title(self) -> str:
+        """고른 수집 방법의 이름 — 로딩 화면 제목에 쓴다."""
+        return self._cards[self._mode].title()
+
+    def show_outcome(self, title: str, lines: list, devices: bool = False) -> None:
+        """수집 결과 알림을 카드 안에 띄운다. lines 가 비면 숨긴다."""
+        if not lines:
+            self._outcome.hide()
+            return
+        self._oc_title.setText(title)
+        self._oc_body.setText("\n".join(lines))
+        self._oc_dev.setVisible(devices)
+        self._outcome.show()
+
+    def show_log(self) -> None:
+        self._sec_log.set_open(True)
+        QTimer.singleShot(0, lambda: self._scroll.ensureWidgetVisible(self._sec_log, 0, 40))
 
     def append_log(self, line: str) -> None:
         self._log.appendPlainText(line)

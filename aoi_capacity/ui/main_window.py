@@ -33,6 +33,17 @@ from .widgets.sheets import SB, SheetHost
 
 log = logging.getLogger("aoi.ui")
 
+
+def dur_text(sec: float) -> str:
+    """걸린 시간 — '12초' · '3분 20초' · '1시간 5분'(예전 '00:00' 은 시각처럼 읽혔다)."""
+    s = int(round(sec))
+    K = i18n.KO
+    if s < 60:
+        return K.DUR_SEC_FMT.format(s=s)
+    if s < 3600:
+        return K.DUR_MIN_FMT.format(m=s // 60, s=s % 60)
+    return K.DUR_HOUR_FMT.format(h=s // 3600, m=s // 60 % 60)
+
 # 살아 있는 워커를 모듈 전역에 잡아둔다 — 창이 먼저 사라져도 QThread 가 GC 로 죽지 않게.
 _LIVE_COLLECTORS: Dict[int, CollectorWorker] = {}
 STATUS_FLASH_MS = 4000
@@ -140,6 +151,7 @@ class MainWindow(QMainWindow):
         self.collect_page.collect_requested.connect(self._start_collect)
         self.collect_page.stop_requested.connect(self._stop_collect)
         self.collect_page.error.connect(lambda t, b: sheets.error(self, t, b))
+        self.collect_page.devices_requested.connect(lambda: self.nav.set_current("devices"))
         self.overlay.cancel_requested.connect(self._stop_collect)
         self.devices_page.saved.connect(self.collect_page.refresh_plan)
         self.devices_page.error.connect(lambda t, b: sheets.error(self, t, b))
@@ -220,7 +232,7 @@ class MainWindow(QMainWindow):
         _LIVE_COLLECTORS[tok] = w
         self._worker = w
         self.collect_page.set_running(True)
-        self.overlay.show_overlay(i18n.KO.LOADING_COLLECT_TITLE, cancelable=True)
+        self.overlay.show_overlay(self.collect_page.mode_title(), cancelable=True)
         self.overlay.set_devices(names)
         log.info("collect start token=%s full=%s backfill=%s recover=%s devices=%s", tok, full, backfill, recover, len(names))
         w.start()
@@ -273,21 +285,22 @@ class MainWindow(QMainWindow):
             self._release_worker(token)
             return
         self._finish_collect(token)
-        m, s = divmod(int(result.elapsed), 60)
-        toast = i18n.KO.COLLECT_DONE_TOAST_FMT.format(devices=result.devices, elapsed=f"{m:02d}:{s:02d}")
+        unreachable, partial = result.unreachable_devices, result.partial_devices
+        toast = i18n.KO.COLLECT_DONE_TOAST_FMT.format(devices=max(0, result.devices - len(unreachable)), elapsed=dur_text(result.elapsed))
         self.collect_page.set_status(toast)
         self.collect_page.append_log(toast)
         self._refresh_last_collect()
-        unreachable, partial = result.unreachable_devices, result.partial_devices
-        if unreachable or partial or result.errors or result.warnings:
-            lines = list(result.warning_lines)          # C06: HTML 은 정상, CSV 만 못 썼을 때의 사유
-            if unreachable:
-                lines.append(i18n.KO.COLLECT_DONE_UNREACHABLE_FMT.format(n=len(unreachable), names=", ".join(unreachable)))
-            if partial:
-                lines.append(i18n.KO.COLLECT_DONE_PARTIAL_FMT.format(n=len(partial), names=", ".join(partial),
-                                                                     reports=len(result.errors)))
+        # 10/24: 문제는 '확인' 을 눌러야 닫히는 팝업 대신 수집 카드 안 알림으로 — 다음 수집 때까지 남는다
+        lines = list(result.warning_lines)          # C06: HTML 은 정상, CSV 만 못 썼을 때의 사유
+        if unreachable:
+            lines.append(i18n.KO.COLLECT_DONE_UNREACHABLE_FMT.format(n=len(unreachable), names=", ".join(unreachable)))
+        if partial:
+            lines.append(i18n.KO.COLLECT_DONE_PARTIAL_FMT.format(n=len(partial), names=", ".join(partial), reports=len(result.errors)))
+        elif result.errors and not lines:
             lines.append(i18n.KO.COLLECT_DONE_SEE_LOG)
-            sheets.warn(self, i18n.KO.COLLECT_DONE_WITH_ERRORS_TITLE, "\n".join(lines))
+        if unreachable:
+            lines.append(i18n.KO.COLLECT_DONE_UNREACHABLE_HINT)
+        self.collect_page.show_outcome(i18n.KO.COLLECT_DONE_WITH_ERRORS_TITLE, lines, devices=bool(unreachable))
 
     def _on_collect_failed(self, token: int, message: str) -> None:
         if not self._is_current(token):

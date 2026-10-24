@@ -31,6 +31,9 @@ QFrame[role="card"] { background: $surface; border: 1px solid $line; border-radi
 QFrame[role="card"] QLabel[role="cardTitle"] { font-family: $font_display; font-size: 14.5px; font-weight: 700; }
 QFrame[role="notice"] { background: $accent_soft; border-radius: 10px; }
 QFrame[role="notice"] QLabel { color: $nav_on; }
+QFrame[role="outcome"] { background: $warn_soft; border: 1px solid $warn; border-radius: 10px; }
+QLabel[role="outcomeTitle"] { font-weight: 700; font-size: 13.5px; color: $warn_ink; }
+QLabel[role="outcomeBody"] { font-size: 13px; color: $ink_2; }
 QFrame[role="rule"] { background: $row; max-height: 1px; min-height: 1px; border: none; }
 
 /* 상황별 수집 카드 — 누르면 고른다. 고른 카드는 파란 테두리(HTML 비교 페이지의 .opt 와 같은 표현) */
@@ -120,11 +123,15 @@ QScrollArea > QWidget > QWidget { background: transparent; }
 
 /* 시트(팝업) · 로딩 카드 */
 QFrame[role="sheet"] { background: $surface; border: 1px solid $line_2; border-radius: 14px; }
+QFrame[role="sheet"][kind="warn"] { border-top: 4px solid $warn; }
+QFrame[role="sheet"][kind="error"] { border-top: 4px solid $crit; }
 QLabel[role="sheetTitle"] { font-family: $font_display; font-size: 16px; font-weight: 700; }
 QLabel[role="sheetBody"] { color: $ink_2; font-size: 13.5px; }
 QFrame[role="loadCard"] { background: $surface; border: 1px solid $line_2; border-radius: 16px; }
 QLabel[role="loadTitle"] { font-family: $font_display; font-size: 17px; font-weight: 700; }
-QLabel[role="loadPhase"] { font-size: 13.5px; color: $ink; }
+QLabel[role="loadPhase"] { font-size: 14px; font-weight: 600; color: $ink; }
 QLabel[role="loadDetail"] { font-family: $font_mono; font-size: 11.5px; color: $ink_3; }
-QLabel[role="loadCount"] { font-family: $font_display; font-size: 22px; font-weight: 700; }
+QLabel[role="loadElapsed"] { font-family: $font_mono; font-size: 13px; color: $ink_3; }
+QLabel[role="loadCount"] { font-family: $font_mono; font-size: 13.5px; font-weight: 600; color: $ink; }
+QLabel[role="loadLeft"] { font-size: 13px; color: $ink_3; }
 QLabel[role="legend"] { font-size: 11.5px; color: $ink_2; }

@@ -83,7 +83,17 @@ def test_collect_flow_writes_html_and_updates_status(window, styled_qapp):
     assert paths.output_html("").exists()
     assert window.nav._status.text().startswith(i18n.KO.NAV_LAST_COLLECT_FMT.split("{")[0])
     assert "수집 완료" in window.collect_page._status.text()
-    assert len(warned) == 1 and "접근 못 함" in warned[0]       # 범위 안인데 접근하지 못한 장비는 완료 안내에 이름이 나온다
+    # 범위 안인데 접근하지 못한 장비는 수집 카드 안 알림에 이름이 나온다 — '확인' 을 눌러야 닫히는 팝업은 없다(10/24)
+    page = window.collect_page
+    assert not warned and page._outcome.isVisible() and "접근 못 함" in page._oc_body.text() and page._oc_dev.isVisible()
+    page._oc_dev.click()
+    assert window.nav.current() == "devices"
+    window.nav.set_current("collect")
+    window._start_collect(False, False)
+    assert not page._outcome.isVisible()                          # 다음 수집이 시작되면 지난 알림은 사라진다
+    while window.is_collecting() and time.time() - t0 < 40:
+        _pump(styled_qapp)
+    _pump(styled_qapp, 0.2)
     assert window.collect_page._b_run.isEnabled()
     # 결과 카드가 방금 만든 HTML 경로를 가리키고 '결과 화면 열기' 가 살아난다
     assert window.collect_page._result.text() == str(paths.output_html(""))
@@ -296,3 +306,28 @@ def test_gap_card_shows_missing_counts_and_fills_them(window, styled_qapp):
     _pump(styled_qapp, 0.3)
     assert page._gap_status.text().startswith(i18n.KO.GAPS_DONE_FMT.split("{")[0]), page._gap_status.text()
     assert page._gap_rows["sec"].count.text() == i18n.KO.GAPS_FULL and not page._b_gaps.isEnabled()
+
+
+def test_loading_overlay_reads_cleanly(window, styled_qapp):
+    """10/24 로딩 화면: 제목 = 고른 수집 방법, 총량 모르는 단계엔 장비 개수, 0 인 범례 없음, 문제 장비 이름은 툴팁, 빈 파일 줄은 숨김."""
+    from aoi_capacity import i18n
+    ov = window.overlay
+    ov.show_overlay(window.collect_page.mode_title())
+    assert ov._title.text() == window.collect_page.mode_title()
+    ov.set_devices(["AOI-1", "AOI-2", "AOI-3"])
+    ov.set_progress(0, 0, "장비 확인")
+    assert ov._count.text() == i18n.KO.LOADING_DEVICES_FMT.format(done=0, total=3)
+    assert i18n.KO.LOADING_LEGEND_ERR not in ov._legend.text()          # 0 이면 적지 않는다
+    ov.set_device_state("AOI-2", "error")
+    ov.set_device_state("AOI-1", "done")
+    assert ov._count.text() == i18n.KO.LOADING_DEVICES_FMT.format(done=2, total=3)
+    assert "AOI-2" in ov._legend.toolTip()
+    assert not ov._detail.isVisible()
+    ov.set_detail("AOI-3 · x_BatchReport.htm")
+    assert ov._detail.isVisible()
+    ov.set_progress(37, 240, "Report 읽기")
+    assert ov._count.text() == "37 / 240" and ov._phase.text() == "Report 읽기"
+    ov.set_stopping()
+    ov.set_progress(38, 240, "Report 읽기")                             # 멈추는 중엔 단계 글자가 안내를 덮지 않는다
+    assert ov._phase.text() == i18n.KO.LOADING_STOPPING_NOTE
+    ov.hide_overlay()
