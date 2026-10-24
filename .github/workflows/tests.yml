@@ -149,22 +149,19 @@ jobs:
           path: ~/.cache/ms-playwright
           key: pw-${{ runner.os }}-${{ hashFiles('dev/requirements-dev.txt') }}-${{ steps.pwver.outputs.v }}
 
-      - name: Playwright Chromium 설치 (브라우저 본체는 캐시에 없을 때만, 시스템 라이브러리는 브라우저가 안 뜰 때만)
+      - name: Playwright Chromium 설치 (시스템 라이브러리는 매번, 브라우저 본체는 캐시에 없을 때만)
         timeout-minutes: 5
         run: |
-          python -m playwright install chromium
-          # 10/24: install-deps 는 apt(update + install)라 미러가 느리면 2분 넘게 걸렸다(run 101).
-          #        브라우저가 이미 뜨면 건너뛰고, 필요할 때만 시간 제한 + 세 번 재시도(Qt 단계와 같은 방식).
-          if python -c "from playwright.sync_api import sync_playwright as s; p=s().start(); p.chromium.launch().close(); p.stop()"; then
-            echo "Chromium 이 이미 뜬다 — install-deps 건너뜀"; exit 0
-          fi
+          # 10/24: install-deps 는 apt(update + install)라 미러가 느리면 2분 넘게 걸렸다(run 101) — 시간 제한 + 세 번 재시도(Qt 단계와 같은 방식).
+          #        '브라우저가 이미 뜨면 건너뛰기' 는 하지 않는다: 뜨기는 하지만 install-deps 가 까는 글꼴이 빠져 글자 폭이 달라지고
+          #        탭 표시자 물리 테스트가 떨어졌다(run 108). root 로 돌려 timeout 이 apt 자식까지 함께 끊게 한다.
+          ok=""
           for i in 1 2 3; do
-            # root 로 돌려 timeout 이 apt 자식까지 함께 끊게 한다(playwright 가 스스로 부르는 sudo 는 새 세션이라 안 끊길 수 있다)
-            if sudo timeout 90 env "PATH=$PATH" python -m playwright install-deps chromium; then exit 0; fi
+            if sudo timeout 90 env "PATH=$PATH" python -m playwright install-deps chromium; then ok=1; break; fi
             sudo dpkg --configure -a || true
           done
-          exit 1
-
+          [ -n "$ok" ] || exit 1
+          python -m playwright install chromium
       - name: 사전 점검 — Playwright 가 실제로 import 되고 브라우저가 뜬다
         run: |
           set -eu
