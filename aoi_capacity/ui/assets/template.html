@@ -1857,7 +1857,7 @@ function calloutFit(root){const box=root.querySelector("[data-callw]");if(!box)r
   for(const c of box.querySelectorAll(".callout")){const cw=c.offsetWidth,l=c.offsetLeft;if(l+cw>w)c.style.left=Math.max(0,w-cw)+"px";}   /* 글자 폭 어림이 모자라면 실제 폭으로 안에 넣는다 */if(w&&Math.abs(w-(+box.dataset.callw))>2){_calloutW=w;requestAnimationFrame(render);}}
 /* 10/24: 장비 팝업 Scan 카드 밑 한 줄 — 스캔 비율과 그 근거 장 수. 옛 행(수집기 업데이트 전)은 값이 없어 '채우기 전' 으로 적는다 */
 function scLine(t){const c=t&&t.sc;if(!c)return "";const [S,I,n,N]=c;
-  if(!n)return "스캔 비율 · 채우기 전";const p="그중 스캔 "+Math.round(S/I*100)+"%";return n>=N?p:p+" · 근거 "+n+"/"+N+"장";}
+  if(!n)return "스캔 비율 · 채우기 전";if(!(I>0))return "";const p="그중 스캔 "+Math.round(S/I*100)+"%";return n>=N?p:p+" · 근거 "+n+"/"+N+"장";}
 function scTip(t){const c=t&&t.sc;if(!c)return "";const [S,I,n,N]=c;
   const miss=N-n,fill=miss>0?`\n${N}장 중 ${miss}장은 값이 없습니다(수집기 업데이트 전에 모은 장) — 수집 창 '옛 기간 빈칸 채우기' 로 채울 수 있습니다.`:"";
   return (n?`INI 로 시각을 잰 장의 시간 ${hm(I)} 중 실제 촬영(ScanLog Duration + 둘째 레시피) ${hm(S)} — 나머지는 로드 · 얼라인 · 레시피 전환 · 마무리. 가동률 값은 그대로입니다.`:"실제 촬영 시간(ScanLog)이 아직 없는 날입니다.")+fill;}
