@@ -721,7 +721,7 @@ def test_lot_tab_groups_by_wafer_id_not_by_name_and_follows_devices():
     lot = next(k for k in ks if "LPT-PIDS5" in lst.split(f'lp:lot:{k}"')[1].split("</button>")[0])
     out = _lot_screen(rows, lot)
     assert out.count('class="lotatt"') == 2 and "ZZZ-1" not in out.split("검사 순서")[1]
-    assert "TYPO-RDL3" in out and "ALIGN_ERROR" in out and '<small class="gap">+' in out   # 10/24: 간격은 시각 밑 작은 글자
+    assert "TYPO-RDL3" in out and "ALIGN_ERROR" in out and 'class="gap"' not in out and "+23일" not in out   # 10/25: 시작 밑 '+간격' 은 없앴다
     assert out.count('<b class="same">') == 0 and 'class="lotbox"' in out and "max-height" not in out.split('class="lotbox"')[1][:40]
     assert 'class="ix num">1<' in out and 'class="ix num">2<' in out                       # 검사 # = 격자 열 번호
     assert "확인 필요" not in out and "lotconf" not in out
@@ -757,7 +757,7 @@ def test_lot_tab_ignores_slot_ids_and_parses_kla_names():
 
 
 def test_lot_tab_tags_retries_rescans_and_lists_every_wafer():
-    """구분: 앞 시도가 PASS 가 아니면 재시도, PASS 였던 같은 검사는 재검사(이름 바뀜 구분), Job 이 다르면 다른 Job. Wafer × 검사는 늘 Wafer 마다 한 줄(10/24 '같은 이력 묶기' 삭제)."""
+    """구분: 앞 시도가 PASS 가 아니면 재시도, PASS 였던 같은 검사는 재스캔(이름 바뀜 구분), 첫 검사 · 다른 Job 은 글자를 적지 않는다. Wafer × 검사는 늘 Wafer 마다 한 줄(10/24 '같은 이력 묶기' 삭제)."""
     ids = [f"GRP{i:06d}X" for i in range(4)]
     rows = [w("AOI-1", i, "00:10", "00:20", lot="DBM-1", report="a.htm", status="Alignment Error.") | {"recipe": "x20"} for i in ids] + \
            [w("AOI-1", i, "02:10", "02:20", lot="DBM-1", report="b.htm") | {"recipe": "x20"} for i in ids] + \
@@ -765,7 +765,8 @@ def test_lot_tab_tags_retries_rescans_and_lists_every_wafer():
     lst = _lot_screen(rows)
     (k,) = _lot_keys(lst)
     out = _lot_screen(rows, k)
-    assert "재시도" in out and "재검사(이름 바뀜)" in out
+    assert "재시도" in out and "재스캔(이름 바뀜)" in out and "재검사" not in out.split("LOT 추적")[-1]
+    assert "첫 검사" not in out and "다른 Job" not in out and "한 장 = 한 줄" not in out      # 10/25: 첫 검사 · 다른 Job 은 적지 않는다
     assert "같은 이력" not in out and out.count('class="lw mono') == 4
 
 
@@ -802,3 +803,14 @@ def test_lot_tab_merges_one_char_ocr_misreads_but_not_other_wafers():
     rows2 = [w("K1", x, "00:10", "00:20", lot="TB500.INT795@6412", report="KLA:a") for x in other] + \
             [w("AOI-20", x, "02:10", "02:20", lot="LNF-PIDS3", report="b.htm") for x in good]
     assert len(_lot_keys(_lot_screen(rows2))) == 2
+
+
+def test_lot_tab_matrix_cells_show_defect_counts():
+    """10/25: Wafer × 검사 칸에 Defect 개수 — 1000 이상은 1.2k, 쉼표가 든 원문도 숫자로 읽는다. 값이 없으면 칸은 비워 둔다(지어내지 않는다)."""
+    ids = ["DEF00001X", "DEF00002X", "DEF00003X"]
+    rows = [w("AOI-1", ids[0], "00:10", "00:20", lot="DEF-1", report="a.htm") | {"faults": "7"},
+            w("AOI-1", ids[1], "00:20", "00:30", lot="DEF-1", report="a.htm") | {"faults": "1,234"},
+            w("AOI-1", ids[2], "00:30", "00:40", lot="DEF-1", report="a.htm")]
+    (k,) = _lot_keys(_lot_screen(rows))
+    mx = _lot_screen(rows, k).split("Wafer × 검사")[1]
+    assert ">7</i>" in mx and ">1.2k</i>" in mx

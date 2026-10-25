@@ -119,8 +119,9 @@ def test_screen_terms_are_the_design_terms_and_old_ones_are_gone():
     """D48-⑦: Scan · Rescan · Test · Error · 에러 후 대기 · 대기. 옛 화면 용어는 JS 에 남지 않는다."""
     for term in (">Scan<", ">Rescan<", ">Test<", ">Error<", ">에러 후 대기<", ">대기<"):
         assert term in HTML, term
-    for gone in ("중복스캔", "재스캔", "재작업", "미가동", "정지(추정)", "DISPLAY_META", "metricState", "materialIndex", "occurrenceIndex"):
+    for gone in ("중복스캔", "재작업", "미가동", "정지(추정)", "DISPLAY_META", "metricState", "materialIndex", "occurrenceIndex"):
         assert gone not in HTML, gone
+    # 10/25: '재스캔' 은 LOT 추적 탭(구분 · 카드 · 범례)에서만 사용자가 정해 준 이름이다 — 가동률 쪽 용어는 여전히 Rescan
 
 
 def test_removed_features_stay_removed():
