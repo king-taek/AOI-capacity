@@ -2248,7 +2248,7 @@ function lotOcrPairs(XA,XB){if(!XA.length||!XB.length||XA.length>LOT_MAX||XB.len
   for(const p of XA){for(const q of XB){if(used.has(q)||p.length!==q.length)continue;let d=0;for(let i=0;i<p.length&&d<2;i++)if(p[i]!==q[i])d++;if(d===1){used.add(q);out.push([p,q]);break;}}if(out.length>=LOT_OCR_MAX)break;}
   return out.length?out:null;}
 /* 구분 — Wafer 한 장의 한 검사가 그 Wafer 의 앞 이력에서 어떤 위치인지(재검사 = 모델의 Rescan 과 같은 조건: Job 묶음 · 단계 낱말 · 레시피가 같고 앞 시도가 PASS) */
-const LOT_TAGS={first:["첫 검사","RUN"],retry:["재시도","ERR"],re:["재검사","DUP"],ren:["재검사(이름 바뀜)","DUP"],stage:["같은 Job 다른 단계",""],job:["다른 Job",""],test:["Test","TEST"]};
+const LOT_TAGS={first:["첫 검사","RUN"],retry:["재시도","ERR"],re:["재스캔","DUP"],ren:["재스캔(이름 바뀜)","DUP"],stage:["같은 Job 다른 단계",""],job:["다른 Job",""],test:["Test","TEST"]};
 const LOT_TAG_ORDER=["test","ren","re","retry","stage","job","first"];
 const lotTagBg=k=>{const c=LOT_TAGS[k][1];return c==="RUN"?RUN+"1F":c==="ERR"?ERR+"22":c==="DUP"?DUP+"55":c==="TEST"?TEST+"22":"#EDF1F5";};
 function lotFamily(pick){const X=lotIndex();let ids=new Set(),L=null,all=new Set();
@@ -2266,7 +2266,7 @@ function lotFamily(pick){const X=lotIndex();let ids=new Set(),L=null,all=new Set
       const hs=hist.get(id)||[],same=hs.filter(q=>q.mk===mk),sp=same.filter(q=>q.pass);
       let tag="first";
       if(A.test)tag="test";else if(sp.length)tag=sp[sp.length-1].name===a.name?"re":"ren";else if(same.length)tag="retry";else if(hs.length)tag=hs.some(q=>q.jk===jk)?"stage":"job";
-      const f=/^\d+$/.test(String(r.faults??"").trim())?+r.faults:null;
+      const f=/^\d[\d,]*$/.test(String(r.faults??"").trim())?+String(r.faults).replace(/,/g,""):null;
       A.w.set(id,{r,pass,c,tag,f,min:r.ini_match==="EXACT"&&ws&&we&&we>ws?(we-ws)/60000:null});
       upd.push([id,{mk,jk,pass,name:a.name}]);}
     if(!A.w.size)continue;
@@ -2303,14 +2303,12 @@ function lotHtml(){
     if(!M.length)right=`<div class="panel" style="padding:24px">이 ${pick.k==="lot"?"Lot":"Wafer"} 에는 따라갈 Wafer ID 가 없습니다(슬롯 번호 같은 짧은 ID 뿐).</div>`;
     else{const tot={e:0,re:0,f:0,b:0,scan:0,fN:0};for(const a of M){tot.e+=a.e;for(const x of a.w.values())if(x.tag==="re"||x.tag==="ren")tot.re++;tot.f+=a.f;tot.fN+=a.fN;tot.b+=a.bmin||0;tot.scan+=a.scan;}
       const devs=new Set(M.map(a=>a.dev)),nX=A.length-M.length,al=[...F.names].filter(n=>n!==(F.L?F.L.title:""));
-      const cards=[{k:"검사",v:M.length+"번",s:`장비 ${devs.size}대`},{k:"재검사",v:tot.re+" wafer",s:"앞이 PASS 였던 같은 검사"},{k:"Error",v:tot.e+" wafer",s:tot.e?"원인 있는 wafer":"없음"},{k:"배치 시간",v:hm(tot.b),s:`INI 스캔 ${hm(tot.scan)}`}];
+      const cards=[{k:"검사",v:M.length+"번",s:`장비 ${devs.size}대`},{k:"재스캔",v:tot.re+" wafer",s:"앞이 PASS 였던 같은 검사"},{k:"Error",v:tot.e+" wafer",s:tot.e?"원인 있는 wafer":"없음"},{k:"배치 시간",v:hm(tot.b),s:`INI 스캔 ${hm(tot.scan)}`}];
       if(tot.fN)cards.push({k:"Defect",v:tot.f.toLocaleString(),s:F.L&&F.L.kla?"결함 레코드 수 합":"PASS wafer 합"});
       const anyE=M.some(a=>a.e),anyF=A.some(a=>a.fN);
       const cols=["28px","92px","64px","minmax(80px,1fr)","minmax(140px,1.7fr)","minmax(48px,.5fr)","58px"].concat(anyE?["minmax(90px,.9fr)"]:[],anyF?["60px"]:[],["70px","minmax(100px,.9fr)","48px"]).join(" ");
-      const durS=m=>m>=1440?Math.floor(m/1440)+"일 "+Math.floor(m%1440/60)+"시간":hm(m);
-      const gapS=(pv,a)=>{const g=(a.t-pv.t-(pv.bmin||0)*60000)/60000;return g>1?"+"+durS(g):"바로 이어서";};
-      const attTag=a=>`<span class="pill" style="background:${lotTagBg(a.dom)}${a.dom==="test"?";color:#5B3F8F":""}">${esc(LOT_TAGS[a.dom][0])}${a.mixed?` 외 ${a.mixed}`:""}</span>`;
-      const row=(a,i)=>{const pv=i?A[i-1]:null;return `<div class="lotatt${a.x?" xo":""}" data-key="la:${esc(a.k)}"><span class="ix num">${i+1}</span><span class="num">${fmtT(a.t)}${pv?`<small class="gap">${gapS(pv,a)}</small>`:""}</span><b class="${pv&&pv.dev===a.dev?"same":""}">${esc(a.dev)}</b><span class="mono wrap" title="${esc(a.lot)}">${esc(a.name||"(Lot 없음)")}${a.proc?` <small class="muted">@${esc(a.proc)}</small>`:""}</span><span class="mono muted wrap" title="${esc(a.job)}">${esc((isKla(a.dev)&&klaJobAlias(a.job))||a.job)}</span><span class="mono">${esc([...a.rcp].join(" · ")||"—")}</span>
+      const attTag=a=>a.dom==="first"||a.dom==="job"?"":`<span class="pill" style="background:${lotTagBg(a.dom)}${a.dom==="test"?";color:#5B3F8F":""}">${esc(LOT_TAGS[a.dom][0])}${a.mixed?` 외 ${a.mixed}`:""}</span>`;
+      const row=(a,i)=>{const pv=i?A[i-1]:null;return `<div class="lotatt${a.x?" xo":""}" data-key="la:${esc(a.k)}"><span class="ix num">${i+1}</span><span class="num">${fmtT(a.t)}</span><b class="${pv&&pv.dev===a.dev?"same":""}">${esc(a.dev)}</b><span class="mono wrap" title="${esc(a.lot)}">${esc(a.name||"(Lot 없음)")}${a.proc?` <small class="muted">@${esc(a.proc)}</small>`:""}</span><span class="mono muted wrap" title="${esc(a.job)}">${esc((isKla(a.dev)&&klaJobAlias(a.job))||a.job)}</span><span class="mono">${esc([...a.rcp].join(" · ")||"—")}</span>
         <span class="num r">${a.p}<small class="muted">/${a.w.size}</small>${a.e?` <b class="bad">E${a.e}</b>`:""}</span>${anyE?`<span class="wrap">${a.e?lotCauseHtml(a):""}</span>`:""}${anyF?`<span class="num r">${a.fN?a.f.toLocaleString():"—"}</span>`:""}<span class="num r">${a.bmin!=null?hm(a.bmin):"—"}</span><span class="wrap">${a.x?`<span class="pill" title="이 Lot 에 묶이지 않은 다른 Lot 이름 — 같은 Wafer 를 검사했습니다">다른 LOT 이름</span>`:attTag(a)}</span>
         <span>${a.rep&&reportUrl({device:a.dev,report:a.rep})?`<button class="link" data-h="${h(()=>openReport({device:a.dev,report:a.rep}))}">Report</button>`:""}</span></div>`;};
       const tl=A.map(row).join("");
@@ -2323,10 +2321,10 @@ function lotHtml(){
       const slotNow=id=>sBase?sno(sBase.a.w.get(id)):null;
       const idsBySlot=[...F.ids].sort((p,q)=>(slotNow(p)??999)-(slotNow(q)??999)||(p<q?-1:1));
       const code=(a,id)=>{const x=a.w.get(id);return !x?"-":a.test?"T":x.pass?(x.tag==="re"||x.tag==="ren"?"R":"P"):x.c?"E":"S";};
-      const COL={P:RUN,R:DUP,E:ERR,S:"#C9D2DC",T:TEST},CN={P:"PASS",R:"재검사 PASS",E:"Error",S:"건너뜀/중단",T:"Test","-":"검사 안 함"};
+      const COL={P:RUN,R:DUP,E:ERR,S:"#C9D2DC",T:TEST},CN={P:"PASS",R:"재스캔 PASS",E:"Error",S:"건너뜀/중단",T:"Test","-":"검사 안 함"};
       const cell=(a,id,num)=>{const c=code(a,id);if(c==="-")return `<i class="lc"></i>`;const x=a.w.get(id);
         const tip=`${id}${lotIdOk(x.r.wafer_id)!==id?" (판독 "+x.r.wafer_id+")":""}${sno(x)!=null?" · Slot #"+sno(x):""} · ${a.dev} · ${a.lot} · ${fmtT(a.t)} · ${x.pass?"PASS":x.c?x.c:String(x.r.status||"").slice(0,40)}${x.f!=null?" · Defect "+x.f:""}${x.min!=null?" · "+hm(x.min):""}${a.x?" · 다른 LOT 이름":""}`;
-        return `<i class="lc${a.x?" xc":""}" style="background-color:${COL[c]}" title="${esc(tip)}">${num&&x.pass&&x.f!=null&&x.f<1000?x.f:x.c&&num?"E":""}</i>`;};
+        return `<i class="lc${a.x?" xc":""}" style="background-color:${COL[c]}" title="${esc(tip)}">${num&&x.pass&&x.f!=null?(x.f<1000?x.f:x.f<10000?(x.f/1000).toFixed(1)+"k":Math.round(x.f/1000)+"k"):x.c&&num?"E":""}</i>`;};
       const dshort=d=>String(d).replace(/^4F-AOI-0?/,"4F-").replace(/^AOI-/,"");const runs=[];for(const a of AC){const r=runs[runs.length-1];if(r&&r.d===a.dev)r.n++;else runs.push({d:a.dev,n:1});}
       const head=`<span class="ldl">장비</span>${runs.map(r=>`<span class="ldv" style="grid-column:span ${r.n}" title="${esc(r.d)}">${esc(r.n>2?r.d:dshort(r.d))}</span>`).join("")}<span class="ldl">검사 #</span>${AC.map((a,i)=>`<span class="lh${a.x?" xc":""}" title="${esc(a.dev+" · "+a.lot+" · "+fmtT(a.t))}">${cut+i+1}</span>`).join("")}`;
       const slotLab=id=>{const n=slotNow(id);return n!=null?`<span class="sn">#${n}</span>`:`<span class="sn none">${sBase?"—":""}</span>`;};
@@ -2341,18 +2339,18 @@ function lotHtml(){
         const pickB=o=>`<button type="button" class="lsp${o===sBase?" on":""}" data-h="${h(()=>setState({lotSlotAtt:o.a.k}))}" title="${esc(o.a.dev+" · "+o.a.lot+" · "+fmtT(o.a.t))}">#${o.i+1} ${esc(o.a.dev)} · ${o.n}장</button>`;
         slots=`<div class="panel" style="padding:12px 16px;margin-bottom:14px" data-key="lotslots"><h3 style="margin:0 0 8px;font-size:14px;display:flex;gap:8px;align-items:center;flex-wrap:wrap">Slot No · Wafer ID <span class="muted" style="font-weight:400;font-size:12px">검사 #${sBase.i+1} 기준 · ${esc(sBase.a.dev)} · ${fmtT(sBase.a.t)}</span>${sAtts.length>1?`<span class="lsps">${sAtts.slice(0,16).map(pickB).join("")}</span>`:""}</h3>
           <div class="lotslots">${Array.from({length:top},(_,i)=>sCell(i+1)).join("")}</div>${miss.length?`<p class="muted" style="font-size:11.5px;margin:6px 0 0">이 검사에 없는 Wafer ${miss.length}장: <span class="mono">${esc(miss.slice(0,8).join(", "))}${miss.length>8?" …":""}</span></p>`:""}</div>`;}
-      const mx=`<div class="lotmx" style="grid-template-columns:170px repeat(${AC.length},28px)">${head}${body}</div>`;
+      const mx=`<div class="lotmx" style="grid-template-columns:170px repeat(${AC.length},34px)">${head}${body}</div>`;
       let wd="";if(state.lotWid&&F.ids.includes(state.lotWid)){const id=state.lotWid;
         wd=`<div class="panel" style="padding:12px 16px;margin-top:12px" data-key="lotwid"><b class="mono">${esc(id)}</b> <span class="muted">이 Wafer 의 검사 ${A.filter(a=>a.w.has(id)).length}번</span>
-          ${A.filter(a=>a.w.has(id)).map(a=>{const x=a.w.get(id);return `<div class="lotatt sm"><span class="num">${fmtT(a.t)}</span><b>${esc(a.dev)}${x.r.slot_no?` <small class="muted">#${esc(x.r.slot_no)}</small>`:""}</b><span class="mono">${esc(a.name)}${a.proc?" @"+esc(a.proc):""}</span><span class="mono">${esc(x.r.recipe||"—")}</span><span>${x.pass?"PASS":esc(x.c||String(x.r.status||"").slice(0,30))}</span><span class="num r">${x.f!=null?"Defect "+x.f:""}</span><span class="num r">${x.min!=null?hm(x.min):"시각 없음"}</span><span>${esc(LOT_TAGS[x.tag][0])}</span></div>`;}).join("")}</div>`;}
+          ${A.filter(a=>a.w.has(id)).map(a=>{const x=a.w.get(id);return `<div class="lotatt sm"><span class="num">${fmtT(a.t)}</span><b>${esc(a.dev)}${x.r.slot_no?` <small class="muted">#${esc(x.r.slot_no)}</small>`:""}</b><span class="mono">${esc(a.name)}${a.proc?" @"+esc(a.proc):""}</span><span class="mono">${esc(x.r.recipe||"—")}</span><span>${x.pass?"PASS":esc(x.c||String(x.r.status||"").slice(0,30))}</span><span class="num r">${x.f!=null?"Defect "+x.f:""}</span><span class="num r">${x.min!=null?hm(x.min):"시각 없음"}</span><span>${x.tag==="first"||x.tag==="job"?"":esc(LOT_TAGS[x.tag][0])}</span></div>`;}).join("")}</div>`;}
       const alOpen=!!state.lotAl;
       right=`<div class="lothead" data-key="lothead"><b class="mono lt">${esc(F.L?F.L.title:pick.v)}</b>${F.L&&F.L.procs.size?` <small class="muted">@${esc([...F.L.procs].join(", "))}</small>`:""}<span class="muted">${F.ids.length} wafer</span>${al.length?`<button type="button" class="alb" data-h="${h(()=>setState({lotAl:!alOpen}))}" title="${esc(al.join(", "))}">다른 이름 ${al.length} ${alOpen?"▴":"▾"}</button>`:""}${nX?`<span class="pill warn" title="다른 LOT 이름으로도 검사된 검사 ${nX}번 — 표에 흐리게 표시">겹침 ${nX}</span>`:""}${F.L&&F.L.ocr.length?`<span class="pill warn" title="${esc("한 글자만 다르게 읽힌 Wafer ID 를 같은 Wafer 로 묶었습니다: "+F.L.ocr.map(([o,c])=>o+" → "+c).join(", "))}">ID 판독 차이 ${F.L.ocr.length}</span>`:""}</div>
         ${alOpen&&al.length?`<div class="lotal" data-key="lotal">${al.map(n=>`<span class="pill mono" style="background:#EDF1F5;font-weight:500">${esc(n)}</span>`).join("")}</div>`:""}
         <section class="cards sm lotcards" style="margin-bottom:14px;grid-template-columns:repeat(${cards.length},minmax(0,1fr))">${cards.map(s=>`<div><p class="k">${s.k}</p><p class="v num">${esc(s.v)}</p><p class="s">${esc(s.s)}</p></div>`).join("")}</section>
-        <div class="panel" style="padding:12px 16px;margin-bottom:14px;--lotcols:${cols}"><h3 style="margin:0 0 8px;font-size:14px">검사 순서 <span class="muted" style="font-weight:400;font-size:12px">Report 한 장 = 한 줄</span></h3>
+        <div class="panel" style="padding:12px 16px;margin-bottom:14px;--lotcols:${cols}"><h3 style="margin:0 0 8px;font-size:14px">검사 순서</h3>
           <div class="lotatt head"><span class="ix">#</span><span>시작</span><span>장비</span><span>Lot 이름</span><span>Job</span><span>레시피</span><span class="r">PASS</span>${anyE?"<span>Error 원인</span>":""}${anyF?'<span class="r">Defect</span>':""}<span class="r">배치 시간</span><span>구분</span><span></span></div><div class="lotbox">${tl}</div></div>
         ${slots}
-        <div class="panel" style="padding:12px 16px;overflow-x:auto"><h3 style="margin:0 0 8px;font-size:14px;display:flex;gap:10px;align-items:center;flex-wrap:wrap">Wafer × 검사 <span class="lotleg">${[["P","PASS"],["R","재검사"],["E","Error"],["S","건너뜀"],["T","Test"]].map(([c,n])=>`<span><i style="background-color:${COL[c]}"></i>${n}</span>`).join("")}${cut?`<span class="muted">최근 30번만</span>`:""}</span></h3>${mx}</div>${wd}`;}}
+        <div class="panel" style="padding:12px 16px;overflow-x:auto"><h3 style="margin:0 0 8px;font-size:14px;display:flex;gap:10px;align-items:center;flex-wrap:wrap">Wafer × 검사 <span class="lotleg">${[["P","PASS"],["R","재스캔"],["E","Error"],["S","건너뜀"],["T","Test"]].map(([c,n])=>`<span><i style="background-color:${COL[c]}"></i>${n}</span>`).join("")}${cut?`<span class="muted">최근 30번만</span>`:""}</span></h3>${mx}</div>${wd}`;}}
   return `<div class="bar-h"><h1>LOT 추적</h1><span style="font-size:12.5px;color:#5A6673">Wafer ID 로 묶음 · 조회 기간과 무관</span></div>
     <div class="lotgrid">${left}<div>${right}</div></div>`;}
 /* ---------- RDL 단일스캔 탭(옛 '레시피' 탭, D70 · D74 · 10/6 개편) ----------
