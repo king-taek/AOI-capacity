@@ -743,7 +743,7 @@ def test_lot_tab_never_merges_past_25_wafers_and_shows_cross_rows():
     assert len(ks) == 2
     big = next(k for k in ks if "25 wafer" in _lot_screen(rows).split(f'lp:lot:{k}"')[1].split("</button>")[0])
     out = _lot_screen(rows, big)
-    assert "겹침" in out and "다른 LOT 이름" in out and 'class="lotatt x"' in out
+    assert "겹침" in out and "다른 LOT 이름" in out and 'class="lotatt xo"' in out   # 10/24: '.x'(닫기 단추 32px) 와 겹쳐 줄이 납작해지던 것 — 이름을 xo 로
 
 
 def test_lot_tab_ignores_slot_ids_and_parses_kla_names():
@@ -785,3 +785,20 @@ def test_scan_share_counts_only_rows_with_scan_sec_and_keeps_utilization():
     assert "스캔 비율 · 채우기 전" in pop
     (line,) = screen(rows, meta("AOI-1"), [["scLine", {"sc": [0, 0, 1, 1]}]])   # INI 분이 반올림으로 0 — 'NaN%' 대신 비움(PR #3 리뷰)
     assert line == ""
+
+
+def test_lot_tab_merges_one_char_ocr_misreads_but_not_other_wafers():
+    """10/24(LNF): K1 이 38135G04EWB7 을 48135G04EWB7 로 읽어 합치면 26장 → Lot 이 둘로 갈렸다. 양쪽에만 있는 ID 가 한 글자만 다르면 같은 Wafer 로 묶고
+    'ID 판독 차이' 로 남긴다. 두 글자 이상 다르면(다른 Wafer) 여전히 25장 넘게 합치지 않는다."""
+    good = [f"38135G{i:02d}EWB7" for i in range(25)]
+    typo = ["48135G04EWB7" if x == "38135G04EWB7" else x for x in good]
+    rows = [w("K1", x, "00:10", "00:20", lot="TB500.INT795@6412", report="KLA:a") for x in typo] + \
+           [w("AOI-20", x, "02:10", "02:20", lot="LNF-PIDS3", report="b.htm") for x in good]
+    (k,) = _lot_keys(_lot_screen(rows))
+    out = _lot_screen(rows, k)
+    assert "ID 판독 차이 1" in out and "48135G04EWB7 → 38135G04EWB7" in out and "25 wafer" in out
+    assert out.split("Wafer × 검사")[1].count('class="lw mono') == 25                    # 한 장은 한 줄
+    other = ["99999X04EWB7" if x == "38135G04EWB7" else x for x in good]                  # 세 글자 넘게 다름 → 다른 Wafer
+    rows2 = [w("K1", x, "00:10", "00:20", lot="TB500.INT795@6412", report="KLA:a") for x in other] + \
+            [w("AOI-20", x, "02:10", "02:20", lot="LNF-PIDS3", report="b.htm") for x in good]
+    assert len(_lot_keys(_lot_screen(rows2))) == 2

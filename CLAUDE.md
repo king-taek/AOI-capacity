@@ -132,13 +132,14 @@ graphify 는 `--code-only` 로, template.html 인라인 JS 까지 보려면 `pyt
   **`TEST` 는 분모(24시간)에는 들어가되 분자(실가동)에서만 뺀다**(사용자 확정 — 양산을 위해 돈 게 아니다).
   오류 건수에도 넣지 않는다. 화면에서 사라지지는 않는다: 타임라인에 분홍 점무늬 띠, 제목에 'Test n건 제외',
   Lot 목록에 '시험 · 제외' 표. 빼는 것과 없었던 것은 다르다.
-- 행 데이터 계약(`collect.OUT_COLS`, **31열 · `ROW_SCHEMA_VERSION` 9**): `kind`("" = Wafer 한 장 · "batch" = 통째로 실패한 시도 · "slot" = 일부 성공한
+- 행 데이터 계약(`collect.OUT_COLS`, **32열 · `ROW_SCHEMA_VERSION` 10**): `kind`("" = Wafer 한 장 · "batch" = 통째로 실패한 시도 · "slot" = 일부 성공한
   배치의 자리표시 행 Error 를 Report 당 1건으로 합성한 사건, D38), `batch_end`,
   `job`·`setup`(Report 안의 `Job/Setup`, 없으면 파일명 규칙), `report`(BatchReport 파일 이름 — 화면에서 그 파일을 다시 여는 근거),
   `cause`(원인 코드들, 규칙 순 세미콜론) · `outcome`(종료 결과) · `norm_status`(호환: 원인이 있으면 첫 원인, 없으면 결과) — **원인과 결과는 다른 축**(D43),
   `scan_type`("" · RESCAN · REWORK · TEST — 겹치면 TEST → RESCAN → REWORK 순), `scan_mode`(MULTI · SINGLE · "" — Wafer 폴더 `RecipesInfo.ini` 에 레시피 둘 이상이면 MULTI, INI 만 있으면 SINGLE, 표·요약만이면 `|` 가 있을 때만 MULTI, D74·D75), `ini_match`(EXACT · NOT_FOUND · MOVED_ONLY · NO_WAFER_ID · READ_ERROR · STALE · BATCH_FAILED · BATCH · BATCH_SLOT),
   `wafers_scanned` · `avg_scan_time`(Report 요약 원문, Report 마다 같은 값 — Wafers Scanned = 스캔이 끝난 장 수 · Avg. Scan Time = 첫 레시피 ScanLog 평균이라 **시간 계산에 쓰지 않는다**, 10/11) · `cr_every` · `af_every`(Recipe.ini 의 CleanReferenceEvery · AutoFocusEvery 를 None · Lot · Wafer 로 — `RECIPE_TAB_JOB_RE`(RDL · TB500 PI2~4) Job 만, Report 마다 INI 를 찾은 첫 Wafer 폴더에서 한 번, 10/11),
   `scan_sec`(실제 촬영 초 — EXACT 장마다 Wafer 폴더 ScanLog.ini `Duration`(첫 레시피만) + 멀티면 `ExtendedScanMetaData_<레시피 2>.json` 시작 ~ 장 끝(첫 레시피와 겹친 만큼 · 마무리 `SCAN_TAIL_SEC` 20초 제외), 장 시간 상한 · 근거가 안 맞으면 빈 값, 10/11 — 이 때문에 RecipesInfo.ini 는 모든 EXACT 장에서 열고 scan_mode 판정은 여전히 RDL 만),
+  `slot_no`(카세트 슬롯 번호 — Camtek WaferInfo.ini `ActiveSlot`(이미 여는 파일) · KLA 결과 파일 `Slot N;`(없으면 Wafer 폴더 이름 끝), EXACT 장만, AOI 레시피 검증(coding 저장소)과 같은 출처 — LOT 추적의 'Slot No · Wafer ID' 카세트 지도 · 격자 줄 이름, 10/24),
   `faults` · `scanned_dice` · `yield`(Report 표의 Faults · Scanned Dice · Yield **원문 그대로**, 합성 행은 빈 값 — 옛 캐시 행에는 없어 `--rebuild-all`(또는 `--refresh-window N`) 재수집으로만 채워진다),
   `time_basis`(STRICT_IN_BATCH · TOLERANCE_ONLY · OUTSIDE_BATCH · BATCH_ONLY · MISSING · INVALID · UNKNOWN_BATCH), `slots`(slot 행의 영향 Slot 수),
   `issue_codes`(C12: `CODE` 또는 `CODE=인자,인자` 를 `;` 로 이은 목록, `collect.ISSUE_CODES` 16개 — 인자 안의 `% ; = ,` 만 퍼센트 이스케이프, 경로·한글은 그대로).
@@ -244,8 +245,9 @@ graphify 는 `--code-only` 로, template.html 인라인 JS 까지 보려면 `pyt
   입력 칸은 `data-in` + `INPUT_KEYS`(같은 이름의 state). 좁은 화면은 신경 쓰지 않는다(사용자 10/6 — PC 전용).
 - **LOT 추적 탭(D88 → D92, 10/19 — `lotHtml` · `lotIndex` · `lotFamily`)**: Lot 이름은 사람이 적어 틀리고 세 글자 코드는 몇 달 뒤 다른 Wafer 에 다시 쓰인다 — 기계가 OCR 로 읽은 **Wafer ID**(`lotIdOk`: 영숫자 6자 이상 · 숫자만 아님 · `SLOT\d*` 아님)로 묶는다.
   **Lot = 같은 Wafer ID 를 가진 Report(시도)를 이어 붙인 덩어리, 합친 Wafer 가 25장(`LOT_MAX`, 한 Lot 은 25장 이하 — 사용자 확정)을 넘으면 합치지 않는다.** 이름 · 코드는 별칭일 뿐 묶는 근거가 아니고(확인 필요 상자 · localStorage 없음), 합치지 못한 쌍은 고른 Lot 검사 순서에 흐린 '다른 LOT 이름' 줄 · 목록 '겹침 n' 으로 보인다.
-  KLA 이름은 `Lot이름@공정코드`(`lotParse`) — 이름과 공정 코드를 나눠 보인다. 왼쪽 검색(`data-in="lotQ"` — Lot 이름 · Wafer ID, 비우면 최근 Lot 30개) + 전체/Camtek/KLA 필터 → 고른 Lot 의 모든 Report(헤더 기간과 무관)를 시간 순 한 줄씩(간격 줄 사이사이):
-  카드(Wafer · 검사 · Lot 이름 수 · 재검사 · Error · 배치 시간 합 · Defect) · 검사 순서(장비 · Lot 원문 · Job · 레시피 · PASS/wafer · Error 원인 · Defect · 배치 시간 · 구분 · Report 열기) · Wafer × 검사(같은 이력 Wafer 는 한 줄로 묶어 보기 / Wafer 마다, Wafer ID 를 누르면 그 Wafer 의 이력 `state.lotWid`).
+  KLA 이름은 `Lot이름@공정코드`(`lotParse`) — 이름과 공정 코드를 나눠 보인다. 왼쪽 검색(`data-in="lotQ"` — Lot 이름 · Wafer ID, 비우면 최근 Lot 30개) + 전체/Camtek/KLA 필터 → 고른 Lot 의 모든 Report(헤더 기간과 무관)를 시간 순 한 줄씩:
+  머리(이름 · wafer 수 · '다른 이름 n ▾' `state.lotAl`) · 카드 4(검사 · 재검사 · Error · 배치 시간, Defect 는 값 있을 때만) · 검사 순서(# 번호 = 격자 열 번호 · 시작 밑 '+간격' · 장비 · Lot 원문 · Job · 레시피 · PASS/wafer · Error 원인/Defect 는 값 있을 때만 열 · 배치 시간 · 구분 · Report 열기, **안쪽 스크롤 없음**) ·
+  **Slot No · Wafer ID**(10/24 — 기준 검사 하나의 카세트 지도 #1~#25, 기본은 슬롯을 아는 Wafer 가 가장 많은 검사 · 칩으로 바꿈 `state.lotSlotAtt`, 슬롯은 검사마다 다르다) · Wafer × 검사(늘 Wafer 마다 한 줄 — '같은 이력 묶기' 는 10/24 사용자 요청으로 없앰, 줄 이름 앞 기준 검사의 #슬롯 · 슬롯 순서, 열 위 장비 띠, Wafer ID 를 누르면 그 Wafer 의 이력 `state.lotWid`).
   **구분은 Wafer 별 이력**: 첫 검사 · 재시도(같은 Job·단계·레시피의 앞 시도가 PASS 아님) · 재검사(앞이 PASS = 모델의 Rescan 조건, 이름 바뀜 구분) · 같은 Job 다른 단계 · 다른 Job · Test — Report 는 우세한 구분 + '외 n장'. 원천 행에서 계산하고 모델 값은 건드리지 않는다.
 - **파라미터 탭(D89, 10/11 — 수집 `aoi_capacity/params.py` · 가져오기 `params_import.py` · 화면 `paramHtml`)**: Report(= Lot 한 번)마다 INI 를 찾은 **첫 Wafer 폴더 안만** 읽는다(맨 위 한 번 나열 + `Zones` · `Recipe2-Zones` · `TrainData` 한 단계 · `FocusMapping/FocusMapping.ini`, 규칙 4 — 정확 경로 아래, 재귀 아님).
   스레드는 읽기만(`rows_for_report(params_out=)`), 메인 스레드가 캐시 `params` 에 넣는다: 파일마다 파싱해 **측정값(`MEASURE_RE` — Rotate_Wafer · FocusPosAboveChuck · Zwafer · NominalGL · 광학 Id · 보정 파일 날짜 경로 · ScanResultsPath · ChuckPos · MskPixelCount, 이어진 Lot 2,159쌍으로 확인)과 LastCam 을 뺀** 정규화 글을 해시로 한 번(`blobs`), Report 마다 스냅숏(`snaps[Report 키]` — 파일이 없어도 빈 스냅숏으로 남겨 다시 열지 않는다, rebuild · refresh 에도 이미 있는 Report 는 다시 읽지 않는다). cfg `collect_params`(기본 true) 로 끈다. dirty 이유 `params`.

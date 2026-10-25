@@ -153,9 +153,12 @@ DEV_OK, DEV_NO_DATA, DEV_PARTIAL, DEV_UNREACHABLE = "ok", "no_data", "partial", 
 #: `scan_sec`(ROW_SCHEMA_VERSION 9, 10/11) — 그 Wafer 의 **실제 촬영 초**(정수 문자열): Wafer 폴더 ScanLog.ini 의 `Duration`(첫 레시피만 센다 — 10/10 검증)
 #: + 두 번째 레시피 구간(`ExtendedScanMetaData_<레시피 2>.json` 의 시작 ~ 장 끝, 첫 레시피와 겹친 만큼과 마무리 `SCAN_TAIL_SEC` 는 뺌), 장 시간(INI)을 넘지 않게.
 #: INI 를 찾은(EXACT) 행만 — STALE · 없음 · ScanLog 없음은 빈 값(지어내지 않는다). 장비 팝업의 '그중 스캔 n%' 근거(D86 Q4 · Q5). 옛 캐시 행은 빈 값.
-ROW_SCHEMA_VERSION = 9
+#: `slot_no`(ROW_SCHEMA_VERSION 10, 10/24) — 그 Wafer 가 꽂혀 있던 **카세트 슬롯 번호**. Camtek 은 WaferInfo.ini `[AutoCycleInfo] ActiveSlot`(이미 여는 파일, 열기 추가 0),
+#: KLA 는 결과 파일 머리의 `Slot N;`(없으면 Wafer 폴더 이름 끝 `_6`). AOI 레시피 검증(coding 저장소 `lot_info.read_active_slot` · `kla_info.read_slot_no`)과 같은 출처.
+#: INI 를 찾은(EXACT) 행만 — 덮어써진(STALE) INI 의 번호는 다른 시도의 것일 수 있어 쓰지 않는다. 옛 캐시 행은 빈 값(다시 읽으면 채워진다).
+ROW_SCHEMA_VERSION = 10
 OUT_COLS = ["device", "kind", "job", "setup", "lot", "wafer_id", "status", "norm_status", "cause", "outcome", "scan_type", "recipe", "scan_mode",
-            "faults", "scanned_dice", "yield", "wafers_scanned", "avg_scan_time", "cr_every", "af_every", "scan_sec",
+            "faults", "scanned_dice", "yield", "wafers_scanned", "avg_scan_time", "cr_every", "af_every", "scan_sec", "slot_no",
             "wafer_start_time", "wafer_end_time", "batch_start", "batch_end", "report", "ini_match", "time_basis", "slots", "data_issue",
             "issue_codes"]
 QUALITY_COLS = ("faults", "scanned_dice", "yield")
@@ -1231,7 +1234,7 @@ def rows_for_report(dev_name: str, rep: dict, scan_root: str, memo: Optional[_In
              "report": rep.get("name", ""), "lot": w["lot"], "wafer_id": w["wafer_id"], "status": w["status"],
              "norm_status": norm_status(w["status"]), "cause": cause_field(causes), "outcome": norm_outcome(w["status"]),
              "scan_type": scan_type(w["lot"]),
-             "recipe": w["recipe"] or s.get("Recipe", ""), "scan_mode": "", "scan_sec": "",
+             "recipe": w["recipe"] or s.get("Recipe", ""), "scan_mode": "", "scan_sec": "", "slot_no": "",
              "faults": w.get("faults", ""), "scanned_dice": w.get("scanned_dice", ""), "yield": w.get("yield", ""),
              **rfields,
              "wafer_start_time": "", "wafer_end_time": "", "batch_start": s.get("Batch Start", ""),
@@ -1288,6 +1291,8 @@ def rows_for_report(dev_name: str, rep: dict, scan_root: str, memo: Optional[_In
                     if found_job != rep["equipment"]:
                         iss.append((ISSUE_JOB_FOLDER_DIFFERS, found_job))
                     names = None
+                    if r["ini_match"] == "EXACT" and str(a.get("ActiveSlot", "")).strip().isdigit():
+                        r["slot_no"] = str(int(a["ActiveSlot"]))      # 카세트 슬롯 번호 — STALE 이면 다른 시도의 값일 수 있어 쓰지 않는다
                     if r["ini_match"] == "EXACT":
                         # 10/11(D86 Q4): 실제 촬영 초 — 모든 Job 의 EXACT 장. ScanLog.ini 하나 + (멀티면) 두 번째 레시피의 ExtendedScanMetaData 하나, 정확 경로만.
                         wdir = os.path.join(found_in, rel_found)

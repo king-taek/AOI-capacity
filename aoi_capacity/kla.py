@@ -122,6 +122,15 @@ def parse_result(text: str) -> dict:
             "defects": defects, "ndefect": col_sum("NDEFECT"), "ndie": col_sum("NDIE"), "eof": "EndOfFile" in head}
 
 
+def _slot_no(rec: dict) -> str:
+    """카세트 슬롯 번호(10/24) — 결과 파일 머리의 `Slot N;`, 없으면 Wafer 폴더 이름 끝(`…_6`). 숫자가 아니면 빈 값."""
+    for v in (rec.get("slot"), rec.get("dir_slot")):
+        v = str(v if v is not None else "").strip()
+        if v.isdigit():
+            return str(int(v))
+    return ""
+
+
 # ── NAS 읽기(스레드에서) ─────────────────────────────────────────────────────
 def list_dates(root: str) -> List[str]:
     """맨 위의 날짜 폴더 이름(오름차순). 날짜 아닌 폴더는 보지 않는다(D71). 루트를 못 읽으면 OSError."""
@@ -409,7 +418,7 @@ def rows_from_store(store: dict, cfg: dict, scan_type: Callable[[str], str]) -> 
                              "lot": lot_id, "wafer_id": str(r.get("wafer") or ""), "status": "Pass", "norm_status": "PASS",
                              "cause": "", "outcome": "PASS", "scan_type": scan_type(lot_id), "recipe": str(r.get("step") or ""),
                              "faults": str(r.get("defects", "")), "scanned_dice": "" if r.get("ndie") is None else str(r.get("ndie")),
-                             "yield": "", "wafer_start_time": _fmt(t), "wafer_end_time": _fmt(end) if end else "",
+                             "slot_no": _slot_no(r), "yield": "", "wafer_start_time": _fmt(t), "wafer_end_time": _fmt(end) if end else "",
                              "batch_start": _fmt(bs), "batch_end": _fmt(be), "report": report, "ini_match": "EXACT",
                              "time_basis": "STRICT_IN_BATCH", "slots": "", "data_issue": "", "issue_codes": ""})
     return rows
