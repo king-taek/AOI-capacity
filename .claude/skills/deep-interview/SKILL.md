@@ -6,6 +6,7 @@ pipeline: [deep-interview, plan]
 handoff-policy: approval-required
 handoff: .omc/specs/deep-interview-{slug}.md
 level: 3
+disable-model-invocation: true
 ---
 
 <Purpose>
