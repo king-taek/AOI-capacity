@@ -1029,8 +1029,19 @@ const JOB_ALIAS={
 /* 나뉜 이름(D76)의 표기명: 줄기가 같은 표기명 Job 이 있으면 그 표기명 + '-Multi' · '-Single' · '-미구분' */
 const JOB_ALIAS_STEM=Object.fromEntries(Object.entries(JOB_ALIAS).map(([k,v])=>[jobStem(k),v]));
 function jobAlias(raw){if(JOB_ALIAS[raw])return JOB_ALIAS[raw];const m=String(raw||"").match(/^(.*)-(Multi|Single|미구분)$/);if(!m)return null;const a=JOB_ALIAS_STEM[jobStem(m[1])];return a?a+"-"+m[2]:null;}
-/* Job 묶음의 표시 이름: 레시피 묶음 이름(D67) → 표기명(JOB_ALIAS) → 대표 원문. al = 원문이 아닌 이름(고정폭 글꼴을 쓰지 않는다) */
-function jobNm(G){if(!G)return{nm:"",al:false,raw:""};const raw=D.pool.job[G.l]||"(Job 없음)";if(G.nm)return{nm:G.nm,al:true,raw};const a=jobAlias(raw);return{nm:a||raw,al:!!a,raw};}
+/* KLA TB500 Job 표기(10/25, 사용자): SetupID `ROOT-HVM-4DT-TB500-H-M1-<이름>` 에서 공통 접두와 끝의 장비 표시 `_K1`~`_K6` 를 떼고 **원문 낱말 순서 그대로** 적는다 —
+   `SEQ_TB500_RDL1_(M)_K5` → `SEQ TB500 RDL1 Multi` · `RDL3_K2` → `TB500 RDL3` · `RDL4_AUTO_RBB` → `TB500 RDL4 AUTO_RBB`. 원문에 TB500 이 없으면 앞에 붙이고(SEQ 가 있으면 SEQ 뒤가 아니라 원문 자리),
+   `TB00` 오타는 TB500 으로 읽는다. 읽을 수 없는 모양(RDL 낱말이 없음 · 접두 다름)은 null — 원문 그대로 둔다. 표시 전용: 통계 묶기(jobKey)·Rescan(matKey)·CSV 는 원문이다. KLA 장비의 Job 만 부르는 곳에서 쓴다 */
+const KLA_TB_PRE="ROOT-HVM-4DT-TB500-H-M1-";
+function klaJobAlias(raw){const s=String(raw||"");if(!s.startsWith(KLA_TB_PRE))return null;
+  const t=s.slice(KLA_TB_PRE.length).replace(/\(M(?:ULTI)?\)/ig,"_Multi_").split("_").filter(x=>x&&!/^K\d$/i.test(x)).map(x=>/^TB0*500$|^TB00$/i.test(x)?"TB500":x);
+  if(!t.some(x=>/^RDL\d$/i.test(x)))return null;
+  if(!t.includes("TB500"))t.unshift("TB500");
+  const out=[];let gap=false;
+  for(const x of t){const known=x==="TB500"||/^(SEQ|Multi|RDL\d)$/i.test(x);if(!known&&gap&&out.length)out[out.length-1]+="_"+x;else out.push(x);gap=!known;}
+  return out.join(" ");}
+/* Job 묶음의 표시 이름: 레시피 묶음 이름(D67) → 표기명(JOB_ALIAS) → KLA TB500 표기 → 대표 원문. al = 원문이 아닌 이름(고정폭 글꼴을 쓰지 않는다) */
+function jobNm(G){if(!G)return{nm:"",al:false,raw:""};const raw=D.pool.job[G.l]||"(Job 없음)";if(G.nm)return{nm:G.nm,al:true,raw};const a=jobAlias(raw)||klaJobAlias(raw);return{nm:a||raw,al:!!a,raw};}
 const PROPS={attentionUtil:40,attentionErr:3};   /* 살펴볼 장비 문턱 — meta.dashboard_settings 의 같은 이름 숫자가 있으면 그것으로(D14) */
 function applySettings(m){const o=(m&&m.dashboard_settings)||{};for(const k of Object.keys(PROPS)){const v=Number(o[k]);if(o[k]!==undefined&&Number.isFinite(v)&&v>=0)PROPS[k]=v;}}
 let D=null;
@@ -1896,7 +1907,7 @@ function devPopupHtml(){
       ${types.map(([k,v])=>`<span class="pill err mono">${esc(k)} ${hm(v[1])}</span>`).join("")}${types.length?"":`<span class="pill ok">Error 없음</span>`}<div class="spacer"></div><button class="link" style="color:#5A6673;text-decoration:none" data-h="${h(()=>setState({selLot:null}))}">선택 해제</button></div>
       <div class="kv"><span class="k">시간</span><span class="num">${clock(a)} – ${clock(b)} (${hm(b-a)})</span><span class="k">Wafer</span><span>${sel[4]?sel[4]+"장":"전날 시작한 배치(장수는 전날에)"}${sel[6]?" · Rescan "+sel[6]+"장":""}${sel[7]?" · Test "+sel[7]+"장"+(MONITOR_JOB_RE.test(P.job[sel[0]]||"")?" (No Pattern Job — 모니터 웨이퍼로 보고 Test 처리, 현장 확인 전)":""):""}</span>
       ${sel[15]?`<span class="k">INI</span><span>덮어씀 ${sel[15]}장 — 같은 자리를 나중 시도가 다시 썼습니다${sel[16]>=0?`: <b class="mono">${esc(P.st[sel[16]])}</b>`:""} · 이 장들의 시간은 Report 배치 창으로 추정</span>`:""}
-      <span class="k">Job</span><span class="mono" style="word-break:break-all">${esc(P.job[sel[0]]||"(Job 없음)")}</span>${sel[17]>=0&&sel[17]!=null?`<span class="k">Report 요약</span><span class="mono" style="color:#4B5866" title="Wafers Scanned = 스캔이 끝난 장 수 · Avg. Scan Time = 첫 레시피 스캔 평균(로드 · 둘째 레시피 제외) — 시간 계산에는 쓰지 않습니다">${esc(P.st[sel[17]])}</span>`:""}${sel[10]>=0?`<span class="k">원문</span><span class="mono" style="color:#4B5866;word-break:break-all">${esc(P.st[sel[10]])}</span>`:""}
+      <span class="k">Job</span><span class="mono" style="word-break:break-all" title="${esc(P.job[sel[0]]||"")}">${esc((isKla(mDev)&&klaJobAlias(P.job[sel[0]]))||P.job[sel[0]]||"(Job 없음)")}</span>${sel[17]>=0&&sel[17]!=null?`<span class="k">Report 요약</span><span class="mono" style="color:#4B5866" title="Wafers Scanned = 스캔이 끝난 장 수 · Avg. Scan Time = 첫 레시피 스캔 평균(로드 · 둘째 레시피 제외) — 시간 계산에는 쓰지 않습니다">${esc(P.st[sel[17]])}</span>`:""}${sel[10]>=0?`<span class="k">원문</span><span class="mono" style="color:#4B5866;word-break:break-all">${esc(P.st[sel[10]])}</span>`:""}
       <span class="k">Report</span><span class="mono" style="color:#4B5866;word-break:break-all">${esc(rep||"—")}${rep&&reportUrl({device:mDev,report:rep})?` <button class="link" data-h="${h(()=>openReport({device:mDev,report:rep}))}" title="이 BatchReport 를 새 탭으로 엽니다(NAS 경로)">Report 열기</button>`:""}</span></div></div>`;})():"";
   return `<div class="ov z50"><button class="scrim" data-h="${h(close)}" aria-label="닫기"></button><div class="dlg w1120" role="dialog" aria-modal="true" aria-labelledby="dlg-dev-title" data-dlg="dev">
     <div class="dh"><h2 id="dlg-dev-title" tabindex="-1">${esc(mDev)}</h2><span class="sub num">${dayName(mDay)}</span><span class="note">${esc(sc.note||"")}</span><div class="spacer"></div>
@@ -2299,7 +2310,7 @@ function lotHtml(){
       const durS=m=>m>=1440?Math.floor(m/1440)+"일 "+Math.floor(m%1440/60)+"시간":hm(m);
       const gapS=(pv,a)=>{const g=(a.t-pv.t-(pv.bmin||0)*60000)/60000;return g>1?"+"+durS(g):"바로 이어서";};
       const attTag=a=>`<span class="pill" style="background:${lotTagBg(a.dom)}${a.dom==="test"?";color:#5B3F8F":""}">${esc(LOT_TAGS[a.dom][0])}${a.mixed?` 외 ${a.mixed}`:""}</span>`;
-      const row=(a,i)=>{const pv=i?A[i-1]:null;return `<div class="lotatt${a.x?" xo":""}" data-key="la:${esc(a.k)}"><span class="ix num">${i+1}</span><span class="num">${fmtT(a.t)}${pv?`<small class="gap">${gapS(pv,a)}</small>`:""}</span><b class="${pv&&pv.dev===a.dev?"same":""}">${esc(a.dev)}</b><span class="mono wrap" title="${esc(a.lot)}">${esc(a.name||"(Lot 없음)")}${a.proc?` <small class="muted">@${esc(a.proc)}</small>`:""}</span><span class="mono muted wrap" title="${esc(a.job)}">${esc(a.job)}</span><span class="mono">${esc([...a.rcp].join(" · ")||"—")}</span>
+      const row=(a,i)=>{const pv=i?A[i-1]:null;return `<div class="lotatt${a.x?" xo":""}" data-key="la:${esc(a.k)}"><span class="ix num">${i+1}</span><span class="num">${fmtT(a.t)}${pv?`<small class="gap">${gapS(pv,a)}</small>`:""}</span><b class="${pv&&pv.dev===a.dev?"same":""}">${esc(a.dev)}</b><span class="mono wrap" title="${esc(a.lot)}">${esc(a.name||"(Lot 없음)")}${a.proc?` <small class="muted">@${esc(a.proc)}</small>`:""}</span><span class="mono muted wrap" title="${esc(a.job)}">${esc((isKla(a.dev)&&klaJobAlias(a.job))||a.job)}</span><span class="mono">${esc([...a.rcp].join(" · ")||"—")}</span>
         <span class="num r">${a.p}<small class="muted">/${a.w.size}</small>${a.e?` <b class="bad">E${a.e}</b>`:""}</span>${anyE?`<span class="wrap">${a.e?lotCauseHtml(a):""}</span>`:""}${anyF?`<span class="num r">${a.fN?a.f.toLocaleString():"—"}</span>`:""}<span class="num r">${a.bmin!=null?hm(a.bmin):"—"}</span><span class="wrap">${a.x?`<span class="pill" title="이 Lot 에 묶이지 않은 다른 Lot 이름 — 같은 Wafer 를 검사했습니다">다른 LOT 이름</span>`:attTag(a)}</span>
         <span>${a.rep&&reportUrl({device:a.dev,report:a.rep})?`<button class="link" data-h="${h(()=>openReport({device:a.dev,report:a.rep}))}">Report</button>`:""}</span></div>`;};
       const tl=A.map(row).join("");

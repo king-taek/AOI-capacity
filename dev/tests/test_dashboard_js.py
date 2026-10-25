@@ -802,3 +802,25 @@ def test_lot_tab_merges_one_char_ocr_misreads_but_not_other_wafers():
     rows2 = [w("K1", x, "00:10", "00:20", lot="TB500.INT795@6412", report="KLA:a") for x in other] + \
             [w("AOI-20", x, "02:10", "02:20", lot="LNF-PIDS3", report="b.htm") for x in good]
     assert len(_lot_keys(_lot_screen(rows2))) == 2
+
+
+def test_kla_tb500_job_names_are_shortened_for_display_only():
+    """KLA TB500 SetupID 표기(10/25): 공통 접두와 끝의 장비 표시 _K#(장비 이름) 을 떼고 원문 낱말 순서 그대로 적는다(SEQ 는 TB500 앞). 모르는 모양은 null(원문 유지)."""
+    pre = "ROOT-HVM-4DT-TB500-H-M1-"
+    want = {
+        "RDL3_K2": "TB500 RDL3", "RDL1_K1": "TB500 RDL1", "RDL4_K1_NEW": "TB500 RDL4 NEW", "RDL2_NEW": "TB500 RDL2 NEW",
+        "RDL4_AUTO_RBB": "TB500 RDL4 AUTO_RBB",
+        "SEQ_TB500_RDL1_K5": "SEQ TB500 RDL1", "SEQ_TB500_RDL1_(M)_K5": "SEQ TB500 RDL1 Multi",
+        "SEQ_TB500_RDL1_(MULTI)": "SEQ TB500 RDL1 Multi", "SEQ_TB00_RDL1_(MULTI)_K2": "SEQ TB500 RDL1 Multi",   # TB00 은 원문 오타
+        "SEQ_TB500_RDL3_(MULTI)_K2": "SEQ TB500 RDL3 Multi",
+    }
+    calls = [f"klaJobAlias({json.dumps(pre + k)})" for k in want]
+    calls += ['klaJobAlias("ROOT-HVM-KLA-ONLY-SETUP")', 'klaJobAlias("TB500_RDL3 - Multi")', f'klaJobAlias({json.dumps(pre + "PI3")})', 'klaJobAlias("")']
+    got = globals_(*calls)
+    for k, v in want.items():
+        assert got[f"klaJobAlias({json.dumps(pre + k)})"] == v, k
+    assert got['klaJobAlias("ROOT-HVM-KLA-ONLY-SETUP")'] is None and got['klaJobAlias("TB500_RDL3 - Multi")'] is None
+    assert got[f'klaJobAlias({json.dumps(pre + "PI3")})'] is None and got['klaJobAlias("")'] is None
+    # 이 함수는 KLA 표기 전용 — Camtek 표기명(jobAlias)에는 끼지 않는다(TB500 · Kendall 탭이 KLA Job 을 끌어오지 않게)
+    html = (ROOT / "aoi_capacity" / "ui" / "assets" / "template.html").read_text(encoding="utf-8")
+    assert "function jobAlias(raw){if(JOB_ALIAS[raw])return JOB_ALIAS[raw];const m=" in html and "klaJobAlias" not in html.split("function jobAlias")[1].split("\n")[0]
