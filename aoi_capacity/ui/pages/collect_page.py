@@ -498,9 +498,10 @@ class CollectPage(QWidget):
         gg.setHorizontalSpacing(14)
         gg.setVerticalSpacing(6)
         gg.setColumnStretch(3, 1)
-        self._gap_rows = {"sec": _GapRow(self._gaps, gg, 0, K.GAPS_ROW_SEC, K.GAPS_ROW_SEC_TIP),
-                          "params": _GapRow(self._gaps, gg, 1, K.GAPS_ROW_PARAMS, K.GAPS_ROW_PARAMS_TIP),
-                          "rdl": _GapRow(self._gaps, gg, 2, K.GAPS_ROW_RDL, K.GAPS_ROW_RDL_TIP)}
+        self._gap_rows = {"slot": _GapRow(self._gaps, gg, 0, K.GAPS_ROW_SLOT, K.GAPS_ROW_SLOT_TIP),
+                          "sec": _GapRow(self._gaps, gg, 1, K.GAPS_ROW_SEC, K.GAPS_ROW_SEC_TIP),
+                          "params": _GapRow(self._gaps, gg, 2, K.GAPS_ROW_PARAMS, K.GAPS_ROW_PARAMS_TIP),
+                          "rdl": _GapRow(self._gaps, gg, 3, K.GAPS_ROW_RDL, K.GAPS_ROW_RDL_TIP)}
         gl.addLayout(gg)
         self._gap_bar = QProgressBar(self._gaps)                 # 채우는 동안만 — 글자만 바뀌어서 도는지 알기 어려웠다
         self._gap_bar.setTextVisible(False)
@@ -875,7 +876,7 @@ class CollectPage(QWidget):
         elif st.get("stopped"):
             msg = K.GAPS_STOPPED
         else:
-            msg = K.GAPS_DONE_FMT.format(sec=int((st.get("sec") or {}).get("filled", 0)), params=int((st.get("params") or {}).get("added", 0)),
+            msg = K.GAPS_DONE_FMT.format(slot=int((st.get("slot") or {}).get("filled", 0)), sec=int((st.get("sec") or {}).get("filled", 0)), params=int((st.get("params") or {}).get("added", 0)),
                                          rdl=int((st.get("rdl") or {}).get("filled", 0)))
         self._gap_status.setText(msg)
         self.append_log(msg)
@@ -885,12 +886,13 @@ class CollectPage(QWidget):
     def _update_gaps(self, plan) -> None:
         """빈칸 카드 — 캐시만 보고 센다(NAS 접근 없음). 빈칸이 하나도 없으면 카드를 숨긴다(도는 중·방금 끝난 결과는 보인다)."""
         et = plan.etas or {}
-        n = plan.sec_missing + plan.params_missing + plan.rdl_reports
+        n = plan.slot_missing + plan.sec_missing + plan.params_missing + plan.rdl_reports
         self._gap_n = n
         if self._gap_worker is None:
             self._gaps.setVisible(bool(plan.total_reports) and (n > 0 or bool(self._gap_status.text())))
             self._b_gaps.setEnabled(n > 0 and not self._nas_busy())
-        rows = (("sec", plan.sec_missing, plan.sec_have, K.GAPS_MISSING_WAFER_FMT, plan.sec_from, plan.sec_to),
+        rows = (("slot", plan.slot_missing, plan.slot_have, K.GAPS_MISSING_WAFER_FMT, plan.slot_from, plan.slot_to),
+                ("sec", plan.sec_missing, plan.sec_have, K.GAPS_MISSING_WAFER_FMT, plan.sec_from, plan.sec_to),
                 ("params", plan.params_missing, plan.params_have, K.GAPS_MISSING_REPORT_FMT, plan.params_from, plan.params_to),
                 ("rdl", plan.rdl_reports, plan.rdl_have, K.GAPS_MISSING_REPORT_FMT, "", ""))
         total_sec, rough_any = 0, False

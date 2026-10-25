@@ -57,3 +57,42 @@ def test_lot_tab_without_slots_says_how_to_fill_them():
     (k,) = _lot_keys(_lot_screen(rows))
     out = _lot_screen(rows, k)
     assert "슬롯 번호가 아직 없습니다" in out and "lotslots" in out
+
+
+def test_fill_gaps_fills_slot_no_from_wafer_ini_only_when_folder_not_rewritten(tmp_path, fake_nas):
+    """10/25 '옛 기간 빈칸 채우기' 의 슬롯 번호 줄 — 빈 slot_no 를 Wafer 폴더의 WaferInfo.ini 한 장만 읽어 채운다.
+    INI 의 WaferStartTime 이 행과 다르면(나중 검사가 덮어씀) 쓰지 않고, 해 본 Report 는 다시 열지 않는다."""
+    import json
+    from conftest import make_cfg
+    nas, csv_path = fake_nas
+    cfg = make_cfg(tmp_path, csv_path, collect_params=False)
+    collect.collect(cfg)
+    inis = [p for p in nas.rglob("WaferInfo.ini")]
+    assert inis
+    for ini in inis:
+        t = ini.read_text(encoding="utf-8")
+        ini.write_text(t.replace("Operator=MAINT\n", "Operator=MAINT\nActiveSlot=07\n"), encoding="utf-8")
+    plan = collect.plan_run(cfg)
+    assert plan.slot_missing > 0 and plan.slot_have == 0 and plan.etas["slot"][0] is not None
+    st = collect.fill_gaps(cfg)
+    assert st["slot"]["filled"] == plan.slot_missing and st["slot"]["empty"] == 0
+    rows = [r for e in json.load(open(cfg["cache_file"], encoding="utf-8"))["reports"].values() for r in e["rows"] if r.get("ini_match") == "EXACT" and not r.get("kind")]
+    assert rows and all(r["slot_no"] == "7" for r in rows)
+    after = collect.plan_run(cfg)
+    assert after.slot_missing == 0 and after.slot_have == len(rows)
+    assert collect.fill_gaps(cfg)["slot"]["targets"] == 0                            # 두 번째는 할 일이 없다
+
+
+def test_fill_gaps_leaves_slot_empty_when_ini_was_rewritten(tmp_path, fake_nas):
+    import json
+    from conftest import make_cfg
+    nas, csv_path = fake_nas
+    cfg = make_cfg(tmp_path, csv_path, collect_params=False)
+    collect.collect(cfg)
+    for ini in nas.rglob("WaferInfo.ini"):
+        t = ini.read_text(encoding="utf-8")
+        import re
+        ini.write_text(re.sub(r"WaferStartTime=.*", "WaferStartTime=09/20/2026 01:00:00", t) + "\nActiveSlot=3\n", encoding="utf-8")
+    st = collect.fill_gaps(cfg)
+    assert st["slot"]["filled"] == 0 and st["slot"]["empty"] == st["slot"]["targets"] > 0
+    assert collect.plan_run(cfg).slot_missing == 0
