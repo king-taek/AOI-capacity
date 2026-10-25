@@ -268,6 +268,7 @@ graphify 는 `--code-only` 로, template.html 인라인 JS 까지 보려면 `pyt
   캐시 `cache["kla"][안정 키] = {name, since, seen_to, lots: {Lot: {Wafer 폴더: 기록}}}`(바뀌면 dirty `kla`). 행은 `kla.rows_from_store` 가 `_rows_from_cache` 끝에서 만든다(→ HTML 만 다시 만들기도 같다):
   같은 Lot·같은 ResultTimestamp = 한 실행(`report` = `KLA:<Lot>:<ResultTimestamp>`), 장 시작 = Wafer 폴더 시각, 끝 = 다음 장 시작(간격이 중앙의 3배 넘으면 · 마지막 장은 중앙 간격만큼), 배치 = 첫 장 시작 ~ 마지막 장 끝,
   job = SetupID · setup/recipe = StepID · faults = 결함 레코드 수(D68) · scanned_dice = NDIE · 전부 PASS(Error 수집 없음, D68) · `ini_match` EXACT. 화면: 따로 탭 없이 **층(전체 · 2층 · 4층)과 장비 종류(전체 · Camtek · KLA) 두 필터**(`state.floor` · `state.maker`, `S.devList` 가 둘 다 건다 — 10/5) · KLA 는 Report 열기 없음 · 정렬은 Camtek 뒤 K1… 4F-K1….
+  **Job 표기(10/25, D96)**: TB500 KLA Job(`ROOT-HVM-4DT-TB500-H-M1-…`)은 화면에서 `klaJobAlias` 로 접두와 끝 `_K#`(장비 표시)를 떼고 원문 낱말 순서로 적는다(`RDL3_K2` → `TB500 RDL3` · `SEQ_TB500_RDL1_(M)_K5` → `SEQ TB500 RDL1 Multi`). 표시 전용 — 통계 묶기 · Rescan · CSV · 캐시는 원문이고 원문은 툴팁. 다른 KLA Job(Talon · Kendall)은 모양을 몰라 원문 그대로.
 - **Report 열기**는 장비 팝업의 선택 Lot 에서만(`reportUrl` · `openReport`). 경로는 `meta.devices[].note` + `report_dir` + `report` 로만 만들고 드라이브 문자와 UNC(`\\10.x`) 를 모두 다룬다.
   여는 주체는 사람이 연 그 탭이지 이 화면이 아니다 — 화면은 여전히 바깥으로 요청을 한 건도 보내지 않는다. 수집 상태 칩(`collectChip`: 수집 실패 · 일부 누락)과 바닥글의 '수집 안 함'(범위 밖 장비) 은 `meta` 에서 그린다(바닥글의 수집 범위 목록 · 장비/일수/버전 줄 · 가동률 설명은 D84 에서 지웠다 — 수집기 버전은 수집 시각 칩의 title). **사본 저장**(`saveHtml`)은 수집기가 준 열·풀 구조 그대로 다시 접는다.
 - 추이 화면에 **전 기간 대비(전주·전월·전일)는 두지 않는다**(사용자 확정, 가드: `test_no_period_over_period_comparison_anywhere`). 선택한 기간의 값만 보여 준다.
