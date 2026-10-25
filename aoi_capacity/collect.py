@@ -919,26 +919,34 @@ def _fill_scan_sec_into(cfg: dict, cache: dict, devs: List[dict], fixed: float, 
         return out
 
     st = {"targets": total, "filled": 0, "empty": 0, "no_device": no_dev, "stopped": 0}
-    t1, n_done = time.perf_counter(), 0
-    for lo in range(0, total, SEC_FILL_CHUNK):
-        chunk = tasks[lo:lo + SEC_FILL_CHUNK]
-        try:
-            results = _run(cfg, chunk, one, should_stop, group=lambda t: nas_group(t[2]))
-        except CollectCancelled:
-            st["stopped"] = 1
-            break
-        for (e, r, _w, _n), sec in zip(chunk, results):
-            if sec is not None:
-                r["scan_sec"] = str(sec)
-                st["filled"] += 1
-            else:
-                st["empty"] += 1
-            rep_left[id(e)] -= 1
-            if rep_left[id(e)] <= 0:
-                e["sec_checked"] = True
-        n_done += len(chunk)
-        if n_done >= total:
-            record_eta(cache, "sec_fill", n_done, time.perf_counter() - t1, fixed)
+    t1, n_done, since_save = time.perf_counter(), 0, 0
+
+    def apply(i, sec) -> None:                       # 메인 스레드가 끝나는 대로 — 도중에 멈춰도 끝낸 장은 남는다(덩어리째 버리지 않는다)
+        nonlocal n_done, since_save
+        e, r, _w, _n = tasks[i]
+        if sec is not None:
+            r["scan_sec"] = str(sec)
+            st["filled"] += 1
+        else:
+            st["empty"] += 1
+        rep_left[id(e)] -= 1
+        if rep_left[id(e)] <= 0:
+            e["sec_checked"] = True
+        n_done += 1
+        since_save += 1
+
+    def checkpoint() -> None:
+        nonlocal since_save
+        if since_save >= SEC_FILL_CHUNK:
+            since_save = 0
+            _save_cache(cfg, cache)
+    try:
+        _run(cfg, tasks, one, should_stop, group=lambda t: nas_group(t[2]), on_result=apply, tick=checkpoint)
+    except CollectCancelled:
+        st["stopped"] = 1
+    if total and n_done >= total:
+        record_eta(cache, "sec_fill", n_done, time.perf_counter() - t1, fixed)
+    if since_save or (n_done and n_done >= total):
         _save_cache(cfg, cache)
     if marked and n_done == 0 and not st["stopped"]:
         _save_cache(cfg, cache)                              # 되짚을 폴더가 없어 표시만 남긴 Report

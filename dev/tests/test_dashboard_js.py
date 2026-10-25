@@ -783,3 +783,5 @@ def test_scan_share_counts_only_rows_with_scan_sec_and_keeps_utilization():
     assert "그중 스캔 63%<" in pop and "근거" not in pop                    # 다 채워지면 비율만
     (pop,) = screen(rows[2:], meta("AOI-1"), [["devPopupHtml"]], state={"modalDev": "AOI-1", "modalDayI": 0})
     assert "스캔 비율 · 채우기 전" in pop
+    (line,) = screen(rows, meta("AOI-1"), [["scLine", {"sc": [0, 0, 1, 1]}]])   # INI 분이 반올림으로 0 — 'NaN%' 대신 비움(PR #3 리뷰)
+    assert line == ""
