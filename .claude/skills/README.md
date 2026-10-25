@@ -47,3 +47,14 @@
 | `motion-reference/` | https://motion-reference.takayustudio.jp/ (TakayuStudio) — 외부 파일 없음, `SKILL.md` 만 이 저장소에서 새로 씀 | **명시 없음**("개인 학습용 레퍼런스") — 그래서 링크만 둔다 | 모션 이름 · 시간 · 이징을 찾는 사전. 코드 · 설명 · 목록은 복사하지 않고 수치와 원리만 참고 |
 
 - 받아 온 파일이 없어 SkillSpector 검사는 하지 않았다.
+
+## 10/25 추가 설치 (사용자 요청)
+
+| 폴더 | 출처 · 고정 | 라이선스 | 무엇 |
+|---|---|---|---|
+| `deep-interview/` | https://github.com/Yeachan-Heo/oh-my-claudecode `skills/deep-interview/SKILL.md` (main, 2026-10-25 받음 · sha256 `b6fd6296…7930`) — 사용자가 올린 zip 과 바이트 동일(아래 한 줄만 더함) | MIT (`.claude/licenses/oh-my-claudecode-MIT.txt`) | 모호한 아이디어를 소크라테스식 질문(한 번에 하나)과 모호도 점수(목표 · 제약 · 성공 기준 · 맥락)로 0.2 이하까지 좁힌 뒤 명세서로 굳히는 인터뷰 |
+
+- 원본에서 frontmatter 한 줄(`disable-model-invocation: true`)만 더했고 나머지는 그대로다. 파일 하나(`SKILL.md`)뿐이고 실행 스크립트 · 바깥 전송 · 숨은 지시는 없다(전체를 읽고 확인).
+- 이 스킬은 원래 oh-my-claudecode 플러그인 안에서 돈다. 본문의 `state_write` · `explore` 에이전트 · `Skill("oh-my-claudecode:plan")` 등 OMC 도구가 이 저장소에는 없다 —
+  **질문 · 점수 · 요약 부분은 그대로 쓸 수 있고**, 상태 저장 · 실행 연결은 없는 도구라 건너뛴다. 명세서는 OMC 경로 `.omc/specs/` 대신 대화에 보이고 필요하면 사용자가 정한 곳에 쓴다(`.omc/` 는 만들지 않는다).
+- `interview-me`(Addy) 와 겹친다. 이 스킬은 **사용자가 `/deep-interview` 로 직접 부를 때만** 쓴다 — 위 frontmatter 한 줄이 그렇게 막아 둔다(짧은 요청에 알아서 길게 묻지 않는다). 규칙 우선순위는 `CLAUDE.md` 그대로(작업 절차 → 관점).
