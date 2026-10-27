@@ -23,8 +23,7 @@ from PyQt6.QtWidgets import (QCheckBox, QFileDialog, QFrame, QGridLayout, QHBoxL
 
 from ... import collect, i18n, nas_guard, publish
 from ...utils import paths, prefs, results
-from ...workers import failure_logs, wafer_logs
-from ...workers import share_probe
+from ...workers import failure_logs
 from ..widgets.buttons import make_button
 from ..widgets.collapsible import Collapsible
 from ..widgets.inputs import NoWheelDateEdit as QDateEdit, NoWheelSpinBox as QSpinBox
@@ -134,23 +133,6 @@ class _LotPublishWorker(QThread):
         cfg, out_dir = self._args
         try:
             self.done.emit(publish.publish_lot(cfg, out_dir, log=self.log.emit), "")
-        except Exception as ex:  # noqa: BLE001
-            self.done.emit(None, f"{type(ex).__name__}: {ex}")
-
-
-class _ParamZipWorker(QThread):
-    """30일 Wafer 로그 zip 으로 파라미터 이력 채우기(D89) — 이 PC 의 zip 만 읽는다. 끝나면 (통계 | None, 오류 문구)."""
-    log = pyqtSignal(str)
-    done = pyqtSignal(object, str)
-
-    def __init__(self, cfg: dict, folder: str, parent=None):
-        super().__init__(parent)
-        self._args = (cfg, folder)
-
-    def run(self) -> None:  # noqa: D401
-        cfg, folder = self._args
-        try:
-            self.done.emit(collect.import_param_zips(cfg, folder, log=self.log.emit), "")
         except Exception as ex:  # noqa: BLE001
             self.done.emit(None, f"{type(ex).__name__}: {ex}")
 
@@ -561,27 +543,6 @@ class CollectPage(QWidget):
         dl.setContentsMargins(0, 0, 0, 0)
         dl.setSpacing(8)
 
-        # 공유 폴더 시험(10/24) — LOT 추적 화면을 팀 공유 폴더에 올리기 전. 장비 NAS 는 읽지 않아 수집과 서로 막지 않는다
-        scard, sl = _tool(dev, K.SHARE_PROBE_TITLE, K.SHARE_PROBE_SHORT, K.SHARE_PROBE_WHEN)
-        self._sp_target = QLineEdit(share_probe.default_target(), scard)
-        self._sp_target.setProperty("role", "mono")
-        r = _row(_label(K.SHARE_PROBE_TARGET, "muted", scard), self._sp_target, stretch=False)
-        r.setStretch(1, 1)
-        sl.addLayout(r)
-        self._b_sp_run = make_button(K.SHARE_PROBE_RUN, "primary", scard)
-        self._b_sp_hammer = make_button(K.SHARE_PROBE_HAMMER, "default", scard, tooltip=K.SHARE_PROBE_HAMMER_HINT)
-        self._b_sp_stop = make_button(K.SHARE_PROBE_STOP, "default", scard)
-        self._b_sp_stop.hide()
-        self._b_sp_clean = make_button(K.SHARE_PROBE_CLEAN, "ghost", scard)
-        self._b_sp_open = make_button(K.SHARE_PROBE_OPEN, "ghost", scard)
-        sl.addLayout(_row(self._b_sp_run, self._b_sp_hammer, self._b_sp_stop, self._b_sp_clean, self._b_sp_open))
-        self._sp_status = _label("", "muted", scard, wrap=True)
-        self._sp_status.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)   # 팀원에게 보낼 경로를 복사하게
-        self._sp_status.hide()
-        sl.addWidget(self._sp_status)
-        dl.addWidget(scard)
-        self._sp_worker: Optional[share_probe.ShareProbeWorker] = None
-
         # LOT 추적 발행 시험(10/27) — 이 PC 에서만 만든다. 공유 폴더 쓰기는 없다(임시 카드 — 시험이 끝나면 지운다)
         pcard, pl = _tool(dev, K.LOT_PUB_TITLE, K.LOT_PUB_SHORT, K.LOT_PUB_WHEN)
         self._lp_out = QLineEdit(str(p.publish_dir or "") or str(paths.data_root() / collect.LOT_PUBLISH_DIR), pcard)
@@ -624,30 +585,6 @@ class CollectPage(QWidget):
         dl.addWidget(fcard)
         self._fl_worker: Optional[QThread] = None        # 실패 로그 워커 자리
 
-        # Wafer 로그 30일 전체 수집(10/10) — 개발자 조사용
-        wcard, wl = _tool(dev, K.WAFER_LOGS_TITLE, K.WAFER_LOGS_SHORT, K.WAFER_LOGS_WHEN)
-        self._wl_out = QLineEdit(wafer_logs.default_out_dir(), wcard)
-        self._wl_out.setProperty("role", "mono")
-        self._b_wl_browse = make_button(K.BTN_BROWSE, parent=wcard)
-        r = _row(_label(K.WAFER_LOGS_OUT, "muted", wcard), self._wl_out, self._b_wl_browse, stretch=False)
-        r.setStretch(1, 1)
-        wl.addLayout(r)
-        self._wl_status = _label("", "muted", wcard, wrap=True)
-        self._b_wl_run = make_button(K.WAFER_LOGS_RUN, "default", wcard)
-        self._b_wl_stop = make_button(K.WAFER_LOGS_STOP, "default", wcard)
-        self._b_wl_stop.hide()
-        self._b_wl_open = make_button(K.WAFER_LOGS_OPEN, "ghost", wcard)
-        wl.addLayout(_row(self._b_wl_run, self._b_wl_stop, self._b_wl_open, self._wl_status))
-        dl.addWidget(wcard)
-        self._wl_worker: Optional[wafer_logs.WaferLogsWorker] = None
-
-        # 파라미터 이력 — 30일 로그 zip 으로(D89). 이 PC 의 zip 만 읽는다
-        pcard, pzl = _tool(dev, K.PARAM_ZIP_TITLE, K.PARAM_ZIP_SHORT, K.PARAM_ZIP_WHEN)
-        self._b_pzip = make_button(K.PARAM_ZIP_RUN, "default", pcard)
-        self._b_pzip.clicked.connect(self._on_param_zip)
-        pzl.addLayout(_row(self._b_pzip))
-        dl.addWidget(pcard)
-        self._pz_worker: Optional[_ParamZipWorker] = None
         self._sec_dev = Collapsible(K.COLLECT_SEC_DEV, dev, body)
         lay.addWidget(self._sec_dev)
 
@@ -703,20 +640,11 @@ class CollectPage(QWidget):
         self._b_from.dateChanged.connect(lambda _d: self._mode == "backfill" and self.refresh_plan())
         self._csv.toggled.connect(lambda on: prefs.patch(write_csv=bool(on)))
         self._out.editingFinished.connect(self._apply_out)
-        self._b_wl_run.clicked.connect(self._on_wafer_logs)
-        self._b_wl_stop.clicked.connect(self._stop_wafer_logs)
-        self._b_wl_open.clicked.connect(lambda: QDesktopServices.openUrl(QUrl.fromLocalFile(self._wl_out.text().strip())))
-        self._b_wl_browse.clicked.connect(self._browse_wl_out)
         self._b_fl_run.clicked.connect(self._on_fail_logs)
-        self._b_sp_run.clicked.connect(lambda: self._on_share_probe("probe"))
-        self._b_sp_hammer.clicked.connect(lambda: self._on_share_probe("hammer"))
-        self._b_sp_clean.clicked.connect(lambda: self._on_share_probe("clean"))
-        self._b_sp_stop.clicked.connect(self._stop_share_probe)
         self._b_lp_run.clicked.connect(self._on_lot_publish)
         self._b_lp_view.clicked.connect(lambda: self._lp_path and QDesktopServices.openUrl(QUrl.fromLocalFile(self._lp_path)))
         self._b_lp_short.clicked.connect(self._on_lot_shortcut)
         self._b_lp_open.clicked.connect(lambda: QDesktopServices.openUrl(QUrl.fromLocalFile(self._lp_out.text().strip())))
-        self._b_sp_open.clicked.connect(self._open_share_probe_dir)
         self._b_fl_open.clicked.connect(lambda: QDesktopServices.openUrl(QUrl.fromLocalFile(self._fl_out.text().strip())))
         self._b_fl_browse.clicked.connect(self._browse_fl_out)
         self._fl_days.valueChanged.connect(lambda v: prefs.patch(fail_log_days=int(v)))
@@ -841,8 +769,7 @@ class CollectPage(QWidget):
 
     # ── 옛 기간 빈칸 채우기(10/24) ──
     def _nas_busy(self) -> bool:
-        return (self._running or self._wl_worker is not None or self._fl_worker is not None or self._pz_worker is not None
-                or self._gap_worker is not None)
+        return self._running or self._fl_worker is not None or self._gap_worker is not None
 
     def _on_gaps(self) -> None:
         if self._gap_worker is not None:                      # 도는 중에 다시 누르면 멈춤
@@ -862,7 +789,6 @@ class CollectPage(QWidget):
         self._b_gaps.setText(K.BTN_STOP)
         self._gap_status.setText(K.GAPS_RUNNING)
         self._b_run.setEnabled(False)
-        self._b_pzip.setEnabled(False)
         w.start()
 
     def _on_gaps_progress(self, done: int, total: int, phase: str) -> None:
@@ -887,8 +813,7 @@ class CollectPage(QWidget):
         self._gap_total = None
         self._b_gaps.setText(K.GAPS_RUN)
         self._b_gaps.setEnabled(True)
-        self._b_run.setEnabled(not self._running and self._wl_worker is None)
-        self._b_pzip.setEnabled(not self._running)
+        self._b_run.setEnabled(not self._running)
         if st is None:
             msg = K.GAPS_FAIL_FMT.format(error=err)
             self.error.emit(K.GAPS_TITLE, msg)
@@ -927,33 +852,6 @@ class CollectPage(QWidget):
         self._gap_eta.setText(K.GAPS_ETA_FMT.format(t=eta_text(total_sec, rough_any)) if n else "")
         self._gap_eta.setVisible(bool(n))
         self._gap_eta.setToolTip(K.ETA_BASIS_TIP)
-
-    def _on_param_zip(self) -> None:
-        if self._pz_worker is not None or self._running or self._wl_worker is not None or self._gap_worker is not None:
-            return
-        folder = QFileDialog.getExistingDirectory(self, K.PARAM_ZIP_PICK, str(paths.data_root()))
-        if not folder:
-            return
-        self._b_pzip.setEnabled(False)
-        self._b_run.setEnabled(False)
-        w = _ParamZipWorker(prefs.to_collect_cfg(prefs.load()), folder, self)
-        w.log.connect(self.append_log)
-        w.done.connect(self._on_param_zip_done)
-        w.finished.connect(lambda w=w: self._worker_done("_pz_worker", w))
-        self._pz_worker = w
-        self.append_log(K.PARAM_ZIP_START_FMT.format(folder=folder))
-        w.start()
-
-    def _on_param_zip_done(self, st, err: str) -> None:
-        self._b_pzip.setEnabled(not self._running)
-        self._b_run.setEnabled(not self._running and self._wl_worker is None)
-        if st is not None:
-            msg = K.PARAM_ZIP_DONE_FMT.format(added=st.get("added", 0), lots=st.get("lots", 0), known=st.get("skipped_known", 0))
-            self.append_log(msg)
-            self._status.setText(msg)
-        else:
-            self.append_log(K.PARAM_ZIP_FAIL_FMT.format(error=err))
-            self.error.emit(K.PARAM_ZIP_TITLE, K.PARAM_ZIP_FAIL_FMT.format(error=err))
 
     def _open_result(self) -> None:
         QDesktopServices.openUrl(QUrl.fromLocalFile(str(results.ensure_html())))
@@ -1065,107 +963,9 @@ class CollectPage(QWidget):
             self._cards["recover"].set_badges([(K.MODE_BADGE_TARGET_ETA_FMT.format(n=n_recover, t=eta("recover")), "warn") if n_recover
                                                else (K.MODE_BADGE_NONE, "slow")])
 
-    # ── Wafer 폴더 로그 모으기(10/9) ──
     def wafer_logs_running(self) -> bool:
         # 실패 로그 · 빈칸 채우기도 NAS 를 읽으니 가동률 수집과 겹치지 않게
-        return self._wl_worker is not None or self._fl_worker is not None or self._gap_worker is not None
-
-    def _on_wafer_logs(self) -> None:
-        if self._wl_worker is not None or self._fl_worker is not None or self._gap_worker is not None:
-            return
-        if self._running:
-            self.error.emit(K.WAFER_LOGS_TITLE, K.WAFER_LOGS_BUSY)
-            return
-        out = self._wl_out.text().strip() or wafer_logs.default_out_dir()
-        self._wl_out.setText(out)
-        w = wafer_logs.WaferLogsWorker(prefs.to_collect_cfg(prefs.load()), out, self)
-        w.log.connect(self.append_log)
-        w.done.connect(self._on_wafer_logs_done)
-        w.finished.connect(lambda w=w: self._worker_done("_wl_worker", w))
-        self._wl_worker = w
-        self._set_wafer_logs_running(True)
-        self._wl_status.setText(K.WAFER_LOGS_RUNNING)
-        w.start()
-
-    def _stop_wafer_logs(self) -> None:
-        if self._wl_worker is not None:
-            self._wl_worker.stop()
-            self._b_wl_stop.setEnabled(False)
-            self._wl_status.setText(K.WAFER_LOGS_STOPPING)
-
-    def _on_wafer_logs_done(self, result, err: str) -> None:
-        self._set_wafer_logs_running(False)
-        if result:
-            text = K.WAFER_LOGS_DONE_FMT.format(n=len(result.get("parts") or []), lots=result.get("lots", 0),
-                                                path=result.get("out_dir", ""))
-            self._wl_status.setText(text)
-            self.append_log(text)
-        else:
-            self._wl_status.setText(err)
-            self.append_log(err)
-            if err != K.WAFER_LOGS_STOPPED:
-                self.error.emit(K.WAFER_LOGS_TITLE, err)
-
-    def _set_wafer_logs_running(self, on: bool) -> None:
-        if on:
-            self._sec_dev.set_open(True)                # 도는 동안은 '중지' 버튼이 보여야 한다
-        self._b_wl_run.setEnabled(not on)
-        self._b_wl_stop.setVisible(on)
-        self._b_wl_stop.setEnabled(on)
-        self._wl_out.setEnabled(not on)
-        self._b_wl_browse.setEnabled(not on)
-        self._b_run.setEnabled(not on and not self._running)     # 가동률 수집과 동시에 NAS 를 읽지 않는다
-
-    # ── 공유 폴더 시험(10/24) ──
-    def _on_share_probe(self, job: str) -> None:
-        if self._sp_worker is not None:
-            return
-        target = self._sp_target.text().strip()
-        w = share_probe.ShareProbeWorker(prefs.to_collect_cfg(prefs.load()), job, target, self)
-        w.log.connect(self.append_log)
-        w.done.connect(self._on_share_probe_done)
-        w.finished.connect(lambda w=w: self._worker_done("_sp_worker", w))
-        self._sp_worker = w
-        self._set_share_probe_running(True, job)
-        self._sp_status.setText({"probe": K.SHARE_PROBE_RUNNING, "hammer": K.SHARE_PROBE_HAMMER_RUNNING,
-                                 "clean": K.SHARE_PROBE_CLEANING}[job])
-        self._sp_status.show()
-        self._sec_log.set_open(True)
-        w.start()
-
-    def _stop_share_probe(self) -> None:
-        if self._sp_worker is not None:
-            self._sp_worker.stop()
-            self._b_sp_stop.setEnabled(False)
-
-    def _on_share_probe_done(self, job: str, result, err: str) -> None:
-        self._set_share_probe_running(False, job)
-        if result is None:
-            text = err
-            self.error.emit(K.SHARE_PROBE_TITLE, err)
-        elif job == "clean":
-            text = K.SHARE_PROBE_CLEAN_DONE_FMT.format(n=len(result.get("gone") or ()))
-        elif job == "hammer":
-            text = K.SHARE_PROBE_HAMMER_DONE_FMT.format(rounds=len(result.get("rounds") or ()), fail=result.get("fail", 0),
-                                                        retried=result.get("retried", 0), saved=result.get("saved", ""))
-        else:
-            text = K.SHARE_PROBE_DONE_FMT.format(guide=result.get("guide_unc") or result.get("guide", ""), saved=result.get("saved", ""))
-        self._sp_status.setText(text)
-        self._sp_status.show()
-        self.append_log(text)
-
-    def _set_share_probe_running(self, on: bool, job: str = "") -> None:
-        if on:
-            self._sec_dev.set_open(True)
-        for w in (self._b_sp_run, self._b_sp_hammer, self._b_sp_clean, self._sp_target):
-            w.setEnabled(not on)
-        stoppable = on and job == "hammer"
-        self._b_sp_stop.setVisible(stoppable)
-        self._b_sp_stop.setEnabled(stoppable)
-
-    def _open_share_probe_dir(self) -> None:
-        d = share_probe.result_dir()
-        QDesktopServices.openUrl(QUrl.fromLocalFile(str(d if d.is_dir() else paths.data_root())))
+        return self._fl_worker is not None or self._gap_worker is not None
 
     # ── LOT 추적 발행 시험(10/27) ──
     def _on_lot_publish(self) -> None:
@@ -1210,7 +1010,7 @@ class CollectPage(QWidget):
 
     def _on_lot_publish_done(self, got, err: str) -> None:
         self._b_lp_run.setEnabled(True)
-        self._b_run.setEnabled(not self._running and self._wl_worker is None)
+        self._b_run.setEnabled(not self._running)
         if got is None:
             self._lp_status.setText(err)
             self.error.emit(K.LOT_PUB_TITLE, err)
@@ -1225,7 +1025,7 @@ class CollectPage(QWidget):
 
     # ── 실패 로그 수집(10/20) ──
     def _on_fail_logs(self) -> None:
-        if self._fl_worker is not None or self._wl_worker is not None or self._gap_worker is not None:
+        if self._fl_worker is not None or self._gap_worker is not None:
             return
         if self._running:
             self.error.emit(K.FAIL_LOGS_TITLE, K.WAFER_LOGS_BUSY)
@@ -1257,22 +1057,16 @@ class CollectPage(QWidget):
             self._sec_dev.set_open(True)
         for w in (self._b_fl_run, self._fl_days, self._fl_out, self._b_fl_browse):
             w.setEnabled(not on)
-        self._b_run.setEnabled(not on and not self._running and self._wl_worker is None)
-        self._b_wl_run.setEnabled(not on and not self._running and self._wl_worker is None)
+        self._b_run.setEnabled(not on and not self._running)
 
     def _browse_fl_out(self) -> None:
         chosen = QFileDialog.getExistingDirectory(self, K.WAFER_LOGS_OUT, self._fl_out.text())
         if chosen:
             self._fl_out.setText(chosen)
 
-    def _browse_wl_out(self) -> None:
-        chosen = QFileDialog.getExistingDirectory(self, K.WAFER_LOGS_OUT, self._wl_out.text())
-        if chosen:
-            self._wl_out.setText(chosen)
-
     def shutdown(self, ms: int = 15_000) -> None:
         """창을 닫을 때 — 로그 모으기를 멈추고(지금까지 담은 것으로 zip 마무리) 기다린다."""
-        for attr in ("_wl_worker", "_fl_worker", "_gap_worker", "_sp_worker"):
+        for attr in ("_fl_worker", "_gap_worker"):
             w = getattr(self, attr, None)
             if w is None:
                 continue
@@ -1284,10 +1078,8 @@ class CollectPage(QWidget):
 
     def set_running(self, running: bool) -> None:
         self._running = running
-        self._b_run.setEnabled(not running and self._wl_worker is None and getattr(self, "_pz_worker", None) is None and self._lp_worker is None)
-        self._b_wl_run.setEnabled(not running and self._wl_worker is None and self._fl_worker is None)
-        self._b_fl_run.setEnabled(not running and self._fl_worker is None and self._wl_worker is None)
-        self._b_pzip.setEnabled(not running and self._pz_worker is None and self._gap_worker is None)
+        self._b_run.setEnabled(not running and self._lp_worker is None)
+        self._b_fl_run.setEnabled(not running and self._fl_worker is None)
         if self._gap_worker is None:
             self._b_gaps.setEnabled(not running and bool(self._gap_n))
         self._b_stop.setVisible(running)

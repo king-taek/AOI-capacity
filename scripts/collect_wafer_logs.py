@@ -51,7 +51,7 @@ DEVICE_ROOTS = [
 ]
 # ══════════════════════════════════════════════════════════════════════════════
 
-#: 수집 창 버튼(`aoi_capacity/workers/wafer_logs.py`)이 기대하는 이 파일의 호출 방식 판 — `parse_args` · `run(args, log, should_stop, result)`.
+#: (지운 수집 창 버튼이 쓰던) 호출 방식 — 이 파일의 호출 방식 판 — `parse_args` · `run(args, log, should_stop, result)`.
 #: 앱이 옛 사본(예: 손으로 넣은 첫 판)을 불러 엉뚱한 오류를 내지 않도록 판을 확인한다. 호출 방식을 바꾸면 둘 다 올린다.
 TOOL_API = 5                       # 3: --wide · 4: --all · 5: --all 이 Job별 최소 · 10장 상한 · 암호화(.enc)
 #: zip 한 장의 크기 — MB(10^6) 로 보든 MiB(2^20) 로 보든 '25MB 이상 · 29.9MB 이하' 가 되게 잡았다.
@@ -811,7 +811,7 @@ def pick(cands, cat: str, chosen_keys: set, dev_count: dict, tried: set):
 
 
 def run(args, log=None, should_stop=None, result=None) -> int:
-    """수집 본체 — 명령줄(`main`)과 수집 창 버튼(`aoi_capacity/workers/wafer_logs.py`)이 같이 쓴다.
+    """수집 본체 — 명령줄(`main`)이 같이 쓴다.
     log: 한 줄씩 받는 함수(기본 print) · should_stop: 참이면 담던 Lot 까지만 하고 마무리 · result: 끝에 zip 목록 등을 채울 dict."""
     log = log or say
     should_stop = should_stop or (lambda: False)
