@@ -7,7 +7,7 @@ from typing import Optional
 
 from PyQt6.QtCore import Qt, QUrl, pyqtSignal
 from PyQt6.QtGui import QDesktopServices
-from PyQt6.QtWidgets import QCheckBox, QFrame, QGridLayout, QHBoxLayout, QLabel, QVBoxLayout, QWidget
+from PyQt6.QtWidgets import QCheckBox, QFrame, QGridLayout, QHBoxLayout, QLabel, QLineEdit, QVBoxLayout, QWidget
 
 from ... import i18n
 from ...utils import paths, prefs
@@ -71,6 +71,11 @@ class SettingsPage(QWidget):
         self._html_days.setSpecialValueText(K.SET_HTML_DAYS_ALL)
         self._html_days.setSuffix(K.SET_HTML_DAYS_SUFFIX)
         self._html_days.setValue(int(p.html_days))
+        self._publish = QLineEdit(str(p.publish_dir or ""), card)
+        self._publish.setProperty("role", "mono")
+        self._publish.setPlaceholderText(K.SET_PUBLISH_PLACEHOLDER)
+        self._publish.setToolTip(K.SET_PUBLISH_HELP)
+        self._publish.setMinimumWidth(360)
         for box in (self._th_util, self._th_err, self._backfill, self._retention, self._workers, self._html_days):
             box.setMinimumWidth(120)
         self._backfill.setToolTip(K.SET_COLLECT_RANGE_HELP)
@@ -104,6 +109,7 @@ class SettingsPage(QWidget):
             (K.SET_BACKFILL_DAYS, hrow(self._backfill)),
             (K.SET_RETENTION_DAYS, hrow(self._retention)),
             (K.SET_HTML_DAYS, hrow(self._html_days)),
+            (K.SET_PUBLISH_DIR, hrow(self._publish, stretch=False)),
             (K.SET_READ_WORKERS, hrow(self._workers)),
             ("", self._dark),
             (K.SET_DATA_DIR, hrow(self._data_dir, b_open, b_log)),
@@ -119,6 +125,7 @@ class SettingsPage(QWidget):
         self._retention.valueChanged.connect(lambda v: prefs.patch(retention_days=int(v)))
         self._workers.valueChanged.connect(lambda v: prefs.patch(read_workers=int(v)))
         self._html_days.valueChanged.connect(lambda v: prefs.patch(html_days=int(v)))
+        self._publish.editingFinished.connect(lambda: prefs.patch(publish_dir=self._publish.text().strip()))
         b_open.clicked.connect(lambda: QDesktopServices.openUrl(QUrl.fromLocalFile(str(paths.data_root()))))
         b_log.clicked.connect(lambda: QDesktopServices.openUrl(QUrl.fromLocalFile(str(paths.log_file()))))
         b_upd.clicked.connect(self.update_check_requested.emit)

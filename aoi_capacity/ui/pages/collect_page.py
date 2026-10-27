@@ -21,7 +21,7 @@ from PyQt6.QtGui import QDesktopServices
 from PyQt6.QtWidgets import (QCheckBox, QFileDialog, QFrame, QGridLayout, QHBoxLayout, QLabel, QLineEdit,
                              QPlainTextEdit, QProgressBar, QScrollArea, QSizePolicy, QVBoxLayout, QWidget)
 
-from ... import collect, i18n, nas_guard
+from ... import collect, i18n, nas_guard, publish
 from ...utils import paths, prefs, results
 from ...workers import failure_logs, wafer_logs
 from ...workers import share_probe
@@ -122,7 +122,7 @@ class _HtmlOnlyWorker(QThread):
 
 
 class _LotPublishWorker(QThread):
-    """LOT 추적만 담은 HTML 한 장을 이 PC 의 시험 폴더에 만든다(10/27, 공유 발행 시험) — 캐시만 읽고 NAS 는 건드리지 않는다. 끝나면 ((경로, 바이트, 초) | None, 오류 문구)."""
+    """LOT 추적 배포판을 폴더에 올린다(10/27) — 캐시만 읽고 장비 NAS 는 건드리지 않는다. 끝나면 (결과 dict | None, 오류 문구)."""
     log = pyqtSignal(str)
     done = pyqtSignal(object, str)
 
@@ -133,9 +133,7 @@ class _LotPublishWorker(QThread):
     def run(self) -> None:  # noqa: D401
         cfg, out_dir = self._args
         try:
-            t0 = time.perf_counter()
-            path = collect.html_from_cache(cfg, log=self.log.emit, lot_only=True, out_dir=out_dir, out_name=collect.LOT_PUBLISH_NAME)
-            self.done.emit((path, os.path.getsize(path), round(time.perf_counter() - t0, 1)), "")
+            self.done.emit(publish.publish_lot(cfg, out_dir, log=self.log.emit), "")
         except Exception as ex:  # noqa: BLE001
             self.done.emit(None, f"{type(ex).__name__}: {ex}")
 
@@ -586,7 +584,7 @@ class CollectPage(QWidget):
 
         # LOT 추적 발행 시험(10/27) — 이 PC 에서만 만든다. 공유 폴더 쓰기는 없다(임시 카드 — 시험이 끝나면 지운다)
         pcard, pl = _tool(dev, K.LOT_PUB_TITLE, K.LOT_PUB_SHORT, K.LOT_PUB_WHEN)
-        self._lp_out = QLineEdit(str(paths.data_root() / collect.LOT_PUBLISH_DIR), pcard)
+        self._lp_out = QLineEdit(str(p.publish_dir or "") or str(paths.data_root() / collect.LOT_PUBLISH_DIR), pcard)
         self._lp_out.setProperty("role", "mono")
         r = _row(_label(K.LOT_PUB_OUT, "muted", pcard), self._lp_out, stretch=False)
         r.setStretch(1, 1)
@@ -1192,10 +1190,11 @@ class CollectPage(QWidget):
             self._lp_status.setText(err)
             self.error.emit(K.LOT_PUB_TITLE, err)
             return
-        path, size, sec = got
-        self._lp_path = str(path)
+        self._lp_path = os.path.join(str(got["dir"]), publish.STUB_NAME)
         self._b_lp_view.setEnabled(True)
-        text = K.LOT_PUB_DONE_FMT.format(size=f"{size / 1048576:.1f}MB", sec=sec, path=path)
+        text = K.LOT_PUB_DONE_FMT.format(size=f"{int(got['bytes']) / 1048576:.1f}MB", sec=got["sec"], path=self._lp_path)
+        if not got.get("pointer_ok"):
+            text += "\n" + K.LOT_PUB_POINTER_LOCKED
         self._lp_status.setText(text)
         self.append_log(text)
 

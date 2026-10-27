@@ -15,7 +15,7 @@ from typing import List
 
 from PyQt6.QtCore import QObject, QThread, pyqtSignal
 
-from .. import collect, i18n
+from .. import collect, i18n, publish
 
 STATE_COMPLETED, STATE_COMPLETED_WITH_WARNINGS = "completed", "completed_with_warnings"
 
@@ -114,6 +114,7 @@ class CollectorWorker(QThread):
             path = collect.write_html(self.cfg, rows, dev_meta, errors, started, mode="gui", timing=stats, warnings=warnings,
                                       log=lambda m: self.signals.log.emit(tok, str(m)),
                                       progress=lambda d, t, p: self.signals.progress.emit(tok, int(d), int(t), str(p)))
+            publish.publish_after_collect(self.cfg, rows, dev_meta, log=lambda m: self.signals.log.emit(tok, str(m)))   # 10/27: 조용히 — 실패해도 수집은 성공
         except collect.CollectCancelled:
             saved = stats.get("cancel_saved")
             if saved:

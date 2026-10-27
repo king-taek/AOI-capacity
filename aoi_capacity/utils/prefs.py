@@ -41,6 +41,7 @@ class Prefs:
     refresh_pick_days: int = 3        # 수집 페이지 '최근 N일 다시 읽기' 카드의 N(고를 때만 refresh_window_days 로 들어간다)
     fail_log_days: int = 3            # 수집 페이지 '실패 로그 수집' 카드의 검사 일수(1~90, 10/20)
     html_days: int = 30               # 수집 뒤 결과 HTML 에 담을 최근 일수(0 = 전부, 기본 1달 — 10/5 사용자). 전체 기간은 수집 창 버튼
+    publish_dir: str = ""             # LOT 추적 배포 폴더(팀 공유 — 10/27). 비우면 배포 안 함, 있으면 수집이 끝날 때마다 조용히 올린다
     refresh_window_days: int = 0      # D60: 최근 N일 안의 Report 는 캐시에 있어도 다시 읽기(0 = 끔). 수집 페이지 체크박스가 켜고 끈다
     prefs_version: int = PREFS_VERSION
     extra: Dict[str, Any] = field(default_factory=dict)
@@ -171,6 +172,7 @@ def to_collect_cfg(p: Prefs) -> Dict[str, Any]:
         "attention_util": p.threshold_util,   # D14: 결과 HTML 의 meta.dashboard_settings 로 나간다(prefs 의 이름은 옛 그대로 threshold_*)
         "attention_err": p.threshold_err,
         "html_days": p.html_days,
+        "publish_dir": str(p.publish_dir or "").strip(),
     })
     # ★ CLI(config.json)와 같은 규칙으로 정규화한다 — 성능·기간 값은 고치고, 범위·경로 문제는 그대로 두어 수집 진입점이 막는다(C13)
     cfg, _problems = _config.normalize_config(cfg)

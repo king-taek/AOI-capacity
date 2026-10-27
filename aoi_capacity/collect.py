@@ -110,6 +110,7 @@ DEFAULT_CONFIG: Dict[str, object] = {
     "attention_err": 3,                           # D14: 또는 Error 건수 이 값 이상
     "html_days": 30,                              # 수집 뒤 결과 HTML 에 담을 최근 일수(0 = 가진 데이터 전부, 기본 1달 — 10/5 사용자). 분할은 없다(9/23 분할 롤백)
     "collect_params": True,                       # D89: Report 마다 INI 를 찾은 첫 Wafer 폴더의 레시피 파라미터 파일을 읽어 둔다(파라미터 탭). 끄면 읽지 않는다
+    "publish_dir": "",                            # 10/27: LOT 추적 배포 폴더(팀 공유 — 장비 NAS 아래는 거부). 비우면 배포 안 함, 있으면 수집이 끝날 때마다 조용히 올린다
     "recipe_groups_file": "",                     # D67: 결과 HTML 에 담을 레시피 묶음(화면에서 내보낸 JSON). 비우면 데이터 폴더·다운로드에서 가장 최근 것
 }
 MAX_READ_RETRY = 3   # 읽기에 실패한 Report 를 몇 번까지 다시 시도하고 커서를 붙잡아 둘지
@@ -172,8 +173,10 @@ POOLED_COLS = tuple(c for c in OUT_COLS if c not in ("wafer_start_time", "wafer_
 #: LOT 추적만 담는 시험 파일의 이름 · 이 PC 의 데이터 폴더 아래 폴더 이름(공유 폴더에는 아직 쓰지 않는다).
 LOT_PUBLISH_NAME = "AOI_LOT_tracking.html"
 LOT_PUBLISH_DIR = "publish_test"
-#: LOT 추적만 담는 파일(`write_html(lot_only=True)`)에서 값을 비우는 열 — 화면(template)이 어디에서도 읽지 않는 열이다(가드 `test_lot_publish.py`).
-LOT_ONLY_BLANK_COLS = ("data_issue", "issue_codes", "norm_status", "outcome", "scanned_dice", "yield", "time_basis")
+#: LOT 추적만 담는 파일(`write_html(lot_only=True)`)이 값을 남기는 열 — 나머지 열은 값만 비운다(열 이름은 그대로, 풀의 빈 문자열 하나로 접힌다).
+#: LOT 추적 화면(`lotIndex` · `lotFamily` · `lotHtml`)이 읽는 열이다(가드 `test_lot_publish.py` 가 템플릿 소스에서 확인).
+LOT_ONLY_KEEP_COLS = ("device", "kind", "job", "lot", "wafer_id", "status", "recipe", "slot_no", "wafer_start_time", "batch_start", "report", "faults")
+LOT_ONLY_BLANK_COLS = tuple(c for c in OUT_COLS if c not in LOT_ONLY_KEEP_COLS)
 REPORT_RE = re.compile(r"^(.+?)_(\d{4})_(.+)_(\d{1,2}-[A-Za-z]{3}-\d{2})_\((\d{2}\.\d{2}\.\d{2})\)_BatchReport\.html?$", re.I)
 #: 장비마다 다르다 — AOI-8·25 는 `13-Sep-26 01:03:29 PM`, AOI-1 은 `9/16/2026 1:54:03 PM`,
 #: INI 의 BatchStartTime 은 `09/10/2026 18:50:08`(24시간제).
@@ -3372,7 +3375,7 @@ def write_html(cfg: dict, rows: List[dict], dev_meta: List[dict], errors: List[d
     if pst and pst.get("snaps") and not lot_only:
         meta["params"] = params_for_range(pst, r_from, r_to)
     if lot_only:
-        rows = [{**r, **{c: "" for c in LOT_ONLY_BLANK_COLS}} for r in rows]     # 열은 그대로 두고 값만 비운다 — 풀의 빈 문자열 하나로 접힌다
+        rows = [{**r, **{c: "" for c in LOT_ONLY_BLANK_COLS}} for r in rows if not r.get("kind")]   # 합성 행(kind)은 LOT 추적이 건너뛴다
     emb = _embed_rows(rows)
     if meta["timing"]:
         meta["timing"]["html_ms"] = int((time.perf_counter() - t_html) * 1000)   # 템플릿 읽기 + 접기까지(쓰기 전)
