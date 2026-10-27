@@ -57,8 +57,29 @@ def stub_url(share_dir: str) -> str:
     return "file:///" + q(p) + "/" + STUB_NAME
 
 
+def raw_stub_url(share_dir: str) -> str:
+    """한글을 퍼센트 인코딩하지 않은 주소(공백만 %20) — .url 은 ANSI 로 읽히고 셸이 %XX 를 UTF-8 바이트 그대로 ANSI 로 해석해 경로가 깨진다(실측 10/27)."""
+    p = str(share_dir).strip().rstrip("\\/").replace("\\", "/").replace(" ", "%20")
+    if p.startswith("//"):
+        return "file://" + p[2:] + "/" + STUB_NAME
+    return "file:///" + p + "/" + STUB_NAME
+
+
+def _ansi() -> str:
+    return "mbcs" if os.name == "nt" else "cp949"
+
+
 def shortcut_text(share_dir: str) -> str:
-    return f"[InternetShortcut]\r\nURL={stub_url(share_dir)}\r\n"
+    """바로가기(.url) 내용 — 한글 경로는 이 PC 의 ANSI 코드 페이지로 쓸 수 있을 때 그 글자 그대로(`shortcut_bytes`)."""
+    return f"[InternetShortcut]\r\nURL={raw_stub_url(share_dir)}\r\n"
+
+
+def shortcut_bytes(share_dir: str) -> bytes:
+    """.url 파일 바이트 — ANSI(한글 윈도의 CP949)로 그대로, 인코딩이 안 되는 글자가 있으면 퍼센트 인코딩 판(UTF-8)으로."""
+    try:
+        return shortcut_text(share_dir).encode(_ansi())
+    except (UnicodeEncodeError, LookupError):
+        return f"[InternetShortcut]\r\nURL={stub_url(share_dir)}\r\n".encode("utf-8")
 
 
 def write_shortcut(dest_dir: str, share_dir: str, cfg: dict, name: str = SHORTCUT_NAME) -> str:
@@ -67,17 +88,17 @@ def write_shortcut(dest_dir: str, share_dir: str, cfg: dict, name: str = SHORTCU
     nas_guard.assert_local(dest_dir, roots)
     os.makedirs(dest_dir, exist_ok=True)
     path = os.path.join(dest_dir, name)
-    if not _write_text(path, shortcut_text(share_dir), roots, tries=2):
+    if not _write_text(path, shortcut_bytes(share_dir), roots, tries=2):
         raise PermissionError(13, i18n.KO.PUBLISH_SHORTCUT_LOCKED, path)
     return path
 
 
-def _write_text(path: str, text: str, roots: List[str], *, tries: int = REPLACE_TRIES, newline: str = "") -> bool:
+def _write_text(path: str, text, roots: List[str], *, tries: int = REPLACE_TRIES, newline: str = "") -> bool:
     """임시 파일에 쓰고 이름 바꿔 교체 — 잠겨 있으면 `tries` 번까지 기다려 다시. 성공 여부."""
     nas_guard.assert_local(path, roots)
     tmp = f"{path}.{os.getpid()}-{time.time_ns()}.tmp"
     try:
-        with open(tmp, "w", encoding="utf-8", newline=newline) as f:
+        with (open(tmp, "wb") if isinstance(text, bytes) else open(tmp, "w", encoding="utf-8", newline=newline)) as f:
             f.write(text)
             f.flush()
             os.fsync(f.fileno())
@@ -174,11 +195,11 @@ def publish_lot(cfg: dict, share_dir: str, *, rows: Optional[list] = None, dev_m
         ok = _write_text(stub, stub_text(), roots) and ok
     short = os.path.join(share_dir, SHORTCUT_NAME)
     try:
-        cur_s = open(short, encoding="utf-8").read() if os.path.isfile(short) else None
+        cur_s = open(short, "rb").read() if os.path.isfile(short) else None
     except OSError:
         cur_s = None
-    if cur_s != shortcut_text(share_dir):
-        _write_text(short, shortcut_text(share_dir), roots, tries=2)           # 못 써도 배포는 성공 — 바로가기는 이미 있거나 다음에
+    if cur_s != shortcut_bytes(share_dir):
+        _write_text(short, shortcut_bytes(share_dir), roots, tries=2)           # 못 써도 배포는 성공 — 바로가기는 이미 있거나 다음에
     size = os.path.getsize(path)
     pruned = _prune(data_dir, KEEP_FILES, roots, protect={name, _pointed_name(share_dir)})
     res = {"dir": share_dir, "data": path, "bytes": size, "sec": round(time.perf_counter() - t0, 1),

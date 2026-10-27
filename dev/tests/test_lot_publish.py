@@ -167,10 +167,17 @@ def test_shortcut_points_at_the_stub_with_an_encoded_file_url(tmp_path, sample):
     assert publish.stub_url("Z:\\a b\\c\\") == "file:///Z:/a%20b/c/AOI_LOT.html"
     desk = tmp_path / "Desktop"
     path = publish.write_shortcut(str(desk), config_mod.PUBLISH_DIR_DEFAULT, cfg)
-    assert Path(path).read_bytes() == ("[InternetShortcut]\r\nURL=" + url + "\r\n").encode("ascii")
+    # 바로가기(.url)는 ANSI 로 읽힌다 — 한글을 퍼센트 인코딩하면 셸이 UTF-8 바이트를 ANSI 로 풀어 경로가 깨졌다(10/27 실측). 한글은 그대로 CP949 로
+    raw = "file://k5cifsn2/k5tsvdata$/1.%20Conder%20Scan/0.%20전산%20X/임현택/LOT추적/AOI_LOT.html"
+    assert publish.raw_stub_url(config_mod.PUBLISH_DIR_DEFAULT) == raw
+    data = Path(path).read_bytes()
+    if os.name != "nt":
+        assert data == ("[InternetShortcut]\r\nURL=" + raw + "\r\n").encode("cp949")
+    assert "%EC" not in data.decode("cp949", "replace") and b"\xc0\xfc\xbb\xea" in data     # 전산(CP949) 바이트
+    assert publish.raw_stub_url("Z:\\a b\\c\\") == "file:///Z:/a%20b/c/AOI_LOT.html"
     share = tmp_path / "share"
     publish.publish_lot(cfg, str(share), rows=rows[:100], dev_meta=devs, now=dt.datetime(2026, 10, 27, 8, 15))
-    assert "AOI_LOT.html" in (share / "AOI_LOT_shortcut.url").read_text(encoding="ascii")
+    assert b"AOI_LOT.html" in (share / "AOI_LOT_shortcut.url").read_bytes()
 
 
 def test_publish_dir_is_hardcoded_by_default_and_must_be_absolute(tmp_path, sample):
