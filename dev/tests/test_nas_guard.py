@@ -175,3 +175,34 @@ def test_dynamic_no_write_under_nas(tmp_path, fake_nas, monkeypatch):
     assert touched, "쓰기 API 가 전혀 기록되지 않았다(트립와이어가 동작하지 않음)"
     assert _snapshot(nas) == before, "NAS 파일이 바뀌었다"
     assert (tmp_path / "out" / "AOI_capacity.html").exists()
+
+
+def test_publish_module_writes_only_in_guarded_functions():
+    """배포 모듈(publish.py)의 쓰기도 규칙 1 — 쓰기 호출은 첫 줄에서 assert_local 을 부르는 함수 안에만 둔다."""
+    from aoi_capacity import publish
+    tree = ast.parse(Path(publish.__file__).read_text(encoding="utf-8"))
+    fns = {n.name: n for n in ast.walk(tree) if isinstance(n, ast.FunctionDef)}
+    allowed = set()
+    for name, fn in fns.items():
+        body = fn.body[1:] if fn.body and isinstance(fn.body[0], ast.Expr) and isinstance(fn.body[0].value, ast.Constant) else fn.body
+        # 첫 문장이거나 roots 계산 바로 뒤(둘째)에서 assert_local
+        head = [b for b in body[:2] if isinstance(b, ast.Expr) and isinstance(b.value, ast.Call)]
+        if any(_call_name(b.value) == "nas_guard.assert_local" for b in head):
+            allowed.add(name)
+    offenders = []
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call):
+            continue
+        name = _call_name(node)
+        writes = name in {"os.replace", "os.rename", "os.remove", "os.unlink", "os.makedirs", "os.mkdir", "os.utime", "os.chmod", "os.rmdir"} or name.startswith("shutil.")
+        if name == "open":
+            mode = str(node.args[1].value) if len(node.args) > 1 and isinstance(node.args[1], ast.Constant) else ""
+            for kw in node.keywords:
+                if kw.arg == "mode" and isinstance(kw.value, ast.Constant):
+                    mode = str(kw.value.value)
+            writes = any(ch in mode for ch in "wax+")
+        if writes:
+            fn = _enclosing_function(tree, node)
+            if fn not in allowed:
+                offenders.append(f"{name} in {fn} (line {node.lineno})")
+    assert not offenders, "assert_local 없는 쓰기: " + ", ".join(offenders)

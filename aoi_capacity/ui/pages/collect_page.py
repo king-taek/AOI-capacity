@@ -1182,12 +1182,19 @@ class CollectPage(QWidget):
         w.finished.connect(lambda w=w: self._worker_done("_lp_worker", w))
         self._lp_worker = w
         self._b_lp_run.setEnabled(False)
+        self._b_run.setEnabled(False)                    # 수집 끝의 자동 배포와 같은 폴더에 동시에 쓰지 않는다
         self._lp_status.setText(K.LOT_PUB_RUNNING)
         self._lp_status.show()
         w.start()
 
     def _on_lot_shortcut(self) -> None:
         out = self._lp_out.text().strip()
+        if not out or not os.path.isabs(out):
+            msg = K.PUBLISH_NO_DIR if not out else K.PUBLISH_NOT_ABS_FMT.format(path=out)
+            self._lp_status.setText(msg)
+            self._lp_status.show()
+            self.error.emit(K.LOT_PUB_TITLE, msg)
+            return
         desk = QStandardPaths.writableLocation(QStandardPaths.StandardLocation.DesktopLocation) or str(paths.data_root())
         try:
             path = publish.write_shortcut(desk, out, prefs.to_collect_cfg(prefs.load()))
@@ -1203,6 +1210,7 @@ class CollectPage(QWidget):
 
     def _on_lot_publish_done(self, got, err: str) -> None:
         self._b_lp_run.setEnabled(True)
+        self._b_run.setEnabled(not self._running and self._wl_worker is None)
         if got is None:
             self._lp_status.setText(err)
             self.error.emit(K.LOT_PUB_TITLE, err)
@@ -1276,7 +1284,7 @@ class CollectPage(QWidget):
 
     def set_running(self, running: bool) -> None:
         self._running = running
-        self._b_run.setEnabled(not running and self._wl_worker is None and getattr(self, "_pz_worker", None) is None)
+        self._b_run.setEnabled(not running and self._wl_worker is None and getattr(self, "_pz_worker", None) is None and self._lp_worker is None)
         self._b_wl_run.setEnabled(not running and self._wl_worker is None and self._fl_worker is None)
         self._b_fl_run.setEnabled(not running and self._fl_worker is None and self._wl_worker is None)
         self._b_pzip.setEnabled(not running and self._pz_worker is None and self._gap_worker is None)

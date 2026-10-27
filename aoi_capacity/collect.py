@@ -3356,6 +3356,11 @@ def write_html(cfg: dict, rows: List[dict], dev_meta: List[dict], errors: List[d
     if lot_only:
         rg = None
         meta["lot_only"] = True                    # 화면: 탭 줄에 LOT 추적만
+        # 팀 공유에 올라가는 파일 — 장비 NAS 경로 · 범위 목록 · 시간 · 브랜치는 이 화면이 쓰지 않으니 담지 않는다
+        meta["devices"] = [{k: dm[k] for k in ("name", "key", "status", "read_errors") if k in dm} for dm in dev_meta]
+        meta["scope"] = {}
+        meta["timing"] = {}
+        meta["branch"] = meta["repo"] = ""
     if rg is not None:
         meta["recipe_groups"] = rg                 # D67: 화면의 레시피 묶음 — 통계·표시에만, Rescan 판정에는 쓰지 않는다
     # 기간(10/5): 고른 기간이 있으면 그 기간, 없으면 cfg html_days(최근 N일, 0 = 전부). 분할은 없다 — 9/23 분할은 사용자 요청으로 롤백

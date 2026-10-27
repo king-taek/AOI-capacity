@@ -97,21 +97,42 @@ def _write_text(path: str, text: str, roots: List[str], *, tries: int = REPLACE_
                 pass
 
 
-def _prune(data_dir: str, keep: int, roots: List[str]) -> int:
-    """오래된 데이터 파일 정리 — 최신 `keep` 개만 남긴다. 지운 개수. 못 지운 것(열려 있음)은 다음에."""
+def _prune(data_dir: str, keep: int, roots: List[str], protect=()) -> int:
+    """오래된 데이터 파일 정리 — 최신 `keep` 개만 남긴다(`protect` = 이번에 쓴 것과 latest.js 가 지금 가리키는 이름은 지우지 않는다). 지운 개수. 못 지운 것(열려 있음)은 다음에."""
     nas_guard.assert_local(data_dir, roots)
     try:
         names = sorted(n for n in os.listdir(data_dir) if _DATA_RE.match(n))
     except OSError:
         return 0
     gone = 0
+    now = time.time()
+    for n in os.listdir(data_dir):                      # 쓰다 끊겨 남은 임시 파일(1시간 넘음)
+        if n.endswith(".tmp"):
+            fp = os.path.join(data_dir, n)
+            try:
+                if now - os.path.getmtime(fp) > 3600:
+                    os.remove(fp)
+            except OSError:
+                pass
     for n in names[:-keep] if keep > 0 else names:
+        if n in protect:
+            continue
         try:
             os.remove(os.path.join(data_dir, n))
             gone += 1
         except OSError:
             pass
     return gone
+
+
+def _pointed_name(share_dir: str) -> str:
+    """latest.js 가 지금 가리키는 데이터 파일 이름(못 읽으면 빈 값)."""
+    try:
+        with open(os.path.join(share_dir, LATEST_NAME), encoding="utf-8") as f:
+            m = re.search(r"data/(lot_[0-9_]+\.html)", f.read())
+        return m.group(1) if m else ""
+    except OSError:
+        return ""
 
 
 def publish_lot(cfg: dict, share_dir: str, *, rows: Optional[list] = None, dev_meta: Optional[list] = None,
@@ -131,9 +152,13 @@ def publish_lot(cfg: dict, share_dir: str, *, rows: Optional[list] = None, dev_m
     t0 = time.perf_counter()
     stamp = (now or dt.datetime.now()).strftime("%Y%m%d_%H%M")
     data_dir = os.path.join(share_dir, DATA_DIR)
+    if not (os.path.isdir(share_dir) or os.path.isdir(os.path.dirname(share_dir.rstrip('\\/')))):   # 무거운 HTML 을 만들기 전에 — 닿지 못하면 바로 실패(새 하위 폴더는 만들 수 있다)
+        raise FileNotFoundError(2, i18n.KO.PUBLISH_DIR_MISSING, share_dir)
     name = f"lot_{stamp}.html"
-    if os.path.exists(os.path.join(data_dir, name)):
-        name = f"lot_{stamp}{(now or dt.datetime.now()).strftime('%S')}.html"
+    n = 0
+    while os.path.exists(os.path.join(data_dir, name)):      # 같은 분에 또 올리면 덮어쓰지 않고 번호를 붙인다
+        n += 1
+        name = f"lot_{stamp}{(now or dt.datetime.now()).strftime('%S')}{'' if n == 1 else '_' + str(n)}.html"
     if rows is not None:
         path = collect.write_html(cfg, rows, dev_meta or [], [], time.time(), mode="publish", log=log, lot_only=True,
                                   out_dir=data_dir, out_name=name, params_store={})
@@ -154,8 +179,9 @@ def publish_lot(cfg: dict, share_dir: str, *, rows: Optional[list] = None, dev_m
         cur_s = None
     if cur_s != shortcut_text(share_dir):
         _write_text(short, shortcut_text(share_dir), roots, tries=2)           # 못 써도 배포는 성공 — 바로가기는 이미 있거나 다음에
-    pruned = _prune(data_dir, KEEP_FILES, roots)
-    res = {"dir": share_dir, "data": path, "bytes": os.path.getsize(path), "sec": round(time.perf_counter() - t0, 1),
+    size = os.path.getsize(path)
+    pruned = _prune(data_dir, KEEP_FILES, roots, protect={name, _pointed_name(share_dir)})
+    res = {"dir": share_dir, "data": path, "bytes": size, "sec": round(time.perf_counter() - t0, 1),
            "pointer_ok": ok, "pruned": pruned}
     if log:
         log(f"LOT 추적 배포: {path} ({res['bytes'] >> 20}MB · {res['sec']}초 · 안내 {'갱신' if ok else '못 바꿈(열려 있음)'} · 정리 {pruned}개)")

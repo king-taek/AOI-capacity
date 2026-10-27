@@ -529,7 +529,7 @@ SHARE_PROBE_NO_DEVICES_FMT = "장비 목록(devices.csv)이 없어 장비 NAS �
 LOT_PUB_TITLE = "LOT 추적 발행 시험"
 LOT_PUB_SHORT = "가진 데이터로 LOT 추적만 담은 배포용 HTML 을 폴더에 올리기 · 장비 NAS 는 읽지 않음"
 LOT_PUB_WHEN = ("수집 없이 캐시로 LOT 추적만 보이는 배포용 HTML 을 이 폴더에 올립니다 — 바로가기용 AOI_LOT.html · latest.js · data 폴더(최근 3개). "
-                "설정의 'LOT 추적 배포 폴더' 를 적어 두면 수집이 끝날 때마다 같은 일을 조용히 합니다. 장비 NAS 아래 폴더는 거부합니다. 시험이 끝나면 이 카드는 지웁니다.")
+                "설정의 'LOT 추적 배포 폴더' 를 적어 두면 수집이 끝날 때마다 같은 일을 조용히 합니다. 장비 NAS 아래 폴더는 거부합니다. 이 칸의 폴더는 이 단추에만 쓰이고(설정 값은 안 바뀝니다), 자동 배포는 설정의 폴더로 갑니다.")
 LOT_PUB_OUT = "배포 폴더"
 LOT_PUB_RUN = "지금 올리기"
 LOT_PUB_OPEN = "폴더 열기"
@@ -550,6 +550,7 @@ PUBLISH_NOT_ABS_FMT = "배포 폴더는 전체 경로로 적어 주세요: {path
 PUBLISH_SHORTCUT_LOCKED = "바로가기 파일이 열려 있어 바꾸지 못했습니다"
 LOT_PUB_SHORTCUT = "바탕화면에 바로가기"
 LOT_PUB_SHORTCUT_DONE_FMT = "바탕화면에 바로가기를 만들었습니다: {path}"
+PUBLISH_DIR_MISSING = "배포 폴더에 닿지 못했습니다(공유 연결 · 경로 확인)"
 PUBLISH_NO_DIR = "배포 폴더를 적어 주세요"
 SHARE_PROBE_REFUSED_FMT = "멈췄습니다: {error}"
 SHARE_PROBE_FAIL_FMT = "시험하지 못했습니다: {error}"

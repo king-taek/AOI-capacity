@@ -12,6 +12,7 @@ from pathlib import Path
 import pytest
 
 from aoi_capacity import collect, publish
+from aoi_capacity.nas_guard import NasWriteRefused
 from aoi_capacity.utils import config as config_mod
 import sample_rows
 
@@ -62,7 +63,7 @@ def test_out_dir_under_a_nas_root_is_refused(tmp_path, sample):
     dev_csv = tmp_path / "devices.csv"
     cfg = _cfg(tmp_path / "main", devices_csv=str(dev_csv))
     dev_csv.write_text("name,path\nAOI-1," + str(nas / "AOI-1") + "\n", encoding="utf-8")
-    with pytest.raises(Exception):
+    with pytest.raises(NasWriteRefused):
         collect.write_html(cfg, rows[:5], meta["devices"], [], 0.0, lot_only=True, out_dir=str(nas / "AOI-1" / "pub"))
     assert not (nas / "AOI-1" / "pub").exists()
 
@@ -138,7 +139,7 @@ def test_publish_refuses_a_folder_under_an_equipment_nas(tmp_path, sample):
     dev_csv = tmp_path / "devices.csv"
     dev_csv.write_text("name,path\nAOI-1," + str(nas / "AOI-1") + "\n", encoding="utf-8")
     cfg["devices_csv"] = str(dev_csv)
-    with pytest.raises(Exception):
+    with pytest.raises(NasWriteRefused):
         publish.publish_lot(cfg, str(nas / "AOI-1" / "pub"), rows=rows[:10], dev_meta=devs)
     assert not (nas / "AOI-1" / "pub").exists()
     with pytest.raises(ValueError):
@@ -183,3 +184,34 @@ def test_publish_dir_is_hardcoded_by_default_and_must_be_absolute(tmp_path, samp
     assert not Path("relative\\folder").exists()
     if os.name != "nt":                                           # 개발 환경 · CI 에서는 기본 UNC 로 나가지 않는다
         assert publish.publish_after_collect(dict(_cfg_, publish_dir=config_mod.PUBLISH_DIR_DEFAULT), rows[:10], devs, log=None) is None
+
+
+def test_prune_keeps_the_file_latest_js_points_to(tmp_path):
+    from aoi_capacity import publish
+    d = tmp_path / "data"
+    d.mkdir()
+    for n in ("lot_20260101_0900", "lot_20260102_0900", "lot_20260103_0900", "lot_20260104_0900"):
+        (d / f"{n}.html").write_text("x")
+    publish._prune(str(d), 3, [], protect={"lot_20260101_0900.html"})
+    assert sorted(p.name for p in d.iterdir()) == ["lot_20260101_0900.html", "lot_20260102_0900.html", "lot_20260103_0900.html", "lot_20260104_0900.html"][0:1] + ["lot_20260102_0900.html", "lot_20260103_0900.html", "lot_20260104_0900.html"]
+
+
+def test_lot_only_meta_drops_nas_paths():
+    src = open(collect.__file__, encoding="utf-8").read()
+    assert 'meta["devices"] = [{k: dm[k] for k in ("name", "key", "status", "read_errors")' in src
+
+
+def test_publish_same_minute_three_times_keeps_three_distinct_files_and_a_valid_pointer(tmp_path, sample):
+    cfg, rows, devs = _publish_cfg(tmp_path, sample)
+    share = tmp_path / "share"
+    now = dt.datetime(2026, 10, 27, 8, 10, 0)
+    got = [publish.publish_lot(cfg, str(share), rows=rows[:300], dev_meta=devs, now=now) for _ in range(3)]
+    assert len({g["data"] for g in got}) == 3
+    ptr = (share / "latest.js").read_text(encoding="utf-8")
+    assert os.path.basename(got[-1]["data"]) in ptr and os.path.isfile(got[-1]["data"])
+
+
+def test_publish_to_a_missing_share_fails_fast(tmp_path, sample):
+    cfg, rows, devs = _publish_cfg(tmp_path, sample)
+    with pytest.raises(FileNotFoundError):
+        publish.publish_lot(cfg, str(tmp_path / "no" / "share"), rows=rows[:10], dev_meta=devs)
