@@ -23,6 +23,9 @@ INT, BOOL, STR, NAME, PATH = "int", "bool", "str", "name", "path"
 MAX_DAYS = 3650
 MAX_WORKERS = 32
 
+#: LOT 추적 배포 폴더(10/27 사용자 확정 — 팀 공유 폴더, 장비 NAS 와 다른 서버). 설정에서 비우면 배포하지 않는다.
+PUBLISH_DIR_DEFAULT = i18n.KO.PUBLISH_DIR_DEFAULT          # 한글 경로라 문구 파일(i18n/ko.py)에 둔다
+
 #: 키 → (종류, 기본값, 하한, 상한). 하한·상한은 int 만 쓴다.
 RULES: Dict[str, Tuple[str, Any, Optional[int], Optional[int]]] = {
     "backfill_days": (INT, 30, 1, MAX_DAYS),
@@ -42,7 +45,7 @@ RULES: Dict[str, Tuple[str, Any, Optional[int], Optional[int]]] = {
     "devices_csv": (PATH, "", None, None),
     "cache_file": (PATH, "", None, None),
     "output_dir": (PATH, "", None, None),
-    "publish_dir": (PATH, "", None, None),         # 10/27: LOT 추적 배포 폴더(팀 공유) — 비우면 배포 안 함. 수집이 끝나면 조용히 올린다
+    "publish_dir": (PATH, PUBLISH_DIR_DEFAULT, None, None),         # 10/27: LOT 추적 배포 폴더(팀 공유) — 비우면 배포 안 함. 수집이 끝나면 조용히 올린다
     "recipe_groups_file": (PATH, "", None, None),  # D67: 결과 HTML 에 담을 레시피 묶음 파일(비우면 데이터 폴더·다운로드에서 가장 최근 것)
 }
 _TRUE = {"true", "1", "yes", "y", "on"}

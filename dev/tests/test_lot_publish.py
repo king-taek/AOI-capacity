@@ -12,6 +12,7 @@ from pathlib import Path
 import pytest
 
 from aoi_capacity import collect, publish
+from aoi_capacity.utils import config as config_mod
 import sample_rows
 
 TEMPLATE = Path(__file__).resolve().parents[2] / "aoi_capacity" / "ui" / "assets" / "template.html"
@@ -100,7 +101,7 @@ def test_publish_writes_stub_pointer_and_unique_data_files_and_prunes(tmp_path, 
     now = dt.datetime(2026, 10, 27, 8, 15)
     got = [publish.publish_lot(cfg, str(share), rows=rows[:3000], dev_meta=devs, now=now + dt.timedelta(minutes=i)) for i in range(5)]
     assert all(g["pointer_ok"] for g in got)
-    assert sorted(p.name for p in share.iterdir()) == ["AOI_LOT.html", "data", "latest.js"]
+    assert sorted(p.name for p in share.iterdir()) == ["AOI_LOT.html", "AOI_LOT_shortcut.url", "data", "latest.js"]
     data = sorted(p.name for p in (share / "data").iterdir())
     assert data == ["lot_20261027_0817.html", "lot_20261027_0818.html", "lot_20261027_0819.html"]       # 최근 3개만
     assert (share / "latest.js").read_text(encoding="utf-8") == 'window.AOI_LOT_LATEST="data/lot_20261027_0819.html";\n'
@@ -155,3 +156,30 @@ def test_publish_after_collect_is_silent_and_never_raises(tmp_path, sample):
     cfg["publish_dir"] = str(blocker / "sub")                                          # 폴더를 만들 수 없는 경로
     assert publish.publish_after_collect(cfg, rows[:10], devs, log=lines.append) is None
     assert len(lines) == 1 and lines[0].startswith("LOT 추적 배포 실패(수집은 정상)")
+
+
+def test_shortcut_points_at_the_stub_with_an_encoded_file_url(tmp_path, sample):
+    cfg, rows, devs = _publish_cfg(tmp_path, sample)
+    url = publish.stub_url(config_mod.PUBLISH_DIR_DEFAULT)
+    assert url == ("file://k5cifsn2/k5tsvdata$/1.%20Conder%20Scan/0.%20%EC%A0%84%EC%82%B0%20X/%EC%9E%84%ED%98%84%ED%83%9D/"
+                   "LOT%EC%B6%94%EC%A0%81/AOI_LOT.html")
+    assert publish.stub_url("Z:\\a b\\c\\") == "file:///Z:/a%20b/c/AOI_LOT.html"
+    desk = tmp_path / "Desktop"
+    path = publish.write_shortcut(str(desk), config_mod.PUBLISH_DIR_DEFAULT, cfg)
+    assert Path(path).read_bytes() == ("[InternetShortcut]\r\nURL=" + url + "\r\n").encode("ascii")
+    share = tmp_path / "share"
+    publish.publish_lot(cfg, str(share), rows=rows[:100], dev_meta=devs, now=dt.datetime(2026, 10, 27, 8, 15))
+    assert "AOI_LOT.html" in (share / "AOI_LOT_shortcut.url").read_text(encoding="ascii")
+
+
+def test_publish_dir_is_hardcoded_by_default_and_must_be_absolute(tmp_path, sample):
+    assert collect.DEFAULT_CONFIG["publish_dir"] == config_mod.PUBLISH_DIR_DEFAULT
+    assert config_mod.PUBLISH_DIR_DEFAULT.startswith("\\\\k5cifsn2\\")
+    cfg, problems = config_mod.normalize_config(dict(collect.DEFAULT_CONFIG))
+    assert cfg["publish_dir"] == config_mod.PUBLISH_DIR_DEFAULT and not [p for p in problems if p.key == "publish_dir"]
+    _cfg_, rows, devs = _publish_cfg(tmp_path, sample)
+    with pytest.raises(ValueError):
+        publish.publish_lot(_cfg_, "relative\\folder", rows=rows[:10], dev_meta=devs)
+    assert not Path("relative\\folder").exists()
+    if os.name != "nt":                                           # 개발 환경 · CI 에서는 기본 UNC 로 나가지 않는다
+        assert publish.publish_after_collect(dict(_cfg_, publish_dir=config_mod.PUBLISH_DIR_DEFAULT), rows[:10], devs, log=None) is None

@@ -16,7 +16,7 @@ import os
 import time
 from typing import Dict, Optional
 
-from PyQt6.QtCore import QDate, QThread, Qt, QTimer, QUrl, pyqtSignal
+from PyQt6.QtCore import QDate, QStandardPaths, QThread, Qt, QTimer, QUrl, pyqtSignal
 from PyQt6.QtGui import QDesktopServices
 from PyQt6.QtWidgets import (QCheckBox, QFileDialog, QFrame, QGridLayout, QHBoxLayout, QLabel, QLineEdit,
                              QPlainTextEdit, QProgressBar, QScrollArea, QSizePolicy, QVBoxLayout, QWidget)
@@ -593,10 +593,11 @@ class CollectPage(QWidget):
         self._b_lp_view = make_button(K.LOT_PUB_VIEW, "default", pcard)
         self._b_lp_view.setEnabled(False)
         self._b_lp_open = make_button(K.LOT_PUB_OPEN, "ghost", pcard)
+        self._b_lp_short = make_button(K.LOT_PUB_SHORTCUT, "default", pcard)
         self._lp_status = _label("", "muted", pcard, wrap=True)
         self._lp_status.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
         self._lp_status.hide()
-        pl.addLayout(_row(self._b_lp_run, self._b_lp_view, self._b_lp_open))
+        pl.addLayout(_row(self._b_lp_run, self._b_lp_view, self._b_lp_short, self._b_lp_open))
         pl.addWidget(self._lp_status)
         dl.addWidget(pcard)
         self._lp_worker: Optional[_LotPublishWorker] = None
@@ -713,6 +714,7 @@ class CollectPage(QWidget):
         self._b_sp_stop.clicked.connect(self._stop_share_probe)
         self._b_lp_run.clicked.connect(self._on_lot_publish)
         self._b_lp_view.clicked.connect(lambda: self._lp_path and QDesktopServices.openUrl(QUrl.fromLocalFile(self._lp_path)))
+        self._b_lp_short.clicked.connect(self._on_lot_shortcut)
         self._b_lp_open.clicked.connect(lambda: QDesktopServices.openUrl(QUrl.fromLocalFile(self._lp_out.text().strip())))
         self._b_sp_open.clicked.connect(self._open_share_probe_dir)
         self._b_fl_open.clicked.connect(lambda: QDesktopServices.openUrl(QUrl.fromLocalFile(self._fl_out.text().strip())))
@@ -1183,6 +1185,21 @@ class CollectPage(QWidget):
         self._lp_status.setText(K.LOT_PUB_RUNNING)
         self._lp_status.show()
         w.start()
+
+    def _on_lot_shortcut(self) -> None:
+        out = self._lp_out.text().strip()
+        desk = QStandardPaths.writableLocation(QStandardPaths.StandardLocation.DesktopLocation) or str(paths.data_root())
+        try:
+            path = publish.write_shortcut(desk, out, prefs.to_collect_cfg(prefs.load()))
+        except Exception as ex:  # noqa: BLE001
+            self._lp_status.setText(f"{type(ex).__name__}: {ex}")
+            self._lp_status.show()
+            self.error.emit(K.LOT_PUB_TITLE, f"{type(ex).__name__}: {ex}")
+            return
+        text = K.LOT_PUB_SHORTCUT_DONE_FMT.format(path=path)
+        self._lp_status.setText(text)
+        self._lp_status.show()
+        self.append_log(text)
 
     def _on_lot_publish_done(self, got, err: str) -> None:
         self._b_lp_run.setEnabled(True)

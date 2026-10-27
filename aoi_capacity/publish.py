@@ -19,11 +19,13 @@ import html
 import os
 import re
 import time
+import urllib.parse
 from typing import Callable, Dict, List, Optional
 
 from . import collect, i18n, nas_guard
 
 STUB_NAME = "AOI_LOT.html"
+SHORTCUT_NAME = "AOI_LOT_shortcut.url"          # 폴더 안에 두는 인터넷 바로가기 — 팀원은 이 파일을 더블클릭하거나 바탕화면으로 복사
 LATEST_NAME = "latest.js"
 DATA_DIR = "data"
 KEEP_FILES = 3
@@ -46,12 +48,36 @@ def latest_text(data_name: str) -> str:
     return f'window.AOI_LOT_LATEST="{DATA_DIR}/{data_name}";\n'
 
 
-def _write_text(path: str, text: str, roots: List[str], *, tries: int = REPLACE_TRIES) -> bool:
+def stub_url(share_dir: str) -> str:
+    """안내 파일의 file:// 주소 — UNC(`\\\\서버\\공유\\…`)는 `file://서버/공유/…`, 드라이브(`Z:\\…`)는 `file:///Z:/…`. 한글 · 공백은 퍼센트 인코딩."""
+    p = str(share_dir).strip().rstrip("\\/").replace("\\", "/")
+    q = lambda t: urllib.parse.quote(t, safe="/$:()@!,;=+-_.~")
+    if p.startswith("//"):
+        return "file:" + "//" + q(p[2:]) + "/" + STUB_NAME
+    return "file:///" + q(p) + "/" + STUB_NAME
+
+
+def shortcut_text(share_dir: str) -> str:
+    return f"[InternetShortcut]\r\nURL={stub_url(share_dir)}\r\n"
+
+
+def write_shortcut(dest_dir: str, share_dir: str, cfg: dict, name: str = SHORTCUT_NAME) -> str:
+    """`dest_dir` 에 배포 폴더의 안내 파일을 여는 인터넷 바로가기(.url)를 만든다 — 바탕화면 등 이 PC 의 폴더. 만든 경로."""
+    roots = nas_guard.roots_for_cfg(cfg)
+    nas_guard.assert_local(dest_dir, roots)
+    os.makedirs(dest_dir, exist_ok=True)
+    path = os.path.join(dest_dir, name)
+    if not _write_text(path, shortcut_text(share_dir), roots, tries=2):
+        raise PermissionError(13, i18n.KO.PUBLISH_SHORTCUT_LOCKED, path)
+    return path
+
+
+def _write_text(path: str, text: str, roots: List[str], *, tries: int = REPLACE_TRIES, newline: str = "") -> bool:
     """임시 파일에 쓰고 이름 바꿔 교체 — 잠겨 있으면 `tries` 번까지 기다려 다시. 성공 여부."""
     nas_guard.assert_local(path, roots)
     tmp = f"{path}.{os.getpid()}-{time.time_ns()}.tmp"
     try:
-        with open(tmp, "w", encoding="utf-8", newline="") as f:
+        with open(tmp, "w", encoding="utf-8", newline=newline) as f:
             f.write(text)
             f.flush()
             os.fsync(f.fileno())
@@ -98,6 +124,8 @@ def publish_lot(cfg: dict, share_dir: str, *, rows: Optional[list] = None, dev_m
     share_dir = str(share_dir or "").strip()
     if not share_dir:
         raise ValueError(i18n.KO.PUBLISH_NO_DIR)
+    if not os.path.isabs(share_dir):
+        raise ValueError(i18n.KO.PUBLISH_NOT_ABS_FMT.format(path=share_dir))     # 상대 경로는 엉뚱한 곳에 폴더를 만든다
     roots = nas_guard.roots_for_cfg(cfg)
     nas_guard.assert_local(share_dir, roots)          # ★ 장비 NAS 아래면 여기서 멈춘다
     t0 = time.perf_counter()
@@ -119,6 +147,13 @@ def publish_lot(cfg: dict, share_dir: str, *, rows: Optional[list] = None, dev_m
         cur = None
     if cur != stub_text():
         ok = _write_text(stub, stub_text(), roots) and ok
+    short = os.path.join(share_dir, SHORTCUT_NAME)
+    try:
+        cur_s = open(short, encoding="utf-8").read() if os.path.isfile(short) else None
+    except OSError:
+        cur_s = None
+    if cur_s != shortcut_text(share_dir):
+        _write_text(short, shortcut_text(share_dir), roots, tries=2)           # 못 써도 배포는 성공 — 바로가기는 이미 있거나 다음에
     pruned = _prune(data_dir, KEEP_FILES, roots)
     res = {"dir": share_dir, "data": path, "bytes": os.path.getsize(path), "sec": round(time.perf_counter() - t0, 1),
            "pointer_ok": ok, "pruned": pruned}
@@ -130,7 +165,7 @@ def publish_lot(cfg: dict, share_dir: str, *, rows: Optional[list] = None, dev_m
 def publish_after_collect(cfg: dict, rows: list, dev_meta: list, log: Optional[Callable[[str], None]] = None) -> Optional[Dict[str, object]]:
     """수집이 끝난 뒤 조용히 배포 — cfg `publish_dir` 가 비어 있으면 아무것도 안 한다. 실패해도 수집은 성공으로 두고 로그에 한 줄만 남긴다."""
     share_dir = str(cfg.get("publish_dir") or "").strip()
-    if not share_dir:
+    if not share_dir or (os.name != "nt" and share_dir.startswith("\\\\")):    # 꺼짐 · Windows 가 아니면 UNC 에 닿을 수 없다(개발 환경·CI)
         return None
     try:
         return publish_lot(cfg, share_dir, rows=rows, dev_meta=dev_meta, log=log)
