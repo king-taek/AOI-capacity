@@ -22,8 +22,7 @@ from PyQt6.QtWidgets import (QCheckBox, QFileDialog, QFrame, QGridLayout, QHBoxL
 
 from ... import collect, i18n, nas_guard
 from ...utils import paths, prefs, results
-from ... import image_survey as image_survey_mod
-from ...workers import failure_logs, image_survey, wafer_logs
+from ...workers import failure_logs, wafer_logs
 from ...workers import share_probe
 from ..widgets.buttons import make_button
 from ..widgets.collapsible import Collapsible
@@ -584,27 +583,7 @@ class CollectPage(QWidget):
         fl.addLayout(r)
         fl.addLayout(_row(self._b_fl_run, self._b_fl_open, self._fl_status))
         dl.addWidget(fcard)
-        self._fl_worker: Optional[QThread] = None        # 실패 로그 · Review 이미지 조사가 같은 자리를 쓴다(둘 다 NAS 읽기라 동시에 돌지 않음)
-
-        # Review 이미지 순서 조사(10/22) — 저장 위치는 실패 로그와 같은 폴더
-        icard, il = _tool(dev, K.IMG_SURVEY_TITLE, K.IMG_SURVEY_SHORT, K.IMG_SURVEY_WHEN)
-        self._is_days = QSpinBox(icard)
-        self._is_days.setRange(1, 90)
-        self._is_days.setValue(max(1, min(90, int(p.image_survey_days or 7))))
-        self._is_days.setSuffix(K.FAIL_LOGS_DAYS_SUFFIX)
-        self._is_days.setFixedWidth(84)
-        self._is_terms = QLineEdit(image_survey_mod.DEFAULT_TERMS_TEXT, icard)
-        self._is_terms.setPlaceholderText(K.IMG_SURVEY_TERMS_HINT)
-        self._is_terms.setToolTip(K.IMG_SURVEY_TERMS_HINT)
-        r = _row(_label(K.FAIL_LOGS_DAYS_PREFIX, "muted", icard), self._is_days, 12, _label(K.IMG_SURVEY_TERMS_LABEL, "muted", icard),
-                 self._is_terms, stretch=False)
-        r.setStretch(4, 1)
-        il.addLayout(r)
-        self._is_status = _label("", "muted", icard, wrap=True)
-        self._b_is_run = make_button(K.IMG_SURVEY_RUN, "primary", icard)
-        self._b_is_pixel = make_button(K.IMG_SURVEY_PIXEL_RUN, "default", icard, tooltip=K.IMG_SURVEY_PIXEL_HINT)
-        il.addLayout(_row(self._b_is_run, self._b_is_pixel, self._is_status))
-        dl.addWidget(icard)
+        self._fl_worker: Optional[QThread] = None        # 실패 로그 워커 자리
 
         # Wafer 로그 30일 전체 수집(10/10) — 개발자 조사용
         wcard, wl = _tool(dev, K.WAFER_LOGS_TITLE, K.WAFER_LOGS_SHORT, K.WAFER_LOGS_WHEN)
@@ -697,9 +676,6 @@ class CollectPage(QWidget):
         self._b_sp_open.clicked.connect(self._open_share_probe_dir)
         self._b_fl_open.clicked.connect(lambda: QDesktopServices.openUrl(QUrl.fromLocalFile(self._fl_out.text().strip())))
         self._b_fl_browse.clicked.connect(self._browse_fl_out)
-        self._b_is_run.clicked.connect(self._on_image_survey)
-        self._b_is_pixel.clicked.connect(lambda: self._on_image_survey(pixel=True))
-        self._is_days.valueChanged.connect(lambda v: prefs.patch(image_survey_days=int(v)))
         self._fl_days.valueChanged.connect(lambda v: prefs.patch(fail_log_days=int(v)))
         self._pick("normal")
         self.refresh_result()
@@ -1185,40 +1161,6 @@ class CollectPage(QWidget):
         self._b_run.setEnabled(not on and not self._running and self._wl_worker is None)
         self._b_wl_run.setEnabled(not on and not self._running and self._wl_worker is None)
 
-    # ── Review 이미지 순서 조사(10/22) — 저장 위치는 실패 로그와 같은 폴더 ──
-    def _on_image_survey(self, pixel: bool = False) -> None:
-        if self._fl_worker is not None or self._wl_worker is not None or self._gap_worker is not None:
-            return
-        if self._running:
-            self.error.emit(K.IMG_SURVEY_TITLE, K.WAFER_LOGS_BUSY)
-            return
-        out = self._fl_out.text().strip() or str(paths.data_root() / "fail_logs")
-        w = image_survey.ImageSurveyWorker(prefs.to_collect_cfg(prefs.load()), int(self._is_days.value()), out, self,
-                                        terms=image_survey_mod.parse_terms(self._is_terms.text()), pixel=pixel)
-        w.log.connect(self.append_log)
-        w.done.connect(self._on_image_survey_done)
-        w.finished.connect(lambda w=w: self._worker_done("_fl_worker", w))
-        self._fl_worker = w
-        self._set_image_survey_running(True)
-        self._is_status.setText(K.IMG_SURVEY_RUNNING)
-        w.start()
-
-    def _on_image_survey_done(self, result, err: str) -> None:
-        self._set_image_survey_running(False)
-        if result:
-            text = K.IMG_SURVEY_DONE_FMT.format(n=result.get("items", 0), path=result.get("path", ""))
-        else:
-            text = err
-            self.error.emit(K.IMG_SURVEY_TITLE, err)
-        self._is_status.setText(text)
-        self.append_log(text)
-
-    def _set_image_survey_running(self, on: bool) -> None:
-        for w in (self._b_is_run, self._b_is_pixel, self._is_days, self._is_terms, self._b_fl_run, self._fl_days, self._fl_out, self._b_fl_browse):
-            w.setEnabled(not on)
-        self._b_run.setEnabled(not on and not self._running and self._wl_worker is None)
-        self._b_wl_run.setEnabled(not on and not self._running and self._wl_worker is None)
-
     def _browse_fl_out(self) -> None:
         chosen = QFileDialog.getExistingDirectory(self, K.WAFER_LOGS_OUT, self._fl_out.text())
         if chosen:
@@ -1246,8 +1188,6 @@ class CollectPage(QWidget):
         self._b_run.setEnabled(not running and self._wl_worker is None and getattr(self, "_pz_worker", None) is None)
         self._b_wl_run.setEnabled(not running and self._wl_worker is None and self._fl_worker is None)
         self._b_fl_run.setEnabled(not running and self._fl_worker is None and self._wl_worker is None)
-        self._b_is_run.setEnabled(not running and self._fl_worker is None and self._wl_worker is None)
-        self._b_is_pixel.setEnabled(not running and self._fl_worker is None and self._wl_worker is None)
         self._b_pzip.setEnabled(not running and self._pz_worker is None and self._gap_worker is None)
         if self._gap_worker is None:
             self._b_gaps.setEnabled(not running and bool(self._gap_n))

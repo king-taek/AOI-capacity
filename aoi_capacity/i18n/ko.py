@@ -498,7 +498,6 @@ WAFER_LOGS_NO_DEVICES = "읽을 수 있는 Camtek 장비가 없습니다 — 장
 WAFER_LOGS_BUSY = "가동률 수집 중에는 로그를 모을 수 없습니다(NAS 를 함께 읽지 않게)"
 
 FAIL_LOGS_SHORT = "수집 실패 원인 · 로그를 zip 한 장으로"
-IMG_SURVEY_SHORT = "Color/Scan image 순서 조사용 표본 zip"
 WAFER_LOGS_SHORT = "개발자에게 보낼 30일 로그(암호화) · 몇 시간"
 SHARE_PROBE_SHORT = "LOT 추적 화면을 팀 공유 폴더에 올려도 되는지 미리 재기"
 
@@ -544,17 +543,3 @@ FAIL_LOGS_RUNNING = "모으는 중…"
 FAIL_LOGS_DONE_FMT = "끝났습니다 — 실패 항목 {n}개 · {path}"
 FAIL_LOGS_NONE_FMT = "끝났습니다 — 지난 {days}일 안에 찾은 실패가 없습니다 · {path}"
 FAIL_LOGS_FAIL_FMT = "실패 로그를 모으지 못했습니다: {error}"
-
-# ── Review 이미지 순서 조사(10/22) ──────────────────────────────────────────
-IMG_SURVEY_TITLE = "Review 이미지 순서 조사"
-IMG_SURVEY_WHEN = ("Review 에서 Color image 보다 Scan image 가 먼저 나오는 현상을 조사하려고, 최근 Report 에서 Wafer 를 표본(PI 우선, 장비마다 PI 3장 · 그 밖 1장)으로 골라 "
-                   "그 Wafer 폴더 안의 파일 목록 · 하위 폴더 항목의 수정 시각 · 이미지/검토 관련 ini · txt 를 zip 한 장으로 모읍니다. NAS 는 **읽기 전용**이고 수집 범위 밖 장비는 보지 않습니다. "
-                   "이미지 파일 자체는 담지 않습니다. 파일 내용에 Lot · Job 이름이 있으니 공유 범위는 직접 판단하세요.")
-IMG_SURVEY_TERMS_LABEL = "Lot 지정(선택)"
-IMG_SURVEY_TERMS_HINT = "예: TB500.INT556 FTL, TB500.INT808 LNY — 쉼표로 나눔, 적으면 기간 표본 대신 이 Lot 들만 봄"
-IMG_SURVEY_RUN = "Review 이미지 조사"
-IMG_SURVEY_PIXEL_RUN = "Color 픽셀 크기 조사"
-IMG_SURVEY_PIXEL_HINT = "지난 N일의 모든 Job · Lot 에서 Wafer 를 넓게 골라 Color 픽셀 크기가 0 인 것을 찾습니다(위 일수 사용, 파일은 이름 · 2개 ini 만 읽음)"
-IMG_SURVEY_RUNNING = "표본을 읽는 중…"
-IMG_SURVEY_DONE_FMT = "끝났습니다 — 표본 {n}장 · {path}"
-IMG_SURVEY_FAIL_FMT = "Review 이미지 조사를 하지 못했습니다: {error}"
