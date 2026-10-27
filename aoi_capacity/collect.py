@@ -169,6 +169,11 @@ SYNTHETIC_KINDS = ("batch", "slot")
 #: HTML 에 박아 넣는 JSON 에서 문자열 풀로 접는 열 — 같은 값이 수없이 되풀이되는 열들이다.
 #: (90일치 30대면 행이 십수만 개다. 시각 두 열만 값이 거의 다 달라 접지 않는다.)
 POOLED_COLS = tuple(c for c in OUT_COLS if c not in ("wafer_start_time", "wafer_end_time"))
+#: LOT 추적만 담는 시험 파일의 이름 · 이 PC 의 데이터 폴더 아래 폴더 이름(공유 폴더에는 아직 쓰지 않는다).
+LOT_PUBLISH_NAME = "AOI_LOT_tracking.html"
+LOT_PUBLISH_DIR = "publish_test"
+#: LOT 추적만 담는 파일(`write_html(lot_only=True)`)에서 값을 비우는 열 — 화면(template)이 어디에서도 읽지 않는 열이다(가드 `test_lot_publish.py`).
+LOT_ONLY_BLANK_COLS = ("data_issue", "issue_codes", "norm_status", "outcome", "scanned_dice", "yield", "time_basis")
 REPORT_RE = re.compile(r"^(.+?)_(\d{4})_(.+)_(\d{1,2}-[A-Za-z]{3}-\d{2})_\((\d{2}\.\d{2}\.\d{2})\)_BatchReport\.html?$", re.I)
 #: 장비마다 다르다 — AOI-8·25 는 `13-Sep-26 01:03:29 PM`, AOI-1 은 `9/16/2026 1:54:03 PM`,
 #: INI 의 BatchStartTime 은 `09/10/2026 18:50:08`(24시간제).
@@ -3307,8 +3312,12 @@ def params_for_range(store: dict, r_from: str = "", r_to: str = "") -> dict:
 def write_html(cfg: dict, rows: List[dict], dev_meta: List[dict], errors: List[dict], started: float, *,
                mode: str = "auto", log: Optional[LogFn] = None, progress: Optional[ProgressFn] = None,
                timing: Optional[dict] = None, warnings: Optional[List[dict]] = None,
-               day_from: str = "", day_to: str = "", params_store: Optional[dict] = None) -> str:
+               day_from: str = "", day_to: str = "", params_store: Optional[dict] = None,
+               lot_only: bool = False, out_dir: str = "", out_name: str = "") -> str:
     """template.html 에 데이터를 넣어 출력 폴더에 HTML 한 장을 쓴다(분할 없음).
+
+    `lot_only`(10/27, 공유 발행 시험): LOT 추적 탭만 보이는 한 장 — 기간을 안 주면 가진 데이터 전부, 파라미터 · 레시피 묶음 · LOT 추적이 안 쓰는 열은 담지 않고
+    CSV 도 쓰지 않는다. `out_dir`·`out_name` 을 주면 그 로컬 폴더·이름으로 쓴다(NAS 아래면 거부).
 
     `params_store`(캐시 `params`, D89)를 주거나 `timing["params_store"]`(collect 가 넣는다)가 있으면 파라미터 탭 묶음(`meta.params`)도 담는다.
 
@@ -3341,6 +3350,9 @@ def write_html(cfg: dict, rows: List[dict], dev_meta: List[dict], errors: List[d
             "version": (str(ver.get("sha", ""))[:7]) if ver.get("sha") else "",
             "dashboard_settings": config_mod.dashboard_settings(cfg)}      # D14: 살펴볼 장비 문턱(attentionUtil · attentionErr)
     rg, _rg_path = recipes_mod.load(cfg, log)
+    if lot_only:
+        rg = None
+        meta["lot_only"] = True                    # 화면: 탭 줄에 LOT 추적만
     if rg is not None:
         meta["recipe_groups"] = rg                 # D67: 화면의 레시피 묶음 — 통계·표시에만, Rescan 판정에는 쓰지 않는다
     # 기간(10/5): 고른 기간이 있으면 그 기간, 없으면 cfg html_days(최근 N일, 0 = 전부). 분할은 없다 — 9/23 분할은 사용자 요청으로 롤백
@@ -3348,7 +3360,7 @@ def write_html(cfg: dict, rows: List[dict], dev_meta: List[dict], errors: List[d
     memo: Dict[str, str] = {}
     known_days = sorted({d for d in (_row_day(r, memo) for r in all_rows) if d})
     explicit = bool(day_from or day_to)
-    if not explicit and int(cfg.get("html_days") or 0) > 0:
+    if not explicit and not lot_only and int(cfg.get("html_days") or 0) > 0:
         anchor = dt.date.fromisoformat(known_days[-1]) if known_days else now.date()   # 가진 데이터의 끝날부터 거꾸로
         day_from = (anchor - dt.timedelta(days=int(cfg["html_days"]) - 1)).isoformat()
     rows, r_from, r_to = rows_for_range(all_rows, day_from or "", day_to or "")
@@ -3357,16 +3369,21 @@ def write_html(cfg: dict, rows: List[dict], dev_meta: List[dict], errors: List[d
     if known_days:
         meta["data_from"], meta["data_to"] = known_days[0], known_days[-1]   # 가진 데이터 전체의 첫날 — 첫날은 수집 창이 도중에 시작해 '부분'
     pst = params_store if params_store is not None else (timing or {}).get("params_store")
-    if pst and pst.get("snaps"):
+    if pst and pst.get("snaps") and not lot_only:
         meta["params"] = params_for_range(pst, r_from, r_to)
+    if lot_only:
+        rows = [{**r, **{c: "" for c in LOT_ONLY_BLANK_COLS}} for r in rows]     # 열은 그대로 두고 값만 비운다 — 풀의 빈 문자열 하나로 접힌다
     emb = _embed_rows(rows)
     if meta["timing"]:
         meta["timing"]["html_ms"] = int((time.perf_counter() - t_html) * 1000)   # 템플릿 읽기 + 접기까지(쓰기 전)
     data = _payload(emb, meta)
     del emb                                        # 접힌 dict 는 문자열이 됐다 — 큰 참조를 놓는다(C07)
-    os.makedirs(cfg["output_dir"], exist_ok=True)
-    name = range_name(cfg["output_name"], r_from, r_to) if explicit and r_from else cfg["output_name"]
-    target = os.path.join(cfg["output_dir"], name)
+    out_root = out_dir or cfg["output_dir"]
+    if out_dir:
+        nas_guard.assert_local(out_dir, nas_guard.roots_for_cfg(cfg))     # ★ 따로 준 폴더도 NAS 아래면 거부
+    os.makedirs(out_root, exist_ok=True)
+    name = out_name or (range_name(cfg["output_name"], r_from, r_to) if explicit and r_from else cfg["output_name"])
+    target = os.path.join(out_root, name)
     tmp = _unique_tmp(target)
     size = _utf8_len(prefix) + _utf8_len(data) + _utf8_len(suffix)
     try:
@@ -3385,7 +3402,7 @@ def write_html(cfg: dict, rows: List[dict], dev_meta: List[dict], errors: List[d
                 pass
     del data
     _say(log, f"HTML 저장: {target} ({size // 1024} KB · 기간 {r_from or '-'} ~ {r_to or '-'} · 행 {len(rows)}/{len(all_rows)})")
-    if cfg.get("write_csv"):
+    if cfg.get("write_csv") and not lot_only:
         csv_path = os.path.splitext(target)[0] + ".csv"
         try:
             _write_csv(cfg, csv_path, rows, log)
@@ -3418,7 +3435,8 @@ def cached_days(cfg: dict) -> Tuple[str, str, int]:
 
 
 def html_from_cache(cfg: dict, day_from: str = "", day_to: str = "", *, log: Optional[LogFn] = None,
-                    progress: Optional[ProgressFn] = None, warnings: Optional[List[dict]] = None) -> str:
+                    progress: Optional[ProgressFn] = None, warnings: Optional[List[dict]] = None,
+                    lot_only: bool = False, out_dir: str = "", out_name: str = "") -> str:
     """**수집 없이** 가진 데이터(캐시)만으로 결과 HTML 을 다시 만든다(10/5 사용자 요청 — 기능이 늘 때마다 재수집하지 않게).
 
     NAS 는 한 번도 건드리지 않는다: 캐시 파일을 읽고(분류 규칙이 바뀌었으면 메모리에서만 재분류 — 캐시 파일은 그대로),
@@ -3443,7 +3461,8 @@ def html_from_cache(cfg: dict, day_from: str = "", day_to: str = "", *, log: Opt
     _mark_device_status(dev_meta, rows)
     _say(log, f"가진 데이터로 HTML 만들기: 캐시 행 {len(rows)}개(범위 밖 {hidden}개 제외) · 기간 {day_from or '처음'} ~ {day_to or '끝'}")
     return write_html(cfg, render_issue_rows(rows), dev_meta, [], started, mode="html_only", log=log, progress=progress,
-                      warnings=warnings, day_from=day_from, day_to=day_to, params_store=cache.get("params"))
+                      warnings=warnings, day_from=day_from, day_to=day_to, params_store=cache.get("params"),
+                      lot_only=lot_only, out_dir=out_dir, out_name=out_name)
 
 
 def import_param_zips(cfg: dict, folder: str, log: Optional[LogFn] = None, progress: Optional[ProgressFn] = None) -> Dict[str, int]:

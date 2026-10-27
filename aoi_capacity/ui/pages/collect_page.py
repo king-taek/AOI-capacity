@@ -12,6 +12,7 @@
 결과 화면은 이 프로그램 안에 없다 — 수집이 만든 HTML 을 사용자가 더블클릭해서 본다('결과 화면 열기' 는 편의 버튼)."""
 from __future__ import annotations
 
+import os
 import time
 from typing import Dict, Optional
 
@@ -116,6 +117,25 @@ class _HtmlOnlyWorker(QThread):
         try:
             path = collect.html_from_cache(cfg, a, b, log=self.log.emit)
             self.done.emit(path, "")
+        except Exception as ex:  # noqa: BLE001
+            self.done.emit(None, f"{type(ex).__name__}: {ex}")
+
+
+class _LotPublishWorker(QThread):
+    """LOT 추적만 담은 HTML 한 장을 이 PC 의 시험 폴더에 만든다(10/27, 공유 발행 시험) — 캐시만 읽고 NAS 는 건드리지 않는다. 끝나면 ((경로, 바이트, 초) | None, 오류 문구)."""
+    log = pyqtSignal(str)
+    done = pyqtSignal(object, str)
+
+    def __init__(self, cfg: dict, out_dir: str, parent=None):
+        super().__init__(parent)
+        self._args = (cfg, out_dir)
+
+    def run(self) -> None:  # noqa: D401
+        cfg, out_dir = self._args
+        try:
+            t0 = time.perf_counter()
+            path = collect.html_from_cache(cfg, log=self.log.emit, lot_only=True, out_dir=out_dir, out_name=collect.LOT_PUBLISH_NAME)
+            self.done.emit((path, os.path.getsize(path), round(time.perf_counter() - t0, 1)), "")
         except Exception as ex:  # noqa: BLE001
             self.done.emit(None, f"{type(ex).__name__}: {ex}")
 
@@ -564,6 +584,26 @@ class CollectPage(QWidget):
         dl.addWidget(scard)
         self._sp_worker: Optional[share_probe.ShareProbeWorker] = None
 
+        # LOT 추적 발행 시험(10/27) — 이 PC 에서만 만든다. 공유 폴더 쓰기는 없다(임시 카드 — 시험이 끝나면 지운다)
+        pcard, pl = _tool(dev, K.LOT_PUB_TITLE, K.LOT_PUB_SHORT, K.LOT_PUB_WHEN)
+        self._lp_out = QLineEdit(str(paths.data_root() / collect.LOT_PUBLISH_DIR), pcard)
+        self._lp_out.setProperty("role", "mono")
+        r = _row(_label(K.LOT_PUB_OUT, "muted", pcard), self._lp_out, stretch=False)
+        r.setStretch(1, 1)
+        pl.addLayout(r)
+        self._b_lp_run = make_button(K.LOT_PUB_RUN, "primary", pcard)
+        self._b_lp_view = make_button(K.LOT_PUB_VIEW, "default", pcard)
+        self._b_lp_view.setEnabled(False)
+        self._b_lp_open = make_button(K.LOT_PUB_OPEN, "ghost", pcard)
+        self._lp_status = _label("", "muted", pcard, wrap=True)
+        self._lp_status.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
+        self._lp_status.hide()
+        pl.addLayout(_row(self._b_lp_run, self._b_lp_view, self._b_lp_open))
+        pl.addWidget(self._lp_status)
+        dl.addWidget(pcard)
+        self._lp_worker: Optional[_LotPublishWorker] = None
+        self._lp_path = ""
+
         # 실패 로그 수집(10/20)
         fcard, fl = _tool(dev, K.FAIL_LOGS_TITLE, K.FAIL_LOGS_SHORT, K.FAIL_LOGS_WHEN)
         self._fl_days = QSpinBox(fcard)
@@ -673,6 +713,9 @@ class CollectPage(QWidget):
         self._b_sp_hammer.clicked.connect(lambda: self._on_share_probe("hammer"))
         self._b_sp_clean.clicked.connect(lambda: self._on_share_probe("clean"))
         self._b_sp_stop.clicked.connect(self._stop_share_probe)
+        self._b_lp_run.clicked.connect(self._on_lot_publish)
+        self._b_lp_view.clicked.connect(lambda: self._lp_path and QDesktopServices.openUrl(QUrl.fromLocalFile(self._lp_path)))
+        self._b_lp_open.clicked.connect(lambda: QDesktopServices.openUrl(QUrl.fromLocalFile(self._lp_out.text().strip())))
         self._b_sp_open.clicked.connect(self._open_share_probe_dir)
         self._b_fl_open.clicked.connect(lambda: QDesktopServices.openUrl(QUrl.fromLocalFile(self._fl_out.text().strip())))
         self._b_fl_browse.clicked.connect(self._browse_fl_out)
@@ -1123,6 +1166,38 @@ class CollectPage(QWidget):
     def _open_share_probe_dir(self) -> None:
         d = share_probe.result_dir()
         QDesktopServices.openUrl(QUrl.fromLocalFile(str(d if d.is_dir() else paths.data_root())))
+
+    # ── LOT 추적 발행 시험(10/27) ──
+    def _on_lot_publish(self) -> None:
+        if self._lp_worker is not None:
+            return
+        if self._running:
+            self.error.emit(K.LOT_PUB_TITLE, K.LOT_PUB_BUSY)
+            return
+        out = self._lp_out.text().strip() or str(paths.data_root() / collect.LOT_PUBLISH_DIR)
+        self._lp_out.setText(out)
+        w = _LotPublishWorker(prefs.to_collect_cfg(prefs.load()), out, self)
+        w.log.connect(self.append_log)
+        w.done.connect(self._on_lot_publish_done)
+        w.finished.connect(lambda w=w: self._worker_done("_lp_worker", w))
+        self._lp_worker = w
+        self._b_lp_run.setEnabled(False)
+        self._lp_status.setText(K.LOT_PUB_RUNNING)
+        self._lp_status.show()
+        w.start()
+
+    def _on_lot_publish_done(self, got, err: str) -> None:
+        self._b_lp_run.setEnabled(True)
+        if got is None:
+            self._lp_status.setText(err)
+            self.error.emit(K.LOT_PUB_TITLE, err)
+            return
+        path, size, sec = got
+        self._lp_path = str(path)
+        self._b_lp_view.setEnabled(True)
+        text = K.LOT_PUB_DONE_FMT.format(size=f"{size / 1048576:.1f}MB", sec=sec, path=path)
+        self._lp_status.setText(text)
+        self.append_log(text)
 
     # ── 실패 로그 수집(10/20) ──
     def _on_fail_logs(self) -> None:
