@@ -1047,3 +1047,29 @@ def test_param_tab_unpacks_a_job_on_demand_and_marks_differing_cells(page_factor
     assert pg.locator('section.pgrp:has-text("광학") .ptab').count() == 0              # 장비 고유 그룹은 접힌 채
     assert not errors and not requests
     ctx.close()
+
+
+def test_settings_picks_tabs_and_saves_a_copy_with_only_those_tabs(page, page_factory, tmp_path):
+    """Ctrl+Shift+D ⚙ 설정에서 탭을 골라 저장하면 그 탭만 탭 줄에 있고 첫 고른 탭에서 시작한다(10/28). 데이터는 그대로, 바깥 요청 0건."""
+    pg, errors, requests = page
+    pg.keyboard.press("Control+Shift+D")
+    pg.locator('button[data-fk="set:btn"]').click()
+    pg.locator('button[data-fk="pick:home"]').click()   # 처음엔 숨기지 않은 탭이 전부 켜져 있다 — 셋을 끈다
+    pg.locator('button[data-fk="pick:recipe"]').click()
+    pg.locator('button[data-fk="pick:lot"]').click()
+    with pg.expect_download() as dl:
+        pg.locator('button[data-fk="pick:go"]').click()
+    path = tmp_path / "picked.html"                                                # 내려받은 임시 파일은 확장자가 없다
+    dl.value.save_as(path)
+    assert "탭" in dl.value.suggested_filename
+    saved = path.read_text(encoding="utf-8")
+    _, meta1 = sample_rows.unfold(sample_rows.embedded(saved))
+    assert meta1["only_tabs"] == ["errors", "report"]
+    ctx = page_factory.new_context(viewport={"width": 1280, "height": 900})
+    p2 = ctx.new_page()
+    p2.goto(path.as_uri())
+    p2.wait_for_selector('main[data-key^="view:"]')
+    assert p2.locator("nav.nav button").all_inner_texts() == ["Error", "TB500 · Kendall"]
+    assert p2.locator('main[data-key="view:errors"]').count() == 1
+    ctx.close()
+    assert requests == [] and errors == []

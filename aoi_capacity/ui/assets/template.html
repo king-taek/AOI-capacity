@@ -615,7 +615,7 @@ function loadDemo(){
   /* 로더(Lottie 스캔 표식)를 한 프레임 먼저 그리고, 무거운 JSON 해석과 모델 계산은 그 다음 틱에 — 30일치는 몇 초 걸린다 */
   try{mountLotties(document);}catch(e){}
   const run=()=>{let emb;try{emb=JSON.parse($("#embedded").textContent);}catch(e){errorPanel("embedded JSON 을 해석할 수 없습니다: "+(e&&e.message||e));return;}
-    try{rows=emb.cols?unfold(emb):(emb.rows||[]);meta=emb.meta||{generated:"",mode:"saved"};if(meta.lot_only)state.view="lot";}   /* 공유 발행 파일(10/27): LOT 추적 탭만 */
+    try{rows=emb.cols?unfold(emb):(emb.rows||[]);meta=emb.meta||{generated:"",mode:"saved"};if(meta.lot_only)state.view="lot";else if(Array.isArray(meta.only_tabs)&&meta.only_tabs.length)state.view=meta.only_tabs[0];}   /* 공유 발행 파일(10/27): LOT 추적 탭만 */
     catch(e){log("로더 오류: "+(e&&e.message||e));errorPanel(String(e&&e.message||e));return;}
     setTimeout(()=>{try{init();navWarm();}catch(e){log("로더 오류: "+(e&&e.message||e));errorPanel(String(e&&e.message||e));}},0);};
   if(typeof requestAnimationFrame==="function")requestAnimationFrame(()=>setTimeout(run,0));else run();}
@@ -1047,7 +1047,8 @@ function applySettings(m){const o=(m&&m.dashboard_settings)||{};for(const k of O
 let D=null;
 const VIEWS=["home","errors","report","recipe","lot","param"];   /* 10/5: KLA 탭 · 추이 탭은 없앴다(KLA 는 가동률의 구분 필터로) */
 const HIDDEN_TABS=[["param","파라미터"]];   /* 평소 탭 줄에서 숨기는 탭 — Ctrl+Shift+D 로 켠 ⚙ 설정에서 꺼내 쓴다(10/22) */
-const state={devOn:false,setOpen:false,unhid:[],view:"home",dayI:null,sort:"name",floor:"all",maker:"all",span:0,vp:"all",unit:"day",metric:"min",pickDay:undefined,
+const ALL_TABS=[["home","가동률"],["errors","Error"],["report","TB500 · Kendall"],["recipe","RDL 단일스캔"],["lot","LOT 추적"],...HIDDEN_TABS];   /* 탭 골라 따로 저장(10/28) 후보 */
+const state={devOn:false,setOpen:false,pickTabs:null,unhid:[],view:"home",dayI:null,sort:"name",floor:"all",maker:"all",span:0,vp:"all",unit:"day",metric:"min",pickDay:undefined,
   modalDev:null,modalDayI:null,modalType:null,modalJob:null,selLot:null,lotFilter:"all",showMembers:false,
   stack:[],                                  /* 열린 팝업의 순서(type · dev · err) — 마지막이 맨 위, 나머지는 뒤로 물러난다 */
   errDays:null,errFType:null,errFJob:null,   /* Error 팝업의 기간(여러 날) · Error 탭의 유형/Job 필터 */
@@ -1189,15 +1190,16 @@ const devStatus={};
 let _ct=null;function causeText(dev,rep,c){if(!_ct){_ct=new Map();for(const r of rows){const st=String(r.status||"").trim(),k=causeOf(st);if(!k)continue;const key=r.device+"\u0001"+(r.report||"")+"\u0001"+k;if(!_ct.has(key))_ct.set(key,st);}}return _ct.get(dev+"\u0001"+rep+"\u0001"+c)||"";}
 function collectChip(n){const s=devStatus[n];if(!s)return"";if(s.status==="unreachable")return`<span class="st bad" title="${esc(s.error)}">수집 실패</span>`;if(s.status==="partial")return`<span class="st warn" title="읽지 못한 Report ${s.readErrors}개 — 수집 로그 참조">일부 누락</span>`;return"";}
 function stamp(d=new Date()){return `${d.getFullYear()}-${p2(d.getMonth()+1)}-${p2(d.getDate())}_${p2(d.getHours())}${p2(d.getMinutes())}`;}
-function saveHtml(){if(!rows.length){toast("저장할 데이터가 없습니다");return;}
+function saveHtml(extra,namePart){if(extra&&extra.type)extra=null;   /* 클릭 이벤트가 넘어오면 무시 */
+  if(!rows.length){toast("저장할 데이터가 없습니다");return;}
   /* 수집기가 준 열을 하나도 빠뜨리지 않고 같은 문자열 풀 구조로 다시 접는다(collect._embed_rows 와 같은 계약) */
   const cols=embCols.length?embCols:Object.keys(rows[0]);const pooled=embCols.length?embPooled:cols.filter(c=>c!=="wafer_start_time"&&c!=="wafer_end_time");
   const pool=[],idx=new Map(),F=new Set(pooled);const put=v=>{v=v==null?"":String(v);let i=idx.get(v);if(i==null){i=pool.length;pool.push(v);idx.set(v,i);}return i;};
-  const emb={cols,pooled,pool,rows:rows.map(r=>cols.map(c=>F.has(c)?put(r[c]):(r[c]??""))),meta:{...meta,...(RG.groups.length||RG_EMB?{recipe_groups:RG}:{}),mode:meta.mode==="demo"?"demo":"saved",saved_iso:new Date().toISOString().slice(0,19)}};
+  const emb={cols,pooled,pool,rows:rows.map(r=>cols.map(c=>F.has(c)?put(r[c]):(r[c]??""))),meta:{...meta,...(RG.groups.length||RG_EMB?{recipe_groups:RG}:{}),mode:meta.mode==="demo"?"demo":"saved",...(extra||{}),saved_iso:new Date().toISOString().slice(0,19)}};
   const clone=document.documentElement.cloneNode(true);clone.querySelector("#embedded").textContent=JSON.stringify(emb).replace(/<\//g,"<\\/");
   clone.querySelector("#app").innerHTML='<main><p class="muted" style="padding:40px 0">불러오는 중…</p></main>';clone.querySelector("#toast").classList.remove("on");
   const blob=new Blob(["<!doctype html>\n"+clone.outerHTML],{type:"text/html;charset=utf-8"});const url=URL.createObjectURL(blob);
-  const a=document.createElement("a");a.href=url;a.download="AOI_capacity_"+stamp()+".html";document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),4000);toast("사본을 저장했습니다");}
+  const a=document.createElement("a");a.href=url;a.download="AOI_capacity_"+(namePart||"")+stamp()+".html";document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),4000);toast("사본을 저장했습니다");}
 
 /* ── 팝업 스택 ── */
 function pushTop(k){return state.stack.filter(x=>x!==k).concat([k]);}
@@ -1675,9 +1677,12 @@ function headerHtml(V){
   if(meta.mode==="saved")stampTxt+=" · 사본";
   if(!fixed&&gen)stampTxt+=" · 수집 시각 정보 없음";
   const lotOnly=!!meta.lot_only;
-  const nav=lotOnly?[["lot","LOT 추적"]]:[["home","가동률"],["errors","Error"],["report","TB500 · Kendall"],["recipe","RDL 단일스캔"],["lot","LOT 추적"],...HIDDEN_TABS.filter(([k])=>state.unhid.includes(k)||V===k)];
+  const only=Array.isArray(meta.only_tabs)&&meta.only_tabs.length?meta.only_tabs:null;   /* 탭 골라 저장한 파일(10/28): 고른 탭만 탭 줄에 */
+  const nav=lotOnly?[["lot","LOT 추적"]]:only?ALL_TABS.filter(([k])=>only.includes(k)):[["home","가동률"],["errors","Error"],["report","TB500 · Kendall"],["recipe","RDL 단일스캔"],["lot","LOT 추적"],...HIDDEN_TABS.filter(([k])=>state.unhid.includes(k)||V===k)];
   const hid=lotOnly?[]:HIDDEN_TABS.filter(([k])=>!state.unhid.includes(k)&&V!==k);
-  const setBtn=state.devOn&&!lotOnly?`<span class="setwrap"><button class="btn${state.setOpen?" on":""}" data-h="${h(()=>setState({setOpen:!state.setOpen}))}" data-fk="set:btn" aria-haspopup="true" aria-expanded="${state.setOpen}" title="숨긴 탭 설정">⚙ 설정</button>${state.setOpen?`<div class="setpop" role="menu"><b>숨긴 탭</b>${hid.length?hid.map(([k,l])=>`<button class="btn" role="menuitem" data-h="${h(()=>{setState({unhid:[...state.unhid,k],setOpen:false});S.go(k)();})}" title="탭 줄로 복귀하고 엽니다">${l}</button>`).join(""):`<span class="setnone">숨긴 탭이 없습니다</span>`}</div>`:""}</span>`:"";
+  const pk=state.pickTabs||ALL_TABS.map(t=>t[0]).filter(k=>!HIDDEN_TABS.some(x=>x[0]===k));
+  const pickHtml=`<hr><b>탭 골라 HTML 만들기</b>${ALL_TABS.map(([k,l])=>`<button class="btn" role="menuitemcheckbox" aria-checked="${pk.includes(k)}" data-h="${h(()=>setState({pickTabs:pk.includes(k)?pk.filter(x=>x!==k):[...pk,k]}))}" data-fk="pick:${k}">${pk.includes(k)?"☑":"☐"} ${l}</button>`).join("")}<button class="btn on" ${pk.length?"":"disabled"} data-h="${h(()=>saveHtml({only_tabs:ALL_TABS.map(t=>t[0]).filter(k=>pk.includes(k))},"탭"+pk.length+"개_"))}" data-fk="pick:go">${pk.length?"고른 "+pk.length+"개 탭만 HTML로 저장":"탭을 고르세요"}</button>`;
+  const setBtn=state.devOn&&!lotOnly&&!only?`<span class="setwrap"><button class="btn${state.setOpen?" on":""}" data-h="${h(()=>setState({setOpen:!state.setOpen}))}" data-fk="set:btn" aria-haspopup="true" aria-expanded="${state.setOpen}" title="숨긴 탭 설정">⚙ 설정</button>${state.setOpen?`<div class="setpop" role="menu"><b>숨긴 탭</b>${hid.length?hid.map(([k,l])=>`<button class="btn" role="menuitem" data-h="${h(()=>{setState({unhid:[...state.unhid,k],setOpen:false});S.go(k)();})}" title="탭 줄로 복귀하고 엽니다">${l}</button>`).join(""):`<span class="setnone">숨긴 탭이 없습니다</span>`}${hasD?pickHtml:""}</div>`:""}</span>`:"";
   return `<header class="hdr" data-key="hdr"><div class="brand"><span class="lt" data-lottie="scan" data-loop="1" data-static aria-hidden="true"></span>AOI 가동 현황</div>
     <nav class="nav"><i class="ind" data-key="ind" data-static aria-hidden="true"><b class="l"></b><b class="m"></b><b class="r"></b><b class="s"></b></i>${nav.map(([k,l])=>`<button class="${V===k?"on":""}" data-h="${h(S.go(k))}" data-fk="nav:${k}">${l}</button>`).join("")}</nav>
     <div class="spacer"></div>
