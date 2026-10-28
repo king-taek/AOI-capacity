@@ -1087,3 +1087,12 @@ def test_settings_picks_tabs_and_saves_a_copy_with_only_those_tabs(page, page_fa
     assert p2.locator('main[data-key="view:errors"]').count() == 1
     ctx.close()
     assert requests == [] and errors == []
+
+
+def test_error_job_list_offers_show_all_only_when_more_than_twelve(page):
+    """10/28: Error 탭 Job별은 상위 12개 — 12개를 넘을 때만 '전체 n개 보기' 단추가 생긴다(작은 fixture 는 3개라 없음)."""
+    pg, errors, _ = page
+    pg.locator('button[data-fk="nav:errors"]').click()
+    pg.wait_for_selector('main[data-key="view:errors"]')
+    assert pg.locator('main button[data-key="jobAll"]').count() == 0
+    assert errors == []

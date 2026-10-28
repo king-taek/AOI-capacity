@@ -1796,7 +1796,9 @@ function errorsHtml(){
   const maxDay=PROB?Math.max(1,...spanDays.map(pctDay)):Math.max(1,...spanDays.map(d=>(byDay[d]||[0,0])[mi]));
   const typeArr=PROB?Object.entries(typeErrN).map(([c,e])=>[c,[e,totAtt]]).sort((a,b)=>b[1][0]-a[1][0]):Object.entries(byType).sort((a,b)=>b[1][mi]-a[1][mi]);
   const devArr=PROB?Object.entries(devAtt).filter(([,v])=>v[0]>0).sort(probSort).slice(0,12):Object.entries(byDev).sort((a,b)=>b[1][mi]-a[1][mi]).slice(0,12);
-  const jobArr=PROB?Object.entries(jobAtt).filter(([,v])=>v[0]>0).sort(probSort).slice(0,12).map(([gk,[e,a]])=>[gk,{...(jobAgg[gk]||{eN:0,eM:0,occ:0}),lots:a,eLots:e}]):Object.entries(jobAgg).filter(([,A])=>A.eN>0||A.occ>0).sort((a,b)=>MET?(b[1].eM-a[1].eM||b[1].eN-a[1].eN):(b[1].eN-a[1].eN||b[1].eM-a[1].eM)).slice(0,12);
+  const JTOP=12,JALL=!!state.errJobAll,JCAP=JALL?1e9:JTOP;   /* 10/28: Job별은 상위 12개만 — '전체 보기' 로 펼친다 */
+  const jobTotal=PROB?Object.values(jobAtt).filter(v=>v[0]>0).length:Object.values(jobAgg).filter(A=>A.eN>0||A.occ>0).length;
+  const jobArr=PROB?Object.entries(jobAtt).filter(([,v])=>v[0]>0).sort(probSort).slice(0,JCAP).map(([gk,[e,a]])=>[gk,{...(jobAgg[gk]||{eN:0,eM:0,occ:0}),lots:a,eLots:e}]):Object.entries(jobAgg).filter(([,A])=>A.eN>0||A.occ>0).sort((a,b)=>MET?(b[1].eM-a[1].eM||b[1].eN-a[1].eN):(b[1].eN-a[1].eN||b[1].eM-a[1].eM)).slice(0,JCAP);
   const cmax=typeArr.length?Math.max(1,typeArr[0][1][mi]):1,dmax=PROB?Math.max(.0001,...devArr.map(([,v])=>pr(v[0],v[1]))):(devArr.length?Math.max(1,devArr[0][1][mi]):1);
   const jmax=PROB?Math.max(.0001,...jobArr.map(([,A])=>pr(A.eLots,A.lots))):Math.max(1,...jobArr.map(([,A])=>MET?A.eM:A.eN));
   const dW=v=>Math.round((PROB?pr(v[0],v[1])/dmax:v[mi]/dmax)*100);
@@ -1841,7 +1843,7 @@ function errorsHtml(){
           ${vals(v[0],v[1],v[0],v[1])}<span class="chev" style="text-align:right;color:#5A6673;font-size:13px">›</span></button>
           <button class="fbtn ${FD===n?"on":""}" data-h="${h(()=>setState({errFDev:FD===n?null:n}))}" title="${FD===n?"장비 필터 해제":"이 장비만 통계 보기"}" aria-pressed="${FD===n}">${FUNNEL}</button></div>`).join("")||`<p class="empty">기록 없음</p>`}
       </section>
-      <section class="panel errlist"><div style="padding:15px 20px 10px"><h2>Job별${FJ!=null?` <span style="font-weight:400;color:#5A6673;font-size:12px">이 Job 만</span>`:""}</h2></div>
+      <section class="panel errlist"><div style="padding:15px 20px 10px"><h2>Job별${FJ!=null?` <span style="font-weight:400;color:#5A6673;font-size:12px">이 Job 만</span>`:""}${jobTotal>JTOP?` <button class="link" data-key="jobAll" data-h="${h(()=>setState({errJobAll:!JALL}))}" aria-pressed="${JALL}" title="${JALL?"상위 "+JTOP+"개만 보기":"Job "+jobTotal+"개 전부 보기"}" style="font-size:11.5px;font-weight:600;margin-left:6px;padding:1px 8px;border:1px solid var(--line);border-radius:10px;color:#4B5866;text-decoration:none">${JALL?"상위 "+JTOP+"개만":"전체 "+jobTotal+"개 보기"}</button>`:""}</h2></div>
         ${jobArr.map(([gk,A],i)=>{const gi=+gk,G=D.jobGroups[gi],raw=P.job[G.l]||"(Job 없음)";const {nm,al}=jobNm(G);
           return `<div class="row2" data-key="slot:${i}" data-row="job:${gi}"><button class="rowbtn" data-h="${h(()=>setState({modalJob:gi,showMembers:false,stack:pushTop("type")}))}" title="${esc(raw)}${G.m.length>1?" (이름 "+G.m.length+"개 묶음)":""} · Lot ${A.lots}개 중 ${A.eLots}개 Error · 점유 ${hm(A.occ)} · Error 대기 ${hm(A.eM)} · 눌러서 자세히" data-cols="job" style="border-bottom:0;min-height:44px">
             <span style="display:block;min-width:0"><span data-tx style="display:block;font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;${al?"":"font-family:"+MONO}">${esc(cut(nm,34))}</span><span data-tx style="display:block;font-size:11.5px;color:#5A6673;margin-top:2px">Lot ${A.lots}개 중 ${A.eLots}개 Error</span>
