@@ -1744,7 +1744,7 @@ function errorsHtml(){
   const pickDay=state.pickDay===undefined?day:state.pickDay;
   const eDayI=pickDay?D.days.indexOf(pickDay):D.days.indexOf(spanDays[spanDays.length-1]);
   const useDays=pickDay?[pickDay]:spanDays;
-  const MET=state.metric==="min";
+  const MET=state.metric==="min",PROB=state.metric==="prob";   /* 10/28: 발생 확률 = Error 가 난 LOT 시도 ÷ 전체 LOT 시도(한 시도에서 여러 번 나도 1) */
   const mt=state.modalType,mj=state.modalJob;
   /* 필터(특정 Error 유형 · 특정 Job 만의 통계): 있으면 유형·Job 을 Lot 단위(L[9])에서 다시 모은다 — 없으면 t.ct 그대로(수치 불변) */
   const FT=state.errFType,FJ=state.errFJob,FLT=!!FT||FJ!=null;
@@ -1770,23 +1770,43 @@ function errorsHtml(){
         if(!ln)continue;
         A.eLots++;A.eN+=ln;A.eM+=lm;
         if(mj!=null&&gi===mj){add(pkDev,n,ln,lm);const k3=n+"|"+L[1]+"|"+dy;const r2=jobRows[k3]||(jobRows[k3]={dev:n,lot:lotTxt,n:0,min:0,status:st,day:dy});r2.n+=ln;r2.min+=lm;}}}}
+  /* 발생 확률: 장비-일의 Lot 한 건 = 시도 1회. jobAgg 는 Error 난 장비-일만 돌아 시도 수가 모자라 따로 센다 */
+  const dayAtt={},dayErr={},devAtt={},jobAtt={},typeErrN={};let totAtt=0,totErr=0;
+  for(const dy of spanDays){const dd=D.detail[dy]||{},inUse=useDays.includes(dy);
+    for(const n of devs){const t=dd[n];if(!t||!t.lots)continue;
+      for(const L of t.lots){const gi=D.jobG[L[0]];if(FJ!=null&&gi!==FJ)continue;
+        const bad=!!L[5]&&(!FT||!!(L[9]&&L[9][FT]));
+        dayAtt[dy]=(dayAtt[dy]||0)+1;if(bad)dayErr[dy]=(dayErr[dy]||0)+1;
+        if(!inUse)continue;
+        totAtt++;if(bad)totErr++;
+        const g=devAtt[n]||(devAtt[n]=[0,0]);g[1]++;if(bad)g[0]++;
+        const j=jobAtt[gi]||(jobAtt[gi]=[0,0]);j[1]++;if(bad)j[0]++;
+        if(L[5]&&L[9])for(const c of Object.keys(L[9])){if(FT&&c!==FT)continue;typeErrN[c]=(typeErrN[c]||0)+1;}}}}
+  const LOWN=5,pr=(e,a)=>a?e/a:0,pc=(e,a)=>{if(!a)return"—";const x=e/a*100;return (x>=10?Math.round(x):x.toFixed(1))+"%";};
+  const probSort=(x,y)=>((x[1][1]<LOWN)-(y[1][1]<LOWN))||(pr(y[1][0],y[1][1])-pr(x[1][0],x[1][1]))||(y[1][0]-x[1][0]);
   const totalN=Object.values(byType).reduce((a,b)=>a+b[0],0),totalM=Object.values(byType).reduce((a,b)=>a+b[1],0),mi=MET?1:0;
-  const maxDay=Math.max(1,...spanDays.map(d=>(byDay[d]||[0,0])[mi]));
-  const typeArr=Object.entries(byType).sort((a,b)=>b[1][mi]-a[1][mi]);
-  const devArr=Object.entries(byDev).sort((a,b)=>b[1][mi]-a[1][mi]).slice(0,12);
-  const jobArr=Object.entries(jobAgg).filter(([,A])=>A.eN>0||A.occ>0).sort((a,b)=>MET?(b[1].eM-a[1].eM||b[1].eN-a[1].eN):(b[1].eN-a[1].eN||b[1].eM-a[1].eM)).slice(0,12);
-  const cmax=typeArr.length?Math.max(1,typeArr[0][1][mi]):1,dmax=devArr.length?Math.max(1,devArr[0][1][mi]):1;
-  const jmax=Math.max(1,...jobArr.map(([,A])=>MET?A.eM:A.eN));
-  const dayV=d=>(byDay[d]||[0,0])[mi];
-  const fmtV=v=>MET?(v>=60?(v/60).toFixed(0)+"h":v+"m"):String(v);
+  const pctDay=d=>pr(dayErr[d]||0,dayAtt[d]||0)*100;
+  const maxDay=PROB?Math.max(1,...spanDays.map(pctDay)):Math.max(1,...spanDays.map(d=>(byDay[d]||[0,0])[mi]));
+  const typeArr=PROB?Object.entries(typeErrN).map(([c,e])=>[c,[e,totAtt]]).sort((a,b)=>b[1][0]-a[1][0]):Object.entries(byType).sort((a,b)=>b[1][mi]-a[1][mi]);
+  const devArr=PROB?Object.entries(devAtt).filter(([,v])=>v[0]>0).sort(probSort).slice(0,12):Object.entries(byDev).sort((a,b)=>b[1][mi]-a[1][mi]).slice(0,12);
+  const jobArr=PROB?Object.entries(jobAtt).filter(([,v])=>v[0]>0).sort(probSort).slice(0,12).map(([gk,[e,a]])=>[gk,{...(jobAgg[gk]||{eN:0,eM:0,occ:0}),lots:a,eLots:e}]):Object.entries(jobAgg).filter(([,A])=>A.eN>0||A.occ>0).sort((a,b)=>MET?(b[1].eM-a[1].eM||b[1].eN-a[1].eN):(b[1].eN-a[1].eN||b[1].eM-a[1].eM)).slice(0,12);
+  const cmax=typeArr.length?Math.max(1,typeArr[0][1][mi]):1,dmax=PROB?Math.max(.0001,...devArr.map(([,v])=>pr(v[0],v[1]))):(devArr.length?Math.max(1,devArr[0][1][mi]):1);
+  const jmax=PROB?Math.max(.0001,...jobArr.map(([,A])=>pr(A.eLots,A.lots))):Math.max(1,...jobArr.map(([,A])=>MET?A.eM:A.eN));
+  const dW=v=>Math.round((PROB?pr(v[0],v[1])/dmax:v[mi]/dmax)*100);
+  const dayV=d=>PROB?pctDay(d):(byDay[d]||[0,0])[mi];
+  const fmtV=v=>PROB?(v>=10?Math.round(v):v.toFixed(1))+"%":MET?(v>=60?(v/60).toFixed(0)+"h":v+"m"):String(v);
+  /* 목록 오른쪽 두 칸 — 발생 확률이면 '확률 | Error 난 시도 / 전체 시도'(시도 5회 미만은 흐리게) */
+  const vals=(n,m,e,a,job)=>PROB?`<span class="num" data-tx style="text-align:right;font-size:13px;font-weight:700;color:#0F151C;${a<LOWN?"opacity:.45":""}">${pc(e,a)}</span><span class="num" data-tx style="text-align:right;font-size:13px;white-space:nowrap;color:#5A6673;${a<LOWN?"opacity:.45":""}">${e} / ${a}</span>`
+    :job?`<span class="num" ${txn(n,"n")} style="text-align:right;font-size:13px;font-weight:${nW};color:${n?(MET?"#5A6673":"#0F151C"):"#5A6673"}">${n}건</span><span class="num" ${n?txn(m,"hm"):"data-tx"} style="text-align:right;font-size:13px;white-space:nowrap;font-weight:${mW};color:${mInk}">${n?hm(m):"—"}</span>`
+    :`<span class="num" ${txn(n,"n")} style="text-align:right;font-size:13px;font-weight:${nW};color:${nInk}">${n}건</span><span class="num" ${txn(m,"hm")} style="text-align:right;font-size:13px;white-space:nowrap;font-weight:${mW};color:${mInk}">${hm(m)}</span>`;
   errCtx={spanDays,useDays,pickDay,eDayI,lotRows,jobRows,pkDay,pkDev,jobAgg,byType,MET};
   const spans=[{k:-1,label:"일자별"},{k:0,label:"기간 전체 "+D.days.length+"일"}]
     .map(it=>({label:it.label,on:it.k===-1?!!pickDay:(!pickDay&&state.span===it.k),pick:it.k===-1?(()=>setState({pickDay:undefined})):(()=>setState({span:it.k,pickDay:null}))}));
-  const metrics=S.segGroup([{k:"n",label:"건수"},{k:"min",label:"Error 대기"}],state.metric,k=>setState({metric:k}));
+  const metrics=S.segGroup([{k:"n",label:"건수"},{k:"min",label:"Error 대기"},{k:"prob",label:"발생 확률"}],state.metric,k=>setState({metric:k}));
   const nW=MET?"400":"700",nInk=MET?"#5A6673":"#0F151C",mW=MET?"700":"400",mInk=MET?"#0F151C":"#5A6673";
   const bars=spanDays.map((d,i)=>({label:(i%Math.ceil(spanDays.length/11)===0||i===spanDays.length-1)?md(d):"",
     vTxt:(spanDays.length<=22&&dayV(d))?fmtV(dayV(d)):(dayV(d)===maxDay?fmtV(dayV(d)):""),h:(dayV(d)/maxDay*100).toFixed(1),
-    color:pickDay?(pickDay===d?"#8C2A1F":"#E0A9A2"):ERR,   /* 기간 모드는 모두 같은 색(사용자 확정 9/20) — 일자별 모드만 고른 날 진하게·나머지 연하게 */title:md(d)+" · Error "+(byDay[d]||[0,0])[0]+"건 · 대기 시간 "+hm((byDay[d]||[0,0])[1]),
+    color:pickDay?(pickDay===d?"#8C2A1F":"#E0A9A2"):ERR,   /* 기간 모드는 모두 같은 색(사용자 확정 9/20) — 일자별 모드만 고른 날 진하게·나머지 연하게 */title:PROB?md(d)+" · 발생 확률 "+pc(dayErr[d]||0,dayAtt[d]||0)+" ("+(dayErr[d]||0)+" / "+(dayAtt[d]||0)+" 시도)":md(d)+" · Error "+(byDay[d]||[0,0])[0]+"건 · 대기 시간 "+hm((byDay[d]||[0,0])[1]),
     pick:()=>setState(pickDay===d?{pickDay:null}:{pickDay:undefined,dayI:D.days.indexOf(d),dayNote:""})}));   /* 날짜를 고르면 헤더의 하루 날짜도 그 날(handoff C8) */
   const fjName=FJ!=null?jobNm(D.jobGroups[FJ]).nm:"";
   const chips=(FT?`<button class="fchip animate__animated animate__fadeInDown" data-h="${h(()=>setState({errFType:null}))}" title="유형 필터 해제"><span class="mono">${esc(FT)}</span><span aria-hidden="true">✕</span></button>`:"")
@@ -1794,31 +1814,32 @@ function errorsHtml(){
     +(FD!=null?`<button class="fchip animate__animated animate__fadeInDown" data-h="${h(()=>setState({errFDev:null}))}" title="장비 필터 해제"><span>${esc(FD)}</span><span aria-hidden="true">✕</span></button>`:"");
   const stats=[{k:FLT||FD!=null?"Error (필터)":"Error",v:totalN+"건",h:cnt(totalN)+"건",s:(totalN/useDays.length).toFixed(0)+"건 / 하루",mono:false},
     {k:"Error 대기",v:hm(totalM),s:"하루 평균 "+hm(totalM/useDays.length),mono:false},
-    {k:MET?"시간이 가장 긴 유형":"가장 많은 유형",v:typeArr.length?typeArr[0][0]:"—",s:typeArr.length?(typeArr[0][1][0]+"건 · "+hm(typeArr[0][1][1])):"",mono:true},
-    {k:"Error 난 장비",v:Object.keys(byDev).length+"대",h:cnt(Object.keys(byDev).length)+"대",s:devs.length+"대 중",mono:false}];
+    {k:MET?"시간이 가장 긴 유형":"가장 많은 유형",v:typeArr.length?typeArr[0][0]:"—",s:typeArr.length?(PROB?pc(typeArr[0][1][0],totAtt)+" · "+typeArr[0][1][0]+"시도":typeArr[0][1][0]+"건 · "+hm(typeArr[0][1][1])):"",mono:true},
+    {k:"Error 난 장비",v:Object.keys(byDev).length+"대",h:cnt(Object.keys(byDev).length)+"대",s:devs.length+"대 중",mono:false},
+    {k:"Error 발생 확률",v:pc(totErr,totAtt),s:totErr+" / "+totAtt+" LOT 시도",mono:false}];
   return `<div class="bar-h"><h1>Error</h1><span class="scope-badge" data-key="scope">${scopeBadge("errors")}</span>${chips}<div class="spacer"></div>${S.filterSegs(true)}${segHtml(spans)}${segHtml(metrics)}</div>
     <section class="cards sm" style="margin-bottom:16px">${stats.map(s=>`<div><p class="k">${esc(s.k)}</p><p class="v num" style="${s.mono?"font-family:"+MONO:""}">${s.h||esc(s.v)}</p><p class="s">${esc(s.s)}</p></div>`).join("")}</section>
-    <section class="panel pad"><div style="display:flex;align-items:baseline;gap:10px;margin-bottom:12px"><h2>날짜별 ${MET?"대기 시간":"건수"}</h2><span style="font-size:12.5px;color:#5A6673">${pickDay?(md(pickDay)+" 하루만 보는 중 — 막대를 다시 누르면 기간으로"):(spanDays.length===D.days.length?"전체 "+spanDays.length+"일":"최근 "+spanDays.length+"일")}</span></div>
+    <section class="panel pad"><div style="display:flex;align-items:baseline;gap:10px;margin-bottom:12px"><h2>날짜별 ${PROB?"발생 확률":MET?"대기 시간":"건수"}</h2><span style="font-size:12.5px;color:#5A6673">${pickDay?(md(pickDay)+" 하루만 보는 중 — 막대를 다시 누르면 기간으로"):(spanDays.length===D.days.length?"전체 "+spanDays.length+"일":"최근 "+spanDays.length+"일")}</span></div>
       <div data-anim><div data-key="chart:errors">${barsHtml(bars,140,true)}</div></div></section>
     <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(310px,1fr));gap:16px">
       <section class="panel errlist"><div style="padding:15px 20px 10px"><h2>유형별${FT?` <span style="font-weight:400;color:#5A6673;font-size:12px">이 유형만</span>`:""}</h2></div>
         ${typeArr.map(([c,v],i)=>`<div class="row2" data-key="slot:${i}" data-row="type:${esc(c)}"><button class="rowbtn" data-h="${h(()=>setState({modalType:c,stack:pushTop("type")}))}" title="${esc(c)} · ${v[0]}건 · Error 대기 ${hm(v[1])} · 눌러서 자세히" data-cols="type" style="min-height:44px">
           <span class="mono" data-tx style="font-size:12.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(c)}</span><span class="hbar"><i style="width:${Math.round(v[mi]/cmax*100)}%"></i></span>
-          <span class="num" ${txn(v[0],"n")} style="text-align:right;font-size:13px;font-weight:${nW};color:${nInk}">${v[0]}건</span><span class="num" ${txn(v[1],"hm")} style="text-align:right;font-size:13px;white-space:nowrap;font-weight:${mW};color:${mInk}">${hm(v[1])}</span><span class="chev" style="text-align:right;color:#5A6673;font-size:13px">›</span></button>
+          ${vals(v[0],v[1],v[0],totAtt)}<span class="chev" style="text-align:right;color:#5A6673;font-size:13px">›</span></button>
           <button class="fbtn ${FT===c?"on":""}" data-h="${h(()=>setState({errFType:FT===c?null:c}))}" title="${FT===c?"유형 필터 해제":"이 유형만 통계 보기"}" aria-pressed="${FT===c}">${FUNNEL}</button></div>`).join("")||`<div class="lt-empty" style="padding:4px 20px 14px"><span class="lt" data-lottie="check" data-static aria-hidden="true"></span>이 기간에 Error 가 없습니다.</div>`}
       </section>
       <section class="panel errlist"><div style="padding:15px 20px 10px"><h2>장비별 <span style="font-weight:400;color:#5A6673;font-size:12px">${FD!=null?"이 장비만":pickDay?md(pickDay)+" 하루":"누르면 이 기간 그대로 상세"}</span></h2></div>
         ${devArr.map(([n,v],i)=>`<div class="row2" data-key="slot:${i}" data-row="dev:${esc(n)}"><button class="rowbtn" data-h="${h(S.openErr(n,eDayI,FT?{type:FT}:FJ!=null?{job:FJ}:null,pickDay?null:useDays))}" title="${esc(n)} Error 상세 열기${pickDay?"":" ("+useDays.length+"일)"}" data-cols="dev" style="min-height:44px">
-          <span data-tx style="font-size:13px;font-weight:600">${esc(n)}</span><span class="hbar"><i style="width:${Math.round(v[mi]/dmax*100)}%"></i></span>
-          <span class="num" ${txn(v[0],"n")} style="text-align:right;font-size:13px;font-weight:${nW};color:${nInk}">${v[0]}건</span><span class="num" ${txn(v[1],"hm")} style="text-align:right;font-size:13px;white-space:nowrap;font-weight:${mW};color:${mInk}">${hm(v[1])}</span><span class="chev" style="text-align:right;color:#5A6673;font-size:13px">›</span></button>
+          <span data-tx style="font-size:13px;font-weight:600">${esc(n)}</span><span class="hbar"><i style="width:${dW(v)}%"></i></span>
+          ${vals(v[0],v[1],v[0],v[1])}<span class="chev" style="text-align:right;color:#5A6673;font-size:13px">›</span></button>
           <button class="fbtn ${FD===n?"on":""}" data-h="${h(()=>setState({errFDev:FD===n?null:n}))}" title="${FD===n?"장비 필터 해제":"이 장비만 통계 보기"}" aria-pressed="${FD===n}">${FUNNEL}</button></div>`).join("")||`<p class="empty">기록 없음</p>`}
       </section>
       <section class="panel errlist"><div style="padding:15px 20px 10px"><h2>Job별${FJ!=null?` <span style="font-weight:400;color:#5A6673;font-size:12px">이 Job 만</span>`:""}</h2></div>
         ${jobArr.map(([gk,A],i)=>{const gi=+gk,G=D.jobGroups[gi],raw=P.job[G.l]||"(Job 없음)";const {nm,al}=jobNm(G);
           return `<div class="row2" data-key="slot:${i}" data-row="job:${gi}"><button class="rowbtn" data-h="${h(()=>setState({modalJob:gi,showMembers:false,stack:pushTop("type")}))}" title="${esc(raw)}${G.m.length>1?" (이름 "+G.m.length+"개 묶음)":""} · Lot ${A.lots}개 중 ${A.eLots}개 Error · 점유 ${hm(A.occ)} · Error 대기 ${hm(A.eM)} · 눌러서 자세히" data-cols="job" style="border-bottom:0;min-height:44px">
             <span style="display:block;min-width:0"><span data-tx style="display:block;font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;${al?"":"font-family:"+MONO}">${esc(cut(nm,34))}</span><span data-tx style="display:block;font-size:11.5px;color:#5A6673;margin-top:2px">Lot ${A.lots}개 중 ${A.eLots}개 Error</span>
-              <span class="jbar" style="display:flex;height:8px;margin-top:4px;border-radius:4px;background:#F0F3F7;overflow:hidden"><i style="height:100%;background:${RUN};width:${MET?0:Math.round(A.eN/jmax*100)}%"></i><i style="height:100%;background:${ERR};width:${MET?Math.round(A.eM/jmax*100):0}%"></i></span></span>
-            <span class="num" ${txn(A.eN,"n")} style="text-align:right;font-size:13px;font-weight:${nW};color:${A.eN?(MET?"#5A6673":"#0F151C"):"#5A6673"}">${A.eN}건</span><span class="num" ${A.eN?txn(A.eM,"hm"):"data-tx"} style="text-align:right;font-size:13px;white-space:nowrap;font-weight:${mW};color:${mInk}">${A.eN?hm(A.eM):"—"}</span><span class="chev" style="text-align:right;color:#5A6673;font-size:13px">›</span></button>
+              <span class="jbar" style="display:flex;height:8px;margin-top:4px;border-radius:4px;background:#F0F3F7;overflow:hidden"><i style="height:100%;background:${RUN};width:${PROB?0:MET?0:Math.round(A.eN/jmax*100)}%"></i><i style="height:100%;background:${ERR};width:${PROB?Math.round(pr(A.eLots,A.lots)/jmax*100):MET?Math.round(A.eM/jmax*100):0}%"></i></span></span>
+            ${vals(A.eN,A.eM,A.eLots,A.lots,true)}<span class="chev" style="text-align:right;color:#5A6673;font-size:13px">›</span></button>
             <button class="fbtn ${FJ===gi?"on":""}" data-h="${h(()=>setState({errFJob:FJ===gi?null:gi}))}" title="${FJ===gi?"Job 필터 해제":"이 Job 만 통계 보기"}" aria-pressed="${FJ===gi}">${FUNNEL}</button></div>`;}).join("")||`<p class="empty">기록 없음</p>`}
       </section></div>`;
 }

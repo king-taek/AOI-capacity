@@ -241,6 +241,21 @@ def test_render_morphs_in_place_instead_of_rebuilding(page):
     assert errors == []
 
 
+def test_error_probability_metric_shows_ratio_of_error_attempts(page):
+    """Error 탭 '발생 확률'(10/28): Error 난 LOT 시도 ÷ 전체 시도 — 카드 · 목록이 '확률 | n / m' 으로 바뀌고 콘솔 오류 없음."""
+    pg, errors, _ = page
+    pg.locator('button[data-fk="nav:errors"]').click()
+    pg.wait_for_selector('main[data-key="view:errors"]')
+    pg.locator('main button[data-fk="seg:발생 확률"]').click()
+    pg.wait_for_selector('main button[data-fk="seg:발생 확률"].on')
+    import re
+    pg.wait_for_timeout(600)                                                          # 글자 넘김(txMix 0.24s)이 끝난 뒤 읽는다
+    txt = re.sub(r"\s+", " ", pg.inner_text("main"))
+    assert "Error 발생 확률" in txt and "LOT 시도" in txt and "날짜별 발생 확률" in txt, txt
+    assert re.search(r"\d+(\.\d)?% \d+ / \d+", txt), txt
+    assert not errors
+
+
 def test_error_tab_period_popup_filters_and_no_total_link(page):
     """Error 탭: 기간 전체를 고른 채 장비를 누르면 그 기간 그대로(여러 날) · 유형 필터 · '전체 기간 합계로' 없음."""
     pg, errors, _ = page
