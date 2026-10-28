@@ -596,6 +596,20 @@ def test_header_period_limits_every_tab_to_the_chosen_days(page):
     assert requests == [] and errors == []
 
 
+def test_gen5_filter_keeps_only_aoi_17_to_28_and_4f_aoi_03_to_05(page):
+    """10/28: 층 필터의 'Gen5' — 2층 AOI-17~28 · 4층 4F-AOI-03~05 만 남고 다른 층 단추는 풀린다."""
+    import re
+    pg, errors, _ = page
+    pg.locator('button[data-fk="seg:Gen5"]').click()
+    pg.wait_for_selector('button[data-fk="seg:Gen5"].on')
+    pg.wait_for_timeout(200)
+    assert pg.locator('button[data-fk="seg:2층"].on').count() == 0
+    names = [x.split("\n")[0] for x in pg.locator(".homelist .rowbtn").all_inner_texts()]
+    ok = lambda n: bool(re.fullmatch(r"AOI-(1[7-9]|2[0-8])|4F-AOI-0[3-5]", n))
+    assert all(ok(n) for n in names), names
+    assert errors == []
+
+
 def test_floor_and_maker_filters_are_picked_separately(page):
     """10/5: 층과 장비 종류는 따로 — '2층' 을 고른 채 'Camtek' 을 눌러도 2층이 풀리지 않는다."""
     pg, errors, _ = page
