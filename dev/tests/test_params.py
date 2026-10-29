@@ -199,3 +199,14 @@ def test_resumed_runs_are_left_out_of_timing_records(tmp_path, fake_nas, monkeyp
     assert "rebuild" not in (_cache_of(cfg).get("eta") or {})
     collect.collect(cfg, rebuild_all=True)                                    # 처음부터 끝까지
     assert _cache_of(cfg)["eta"]["rebuild"][0][0] >= 1
+
+
+def test_jobs_differing_only_in_separators_or_case_merge_but_copy_does_not():
+    st = params.empty_store()
+    for dev, job, t in (("AOI-1", "TB500_RDL4-Multi", "10-29 03:11"), ("AOI-2", "TB500_RDL4 - Multi", "10-28 22:55"),
+                        ("AOI-3", "tb500_rdl4 multi", "10-27 01:00"), ("AOI-4", "TB500_RDL4 - Multi COPY", "10-29 01:00")):
+        params.put(st, f"dev:{dev}|x.htm", dev=dev, job=job, setup="", t=f"2026-{t}", report="x.htm", files=_snap())
+    m = params.build_meta(st)
+    byname = {J["j"]: J for J in m["jobs"]}
+    assert set(byname) == {"TB500_RDL4-Multi", "TB500_RDL4 - Multi COPY"}   # 표시 이름 = 가장 최근 스캔의 원문
+    assert byname["TB500_RDL4-Multi"]["n"] == 3

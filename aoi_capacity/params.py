@@ -349,6 +349,14 @@ def _every(k: str, v: str, n: str) -> str:
     return v
 
 
+_JOB_SEP_RE = re.compile(r"[\s_\-]+")
+
+
+def job_key(job: str) -> str:
+    """같은 레시피의 표기 차이(공백 · `_` · `-` · 대소문자)만 같게 본다 — COPY · LIVE · 장비 복사본은 값이 다를 수 있어 합치지 않는다."""
+    return "".join(t for t in _JOB_SEP_RE.split(str(job).upper()) if t)
+
+
 def build_meta(store: dict, sort_key=None, *, max_changes: int = 40) -> dict:
     """캐시 `params` → HTML `meta.params` = {"v": 2, "jobs": [{"j": Job, "n": 장비 수, "t": 가장 최근 스캔, "z": gzip+base64(JSON)}]}.
     Job 하나의 JSON(아래)은 **그 Job 만의 pool** 을 갖고 gzip 으로 접어 둔다 — 30일 516 Job 이 펼치면 21MB 라서, 화면이 고를 때만 푼다
@@ -371,9 +379,9 @@ def build_meta(store: dict, sort_key=None, *, max_changes: int = 40) -> dict:
     by_job: Dict[str, Dict[str, list]] = collections.defaultdict(lambda: collections.defaultdict(list))
     for s in store.get("snaps", {}).values():
         if s.get("job") and s.get("f"):
-            by_job[s["job"]][s.get("dev", "")].append(s)
+            by_job[job_key(s["job"])][s.get("dev", "")].append(s)
     jobs_out = []
-    for job in sorted(by_job):
+    for jk in sorted(by_job):
         pool: List[str] = []
         pidx: Dict[str, int] = {}
 
@@ -385,7 +393,7 @@ def build_meta(store: dict, sort_key=None, *, max_changes: int = 40) -> dict:
                 pool.append(s)
             return i
 
-        per_dev = by_job[job]
+        per_dev = by_job[jk]
         devs = sorted(per_dev, key=sort_key or (lambda d: d))
         for d in devs:
             per_dev[d].sort(key=lambda s: s.get("t") or "")
@@ -458,6 +466,7 @@ def build_meta(store: dict, sort_key=None, *, max_changes: int = 40) -> dict:
         body = {"pool": pool, "d": devs, "l": [[latest[d].get("t") or "", P(latest[d].get("report") or "")] for d in devs],
                 "g": groups, "h": hist}
         raw = json.dumps(body, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+        job = max((s for d in devs for s in per_dev[d]), key=lambda s: s.get("t") or "")["job"]   # 표시 이름 = 가장 최근 스캔의 원문
         jobs_out.append({"j": job, "n": len(devs), "t": max((latest[d].get("t") or "") for d in devs),
                          "z": base64.b64encode(gzip.compress(raw, 6, mtime=0)).decode("ascii")})
     return {"v": 2, "jobs": jobs_out}
