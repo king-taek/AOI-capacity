@@ -7,7 +7,7 @@ from __future__ import annotations
 
 from aoi_capacity import collect, kla
 from test_recipes_info import _rows, _wafer_dir
-from test_dashboard_js import _lot_keys, _lot_screen, w
+from test_dashboard_js import _lot_keys, _lot_screen, meta, screen, w
 
 
 def test_slot_no_is_a_row_column():
@@ -49,6 +49,17 @@ def test_lot_tab_shows_slot_map_below_the_inspection_order():
     assert '<b class="num">#1</b><span class="mono">SLOTW00002X</span>' in sec and '<b class="num">#3</b><span class="mono">SLOTW00000X</span>' in sec
     mx = out.split("Wafer × 검사")[1]
     assert mx.index("SLOTW00002X") < mx.index("SLOTW00001X") < mx.index("SLOTW00000X")   # 격자 줄은 슬롯 순서
+    assert '<span class="sn">#1</span>SLOTW00002X' in mx
+
+
+def test_publish_lot_tab_shows_the_wafer_grid_like_the_full_screen():
+    """10/29 사용자: 배포판의 Slot 세로 목록(25→1, 빈 칸 · 경고)은 빼고 원본과 같은 Wafer × 검사 격자로."""
+    rows = _slot_rows()
+    (k,) = _lot_keys(_lot_screen(rows))
+    (out,) = screen(rows, meta("AOI-1", "AOI-2") | {"lot_only": True}, [["lotHtml"]], state={"view": "lot", "lotPick": {"k": "lot", "v": k}})
+    assert "Slot No · Wafer ID" not in out and "lotslots" not in out and "정확하지 않을 수 있습니다" not in out
+    mx = out.split("Wafer × 검사")[1]
+    assert mx.index("SLOTW00002X") < mx.index("SLOTW00001X") < mx.index("SLOTW00000X")   # 줄 이름 앞 #슬롯 · 슬롯 순서는 원본과 같다
     assert '<span class="sn">#1</span>SLOTW00002X' in mx
 
 
