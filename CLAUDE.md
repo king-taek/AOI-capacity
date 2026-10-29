@@ -87,6 +87,7 @@ graphify 는 `--code-only` 로, template.html 인라인 JS 까지 보려면 `pyt
 **스킬은 알아서 쓴다**(사용자가 초보라 자동을 원함): 읽기 · 검토 · 디버깅 · 설계 조언 스킬은 묻지 않고 쓰고 쓴 스킬 이름을 답에 한 줄 밝힌다. 여러 파일을 고치거나 지우는 스킬(`deprecation-and-migration` 실행 · `ponytail-audit` 결과 적용 · `using-git-worktrees`)만 먼저 묻는다.
 **겹칠 때 우선순위**: 이 CLAUDE.md(절대 규칙 · 화면 모델 · 모델 배분 규칙 11) → 작업 절차(superpowers) → 관점(Addy · ECC · ponytail) → 디자인 스킬(화면 규칙 → `impeccable` → 나머지).
 10/20 추가: `motion-reference`(motion-reference.takayustudio.jp 모션 사전 — 라이선스 명시 없음이라 링크만, 코드 복사 금지) — 판단(`design-motion-principles` · Emil) 다음, 구현(`gsap` · `animate-css`) 전에 이름 · 시간 · 이징만 고르는 데 쓴다.
+10/29 `deep-interview`(`/deep-interview` 로 직접 부를 때만) 는 OMC 플러그인 도구가 없어 이렇게 읽는다: `state_write`/`state_read` → `.omc/state/deep-interview.json` 을 Write/Read, `oh-my-claudecode:explore` → `Explore` 에이전트, `AskUserQuestion` 이 없으면 평범한 질문 하나, 스펙 `.omc/specs/` 는 커밋하지 않는다(`.gitignore` 의 `.omc/`), 인터뷰 뒤 실행(`omc-plan` 등)은 없고 `writing-plans` 로 이어 가거나 스펙에서 멈춘다.
 디자인 · 모션 스킬이 CDN · 웹폰트 · React 를 권해도 결과 HTML 의 '바깥 요청 0건' 규칙이 이긴다. ECC 의 토큰 설정(기본 모델 sonnet · 서브에이전트 haiku)은 가져오지 않았다 — 규칙 11 과 충돌.
 
 ## 레이아웃
