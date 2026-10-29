@@ -488,10 +488,10 @@ def test_recipe_tab_leaves_kla_out():
 
 
 def test_error_tab_leaves_kla_out():
-    """10/6: Error 탭은 KLA 장비를 넣지 않고(장비별 목록에도 없다) 장비 종류 필터도 두지 않는다 — 층 필터만."""
+    """10/6: Error 탭은 KLA 장비를 넣지 않고(장비별 목록에도 없다) 장비 종류 필터는 '전체 장비 · Gen5' 둘뿐(Camtek · KLA 단추 없음, 10/29)."""
     rows = [w("AOI-1", "E1", "08:00", "08:03", status="Alignment Error."), w("K1", "W2", "09:00", "09:10")]
     html, = screen(rows, meta("AOI-1", "K1"), [["errorsHtml"]], state={"pickDay": None})
-    assert "dev:AOI-1" in html and "dev:K1" not in html and "전체 층" in html and "전체 장비" not in html
+    assert "dev:AOI-1" in html and "dev:K1" not in html and "전체 층" in html and "Gen5" in html and ">KLA<" not in html and ">Camtek<" not in html
     kla_picked, = screen(rows, meta("AOI-1", "K1"), [["errorsHtml"]], state={"pickDay": None, "maker": "kla"})
     assert "dev:AOI-1" in kla_picked                                   # 가동률 탭에서 KLA 를 골라 두어도 Error 탭은 비지 않는다
 
