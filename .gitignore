@@ -33,3 +33,6 @@ docs/design/**/AOI 가동 현황*.html
 
 # 세션 에이전트 worktree(저장소에 넣지 않는다)
 .claude/worktrees/
+
+# deep-interview 스펙·상태(커밋하지 않는다)
+.omc/
