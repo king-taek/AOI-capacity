@@ -597,13 +597,13 @@ def test_header_period_limits_every_tab_to_the_chosen_days(page):
 
 
 def test_gen5_filter_keeps_only_aoi_17_to_28_and_4f_aoi_03_to_05(page):
-    """10/28: 층 필터의 'Gen5' — 2층 AOI-17~28 · 4층 4F-AOI-03~05 만 남고 다른 층 단추는 풀린다."""
+    """10/28: 장비 종류 줄의 'Gen5'(Camtek · KLA 옆) — 2층 AOI-17~28 · 4층 4F-AOI-03~05 만 남는다."""
     import re
     pg, errors, _ = page
     pg.locator('button[data-fk="seg:Gen5"]').click()
     pg.wait_for_selector('button[data-fk="seg:Gen5"].on')
     pg.wait_for_timeout(200)
-    assert pg.locator('button[data-fk="seg:2층"].on').count() == 0
+    assert pg.locator('button[data-fk="seg:전체 장비"].on').count() == 0 and pg.locator('button[data-fk="seg:전체 층"].on').count() == 1
     names = [x.split("\n")[0] for x in pg.locator(".homelist .rowbtn").all_inner_texts()]
     ok = lambda n: bool(re.fullmatch(r"AOI-(1[7-9]|2[0-8])|4F-AOI-0[3-5]", n))
     assert all(ok(n) for n in names), names
