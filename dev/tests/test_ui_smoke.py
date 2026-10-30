@@ -385,3 +385,30 @@ def test_test_path_card_saves_both_publish_folders_and_resets(window):
     p = prefs.load()
     assert (p.publish_dir, p.publish_full_dir) == ("D:\\LOT시험", "D:\\전체시험")
     assert sp._publish.text() == "D:\\LOT시험" and sp._publish_full.text() == "D:\\전체시험"      # 카드 → 설정
+
+
+def test_test_path_card_runs_the_automatic_test_and_shows_the_zip(window, styled_qapp, monkeypatch, tmp_path):
+    """10/30 임시 카드 — '자동 시험 시작' 한 번이 정해 둔 시험 경로로 시험을 돌리고 결과 zip 위치를 보인다(경로를 따로 고르지 않는다). 카드와 함께 지운다."""
+    import time
+
+    from aoi_capacity import path_probe
+
+    asked = {}
+    zip_path = str(tmp_path / "AOI_path_test_x.zip")
+
+    def fake_run(cfg, out_dir, **kw):
+        asked["root"] = kw.get("root")
+        kw["progress"]("준비 · 공유 폴더에 닿는가")
+        return {"path": zip_path, "ok": True, "failed": 0, "total": 12, "stopped": False, "rows": []}
+
+    monkeypatch.setattr(path_probe, "run", fake_run)
+    page = window.collect_page
+    page._b_tp_run.click()
+    t0 = time.time()
+    while page._tp_worker is not None and time.time() - t0 < 10:
+        styled_qapp.processEvents()
+        time.sleep(0.01)
+    assert page._tp_worker is None
+    assert zip_path in page._tp_status.text() and "12" in page._tp_status.text()
+    assert asked["root"] is None                                    # 경로를 넘기지 않는다 = 모듈에 정해 둔 시험 경로
+    assert page._b_tp_run.isEnabled()
