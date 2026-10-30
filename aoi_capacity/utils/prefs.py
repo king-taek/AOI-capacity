@@ -19,6 +19,7 @@ from . import config as _config
 from . import paths
 
 PREFS_VERSION = 9
+SCOPE_MIGRATED_AT = 8         # 수집 범위 기본값 이동이 마지막으로 일어난 버전(v8). 범위를 다시 늘릴 때만 올린다 — 그 밖의 v 올림은 고른 범위를 건드리지 않는다
 
 # 10/30: 설정 화면에서 뺀 옵션들의 고정값 — 옛 prefs.json 에 남은 값은 읽을 때 버려지고 이 값이 쓰인다
 READ_WORKERS_FIXED = 4        # NAS 마다 동시에 읽는 개수
@@ -96,8 +97,9 @@ def migrate(p: Prefs) -> Prefs:
     v8(10/16): 수집 범위에 2층 AOI-26~28 추가 — 옛 기본 38대 그대로인 설정만 41대로(`_scope.PAST_DEFAULTS`).
     v9(10/30, 사용자 요청): 설정 화면에서 주의 장비 기준 · CSV 함께 저장 · 이력 보관 기간 · NAS 동시 읽기 · 어두운 화면 옵션을 없앴다.
         이 값들은 이제 Prefs 의 필드가 아니라서 옛 파일에 남은 값은 `from_dict` 가 버린다(다음 저장 때 파일에서도 사라진다) —
+        수집 범위(`scope_devices`)는 건드리지 않는다 — 범위 이동은 `SCOPE_MIGRATED_AT` 미만인 파일만.
         CSV 는 항상 저장, 보관 기간은 기한 없음, 동시 읽기 4, 화면은 라이트, 주의 장비 기준은 기본값(가동률 40% 미만 · Error 3건 이상)."""
-    if p.prefs_version < PREFS_VERSION and list(p.scope_devices or []) in _scope.PAST_DEFAULTS:
+    if p.prefs_version < SCOPE_MIGRATED_AT and list(p.scope_devices or []) in _scope.PAST_DEFAULTS:
         p.scope_devices = list(_scope.DEFAULT_SCOPE)
     if p.prefs_version < 7 and int(p.html_days) == 60:
         p.html_days = 30

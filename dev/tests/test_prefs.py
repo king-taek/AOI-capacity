@@ -76,3 +76,11 @@ def test_options_removed_on_10_30_are_fixed_and_old_saved_values_are_ignored():
     prefs.save(p)
     saved = json.loads(paths.prefs_file().read_text(encoding="utf-8"))
     assert not {"read_workers", "retention_days", "write_csv", "threshold_util", "threshold_err", "color_mode"} & set(saved)
+
+
+def test_v9_does_not_expand_an_explicit_scope_saved_at_v8():
+    """v9(설정 옵션 삭제)는 수집 범위와 무관 — v8 에서 고른 범위가 옛 기본값과 같아도 넓히지 않는다. v7 이하는 예전처럼 옮긴다."""
+    kept = prefs.migrate(prefs.Prefs.from_dict({"scope_devices": ["AOI-25"], "prefs_version": 8}))
+    assert kept.scope_devices == ["AOI-25"] and kept.prefs_version == prefs.PREFS_VERSION
+    moved = prefs.migrate(prefs.Prefs.from_dict({"scope_devices": ["AOI-25"], "prefs_version": 7}))
+    assert moved.scope_devices != ["AOI-25"]
