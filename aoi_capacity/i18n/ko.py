@@ -533,10 +533,10 @@ SET_PUBLISH_DIR = "LOT 추적 배포 폴더"
 SET_PUBLISH_PLACEHOLDER = "비우면 배포 안 함"
 SET_PUBLISH_HELP = ("팀 공유 폴더 경로를 적으면 수집이 끝날 때마다 LOT 추적만 담은 HTML 을 조용히 올립니다(실패해도 수집은 성공, 로그에만 남음). "
                     "폴더 안에 바로가기용 AOI_LOT.html · latest.js · data 폴더(최근 3개)가 생깁니다. 장비 NAS 아래 경로는 거부합니다.")
-PUBLISH_DIR_DEFAULT = "\\\\10.142.80.167\\1.Engr\\0. 전산 X\\임현택 ENG'R\\LOT추적"   # 10/30 사용자 확정(배포 경로 시험 통과) — 팀 공유 폴더(장비 NAS 와 다른 서버)
-PUBLISH_FULL_DIR_DEFAULT = "\\\\10.142.80.167\\1.Engr\\0. 전산 X\\임현택 ENG'R\\전체"   # 10/30 — 모든 탭을 담은 배포판(LOT 추적 폴더 옆)
-PUBLISH_DIR_PAST = "\\\\k5cifsn2\\k5tsvdata$\\1. Conder Scan\\0. 전산 X\\임현택\\LOT추적"   # 10/27~10/30 기본값 — prefs v10 이 이 값 그대로인 설정만 새 경로로 옮긴다
-PUBLISH_FULL_DIR_PAST = "\\\\k5cifsn2\\k5tsvdata$\\1. Conder Scan\\0. 전산 X\\임현택\\전체"
+PUBLISH_DIR_DEFAULT = "\\\\k5cifsn2\\k5tsvdata$\\1. Conder Scan\\0. 전산 X\\임현택\\LOT추적"   # 10/30 사용자 확정(새 공유 시험 뒤 다시 Conder Scan) — 팀 공유 폴더(장비 NAS 와 다른 공유)
+PUBLISH_FULL_DIR_DEFAULT = "\\\\k5cifsn2\\k5tsvdata$\\1. Conder Scan\\0. 전산 X\\임현택\\전체"   # 10/30 — 모든 탭을 담은 배포판(LOT 추적 폴더 옆)
+PUBLISH_DIR_PAST = "\\\\10.142.80.167\\1.Engr\\0. 전산 X\\임현택 ENG'R\\LOT추적"   # 10/30 한나절 기본값(IP 공유) — prefs v11 이 이 값 그대로인 설정만 Conder Scan 으로 되돌린다
+PUBLISH_FULL_DIR_PAST = "\\\\10.142.80.167\\1.Engr\\0. 전산 X\\임현택 ENG'R\\전체"
 SET_PUBLISH_FULL_DIR = "전체 배포 폴더"
 SET_PUBLISH_FULL_HELP = ("팀 공유 폴더 경로를 적으면 수집이 끝날 때마다 모든 탭(최근 90일)을 담은 HTML 을 LOT 추적 뒤에 조용히 올립니다(실패해도 수집은 성공, 로그에만 남음). "
                          "폴더 안에 바로가기용 AOI_ALL.html · latest.js · data 폴더(최근 3개)가 생깁니다. LOT 추적 배포 폴더와 달라야 하고 장비 NAS 아래 경로는 거부합니다.")
