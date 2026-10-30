@@ -55,6 +55,11 @@ class SettingsPage(QWidget):
         self._publish.setPlaceholderText(K.SET_PUBLISH_PLACEHOLDER)
         self._publish.setToolTip(K.SET_PUBLISH_HELP)
         self._publish.setMinimumWidth(360)
+        self._publish_full = QLineEdit(str(p.publish_full_dir or ""), card)
+        self._publish_full.setProperty("role", "mono")
+        self._publish_full.setPlaceholderText(K.SET_PUBLISH_PLACEHOLDER)
+        self._publish_full.setToolTip(K.SET_PUBLISH_FULL_HELP)
+        self._publish_full.setMinimumWidth(360)
         for box in (self._backfill, self._html_days):
             box.setMinimumWidth(120)
         self._backfill.setToolTip(K.SET_COLLECT_RANGE_HELP)
@@ -81,6 +86,7 @@ class SettingsPage(QWidget):
             (K.SET_BACKFILL_DAYS, hrow(self._backfill)),
             (K.SET_HTML_DAYS, hrow(self._html_days)),
             (K.SET_PUBLISH_DIR, hrow(self._publish, stretch=False)),
+            (K.SET_PUBLISH_FULL_DIR, hrow(self._publish_full, stretch=False)),
             (K.SET_DATA_DIR, hrow(self._data_dir, b_open, b_log)),
             (K.SET_VERSION, hrow(self._version, b_upd)),
         ]
@@ -90,6 +96,7 @@ class SettingsPage(QWidget):
         self._backfill.valueChanged.connect(lambda v: prefs.patch(backfill_days=int(v)))
         self._html_days.valueChanged.connect(lambda v: prefs.patch(html_days=int(v)))
         self._publish.editingFinished.connect(lambda: prefs.patch(publish_dir=self._publish.text().strip()))
+        self._publish_full.editingFinished.connect(lambda: prefs.patch(publish_full_dir=self._publish_full.text().strip()))
         b_open.clicked.connect(lambda: QDesktopServices.openUrl(QUrl.fromLocalFile(str(paths.data_root()))))
         b_log.clicked.connect(lambda: QDesktopServices.openUrl(QUrl.fromLocalFile(str(paths.log_file()))))
         b_upd.clicked.connect(self.update_check_requested.emit)

@@ -30,6 +30,7 @@ class CollectResult:
     elapsed: float = 0.0
     warnings: List[dict] = field(default_factory=list)   # write_html 의 부가 산출물 경고(CSV 잠김 등) + 캐시 손상 안내
     cache_status: str = collect.CACHE_OK                 # ok · missing · corrupt(원본은 .bad-<시각> 으로 보존됨)
+    published_full: str = ""                             # 전체 배포를 올린 폴더(끝까지 올렸을 때만, 10/30)
     published: str = ""                                  # LOT 추적을 올린 배포 폴더(끝까지 올렸을 때만, 10/30) — 꺼짐이거나 실패면 빈 값
 
     @property
@@ -49,6 +50,10 @@ class CollectResult:
                 out.append(i18n.KO.COLLECT_DONE_PUBLISH_FAILED_FMT.format(path=w.get("path", ""), error=w.get("error", "")))
             elif w.get("kind") == "publish_locked":
                 out.append(i18n.KO.COLLECT_DONE_PUBLISH_LOCKED_FMT.format(path=w.get("path", "")))
+            elif w.get("kind") == "publish_full":
+                out.append(i18n.KO.COLLECT_DONE_PUBLISH_FULL_FAILED_FMT.format(path=w.get("path", ""), error=w.get("error", "")))
+            elif w.get("kind") == "publish_full_locked":
+                out.append(i18n.KO.COLLECT_DONE_PUBLISH_FULL_LOCKED_FMT.format(path=w.get("path", "")))
             else:
                 out.append(str(w.get("error") or w))
         return out
@@ -120,11 +125,15 @@ class CollectorWorker(QThread):
                                       log=lambda m: self.signals.log.emit(tok, str(m)),
                                       progress=lambda d, t, p: self.signals.progress.emit(tok, int(d), int(t), str(p)))
             pub: dict = {}
-            publish.publish_after_collect(self.cfg, rows, dev_meta, log=lambda m: self.signals.log.emit(tok, str(m)), status=pub)   # 10/27: 조용히 — 실패해도 수집은 성공
+            publish.publish_after_collect(self.cfg, rows, dev_meta, log=lambda m: self.signals.log.emit(tok, str(m)), status=pub, params_store=stats.get("params_store"))   # 10/27: 조용히 — 실패해도 수집은 성공
             if pub.get("error"):                       # 10/30: 조용히 실패해도 수집이 끝났을 때 알림 카드에는 보인다
                 warnings.append({"kind": "publish", "path": pub.get("dir", ""), "error": pub["error"]})
             elif pub.get("locked"):
                 warnings.append({"kind": "publish_locked", "path": pub.get("dir", "")})
+            if pub.get("full_error"):                  # 10/30: 전체 배포도 같은 방식 — 실패해도 수집은 성공, 알림 카드에만
+                warnings.append({"kind": "publish_full", "path": pub.get("full_dir", ""), "error": pub["full_error"]})
+            elif pub.get("full_locked"):
+                warnings.append({"kind": "publish_full_locked", "path": pub.get("full_dir", "")})
         except collect.CollectCancelled:
             saved = stats.get("cancel_saved")
             if saved:
@@ -139,7 +148,8 @@ class CollectorWorker(QThread):
             warnings.append({"kind": "cache", "path": str(stats.get("cache_preserved") or self.cfg.get("cache_file") or "")})
         result = CollectResult(rows=len(rows), devices=len(dev_meta), dev_meta=dev_meta, errors=errors, html_path=path,
                                elapsed=time.time() - started, warnings=warnings, cache_status=cache_status,
-                               published=str(pub.get("dir", "")) if pub.get("ok") or pub.get("locked") else "")
+                               published=str(pub.get("dir", "")) if pub.get("ok") or pub.get("locked") else "",
+                               published_full=str(pub.get("full_dir", "")) if pub.get("full_ok") or pub.get("full_locked") else "")
         for line in result.warning_lines:                 # 로그에도 남긴다 — 시트를 닫아도 사유가 보이게
             self.signals.log.emit(tok, line)
         self.signals.done.emit(tok, result)

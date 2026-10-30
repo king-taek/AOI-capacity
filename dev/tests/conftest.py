@@ -175,6 +175,6 @@ def make_cfg(tmp_path, csv_path, **over):
     # 기본값(AOI-25 만)은 dev/tests/test_scope_isolation.py 가 따로 검증한다.
     cfg.update({"devices_csv": str(csv_path), "cache_file": str(out / "aoi_cache.json"),
                 "output_dir": str(out), "backfill_days": 3650, "retention_days": 3650,
-                "scope_devices": ["*"]})
+                "scope_devices": ["*"], "publish_full_dir": ""})        # 전체 배포는 자기 시험에서만 켠다
     cfg.update(over)
     return cfg

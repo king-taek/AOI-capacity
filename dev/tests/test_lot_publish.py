@@ -11,7 +11,7 @@ from pathlib import Path
 
 import pytest
 
-from aoi_capacity import collect, publish
+from aoi_capacity import collect, i18n, publish
 from aoi_capacity.nas_guard import NasWriteRefused
 from aoi_capacity.utils import config as config_mod
 import sample_rows
@@ -93,7 +93,7 @@ def test_template_reads_only_the_columns_the_publish_file_keeps():
 # ── 배포(publish.py) ──
 def _publish_cfg(tmp_path, sample):
     rows, meta = sample
-    cfg = _cfg(tmp_path / "main")
+    cfg = _cfg(tmp_path / "main", publish_full_dir="")          # 전체 배포는 자기 시험에서만 켠다
     return cfg, rows, meta["devices"]
 
 
@@ -103,7 +103,7 @@ def test_publish_writes_stub_pointer_and_unique_data_files_and_prunes(tmp_path, 
     now = dt.datetime(2026, 10, 27, 8, 15)
     got = [publish.publish_lot(cfg, str(share), rows=rows[:3000], dev_meta=devs, now=now + dt.timedelta(minutes=i)) for i in range(5)]
     assert all(g["pointer_ok"] for g in got)
-    assert sorted(p.name for p in share.iterdir()) == ["AOI_LOT.html", "AOI_LOT_shortcut.url", "data", "latest.js"]
+    assert sorted(p.name for p in share.iterdir()) == ["AOI.ico", "AOI_LOT.html", "AOI_LOT_shortcut.url", "data", "latest.js"]
     data = sorted(p.name for p in (share / "data").iterdir())
     assert data == ["lot_20261027_0817.html", "lot_20261027_0818.html", "lot_20261027_0819.html"]       # 최근 3개만
     assert (share / "latest.js").read_text(encoding="utf-8") == 'window.AOI_LOT_LATEST="data/lot_20261027_0819.html";\n'
@@ -191,9 +191,12 @@ def test_shortcut_points_at_the_stub_with_an_encoded_file_url(tmp_path, sample):
     publish.publish_lot(cfg, str(share), rows=rows[:100], dev_meta=devs, now=dt.datetime(2026, 10, 27, 8, 15))
     # 아이콘 경로만 ANSI 로 못 쓰면(이모지 등) 아이콘만 빼고 주소는 그대로 한글 — 퍼센트 인코딩 판으로 가지 않는다(PR #12 리뷰)
     if os.name != "nt":
-        assert publish.shortcut_bytes(config_mod.PUBLISH_DIR_DEFAULT, "C:\\앱\\😀\\logo.ico") == ("[InternetShortcut]\r\nURL=" + raw + "\r\n").encode("cp949")
+        assert publish.shortcut_bytes(config_mod.PUBLISH_DIR_DEFAULT, icon="C:\\앱\\😀\\logo.ico") == ("[InternetShortcut]\r\nURL=" + raw + "\r\n").encode("cp949")
     shared = (share / "AOI_LOT_shortcut.url").read_bytes()
-    assert b"AOI_LOT.html" in shared and b"IconFile" not in shared                     # 공유 폴더 안 바로가기: 팀원 PC 에 없는 아이콘 경로는 넣지 않는다
+    # 공유 폴더 안 바로가기: 팀원 PC 에는 앱이 없다 — 앱 아이콘을 폴더에 AOI.ico 로 함께 올리고 그 파일을 가리킨다(D103)
+    ico = share / publish.ICON_NAME
+    assert ico.read_bytes() == Path(publish.app_icon()).read_bytes()
+    assert b"AOI_LOT.html" in shared and ("IconFile=" + str(ico) + "\r\n").encode("cp949") in shared
 
 
 def test_publish_dir_is_hardcoded_by_default_and_must_be_absolute(tmp_path, sample):
@@ -238,3 +241,85 @@ def test_publish_to_a_missing_share_fails_fast(tmp_path, sample):
     cfg, rows, devs = _publish_cfg(tmp_path, sample)
     with pytest.raises(FileNotFoundError):
         publish.publish_lot(cfg, str(tmp_path / "no" / "share"), rows=rows[:10], dev_meta=devs)
+
+
+# ── 전체 배포(10/30) ──
+def test_full_publish_has_every_tab_ninety_days_and_its_own_files(tmp_path, sample):
+    cfg, rows, devs = _publish_cfg(tmp_path, sample)
+    share = tmp_path / "full"
+    got = publish.publish_full(dict(cfg, publish_full_days=7), str(share), rows=rows, dev_meta=devs,
+                               params_store={"snaps": {}, "blobs": {}}, now=dt.datetime(2026, 10, 30, 9, 0))
+    assert got["pointer_ok"]
+    assert sorted(p.name for p in share.iterdir()) == ["AOI.ico", "AOI_ALL.html", "AOI_ALL_shortcut.url", "data", "latest.js"]
+    assert b"IconFile=" + str(share / publish.ICON_NAME).encode() in (share / "AOI_ALL_shortcut.url").read_bytes()   # 전체 배포판 바로가기도 같은 아이콘(D103)
+    assert (share / "latest.js").read_text(encoding="utf-8") == 'window.AOI_ALL_LATEST="data/all_20261030_0900.html";\n'
+    stub = (share / "AOI_ALL.html").read_text(encoding="utf-8")
+    assert "window.AOI_ALL_LATEST" in stub and "AOI_LOT" not in stub and "http" not in stub
+    assert b"AOI_ALL.html" in (share / "AOI_ALL_shortcut.url").read_bytes()
+    emb = sample_rows.embedded((share / "data" / "all_20261030_0900.html").read_text(encoding="utf-8"))
+    m = emb["meta"]
+    assert m["hidden_tabs"] == ["recipe"]                                            # RDL 단일스캔은 개발자 모드 숨김탭으로(사용자 10/30)
+    assert not m.get("lot_only") and m["range"]["from"] > m["data_from"]            # 모든 탭 · 최근 7일만(cfg publish_full_days)
+    assert m["devices"] and any(d.get("note") for d in m["devices"])                # Report 열기에 쓰는 장비 경로를 그대로 담는다(사용자 확정)
+    assert not list(share.rglob("*.csv"))
+
+
+def test_full_and_lot_publish_do_not_touch_each_others_data(tmp_path, sample):
+    cfg, rows, devs = _publish_cfg(tmp_path, sample)
+    share = tmp_path / "both"
+    now = dt.datetime(2026, 10, 30, 9, 0)
+    publish.publish_lot(cfg, str(share), rows=rows[:500], dev_meta=devs, now=now)
+    for i in range(5):
+        publish.publish_full(cfg, str(share), rows=rows[:500], dev_meta=devs, now=now + dt.timedelta(minutes=i))
+    names = sorted(p.name for p in (share / "data").iterdir())
+    assert names.count("lot_20261030_0900.html") == 1 and len([n for n in names if n.startswith("all_")]) == 3     # 정리는 자기 종류만
+
+
+def test_publish_after_collect_runs_the_full_publish_after_lot_and_reports_it_separately(tmp_path, sample):
+    cfg, rows, devs = _publish_cfg(tmp_path, sample)
+    st: dict = {}
+    cfg2 = dict(cfg, publish_dir=str(tmp_path / "lot"), publish_full_dir=str(tmp_path / "all"))
+    assert publish.publish_after_collect(cfg2, rows[:200], devs, log=None, status=st)
+    assert st == {"dir": str(tmp_path / "lot"), "ok": True, "full_dir": str(tmp_path / "all"), "full_ok": True}
+    assert (tmp_path / "all" / "AOI_ALL.html").is_file() and (tmp_path / "lot" / "AOI_LOT.html").is_file()
+    blocker = tmp_path / "not_a_dir"
+    blocker.write_text("x")
+    st = {}
+    lines: list = []
+    publish.publish_after_collect(dict(cfg2, publish_full_dir=str(blocker / "sub")), rows[:50], devs, log=lines.append, status=st)
+    assert st["ok"] is True and "full_error" in st and "full_ok" not in st            # 전체가 실패해도 LOT 추적은 올라간다
+    assert any(l.startswith("전체 배포 실패(수집은 정상)") for l in lines)
+    st = {}
+    publish.publish_after_collect(dict(cfg2, publish_full_dir=str(tmp_path / "lot")), rows[:50], devs, log=None, status=st)
+    assert st["full_error"] == i18n.KO.PUBLISH_FULL_SAME_DIR and "full_ok" not in st      # 같은 폴더면 서로 덮지 않게 멈춘다
+    alias = tmp_path / "lot_alias"
+    try:
+        os.symlink(tmp_path / "lot", alias, target_is_directory=True)
+    except (OSError, NotImplementedError):
+        alias = None                                                                   # 심볼릭 링크를 못 만드는 환경(권한 없는 Windows)
+    if alias:
+        st = {}
+        publish.publish_after_collect(dict(cfg2, publish_full_dir=str(alias)), rows[:50], devs, log=None, status=st)
+        assert st["full_error"] == i18n.KO.PUBLISH_FULL_SAME_DIR and "full_ok" not in st      # 다른 이름으로 가리킨 같은 폴더도 막는다
+        assert (tmp_path / "lot" / "latest.js").read_text(encoding="utf-8").startswith("window.AOI_LOT_LATEST")
+    st = {}
+    assert publish.publish_after_collect(dict(cfg2, publish_dir="", publish_full_dir=""), rows[:50], devs, log=None, status=st) is None and st == {}
+
+
+def test_full_publish_refuses_a_folder_under_an_equipment_nas(tmp_path, sample):
+    cfg, rows, devs = _publish_cfg(tmp_path, sample)
+    nas = tmp_path / "nas"
+    (nas / "AOI-1").mkdir(parents=True)
+    dev_csv = tmp_path / "devices.csv"
+    dev_csv.write_text("name,path\nAOI-1," + str(nas / "AOI-1") + "\n", encoding="utf-8")
+    cfg["devices_csv"] = str(dev_csv)
+    with pytest.raises(NasWriteRefused):
+        publish.publish_full(cfg, str(nas / "AOI-1" / "pub"), rows=rows[:10], dev_meta=devs)
+    assert not (nas / "AOI-1" / "pub").exists()
+
+
+def test_full_publish_defaults_are_ninety_days_next_to_the_lot_folder():
+    assert collect.DEFAULT_CONFIG["publish_full_days"] == 90
+    assert collect.DEFAULT_CONFIG["publish_full_dir"] == config_mod.PUBLISH_FULL_DIR_DEFAULT
+    assert config_mod.PUBLISH_FULL_DIR_DEFAULT.rsplit("\\", 1)[0] == config_mod.PUBLISH_DIR_DEFAULT.rsplit("\\", 1)[0]
+    assert config_mod.PUBLISH_FULL_DIR_DEFAULT != config_mod.PUBLISH_DIR_DEFAULT
