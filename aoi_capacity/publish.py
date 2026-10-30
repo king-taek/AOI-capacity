@@ -209,14 +209,24 @@ def publish_lot(cfg: dict, share_dir: str, *, rows: Optional[list] = None, dev_m
     return res
 
 
-def publish_after_collect(cfg: dict, rows: list, dev_meta: list, log: Optional[Callable[[str], None]] = None) -> Optional[Dict[str, object]]:
-    """수집이 끝난 뒤 조용히 배포 — cfg `publish_dir` 가 비어 있으면 아무것도 안 한다. 실패해도 수집은 성공으로 두고 로그에 한 줄만 남긴다."""
+def publish_after_collect(cfg: dict, rows: list, dev_meta: list, log: Optional[Callable[[str], None]] = None,
+                          status: Optional[dict] = None) -> Optional[Dict[str, object]]:
+    """수집이 끝난 뒤 조용히 배포 — cfg `publish_dir` 가 비어 있으면 아무것도 안 한다. 실패해도 수집은 성공으로 두고 로그에 한 줄만 남긴다.
+
+    `status` 를 주면 결과를 거기에 적는다(10/30, 수집 창이 끝에 보여 주려고): 끝까지 올렸으면 `ok`(+`dir`), 안내 파일이 잠겨 못 바꿨으면 `locked`,
+    실패하면 `error`(+`dir`). 안 했으면(꺼짐) 비어 있다."""
     share_dir = str(cfg.get("publish_dir") or "").strip()
     if not share_dir or (os.name != "nt" and share_dir.startswith("\\\\")):    # 꺼짐 · Windows 가 아니면 UNC 에 닿을 수 없다(개발 환경·CI)
         return None
     try:
-        return publish_lot(cfg, share_dir, rows=rows, dev_meta=dev_meta, log=log)
+        res = publish_lot(cfg, share_dir, rows=rows, dev_meta=dev_meta, log=log)
     except Exception as exc:  # noqa: BLE001 - 배포는 부가 산출물이다(CSV 와 같은 취급)
         if log:
             log(f"LOT 추적 배포 실패(수집은 정상): {type(exc).__name__}: {exc}")
+        if status is not None:
+            status.update(error=f"{type(exc).__name__}: {exc}", dir=share_dir)
         return None
+    if status is not None:
+        status["dir"] = share_dir
+        status["ok" if res.get("pointer_ok") else "locked"] = True
+    return res

@@ -18,21 +18,21 @@ from .. import scope as _scope
 from . import config as _config
 from . import paths
 
-PREFS_VERSION = 8
+PREFS_VERSION = 9
+SCOPE_MIGRATED_AT = 8         # 수집 범위 기본값 이동이 마지막으로 일어난 버전(v8). 범위를 다시 늘릴 때만 올린다 — 그 밖의 v 올림은 고른 범위를 건드리지 않는다
+
+# 10/30: 설정 화면에서 뺀 옵션들의 고정값 — 옛 prefs.json 에 남은 값은 읽을 때 버려지고 이 값이 쓰인다
+READ_WORKERS_FIXED = 4        # NAS 마다 동시에 읽는 개수
+RETENTION_DAYS_FIXED = 0      # 이력 보관 기간 — 0 = 기한 없이 보관
+COLOR_MODE_FIXED = "light"    # 수집 창 화면 — 라이트 단일(결과 HTML 과 같은 모양)
 
 
 @dataclass
 class Prefs:
     backfill_days: int = 30
-    read_workers: int = 8
-    retention_days: int = 0           # 이력 보관 기간(일) — 0 = 기한 없이(10/5 사용자 확정)
     output_dir: str = ""              # 비우면 data_root()
-    write_csv: bool = False
     report_dir: str = "Report"
     scan_dir: str = "Scanresult"
-    threshold_util: int = 40          # 주의 장비: 가동률 미만
-    threshold_err: int = 3            # 주의 장비: 오류 건수 이상
-    color_mode: str = "light"         # light | dark — 9/23 부터 라이트가 기본(결과 HTML 과 같은 모양)
     window_width: int = 0
     window_height: int = 0
     window_maximized: bool = False
@@ -94,13 +94,13 @@ def migrate(p: Prefs) -> Prefs:
     v5(10/5): 이력은 **기한 없이 보관**(사용자 확정 — '데이터는 계속 쌓아 놓고'). 고른 값과 상관없이 0(기한 없음)으로 옮긴다.
     v6(10/5): 수집 범위에 KLA 8대 추가 — 옛 기본 30대 그대로인 설정만 38대로(`_scope.PAST_DEFAULTS`).
     v7(10/5): 결과 HTML 기본 기간 60일 → 1달(30일, 사용자 요청) — 옛 기본값 60 그대로인 설정만.
-    v8(10/16): 수집 범위에 2층 AOI-26~28 추가 — 옛 기본 38대 그대로인 설정만 41대로(`_scope.PAST_DEFAULTS`)."""
-    if p.prefs_version < PREFS_VERSION and list(p.scope_devices or []) in _scope.PAST_DEFAULTS:
+    v8(10/16): 수집 범위에 2층 AOI-26~28 추가 — 옛 기본 38대 그대로인 설정만 41대로(`_scope.PAST_DEFAULTS`).
+    v9(10/30, 사용자 요청): 설정 화면에서 주의 장비 기준 · CSV 함께 저장 · 이력 보관 기간 · NAS 동시 읽기 · 어두운 화면 옵션을 없앴다.
+        이 값들은 이제 Prefs 의 필드가 아니라서 옛 파일에 남은 값은 `from_dict` 가 버린다(다음 저장 때 파일에서도 사라진다) —
+        수집 범위(`scope_devices`)는 건드리지 않는다 — 범위 이동은 `SCOPE_MIGRATED_AT` 미만인 파일만.
+        CSV 는 항상 저장, 보관 기간은 기한 없음, 동시 읽기 4, 화면은 라이트, 주의 장비 기준은 기본값(가동률 40% 미만 · Error 3건 이상)."""
+    if p.prefs_version < SCOPE_MIGRATED_AT and list(p.scope_devices or []) in _scope.PAST_DEFAULTS:
         p.scope_devices = list(_scope.DEFAULT_SCOPE)
-    if p.prefs_version < 4 and p.color_mode == "dark":
-        p.color_mode = "light"
-    if p.prefs_version < 5:
-        p.retention_days = 0
     if p.prefs_version < 7 and int(p.html_days) == 60:
         p.html_days = 30
     if p.prefs_version < PREFS_VERSION:
@@ -159,18 +159,16 @@ def to_collect_cfg(p: Prefs) -> Dict[str, Any]:
         "report_dir": p.report_dir or "Report",
         "scan_dir": p.scan_dir or "Scanresult",
         "backfill_days": p.backfill_days,
-        "read_workers": p.read_workers,
-        "retention_days": p.retention_days,
+        "read_workers": READ_WORKERS_FIXED,
+        "retention_days": RETENTION_DAYS_FIXED,
         "output_dir": str(paths.output_dir(p.output_dir)),
         "output_name": "AOI_capacity.html",
-        "write_csv": p.write_csv,
+        "write_csv": True,
         "cache_file": str(paths.cache_file()),
         "scope_devices": list(p.scope_devices) if isinstance(p.scope_devices, list) and p.scope_devices else
                          (p.scope_devices if p.scope_devices else list(_scope.DEFAULT_SCOPE)),
         "refresh_window_days": p.refresh_window_days,
         "rebuild_all": False,          # GUI 의 '전체 다시 만들기' 는 워커 인자(full)로 넘긴다 — 설정에 남기지 않는다
-        "attention_util": p.threshold_util,   # D14: 결과 HTML 의 meta.dashboard_settings 로 나간다(prefs 의 이름은 옛 그대로 threshold_*)
-        "attention_err": p.threshold_err,
         "html_days": p.html_days,
         "publish_dir": str(p.publish_dir or "").strip(),
     })

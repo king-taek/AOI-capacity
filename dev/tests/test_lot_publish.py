@@ -158,6 +158,15 @@ def test_publish_after_collect_is_silent_and_never_raises(tmp_path, sample):
     cfg["publish_dir"] = str(blocker / "sub")                                          # 폴더를 만들 수 없는 경로
     assert publish.publish_after_collect(cfg, rows[:10], devs, log=lines.append) is None
     assert len(lines) == 1 and lines[0].startswith("LOT 추적 배포 실패(수집은 정상)")
+    st: dict = {}                                                                      # 10/30: 수집 창이 끝에 보여 주도록 결과를 status 에 적는다
+    assert publish.publish_after_collect(cfg, rows[:10], devs, log=None, status=st) is None
+    assert st["dir"] == cfg["publish_dir"] and "error" in st and "ok" not in st
+    cfg["publish_dir"] = str(tmp_path / "good")
+    st = {}
+    assert publish.publish_after_collect(cfg, rows[:10], devs, log=None, status=st)
+    assert st == {"dir": cfg["publish_dir"], "ok": True}
+    st = {}
+    assert publish.publish_after_collect(dict(cfg, publish_dir=""), rows[:10], devs, log=None, status=st) is None and st == {}
 
 
 def test_shortcut_points_at_the_stub_with_an_encoded_file_url(tmp_path, sample):

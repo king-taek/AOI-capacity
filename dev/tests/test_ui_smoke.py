@@ -151,16 +151,17 @@ def test_ensure_html_creates_openable_file_without_collecting(tmp_path):
     assert path.is_file() and "__DATA__" not in path.read_text(encoding="utf-8")
 
 
-def test_theme_switch_reapplies_stylesheet(window, styled_qapp):
-    from aoi_capacity.ui import theme
+def test_removed_options_are_not_on_the_settings_page(window):
+    """10/30: 주의 장비 기준 · 이력 보관 기간 · NAS 동시 읽기 · 어두운 화면은 설정에서 없앴고, CSV 도 함께 저장 체크는 수집 화면에서 없앴다."""
+    from PyQt6.QtWidgets import QCheckBox, QLabel
 
-    window.settings_page._dark.setChecked(False)
-    _pump(styled_qapp)
-    assert theme.color_mode() == "light"
-    assert styled_qapp.styleSheet() == theme.render_qss("light")
-    window.settings_page._dark.setChecked(True)
-    _pump(styled_qapp)
-    assert theme.color_mode() == "dark"
+    page = window.settings_page
+    for gone in ("_dark", "_th_util", "_th_err", "_retention", "_workers"):
+        assert not hasattr(page, gone), gone
+    assert not hasattr(window.collect_page, "_csv")
+    texts = {lb.text() for lb in window.findChildren(QLabel)} | {b.text() for b in window.findChildren(QCheckBox)}
+    for gone in ("주의 장비 기준", "이력 보관 기간", "NAS 마다 동시에 읽기", "어두운 화면", "CSV 도 함께 저장"):
+        assert gone not in texts, gone
 
 
 def test_collect_range_is_editable_and_saved(window, styled_qapp):
@@ -171,19 +172,6 @@ def test_collect_range_is_editable_and_saved(window, styled_qapp):
     _pump(styled_qapp)
     assert prefs.load().backfill_days == 3
     assert prefs.to_collect_cfg(prefs.load())["backfill_days"] == 3
-    window.settings_page._retention.setValue(120)
-    _pump(styled_qapp)
-    assert prefs.load().retention_days == 120
-
-
-def test_read_concurrency_is_editable_and_saved(window, styled_qapp):
-    """NAS 가 동시 읽기를 못 견디면 낮출 수 있어야 한다(1 = 예전처럼 한 줄로)."""
-    from aoi_capacity.utils import prefs
-
-    window.settings_page._workers.setValue(4)
-    _pump(styled_qapp)
-    assert prefs.load().read_workers == 4
-    assert prefs.to_collect_cfg(prefs.load())["read_workers"] == 4
 
 
 def test_html_days_is_editable_and_reaches_the_collect_cfg(window, styled_qapp):
@@ -194,15 +182,6 @@ def test_html_days_is_editable_and_reaches_the_collect_cfg(window, styled_qapp):
     _pump(styled_qapp)
     assert prefs.load().html_days == 12 and prefs.to_collect_cfg(prefs.load())["html_days"] == 12
     assert "split_mb" not in prefs.to_collect_cfg(prefs.load())
-    assert window.settings_page._retention.specialValueText() and window.settings_page._retention.minimum() == 0   # 0 = 기한 없음
-
-
-def test_prefs_v5_moves_retention_to_forever():
-    """v5(10/5): 사용자 확정 — 이력은 기한 없이 보관. 옛 설정의 보관 기간은 고른 값과 상관없이 0 으로."""
-    from aoi_capacity.utils import prefs
-
-    p = prefs.migrate(prefs.Prefs.from_dict({"retention_days": 45, "prefs_version": 4}))
-    assert p.retention_days == 0 and p.prefs_version == prefs.PREFS_VERSION
 
 
 def test_html_only_card_builds_from_cache_without_collecting(window, styled_qapp, tmp_path):
