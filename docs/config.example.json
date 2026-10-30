@@ -35,5 +35,8 @@
   "recipe_groups_file": "",
   "_LOT추적배포": "publish_dir: LOT 추적만 담은 HTML 을 올릴 팀 공유 폴더(비우면 배포 안 함). 수집이 끝날 때마다 조용히 올립니다 — 폴더 안에 AOI_LOT.html(바로가기용 안내 파일) · latest.js · data\\lot_날짜_시각.html(최근 3개). 장비 NAS 아래면 쓰지 않습니다.",
   "publish_dir": "\\\\k5cifsn2\\k5tsvdata$\\1. Conder Scan\\0. 전산 X\\임현택\\LOT추적",
+  "_전체배포": "publish_full_dir: 모든 탭(최근 publish_full_days 일, 기본 90 · 0 = 가진 데이터 전부)을 담은 HTML 을 올릴 팀 공유 폴더(비우면 배포 안 함). LOT 추적 배포 뒤에 이어서 올리며 폴더 안에 AOI_ALL.html · latest.js · data\\all_날짜_시각.html(최근 3개)이 생깁니다. LOT 추적 폴더와 달라야 합니다.",
+  "publish_full_dir": "\\\\k5cifsn2\\k5tsvdata$\\1. Conder Scan\\0. 전산 X\\임현택\\전체",
+  "publish_full_days": 90,
   "cache_file": "C:\\AOI_capacity\\aoi_cache.json"
 }

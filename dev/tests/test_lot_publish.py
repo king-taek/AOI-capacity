@@ -11,7 +11,7 @@ from pathlib import Path
 
 import pytest
 
-from aoi_capacity import collect, publish
+from aoi_capacity import collect, i18n, publish
 from aoi_capacity.nas_guard import NasWriteRefused
 from aoi_capacity.utils import config as config_mod
 import sample_rows
@@ -93,7 +93,7 @@ def test_template_reads_only_the_columns_the_publish_file_keeps():
 # ── 배포(publish.py) ──
 def _publish_cfg(tmp_path, sample):
     rows, meta = sample
-    cfg = _cfg(tmp_path / "main")
+    cfg = _cfg(tmp_path / "main", publish_full_dir="")          # 전체 배포는 자기 시험에서만 켠다
     return cfg, rows, meta["devices"]
 
 
@@ -232,3 +232,73 @@ def test_publish_to_a_missing_share_fails_fast(tmp_path, sample):
     cfg, rows, devs = _publish_cfg(tmp_path, sample)
     with pytest.raises(FileNotFoundError):
         publish.publish_lot(cfg, str(tmp_path / "no" / "share"), rows=rows[:10], dev_meta=devs)
+
+
+# ── 전체 배포(10/30) ──
+def test_full_publish_has_every_tab_ninety_days_and_its_own_files(tmp_path, sample):
+    cfg, rows, devs = _publish_cfg(tmp_path, sample)
+    share = tmp_path / "full"
+    got = publish.publish_full(dict(cfg, publish_full_days=7), str(share), rows=rows, dev_meta=devs,
+                               params_store={"snaps": {}, "blobs": {}}, now=dt.datetime(2026, 10, 30, 9, 0))
+    assert got["pointer_ok"]
+    assert sorted(p.name for p in share.iterdir()) == ["AOI_ALL.html", "AOI_ALL_shortcut.url", "data", "latest.js"]
+    assert (share / "latest.js").read_text(encoding="utf-8") == 'window.AOI_ALL_LATEST="data/all_20261030_0900.html";\n'
+    stub = (share / "AOI_ALL.html").read_text(encoding="utf-8")
+    assert "window.AOI_ALL_LATEST" in stub and "AOI_LOT" not in stub and "http" not in stub
+    assert b"AOI_ALL.html" in (share / "AOI_ALL_shortcut.url").read_bytes()
+    emb = sample_rows.embedded((share / "data" / "all_20261030_0900.html").read_text(encoding="utf-8"))
+    m = emb["meta"]
+    assert not m.get("lot_only") and m["range"]["from"] > m["data_from"]            # 모든 탭 · 최근 7일만(cfg publish_full_days)
+    assert m["devices"] and any(d.get("note") for d in m["devices"])                # Report 열기에 쓰는 장비 경로를 그대로 담는다(사용자 확정)
+    assert not list(share.rglob("*.csv"))
+
+
+def test_full_and_lot_publish_do_not_touch_each_others_data(tmp_path, sample):
+    cfg, rows, devs = _publish_cfg(tmp_path, sample)
+    share = tmp_path / "both"
+    now = dt.datetime(2026, 10, 30, 9, 0)
+    publish.publish_lot(cfg, str(share), rows=rows[:500], dev_meta=devs, now=now)
+    for i in range(5):
+        publish.publish_full(cfg, str(share), rows=rows[:500], dev_meta=devs, now=now + dt.timedelta(minutes=i))
+    names = sorted(p.name for p in (share / "data").iterdir())
+    assert names.count("lot_20261030_0900.html") == 1 and len([n for n in names if n.startswith("all_")]) == 3     # 정리는 자기 종류만
+
+
+def test_publish_after_collect_runs_the_full_publish_after_lot_and_reports_it_separately(tmp_path, sample):
+    cfg, rows, devs = _publish_cfg(tmp_path, sample)
+    st: dict = {}
+    cfg2 = dict(cfg, publish_dir=str(tmp_path / "lot"), publish_full_dir=str(tmp_path / "all"))
+    assert publish.publish_after_collect(cfg2, rows[:200], devs, log=None, status=st)
+    assert st == {"dir": str(tmp_path / "lot"), "ok": True, "full_dir": str(tmp_path / "all"), "full_ok": True}
+    assert (tmp_path / "all" / "AOI_ALL.html").is_file() and (tmp_path / "lot" / "AOI_LOT.html").is_file()
+    blocker = tmp_path / "not_a_dir"
+    blocker.write_text("x")
+    st = {}
+    lines: list = []
+    publish.publish_after_collect(dict(cfg2, publish_full_dir=str(blocker / "sub")), rows[:50], devs, log=lines.append, status=st)
+    assert st["ok"] is True and "full_error" in st and "full_ok" not in st            # 전체가 실패해도 LOT 추적은 올라간다
+    assert any(l.startswith("전체 배포 실패(수집은 정상)") for l in lines)
+    st = {}
+    publish.publish_after_collect(dict(cfg2, publish_full_dir=str(tmp_path / "lot")), rows[:50], devs, log=None, status=st)
+    assert st["full_error"] == i18n.KO.PUBLISH_FULL_SAME_DIR and "full_ok" not in st      # 같은 폴더면 서로 덮지 않게 멈춘다
+    st = {}
+    assert publish.publish_after_collect(dict(cfg2, publish_dir="", publish_full_dir=""), rows[:50], devs, log=None, status=st) is None and st == {}
+
+
+def test_full_publish_refuses_a_folder_under_an_equipment_nas(tmp_path, sample):
+    cfg, rows, devs = _publish_cfg(tmp_path, sample)
+    nas = tmp_path / "nas"
+    (nas / "AOI-1").mkdir(parents=True)
+    dev_csv = tmp_path / "devices.csv"
+    dev_csv.write_text("name,path\nAOI-1," + str(nas / "AOI-1") + "\n", encoding="utf-8")
+    cfg["devices_csv"] = str(dev_csv)
+    with pytest.raises(NasWriteRefused):
+        publish.publish_full(cfg, str(nas / "AOI-1" / "pub"), rows=rows[:10], dev_meta=devs)
+    assert not (nas / "AOI-1" / "pub").exists()
+
+
+def test_full_publish_defaults_are_ninety_days_next_to_the_lot_folder():
+    assert collect.DEFAULT_CONFIG["publish_full_days"] == 90
+    assert collect.DEFAULT_CONFIG["publish_full_dir"] == config_mod.PUBLISH_FULL_DIR_DEFAULT
+    assert config_mod.PUBLISH_FULL_DIR_DEFAULT.rsplit("\\", 1)[0] == config_mod.PUBLISH_DIR_DEFAULT.rsplit("\\", 1)[0]
+    assert config_mod.PUBLISH_FULL_DIR_DEFAULT != config_mod.PUBLISH_DIR_DEFAULT

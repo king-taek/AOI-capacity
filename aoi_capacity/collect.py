@@ -110,6 +110,8 @@ DEFAULT_CONFIG: Dict[str, object] = {
     "attention_err": 3,                           # D14: 또는 Error 건수 이 값 이상
     "html_days": 30,                              # 수집 뒤 결과 HTML 에 담을 최근 일수(0 = 가진 데이터 전부, 기본 1달 — 10/5 사용자). 분할은 없다(9/23 분할 롤백)
     "collect_params": True,                       # D89: Report 마다 INI 를 찾은 첫 Wafer 폴더의 레시피 파라미터 파일을 읽어 둔다(파라미터 탭). 끄면 읽지 않는다
+    "publish_full_dir": config_mod.PUBLISH_FULL_DIR_DEFAULT,                  # 10/30: 모든 탭을 담은 전체 배포 폴더(LOT 추적 폴더 옆, 비우면 배포 안 함)
+    "publish_full_days": config_mod.PUBLISH_FULL_DAYS_DEFAULT,                # 10/30: 전체 배포에 담을 최근 일수(기본 90, 0 = 가진 데이터 전부)
     "publish_dir": config_mod.PUBLISH_DIR_DEFAULT,                            # 10/27: LOT 추적 배포 폴더(팀 공유 — 장비 NAS 아래는 거부). 비우면 배포 안 함, 있으면 수집이 끝날 때마다 조용히 올린다
     "recipe_groups_file": "",                     # D67: 결과 HTML 에 담을 레시피 묶음(화면에서 내보낸 JSON). 비우면 데이터 폴더·다운로드에서 가장 최근 것
 }
