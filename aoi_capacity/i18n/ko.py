@@ -519,8 +519,9 @@ SHARE_PROBE_NO_DEVICES_FMT = "장비 목록(devices.csv)이 없어 장비 NAS �
 # LOT 추적 발행 시험(10/27) — 공유 폴더에 올리기 전, 이 PC 에서 LOT 추적만 담은 HTML 한 장을 만들어 본다(NAS 는 읽지 않음)
 TEST_PATH_TITLE = "배포 경로 시험 (임시)"
 TEST_PATH_SHORT = "수집이 끝나면 이 폴더들로 올라갑니다 · 설정의 배포 폴더와 같은 값"
-TEST_PATH_HELP = ("새 공유 폴더로 올려 보는 임시 카드입니다. '시험 경로 넣기'를 누르고 평소처럼 수집하면 LOT 추적 · 전체 배포가 그 아래 LOT추적 · 전체 폴더로 올라갑니다. "
-                  "시험이 끝나면 '원래 경로로'를 누르거나 이 카드를 지웁니다. 두 칸이 같은 폴더면 전체 배포는 올리지 않습니다.")
+TEST_PATH_HELP = ("새 공유 폴더로 올려 보는 임시 카드입니다. '자동 시험 시작'을 한 번 누르면 정해 둔 시험 경로(아래 '시험 대상')에서 닿기 · 폴더 만들기 · 파일 쓰기/이름 바꾸기/덮어쓰기/지우기 · "
+                  "한글·따옴표 경로 · 바로가기(.url) · 아이콘 · 속도를 모두 재고, 로그와 결과를 zip 한 장으로 저장합니다 — 그 zip 을 보내 주세요. 시험 파일은 끝나면 지우고 실제 배포 파일은 건드리지 않습니다. "
+                  "아래 두 칸과 '시험 경로 넣기' · '원래 경로로'는 평소 수집이 끝났을 때 올라갈 배포 폴더를 바꾸는 단추입니다(자동 시험과는 별개).")
 TEST_PATH_LOT = "LOT 추적"
 TEST_PATH_FULL = "전체"
 TEST_PATH_APPLY = "시험 경로 넣기"
@@ -528,6 +529,16 @@ TEST_PATH_RESET = "원래 경로로"
 TEST_PATH_ROOT = "\\\\10.142.80.167\\1.Engr\\0. 전산 X\\임현택 ENG'R"          # 10/30 사용자 시험 경로 — 아래에 LOT추적 · 전체 폴더를 둔다
 TEST_PATH_LOT_DIR = "LOT추적"
 TEST_PATH_FULL_DIR = "전체"
+TEST_PATH_TARGET_FMT = "시험 대상: {root}"
+TEST_PATH_RUN = "자동 시험 시작"
+TEST_PATH_OPEN = "결과 폴더 열기"
+TEST_PATH_RUNNING = "시험 중… 끝나면 zip 한 장으로 저장합니다"
+TEST_PATH_STEP_FMT = "시험 중… {step}"
+TEST_PATH_BUSY = "수집 중에는 시험할 수 없습니다(같은 폴더에 배포가 겹치지 않게) — 수집이 끝난 뒤 눌러 주세요"
+TEST_PATH_DONE_OK_FMT = "끝났습니다 — 모두 통과 ({total}개 검사). 결과 zip 을 보내 주세요: {path}"
+TEST_PATH_DONE_BAD_FMT = "끝났습니다 — 실패 {failed}개 / {total}개. 결과 zip 을 보내 주세요: {path}"
+TEST_PATH_DONE_STOP_FMT = "중간에 멈췄습니다 — 지금까지의 결과 zip: {path}"
+TEST_PATH_FAIL_FMT = "시험을 하지 못했습니다: {error}"
 TEST_PATH_SAVED = "저장했습니다 — 다음 수집이 끝나면 이 경로로 올라갑니다"
 LOT_PUB_TITLE = "LOT 추적 발행 시험"
 LOT_PUB_SHORT = "가진 데이터로 LOT 추적만 담은 배포용 HTML 을 폴더에 올리기 · 장비 NAS 는 읽지 않음"
