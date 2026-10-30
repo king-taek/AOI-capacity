@@ -6,9 +6,11 @@ from __future__ import annotations
 from typing import Iterable, Tuple
 
 from PyQt6.QtCore import Qt, pyqtSignal
+from PyQt6.QtGui import QPixmap
 from PyQt6.QtWidgets import QHBoxLayout, QLabel, QPushButton, QSizePolicy, QWidget
 
 from ... import i18n
+from ...utils import paths
 
 
 def _repolish(w: QWidget) -> None:
@@ -39,8 +41,15 @@ class NavBar(QWidget):
         lay.setContentsMargins(24, 0, 24, 0)
         lay.setSpacing(16)
         logo = QLabel(self)
-        logo.setProperty("role", "logo")
-        logo.setFixedSize(9, 18)
+        pix = QPixmap(str(paths.logo_path("logo.png")))
+        if pix.isNull():                                   # 아이콘 파일이 없으면 예전 파란 막대
+            logo.setProperty("role", "logo")
+            logo.setFixedSize(9, 18)
+        else:                                              # 결과 화면 머리와 같은 브랜드 표식(겹 링, 10/30) — 22px, logo.png 는 44px(2배) 그림
+            logo.setFixedSize(22, 22)
+            pm = pix if pix.width() == 44 else pix.scaled(44, 44, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
+            pm.setDevicePixelRatio(2.0)
+            logo.setPixmap(pm)
         brand = QLabel(i18n.KO.APP_BRAND, self)
         brand.setProperty("role", "brand")
         lay.addWidget(logo)

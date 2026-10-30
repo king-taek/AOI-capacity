@@ -26,10 +26,12 @@ import urllib.parse
 from typing import Callable, Dict, List, NamedTuple, Optional
 
 from . import collect, i18n, nas_guard
+from .utils import paths
 
 STUB_NAME = "AOI_LOT.html"
 SHORTCUT_NAME = "AOI_LOT_shortcut.url"          # 폴더 안에 두는 인터넷 바로가기 — 팀원은 이 파일을 더블클릭하거나 바탕화면으로 복사
 LATEST_NAME = "latest.js"
+ICON_NAME = "AOI.ico"                              # 배포 폴더에 함께 올리는 앱 아이콘 — 폴더 안 바로가기의 IconFile(D103)
 DATA_DIR = "data"
 KEEP_FILES = 3
 REPLACE_TRIES = 6
@@ -90,17 +92,49 @@ def _ansi() -> str:
     return "mbcs" if os.name == "nt" else "cp949"
 
 
-def shortcut_text(share_dir: str, kind: Kind = LOT) -> str:
-    """바로가기(.url) 내용 — 한글 경로는 이 PC 의 ANSI 코드 페이지로 쓸 수 있을 때 그 글자 그대로(`shortcut_bytes`)."""
-    return f"[InternetShortcut]\r\nURL={raw_stub_url(share_dir, kind)}\r\n"
+def shortcut_text(share_dir: str, kind: Kind = LOT, icon: Optional[str] = None) -> str:
+    """바로가기(.url) 내용 — 한글 경로는 이 PC 의 ANSI 코드 페이지로 쓸 수 있을 때 그 글자 그대로(`shortcut_bytes`).
+    `icon` = .ico 경로(10/30 D103) — 바탕화면 바로가기는 이 PC 의 앱 아이콘, 공유 폴더 안 바로가기는 그 폴더에 함께 올린 `ICON_NAME`."""
+    text = f"[InternetShortcut]\r\nURL={raw_stub_url(share_dir, kind)}\r\n"
+    if icon:
+        text += f"IconFile={icon}\r\nIconIndex=0\r\n"
+    return text
 
 
-def shortcut_bytes(share_dir: str, kind: Kind = LOT) -> bytes:
-    """.url 파일 바이트 — ANSI(한글 윈도의 CP949)로 그대로, 인코딩이 안 되는 글자가 있으면 퍼센트 인코딩 판(UTF-8)으로."""
+def shortcut_bytes(share_dir: str, kind: Kind = LOT, icon: Optional[str] = None) -> bytes:
+    """.url 파일 바이트 — ANSI(한글 윈도의 CP949)로 그대로, 인코딩이 안 되는 글자가 있으면 퍼센트 인코딩 판(UTF-8, 아이콘 없이)으로.
+    아이콘 경로만 ANSI 로 못 쓰면 아이콘을 빼고 다시 — 선택 사항인 아이콘 때문에 주소가 퍼센트 인코딩 판(한글 경로가 깨짐)으로 가지 않게."""
+    for ic in ((icon, None) if icon else (None,)):
+        try:
+            return shortcut_text(share_dir, kind, ic).encode(_ansi())
+        except UnicodeEncodeError:
+            continue
+        except LookupError:
+            break
+    return f"[InternetShortcut]\r\nURL={stub_url(share_dir, kind)}\r\n".encode("utf-8")
+
+
+def app_icon() -> Optional[str]:
+    """앱 아이콘(.ico, 결과 화면 브랜드 표식과 같은 그림)의 절대 경로 — 없으면 None(바로가기는 기본 아이콘)."""
+    p = paths.logo_path("logo.ico")
+    return str(p.resolve()) if p.is_file() else None
+
+
+def _share_icon(share_dir: str, roots: List[str]) -> Optional[str]:
+    """배포 폴더에 앱 아이콘을 `ICON_NAME` 으로 올리고(없거나 다를 때만) 그 경로 — 팀원 PC 에는 앱이 없어 공유 폴더 안 바로가기가 이 파일을 가리킨다.
+    앱 아이콘이 없거나 못 쓰면 None(바로가기는 기본 아이콘, 배포는 그대로 성공)."""
+    src = app_icon()
+    if not src:
+        return None
+    dst = os.path.join(share_dir, ICON_NAME)
     try:
-        return shortcut_text(share_dir, kind).encode(_ansi())
-    except (UnicodeEncodeError, LookupError):
-        return f"[InternetShortcut]\r\nURL={stub_url(share_dir, kind)}\r\n".encode("utf-8")
+        data = open(src, "rb").read()
+        cur = open(dst, "rb").read() if os.path.isfile(dst) else None
+    except OSError:
+        return None
+    if cur != data and not _write_text(dst, data, roots, tries=2):
+        return dst if cur is not None else None
+    return dst
 
 
 def write_shortcut(dest_dir: str, share_dir: str, cfg: dict, name: str = "", kind: Kind = LOT) -> str:
@@ -109,7 +143,7 @@ def write_shortcut(dest_dir: str, share_dir: str, cfg: dict, name: str = "", kin
     nas_guard.assert_local(dest_dir, roots)
     os.makedirs(dest_dir, exist_ok=True)
     path = os.path.join(dest_dir, name or kind.shortcut)
-    if not _write_text(path, shortcut_bytes(share_dir, kind), roots, tries=2):
+    if not _write_text(path, shortcut_bytes(share_dir, kind, app_icon()), roots, tries=2):
         raise PermissionError(13, i18n.KO.PUBLISH_SHORTCUT_LOCKED, path)
     return path
 
@@ -223,8 +257,9 @@ def _publish(kind: Kind, cfg: dict, share_dir: str, *, rows: Optional[list] = No
         cur_s = open(short, "rb").read() if os.path.isfile(short) else None
     except OSError:
         cur_s = None
-    if cur_s != shortcut_bytes(share_dir, kind):
-        _write_text(short, shortcut_bytes(share_dir, kind), roots, tries=2)           # 못 써도 배포는 성공 — 바로가기는 이미 있거나 다음에
+    want_s = shortcut_bytes(share_dir, kind, _share_icon(share_dir, roots))       # 팀원도 같은 아이콘(D103) — 폴더에 올린 AOI.ico 를 가리킨다
+    if cur_s != want_s:
+        _write_text(short, want_s, roots, tries=2)           # 못 써도 배포는 성공 — 바로가기는 이미 있거나 다음에
     size = os.path.getsize(path)
     pruned = _prune(data_dir, KEEP_FILES, roots, protect={name, _pointed_name(share_dir, kind)}, kind=kind)
     res = {"dir": share_dir, "data": path, "bytes": size, "sec": round(time.perf_counter() - t0, 1),

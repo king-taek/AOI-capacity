@@ -103,7 +103,7 @@ def test_publish_writes_stub_pointer_and_unique_data_files_and_prunes(tmp_path, 
     now = dt.datetime(2026, 10, 27, 8, 15)
     got = [publish.publish_lot(cfg, str(share), rows=rows[:3000], dev_meta=devs, now=now + dt.timedelta(minutes=i)) for i in range(5)]
     assert all(g["pointer_ok"] for g in got)
-    assert sorted(p.name for p in share.iterdir()) == ["AOI_LOT.html", "AOI_LOT_shortcut.url", "data", "latest.js"]
+    assert sorted(p.name for p in share.iterdir()) == ["AOI.ico", "AOI_LOT.html", "AOI_LOT_shortcut.url", "data", "latest.js"]
     data = sorted(p.name for p in (share / "data").iterdir())
     assert data == ["lot_20261027_0817.html", "lot_20261027_0818.html", "lot_20261027_0819.html"]       # 최근 3개만
     assert (share / "latest.js").read_text(encoding="utf-8") == 'window.AOI_LOT_LATEST="data/lot_20261027_0819.html";\n'
@@ -182,12 +182,21 @@ def test_shortcut_points_at_the_stub_with_an_encoded_file_url(tmp_path, sample):
     assert publish.raw_stub_url(config_mod.PUBLISH_DIR_DEFAULT) == raw
     data = Path(path).read_bytes()
     if os.name != "nt":
-        assert data == ("[InternetShortcut]\r\nURL=" + raw + "\r\n").encode("cp949")
+        icon = publish.app_icon()                                                         # 10/30: 바탕화면 바로가기는 앱 아이콘(logo.ico)
+        assert icon and icon.endswith("logo.ico")
+        assert data == ("[InternetShortcut]\r\nURL=" + raw + "\r\nIconFile=" + icon + "\r\nIconIndex=0\r\n").encode("cp949")
     assert "%EC" not in data.decode("cp949", "replace") and b"\xc0\xfc\xbb\xea" in data     # 전산(CP949) 바이트
     assert publish.raw_stub_url("Z:\\a b\\c\\") == "file:///Z:/a%20b/c/AOI_LOT.html"
     share = tmp_path / "share"
     publish.publish_lot(cfg, str(share), rows=rows[:100], dev_meta=devs, now=dt.datetime(2026, 10, 27, 8, 15))
-    assert b"AOI_LOT.html" in (share / "AOI_LOT_shortcut.url").read_bytes()
+    # 아이콘 경로만 ANSI 로 못 쓰면(이모지 등) 아이콘만 빼고 주소는 그대로 한글 — 퍼센트 인코딩 판으로 가지 않는다(PR #12 리뷰)
+    if os.name != "nt":
+        assert publish.shortcut_bytes(config_mod.PUBLISH_DIR_DEFAULT, icon="C:\\앱\\😀\\logo.ico") == ("[InternetShortcut]\r\nURL=" + raw + "\r\n").encode("cp949")
+    shared = (share / "AOI_LOT_shortcut.url").read_bytes()
+    # 공유 폴더 안 바로가기: 팀원 PC 에는 앱이 없다 — 앱 아이콘을 폴더에 AOI.ico 로 함께 올리고 그 파일을 가리킨다(D103)
+    ico = share / publish.ICON_NAME
+    assert ico.read_bytes() == Path(publish.app_icon()).read_bytes()
+    assert b"AOI_LOT.html" in shared and ("IconFile=" + str(ico) + "\r\n").encode("cp949") in shared
 
 
 def test_publish_dir_is_hardcoded_by_default_and_must_be_absolute(tmp_path, sample):
@@ -241,7 +250,8 @@ def test_full_publish_has_every_tab_ninety_days_and_its_own_files(tmp_path, samp
     got = publish.publish_full(dict(cfg, publish_full_days=7), str(share), rows=rows, dev_meta=devs,
                                params_store={"snaps": {}, "blobs": {}}, now=dt.datetime(2026, 10, 30, 9, 0))
     assert got["pointer_ok"]
-    assert sorted(p.name for p in share.iterdir()) == ["AOI_ALL.html", "AOI_ALL_shortcut.url", "data", "latest.js"]
+    assert sorted(p.name for p in share.iterdir()) == ["AOI.ico", "AOI_ALL.html", "AOI_ALL_shortcut.url", "data", "latest.js"]
+    assert b"IconFile=" + str(share / publish.ICON_NAME).encode() in (share / "AOI_ALL_shortcut.url").read_bytes()   # 전체 배포판 바로가기도 같은 아이콘(D103)
     assert (share / "latest.js").read_text(encoding="utf-8") == 'window.AOI_ALL_LATEST="data/all_20261030_0900.html";\n'
     stub = (share / "AOI_ALL.html").read_text(encoding="utf-8")
     assert "window.AOI_ALL_LATEST" in stub and "AOI_LOT" not in stub and "http" not in stub

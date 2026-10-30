@@ -349,9 +349,9 @@ def test_report_tab_picks_a_job_and_opens_all_batches_of_a_device(page):
 
 
 def test_motion_hooks_lottie_countup_sweep_and_recede(page):
-    """세 라이브러리의 자리: 브랜드의 Lottie 표식 · 'Error 없음' 의 Lottie 체크 · GSAP 카운트업(끝 값이 정확) · 막대 sweep(끝나면 clip-path 남지 않음) · 팝업 뒤 무대 물러남."""
+    """움직임의 자리: 브랜드 표식(인라인 SVG · CSS, 10/30) · 'Error 없음' 의 Lottie 체크 · GSAP 카운트업(끝 값이 정확) · 막대 sweep(끝나면 clip-path 남지 않음) · 팝업 뒤 무대 물러남."""
     pg, errors, _ = page
-    assert pg.locator('.brand .lt svg').count() == 1                                     # lottie 가 브랜드 표식을 그렸다
+    assert pg.locator('.brand .mk.play svg circle.bm-a').count() == 2                     # 브랜드 표식(겹 링, 10/30)은 인라인 SVG — 고리 둘이 그려진다
     pg.locator('button[data-fk="day:prev"]').click()                                     # 날짜를 바꾸면 카드 숫자가 이전 값에서 새 값으로
     pg.wait_for_function("document.querySelector('[data-fk=\"day:date\"]').value === '2026-09-17'")   # 10/6 C8: 하루 날짜는 입력 칸
     pg.wait_for_timeout(900)
