@@ -608,7 +608,7 @@ function bootCore(self,scene0,lib){
    E(s)=1-(1-s)^3(1+3s) — E'(0)=0, E'(1)=0. g(s)=s(1-s)^2 가 출발 속도를 실어 나른다. */
 function bootScene(ctx,W,H,dpr,S,lib,opt){
   const rnd=lib.rnd(77),BG=opt.bg||"#F4F6F8",HOV="#9DB4CE",PRE=["#5A6673","#2E6BA8","#8FB8E0","#AEB8C4"];
-  const N=Math.max(600,Math.round(Math.min(12000,W*H/75)));
+  const N=Math.max(600,Math.round(Math.min(16000,W*H/60))),SZMAX=Math.max(1.6,Math.min(2.4,W/700));
   const F=()=>new Float32Array(N),X=F(),Y=F(),VX=F(),VY=F(),PX=F(),PY=F(),TX=F(),TY=F(),RK=F(),SZ=F(),SP=F(),FX=F(),FY=F(),FVX=F(),FVY=F(),FT=F(),FD=F(),
         HX=F(),HY=F(),HA=F(),HW=F(),HP=F(),D=new Uint8Array(N),C=new Uint16Array(N),ST=new Uint8Array(N);
   let PAL=PRE.slice(),has=false,step=0,NS=0,ND=1,nSet=0,nStr=0,nDat=0,relaunched=false;
@@ -641,7 +641,7 @@ function bootScene(ctx,W,H,dpr,S,lib,opt){
     /* 칸마다 가장 진한 화소 하나 — 칸 가운데 한 점만 보면 1px 선이 격자에 걸릴 때만 잡혀 점선이 된다 */
     const pick=(img,st)=>{const out=[];for(let y0=0;y0<oh;y0+=st)for(let x0=0;x0<ow;x0+=st){let bi=-1,ba=109,bx=0,by=0;
         for(let y=Math.floor(y0);y<Math.min(oh,Math.floor(y0+st));y++)for(let x=Math.floor(x0);x<Math.min(ow,Math.floor(x0+st));x++){const i=(y*ow+x)*4;if(img[i+3]>ba){ba=img[i+3];bi=i;bx=x;by=y;}}
-        if(bi<0)continue;out.push(bx+.5+(rnd()-.5)*.4,by+.5+(rnd()-.5)*.4,near(img[bi],img[bi+1],img[bi+2]),st*.92);}return out;};
+        if(bi<0)continue;out.push(bx+.5+(rnd()-.5)*.4,by+.5+(rnd()-.5)*.4,near(img[bi],img[bi+1],img[bi+2]),Math.min(SZMAX,st*.72));}return out;};   /* 네모는 작게(현택 10/30 '너무 크다') — 간격보다 작아 알갱이로 보인다 */
     const T=pick(iT,Math.max(1.5,Math.min(step*.5,2.6)));return{pal,S:T.concat(pick(iS,step)),nT:T.length/4,D:pick(iD,step)};}
   const zoneOf=(L,x,y)=>{let best=null,ba=1e18;for(const z of L.zones||[]){if(x>=z.x-1&&x<=z.x+z.w+1&&y>=z.y-1&&y<=z.y+z.h+1){const a=z.w*z.h;if(a<ba){ba=a;best=z;}}}return best;};
   const bake=()=>{lc.clearRect(0,0,W,H);const ps=PAL.map(()=>new Path2D());nSet=nStr=nDat=0;
@@ -655,14 +655,8 @@ function bootScene(ctx,W,H,dpr,S,lib,opt){
     const INK="#16202B",INK2="#5A6673",INK3="#AEB8C4",LINE="#D3DAE2",TRACK="#DFE5EC",ACC="#2E6BA8",ACCS="#DCE7F3",ERR="#C5453C";
     const SEG=[["#2E6BA8",.62],["#8FB8E0",.14],["#7A5BB5",.08],["#C5453C",.07],["#E8B7B3",.09]];
     const seg=()=>{let u=r2(),i=0;while(i<SEG.length-1&&u>SEG[i][1]){u-=SEG[i][1];i++;}return SEG[i][0];};
-    const pad=Math.round(Math.max(20,Math.min(W*.03,44))),hh=Math.round(Math.max(52,Math.min(H*.085,72))),cy=hh/2,fs=Math.round(hh*.3);
-    const ir=hh*.2;strokes.push({x:pad,y:cy-ir,w:ir*2,h:ir*2,r:ir,lw:Math.max(2,ir*.3),c:ACC});
-    const tx0=pad+ir*2+fs*.6;texts.push({t:"AOI 가동 현황",x:tx0,y:cy,f:`700 ${fs}px "Segoe UI","Malgun Gothic","Apple SD Gothic Neo",sans-serif`,c:INK,d:0});
-    let tx=tx0+fs*6.6;const tabEnd=W-pad-fs*8;
-    [1,.9,1.1,1.6,1.4,1.1].forEach((k,i)=>{const w=fs*2.3*k,h=hh*.46;if(tx+w>tabEnd)return;if(!i)R(tx,cy-h/2,w,h,ACCS);R(tx+w*.22,cy-fs*.17,w*.56,fs*.34,i?INK3:ACC);tx+=w+fs*.45;});
-    if(W-pad-fs*7>tx)R(W-pad-fs*7,cy-fs*.17,fs*7,fs*.34,INK3);
-    R(0,hh-1,W,1,LINE);
-    const gap=Math.round(pad*.6),y0=hh+pad,kh=Math.round(Math.max(88,Math.min(H*.17,140))),cw=(W-pad*2-gap*2)/3;
+    const pad=Math.round(Math.max(20,Math.min(W*.03,44)));   /* 머리(아이콘 · 제목 · 탭)는 그리지 않는다 — 현택 10/30 */
+    const gap=Math.round(pad*.6),y0=Math.round(pad*1.2),kh=Math.round(Math.max(88,Math.min(H*.17,140))),cw=(W-pad*2-gap*2)/3;
     for(let i=0;i<3;i++){const x=pad+i*(cw+gap),ix=x+Math.min(22,cw*.08);strokes.push({x,y:y0,w:cw,h:kh,r:12,lw:1,c:LINE});
       R(ix,y0+kh*.17,cw*.24,kh*.075,INK3);
       const nw=cw*(.16+.06*((i*7)%3)),ny=y0+kh*.33,nh=kh*.27;R(ix,ny,nw,nh,i===1?ERR:INK,1);zones.push({x:ix,y:ny,w:Math.min(cw*.5,nw*1.6),h:nh});
@@ -682,20 +676,16 @@ function bootScene(ctx,W,H,dpr,S,lib,opt){
         if(k<n-1)R(pad,y+rh,W-pad*2,1,"#EEF1F4");}}
     return{texts,rects,strokes,zones};}
 
-  /* LOT 추적 배포판(<html data-boot="lot">, write_html(lot_only))의 장면 — 같은 연출, LOT 추적 느낌. 머리: 링 + 제목 */
+  /* LOT 추적 배포판(<html data-boot="lot">, write_html(lot_only))의 장면 — 같은 연출, LOT 추적 느낌 */
   const LC={INK:"#16202B",INK2:"#5A6673",INK3:"#AEB8C4",LINE:"#D3DAE2",TRACK:"#DFE5EC",ACC:"#2E6BA8",DUP:"#8FB8DE",ERR:"#C5453C",OV:"#F2C26B",SEV:"#D9731F"};
   const FONT='"Segoe UI","Malgun Gothic","Apple SD Gothic Neo",sans-serif';
-  function lotHead(L,title){
-    const pad=Math.round(Math.max(20,Math.min(W*.03,44))),hh=Math.round(Math.max(52,Math.min(H*.085,72))),cy=hh/2,fs=Math.round(hh*.3),ir=hh*.2;
-    L.strokes.push({x:pad,y:cy-ir,w:ir*2,h:ir*2,r:ir,lw:Math.max(2,ir*.3),c:LC.ACC});
-    const tx=pad+ir*2+fs*.6;L.texts.push({t:title,x:tx,y:cy,f:`700 ${fs}px ${FONT}`,c:LC.INK,d:0});
-    L.rects.push({x:W-pad-fs*7,y:cy-fs*.17,w:fs*7,h:fs*.34,c:LC.INK3,d:0});L.rects.push({x:0,y:hh-1,w:W,h:1,c:LC.LINE,d:0});
-    const capH=Math.max(34,H*.06);return{pad,hh,fs,top:hh+pad,bot:H-capH-pad*.4};}
+  function lotFrame(){   /* 머리(아이콘 · 제목)는 그리지 않는다 — 현택 10/30 */
+    const pad=Math.round(Math.max(20,Math.min(W*.03,44))),capH=Math.max(34,H*.06);return{pad,top:Math.round(pad*1.2),bot:H-capH-pad*.4};}
   const pickC=(r,tab)=>{let u=r(),i=0;while(i<tab.length-1&&u>tab[i][1]){u-=tab[i][1];i++;}return tab[i][0];};
   /* LOT 추적 배포판 '웨이퍼'(현택 10/30, 시안 둘 중 B): 한 Wafer 가 검사를 지날 때마다 결과가 쌓인다 — 큰 웨이퍼 셋(넷)과 칩 격자, 화살표로 잇는다 */
   function waferLayout(){
     const L={texts:[],rects:[],strokes:[],zones:[],arcs:[],lines:[]},r2=lib.rnd(4410),R=(x,y,w,h,c,d)=>L.rects.push({x,y,w,h,c,d:d?1:0});
-    const g=lotHead(L,"LOT 추적"),bh=g.bot-g.top,k=W<760?2:W/H>1.9?4:3,gap=Math.max(40,W*.05);
+    const g=lotFrame(),bh=g.bot-g.top,k=W<760?2:W/H>1.9?4:3,gap=Math.max(40,W*.05);
     const D=Math.min((W-g.pad*2-gap*(k-1))/k,bh*.74),r=D/2,cy=g.top+bh*.46,span=k*D+(k-1)*gap,x0=(W-span)/2;
     const nd=Math.max(9,Math.min(17,Math.round(D/22))),ds=D/nd*.98,gp=Math.max(1,ds*.12);
     const hot=[...Array(k)].map(()=>({a:r2()*6.28,d:.3+r2()*.5,s:.18+r2()*.2}));
@@ -791,13 +781,14 @@ try{
   const bg=(getComputedStyle(document.documentElement).getPropertyValue("--bg")||"").trim()||"#F4F6F8";
   const ov=document.createElement("div");ov.id="aoi-boot";   /* 이 스크립트(id="boot")와 다른 이름 — 같으면 위 줄이 스크립트 자신을 지워 사본에 시작 화면이 빠진다 */
   ov.setAttribute("aria-hidden","true");
-  ov.style.cssText=`position:fixed;left:0;top:0;width:100vw;height:100vh;z-index:2147483000;background:${bg};pointer-events:none;overflow:hidden;opacity:1;transition:opacity .26s cubic-bezier(.23,1,.32,1)`;
-  const cv=document.createElement("canvas");cv.style.cssText=`display:block;width:${W}px;height:${H}px`;ov.appendChild(cv);document.body.appendChild(ov);
+  ov.style.cssText=`position:fixed;left:0;top:0;width:100vw;height:100vh;z-index:2147483000;background:${bg};pointer-events:none;overflow:hidden;opacity:1;transition:opacity .72s cubic-bezier(.33,0,.15,1) .08s`;
+  const cv=document.createElement("canvas");cv.style.cssText=`display:block;width:${W}px;height:${H}px;transform-origin:50% 45%;transition:opacity .5s ease-out,filter .5s ease-out,transform .8s cubic-bezier(.2,.7,.2,1)`;ov.appendChild(cv);document.body.appendChild(ov);
   const dpr=Math.min(2,window.devicePixelRatio||1),epoch=performance.timeOrigin||Date.now()-performance.now();
   let port=null,gone=false,loadedAt=0,fallback=0,revealed=false;const after=[];
   const finish=()=>{if(gone)return;gone=true;clearTimeout(fallback);try{port&&port.kill();}catch(e){}if(ov.parentNode)ov.parentNode.removeChild(ov);window.AOI_BOOT=null;
     for(const f of after.splice(0))setTimeout(()=>{try{f();}catch(e){}},0);};
-  const reveal=()=>{if(revealed||gone)return;revealed=true;ov.style.opacity="0";setTimeout(finish,300);};
+  /* 걷힘(현택 10/30 '너무 갑작스럽다'): 입자 그림이 살짝 퍼지며 흐려지고(0.5초), 바탕은 조금 늦게 0.72초에 걸쳐 걷혀 진짜 화면이 천천히 드러난다 */
+  const reveal=()=>{if(revealed||gone)return;revealed=true;if(!red){cv.style.filter="blur(5px)";cv.style.transform="scale(1.025)";}cv.style.opacity="0";ov.style.opacity="0";setTimeout(finish,860);};
   const onMsg=d=>{if(d&&d.type==="reveal")reveal();};
   const init={type:"init",w:W,h:H,dpr,reduced:red,min:MIN,epoch,labels:LABELS,th:TH,bg,kind:document.documentElement.getAttribute("data-boot")||""};
   try{

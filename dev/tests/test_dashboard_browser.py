@@ -531,7 +531,8 @@ def test_heavy_tab_indexes_are_built_in_idle_time_after_load(page):
     """10/19 실측: LOT 추적 · RDL 단일스캔 첫 진입이 색인을 만드느라 0.7초 멈추면 탭 표시자 이동 시간이 그동안 흘러 한 번에 건너뛴다.
     화면이 뜬 뒤 한가할 때(navWarm) 미리 만들어 두면 첫 클릭에는 색인 비용이 없다."""
     pg, errors, _ = page
-    pg.wait_for_function("typeof _lotIx !== 'undefined' && _lotIx && typeof _rcp !== 'undefined' && _rcp", timeout=5000)
+    # 시작 화면이 걷힌 뒤(AOI_BOOT.later)에 만든다 — 덮개는 4초 + 걷힘 약 0.9초(D104)라 그만큼 여유를 둔다
+    pg.wait_for_function("typeof _lotIx !== 'undefined' && _lotIx && typeof _rcp !== 'undefined' && _rcp", timeout=8000)
     assert errors == []
 
 
