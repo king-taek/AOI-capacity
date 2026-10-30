@@ -248,6 +248,7 @@ def test_full_publish_has_every_tab_ninety_days_and_its_own_files(tmp_path, samp
     assert b"AOI_ALL.html" in (share / "AOI_ALL_shortcut.url").read_bytes()
     emb = sample_rows.embedded((share / "data" / "all_20261030_0900.html").read_text(encoding="utf-8"))
     m = emb["meta"]
+    assert m["hidden_tabs"] == ["recipe"]                                            # RDL 단일스캔은 개발자 모드 숨김탭으로(사용자 10/30)
     assert not m.get("lot_only") and m["range"]["from"] > m["data_from"]            # 모든 탭 · 최근 7일만(cfg publish_full_days)
     assert m["devices"] and any(d.get("note") for d in m["devices"])                # Report 열기에 쓰는 장비 경로를 그대로 담는다(사용자 확정)
     assert not list(share.rglob("*.csv"))

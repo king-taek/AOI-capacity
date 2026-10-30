@@ -440,6 +440,12 @@ def test_header_has_four_tabs_and_each_popup_renders_an_accessible_dialog():
     assert re.findall(r'data-fk="nav:([a-z]+)"', head) == ["home", "errors", "overkill", "report", "recipe", "lot"]   # 10/5: KLA 탭 · 추이 탭 없음, 10/11 LOT 추적, 10/22 파라미터 탭은 기본 숨김(HIDDEN_TABS), 10/30 Overkill(D99)
     shown, = screen(rows, meta("AOI-1"), [["headerHtml", "home"]], state={"unhid": ["param"]})
     assert re.findall(r'data-fk="nav:([a-z]+)"', shown)[-1] == "param"   # 설정 버튼에서 꺼내면 탭 줄 맨 뒤로 돌아온다
+    m_full = dict(meta("AOI-1"), hidden_tabs=["recipe"])           # 전체 배포판(10/30): RDL 단일스캔은 평소 숨기고 설정에서 꺼내 쓴다
+    hid_nav, opened, menu = screen(rows, m_full, [["headerHtml", "home"]], state={}), screen(rows, m_full, [["headerHtml", "home"]], state={"unhid": ["recipe"]}), \
+        screen(rows, m_full, [["headerHtml", "home"]], state={"devOn": True, "setOpen": True})
+    assert re.findall(r'data-fk="nav:([a-z]+)"', hid_nav[0]) == ["home", "errors", "overkill", "report", "lot"]
+    assert re.findall(r'data-fk="nav:([a-z]+)"', opened[0]) == ["home", "errors", "overkill", "report", "recipe", "lot"]    # 꺼내면 제자리로 돌아온다
+    assert ">RDL 단일스캔<" in menu[0] and ">파라미터<" in menu[0]                                                               # 설정 메뉴에 파라미터와 함께 나온다
     for label in (">가동률<", ">Error<", ">Overkill<", ">TB500 · Kendall<", ">RDL 단일스캔<", ">사본 저장<"):
         assert label in head, label
     assert ">추이<" not in head and ">KLA<" not in head

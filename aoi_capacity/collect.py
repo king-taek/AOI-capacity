@@ -175,6 +175,7 @@ POOLED_COLS = tuple(c for c in OUT_COLS if c not in ("wafer_start_time", "wafer_
 #: LOT 추적만 담는 시험 파일의 이름 · 이 PC 의 데이터 폴더 아래 폴더 이름(공유 폴더에는 아직 쓰지 않는다).
 LOT_PUBLISH_NAME = "AOI_LOT_tracking.html"
 LOT_PUBLISH_DIR = "publish_test"
+PUBLISH_FULL_HIDDEN_TABS = ("recipe",)           # 전체 배포판이 탭 줄에서 숨겨 두는 탭(화면 `meta.hidden_tabs`)
 #: LOT 추적만 담는 파일(`write_html(lot_only=True)`)이 값을 남기는 열 — 나머지 열은 값만 비운다(열 이름은 그대로, 풀의 빈 문자열 하나로 접힌다).
 #: LOT 추적 화면(`lotIndex` · `lotFamily` · `lotHtml`)이 읽는 열이다(가드 `test_lot_publish.py` 가 템플릿 소스에서 확인).
 LOT_ONLY_KEEP_COLS = ("device", "kind", "job", "lot", "wafer_id", "status", "recipe", "slot_no", "wafer_start_time", "batch_start", "report", "faults")
@@ -3363,6 +3364,8 @@ def write_html(cfg: dict, rows: List[dict], dev_meta: List[dict], errors: List[d
         meta["scope"] = {}
         meta["timing"] = {}
         meta["branch"] = meta["repo"] = ""
+    if mode == "publish" and not lot_only:
+        meta["hidden_tabs"] = list(PUBLISH_FULL_HIDDEN_TABS)     # 전체 배포(10/30 사용자): RDL 단일스캔은 평소 숨기고 개발자 모드(Ctrl+Shift+D)에서 꺼내 쓴다
     if rg is not None:
         meta["recipe_groups"] = rg                 # D67: 화면의 레시피 묶음 — 통계·표시에만, Rescan 판정에는 쓰지 않는다
     # 기간(10/5): 고른 기간이 있으면 그 기간, 없으면 cfg html_days(최근 N일, 0 = 전부). 분할은 없다 — 9/23 분할은 사용자 요청으로 롤백
