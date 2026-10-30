@@ -224,12 +224,13 @@ def test_gui_prefs_and_cli_config_normalize_the_same_way(tmp_path):
     conf = tmp_path / "config.json"
     conf.write_text(json.dumps({k: v for k, v in RAW.items() if not k.startswith("threshold_")}), encoding="utf-8")
     cli_cfg = cli.load_config(str(conf))
-    keys = ("backfill_days", "read_workers", "retention_days", "refresh_window_days", "write_csv", "report_dir", "scan_dir",
-            "attention_util", "attention_err", "rebuild_all", "output_name")
+    keys = ("backfill_days", "refresh_window_days", "report_dir", "scan_dir", "rebuild_all", "output_name")   # GUI 가 아직 prefs 에서 받는 값
     assert {k: gui[k] for k in keys} == {k: cli_cfg[k] for k in keys}
-    assert gui["backfill_days"] == 30 and gui["read_workers"] == 32 and gui["retention_days"] == 0
-    assert gui["refresh_window_days"] == 0 and gui["write_csv"] is True and gui["scan_dir"] == "ScanResult"
-    assert gui["attention_util"] == 100 and gui["attention_err"] == 3
+    assert gui["backfill_days"] == 30 and gui["refresh_window_days"] == 0 and gui["scan_dir"] == "ScanResult"
+    # 10/30: 동시 읽기 · 보관 기간 · CSV · 주의 장비 기준은 옵션이 아니다 — 옛 prefs 값(RAW)이 있어도 고정값
+    assert gui["read_workers"] == 4 and gui["retention_days"] == 0 and gui["write_csv"] is True
+    assert gui["attention_util"] == 40 and gui["attention_err"] == 3
+    assert cli_cfg["attention_util"] == 100          # CLI(config.json)는 그대로 — 값을 직접 적는 사람의 설정
     assert set(collect.DEFAULT_CONFIG) <= set(gui)
 
 
@@ -237,10 +238,10 @@ def test_prefs_from_dict_keeps_good_fields_and_never_resets_scope_for_a_bad_vers
     from aoi_capacity.utils import paths
     mine = ["AOI-7", "AOI-8"]
     paths.prefs_file().write_text(json.dumps({"prefs_version": "abc", "scope_devices": mine, "backfill_days": "abc",
-                                              "retention_days": 120, "write_csv": "false", "color_mode": 3}), encoding="utf-8")
+                                              "retention_days": 120, "write_csv": "false", "color_mode": 3}), encoding="utf-8")   # 10/30 에 뺀 옵션의 옛 값은 무시된다
     p = prefs.load()
     assert p.scope_devices == mine                                  # ★ 장비 목록은 기본 30대로 돌아가지 않는다
-    assert p.retention_days == 120 and p.backfill_days == 30 and p.write_csv is False and p.color_mode == "light"   # 잘못된 값 → 기본값(9/23 부터 light)
+    assert p.backfill_days == 30 and not hasattr(p, "retention_days")   # 잘못된 값 → 기본값
     assert p.prefs_version == prefs.PREFS_VERSION
     # 옛 기본값 그대로인 목록 + 잘못된 버전: 사용자가 고른 것인지 알 수 없으니 **넓히지 않는다**(fail closed)
     paths.prefs_file().write_text(json.dumps({"prefs_version": None, "scope_devices": ["AOI-25"]}), encoding="utf-8")
@@ -282,7 +283,7 @@ def test_write_html_emits_dashboard_settings_from_cfg(tmp_path, fake_nas):
     assert _meta(Path(target))["dashboard_settings"] == {"attentionUtil": 40, "attentionErr": 3}
 
 
-def test_gui_thresholds_flow_into_dashboard_settings():
-    cfg = prefs.to_collect_cfg(prefs.Prefs(threshold_util=55, threshold_err=2))
-    assert config.dashboard_settings(cfg) == {"attentionUtil": 55, "attentionErr": 2}
-    assert prefs.Prefs().threshold_util == 40 and prefs.Prefs().threshold_err == 3
+def test_gui_dashboard_settings_use_the_default_attention_thresholds():
+    """10/30: '주의 장비 기준' 옵션을 없앴다 — GUI 수집은 기본값(가동률 40% 미만 · Error 3건 이상)을 HTML 로 보낸다."""
+    cfg = prefs.to_collect_cfg(prefs.Prefs())
+    assert config.dashboard_settings(cfg) == {"attentionUtil": 40, "attentionErr": 3}

@@ -18,7 +18,7 @@ from typing import Dict, Optional
 
 from PyQt6.QtCore import QDate, QStandardPaths, QThread, Qt, QTimer, QUrl, pyqtSignal
 from PyQt6.QtGui import QDesktopServices
-from PyQt6.QtWidgets import (QCheckBox, QFileDialog, QFrame, QGridLayout, QHBoxLayout, QLabel, QLineEdit,
+from PyQt6.QtWidgets import (QFileDialog, QFrame, QGridLayout, QHBoxLayout, QLabel, QLineEdit,
                              QPlainTextEdit, QProgressBar, QScrollArea, QSizePolicy, QVBoxLayout, QWidget)
 
 from ... import collect, i18n, nas_guard, publish
@@ -600,14 +600,11 @@ class CollectPage(QWidget):
         self._out.setPlaceholderText(str(paths.data_root()))
         self._out.setToolTip(K.COLLECT_OUTPUT_DEFAULT_HINT)
         self._b_out = make_button(K.BTN_BROWSE, parent=sec)
-        self._csv = QCheckBox(K.COLLECT_WRITE_CSV, sec)
-        self._csv.setChecked(bool(p.write_csv))
         self._result = _label("", "mono", sec, wrap=True)
         self._result.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
         r = _row(self._out, self._b_out, stretch=False)
         r.setStretch(0, 1)
         self.settings_page.add_row(K.COLLECT_OUTPUT_DIR, r)
-        self.settings_page.add_row("", self._csv)
         self.settings_page.add_row(K.COLLECT_RESULT_TITLE, self._result)
         sv.addWidget(self.settings_page)
         self._sec_settings = Collapsible(K.COLLECT_SEC_SETTINGS, sec, body)
@@ -638,7 +635,6 @@ class CollectPage(QWidget):
         for w in (self._r_from, self._r_to):
             w.dateChanged.connect(lambda _d: self._mode == "range" and self.refresh_plan())
         self._b_from.dateChanged.connect(lambda _d: self._mode == "backfill" and self.refresh_plan())
-        self._csv.toggled.connect(lambda on: prefs.patch(write_csv=bool(on)))
         self._out.editingFinished.connect(self._apply_out)
         self._b_fl_run.clicked.connect(self._on_fail_logs)
         self._b_lp_run.clicked.connect(self._on_lot_publish)
@@ -864,7 +860,7 @@ class CollectPage(QWidget):
         if bdays:
             cfg["backfill_days"] = bdays
         self._cards["backfill"].set_texts(what=K.MODE_BACKFILL_WHAT_FMT.format(days=bdays or int(p.backfill_days)))
-        self._cards["rebuild"].set_texts(what=K.MODE_REBUILD_WHAT_FMT.format(days=_days_text(p.retention_days)))
+        self._cards["rebuild"].set_texts(what=K.MODE_REBUILD_WHAT_FMT.format(days=_days_text(prefs.RETENTION_DAYS_FIXED)))
         self._plan_token += 1
         token = self._plan_token
         self._plan.setText(K.COLLECT_PLAN_LOADING)
@@ -1084,7 +1080,7 @@ class CollectPage(QWidget):
             self._b_gaps.setEnabled(not running and bool(self._gap_n))
         self._b_stop.setVisible(running)
         self._b_stop.setEnabled(running)
-        for w in (*self._cards.values(), self._refresh_days, self._r_from, self._r_to, self._out, self._b_out, self._csv, self._b_html, self._b_all):
+        for w in (*self._cards.values(), self._refresh_days, self._r_from, self._r_to, self._out, self._b_out, self._b_html, self._b_all):
             w.setEnabled(not running)
         self._b_all.setEnabled(not running and bool(self._span))
         self._status.setText(K.COLLECT_RUNNING if running else K.COLLECT_IDLE)

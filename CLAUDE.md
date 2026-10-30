@@ -288,7 +288,7 @@ graphify 는 `--code-only` 로, template.html 인라인 JS 까지 보려면 `pyt
   폴더 이름·표시명이 같다는 이유로는 절대 합치지 않는다(이름 충돌은 새 키 + `identity.conflicts` 기록). Report 를 읽을 때 SHA256 을 함께 두어 같은 키의 내용 변화는 `revision`, 다른 폴더의 같은 파일명은 다른 키다.
   옛 절대 경로 캐시는 `_migrate_identity` 가 한 번 옮긴다(멱등 · 행 삭제 0 · 중복은 `superseded_by` 로 출력에서만 제외, `cache_format` 2, 가드 `test_cache_identity.py`). 홈 정렬은 `devices.sort_key`(= template 의 `cmpDev`) — AOI-1…AOI-25 뒤에 4F-AOI-01….
 - **수집 창 UI(9/23 개편, 사용자 요청 — "HTML 테마에 맞게", "어떤 상황에 어떤 옵션을 눌러야 하는지 직관적으로")**: 결과 HTML 과 같은 틀 — 상단 바(`widgets/nav_bar.NavBar`: 브랜드 · 내비 탭 · 마지막 수집, 옛 왼쪽 사이드바 대체)와
-  가운데 정렬 페이지, 라이트가 기본(prefs v4 가 옛 기본값 "dark" 만 옮긴다 · 어두운 화면은 설정), 글꼴은 HTML 의 `--sans`/`--mono`. 수집 페이지는 체크박스 대신 **상황 카드**(`collect_page.ModeCard`):
+  가운데 정렬 페이지, 라이트 단일(10/30 어두운 화면 옵션을 없앴다 — 옛 `color_mode` 값은 prefs 가 버린다, `prefs.COLOR_MODE_FIXED`), 글꼴은 HTML 의 `--sans`/`--mono`. 수집 페이지는 체크박스 대신 **상황 카드**(`collect_page.ModeCard`):
   **10/24 다시 짬(사용자: "정보 · 글자가 너무 많고 가독성이 부족하다")** — 위에서 아래로 쓰는 빈도 순, 설명 문단은 한 줄 + 긴 설명은 툴팁(ⓘ · 카드에 마우스):
   ① 수집 카드: 평소 수집(캐시가 없으면 '처음 수집' — 이때 나머지 카드는 잠김) + 접힌 '다른 수집 방법'(빠진 날 채우기 = backfill · 최근 며칠 다시 읽기 = refresh(카드 안 일수, prefs `refresh_pick_days`) ·
   시간 미확인 복구 = recover · **기간 다시 읽기**(range, 10/5 — `collect(refresh_range=(시작, 끝))`: 그 기간에 수정된 Report · 시작한 KLA Wafer 만 캐시에 있어도 다시 읽고 기간 밖은 그대로) · 전체 다시 만들기 = rebuild) + 실행 줄(계획 한 줄 · 실행 버튼 이름은 고른 카드, 끝나면 평소 수집으로).
@@ -337,7 +337,7 @@ CSV 를 못 쓰는 OS 오류(Excel 잠금)는 실패가 아니라 **부분 성�
 `utils/config.normalize_config` 하나를 prefs(GUI)·cli(config.json)가 같이 쓴다. 성능·기간 값(`read_workers` 1~32 · `backfill_days`/`retention_days` 1~3650 · `refresh_window_days` 0~3650 · `attention_util` 0~100 · `attention_err` 0~999,
 bool 은 문자열을 엄격 판정 — `bool("false")` 없음)은 **경고 + 기본값/클램프**, `scope_devices`·경로·폴더 이름(구분자·`..`·NUL)은 `ConfigError` 로 **실행 차단** — `collect.collect` 첫머리와 장비 게이트 4곳이 파일 접근 전에 부른다(fail closed).
 `retention_days` 가 `backfill_days` 보다 짧으면 backfill 값으로 늘린다. `prefs_version` 이 잘못돼도 장비 목록을 기본 30대로 되돌리지 않는다. 문구는 ko.py `CFG_*`. 가드 `test_config_normalize.py` · `test_config_example.py`(예시 공개 키 = `DEFAULT_CONFIG`).
-`meta.dashboard_settings = {attentionUtil, attentionErr}` 는 cfg `attention_util/attention_err`(prefs 필드명은 `threshold_util/threshold_err` 그대로, 설정 페이지 '주의 장비 기준' 스핀)에서 `write_html` 이 넣고 화면 `PROPS` 가 읽는다(D14).
+`meta.dashboard_settings = {attentionUtil, attentionErr}` 는 cfg `attention_util/attention_err`(10/30 설정 화면의 '주의 장비 기준' 을 없앴다 — GUI 수집은 기본값 40 · 3 을 보내고, 값을 바꾸고 싶으면 CLI config.json 의 같은 이름)에서 `write_html` 이 넣고 화면 `PROPS` 가 읽는다(D14).
 
 ## 테스트
 `QT_QPA_PLATFORM=offscreen python -m pytest -q` (빠른 확인: `-m "not ui and not slow"`, `slow` = 30일치 샘플 전수). PyQt6 가 없는 환경에서는 ui 테스트가 skip 된다.
