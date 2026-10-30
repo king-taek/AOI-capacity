@@ -537,13 +537,13 @@ button.dbrow:focus-visible{outline:2px solid var(--nav-on);outline-offset:-2px}
 <div id="app"><main><p class="muted" style="padding:40px 0">불러오는 중…</p></main></div>
 <script id="boot">
 /* ============================================================================
-   시작 화면(10/30, D104 — 현택 선택 '데이터 입자' A): 흩어진 입자가 곧 열릴 화면으로 모이는 4초 장면.
+   시작 화면(10/30, D104 — 현택 선택 '데이터 입자' A): 흩어진 입자가 화면 가득 대시보드 모양으로 모이는 **고정** 4초 장면.
    · 이 스크립트는 큰 데이터(#embedded)보다 앞에 있어서 파일을 읽는 동안부터 돈다. 그림은 별도 스레드(Worker + OffscreenCanvas)가
      그리므로 JSON 해석 · 모델 계산이 메인 스레드를 막아도 끊기지 않는다(옛 Lottie 로더는 그동안 0프레임이었다 — 실측).
-   · 1막 화면 틀(글자 · 칸 · 선), 2막 숫자 · 색 막대. 페이지를 연 때부터 4초 안에는 드러나지 않고, 로딩이 4초를 넘으면
-     틀은 멈춰 있고 숫자 · 막대 몫 입자만 제 자리 근처에서 살랑살랑 흔들리며 기다린다(값을 모르니 엷은 회청색).
-   · 틀은 지난번에 이 파일을 연 화면(localStorage, 같은 창 너비일 때만 — 숫자 · 값은 저장하지 않고 자리만)으로 미리 맞추고,
-     진짜 화면이 그려지면 그것을 재어(main 스크립트가 AOI_BOOT.done) 달라진 입자만 다시 날아간다.
+   · 모양은 늘 같다(현택 10/30: 처음 불러올 때는 데이터가 없으니 화면마다 다르게 만들 이유가 없다) — 창 크기에 맞춰 그린 머리 · 카드 셋 ·
+     장비 줄과 24시간 막대. 가짜 숫자는 쓰지 않고 숫자 자리는 블록이다. 1막 틀(제목 · 칸 · 선), 2막 숫자 블록 · 색 막대.
+   · 페이지를 연 때부터 4초 안에는 걷히지 않고, 로딩이 4초를 넘으면 틀은 멈춰 있고 숫자 · 막대 몫 입자만 제 자리 근처에서
+     살랑살랑 흔들리며 기다린다(엷은 회청색). 로딩이 끝나면(AOI_BOOT.done) 제 색으로 앉고, 진짜 화면이 덮개 뒤에서 드러난다.
    · 바깥 요청 0건 — Worker 는 이 스크립트 안의 함수로 만든 blob 주소다. 덮개는 클릭을 막지 않는다(pointer-events:none).
    ============================================================================ */
 (function(){
@@ -552,7 +552,6 @@ var prev=document.getElementById("aoi-boot");if(prev&&prev.parentNode)prev.paren
 window.AOI_BOOT=null;
 const MIN=4000,LABELS=["결과 파일 여는 중","데이터 읽는 중","기록 펼치는 중","계산 중","화면 그리는 중"],PW=[.08,.34,.12,.36,.10],TH=[];
 {let a=0;for(const w of PW){TH.push(a);a+=w;}}
-const CACHE_KEY="aoi.bootLayout.v1";
 
 function mulberry(a){return function(){a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296;};}
 function makeLib(mulberry){
@@ -591,11 +590,8 @@ function bootCore(self,scene0,lib){
   self.onmessage=e=>{const m=e.data;
     if(m.type==="init"){const c=m.canvas;c.width=Math.round(m.w*m.dpr);c.height=Math.round(m.h*m.dpr);ctx=c.getContext("2d");ctx.setTransform(m.dpr,0,0,m.dpr,0,0);
       reduced=m.reduced;S.MIN=m.min;S.labels=m.labels;S.th=m.th;S.t0=m.epoch-performance.timeOrigin;last=performance.now();S.tPh=last;
-      scene=scene0(ctx,m.w,m.h,m.dpr,S,lib,m);running=true;
-      if(m.layout){try{scene.retarget(m.layout,last);}catch(err){}}
-      loop();}
+      scene=scene0(ctx,m.w,m.h,m.dpr,S,lib,m);running=true;loop();}
     else if(m.type==="phase"){S.ri=Math.max(S.ri,m.i);S.rp=m.p;S.rpn=m.pn;S.tPh=performance.now();}
-    else if(m.type==="targets"){S.loaded=true;S.ri=S.labels.length-1;let step=0;try{step=scene.retarget(m.L,performance.now());}catch(err){}self.postMessage({type:"built",step});}
     else if(m.type==="loaded"){S.loaded=true;S.ri=S.labels.length-1;}
     else if(m.type==="stop"){running=false;}};
   function loop(){if(!running)return;const now=performance.now(),dt=Math.min(48,now-last);last=now;
@@ -612,10 +608,10 @@ function bootCore(self,scene0,lib){
    E(s)=1-(1-s)^3(1+3s) — E'(0)=0, E'(1)=0. g(s)=s(1-s)^2 가 출발 속도를 실어 나른다. */
 function bootScene(ctx,W,H,dpr,S,lib,opt){
   const rnd=lib.rnd(77),BG=opt.bg||"#F4F6F8",HOV="#9DB4CE",PRE=["#5A6673","#2E6BA8","#8FB8E0","#AEB8C4"];
-  const N=Math.max(600,Math.round(Math.min(10000,W*H/80)));
+  const N=Math.max(600,Math.round(Math.min(12000,W*H/75)));
   const F=()=>new Float32Array(N),X=F(),Y=F(),VX=F(),VY=F(),PX=F(),PY=F(),TX=F(),TY=F(),RK=F(),SZ=F(),SP=F(),FX=F(),FY=F(),FVX=F(),FVY=F(),FT=F(),FD=F(),
         HX=F(),HY=F(),HA=F(),HW=F(),HP=F(),D=new Uint8Array(N),C=new Uint16Array(N),ST=new Uint8Array(N);
-  let PAL=PRE.slice(),has=false,step=opt.step||0,NS=0,ND=1,nSet=0,nStr=0,nDat=0,relaunched=false;
+  let PAL=PRE.slice(),has=false,step=0,NS=0,ND=1,nSet=0,nStr=0,nDat=0,relaunched=false;
   for(let j=0;j<N;j++){X[j]=PX[j]=rnd()*W*1.25-W*.25;Y[j]=PY[j]=rnd()*H;SP[j]=.7+rnd()*.8;VX[j]=1.4*SP[j];C[j]=j%PRE.length;RK[j]=2;SZ[j]=2;
     HA[j]=3+rnd()*6;HW[j]=(2*Math.PI)/(2600+rnd()*1800);HP[j]=rnd()*6.283;}
   const ow=Math.max(1,Math.ceil(W)),oh=Math.max(1,Math.ceil(H)),off=lib.mk(ow,oh),o=off.getContext("2d",{willReadFrequently:true});
@@ -631,76 +627,76 @@ function bootScene(ctx,W,H,dpr,S,lib,opt){
     const prgb=pal.map(rgbOf),memo=new Map();
     const near=(r,g,b)=>{const k=(r<<16)|(g<<8)|b;let v=memo.get(k);if(v!==undefined)return v;let bd=1e9;v=0;
       for(let i=0;i<prgb.length;i++){const q=prgb[i],d=(q[0]-r)**2+(q[1]-g)**2+(q[2]-b)**2;if(d<bd){bd=d;v=i;}}memo.set(k,v);return v;};
-    const draw=dat=>{o.clearRect(0,0,ow,oh);
-      for(const r of L.rects)if(!!r.d===dat){o.fillStyle=r.c;o.fillRect(r.x,r.y,r.w,r.h);}
-      if(!dat)for(const s of L.strokes){const lw=s.lw||1;o.strokeStyle=s.c;o.lineWidth=lw;o.beginPath();
+    const draw=(dat,txt)=>{o.clearRect(0,0,ow,oh);
+      if(txt!==1)for(const r of L.rects)if(!!r.d===dat){o.fillStyle=r.c;o.fillRect(r.x,r.y,r.w,r.h);}
+      if(!dat&&txt!==1)for(const s of L.strokes){const lw=s.lw||1;o.strokeStyle=s.c;o.lineWidth=lw;o.beginPath();
         if(o.roundRect&&s.r)o.roundRect(s.x+lw/2,s.y+lw/2,Math.max(0,s.w-lw),Math.max(0,s.h-lw),Math.min(s.r,s.w/2,s.h/2));else o.rect(s.x+lw/2,s.y+lw/2,Math.max(0,s.w-lw),Math.max(0,s.h-lw));o.stroke();}
-      o.textBaseline="middle";for(const t of L.texts)if(!!t.d===dat){o.font=t.f;o.fillStyle=t.c;o.fillText(t.t,t.x,t.y);}
+      if(txt!==0){o.textBaseline="middle";for(const t of L.texts)if(!!t.d===dat){o.font=t.f;o.fillStyle=t.c;o.fillText(t.t,t.x,t.y);}}
       return o.getImageData(0,0,ow,oh).data;};
-    const iS=draw(false),iD=draw(true);o.clearRect(0,0,ow,oh);
+    const iS=draw(false,0),iT=draw(false,1),iD=draw(true);o.clearRect(0,0,ow,oh);   /* 글자는 따로 — 칸과 같은 간격이면 제목이 읽히지 않는다 */
     if(!step){let ink=0;for(let y=0;y<oh;y+=2)for(let x=0;x<ow;x+=2){const i=(y*ow+x)*4+3;if(iS[i]>=110||iD[i]>=110)ink+=4;}
       step=Math.max(1.5,Math.min(8,Math.sqrt(ink/(N*1.1))));}
-    const pick=img=>{const out=[];for(let y=step/2;y<oh;y+=step)for(let x=step/2;x<ow;x+=step){const i=(Math.floor(y)*ow+Math.floor(x))*4;if(img[i+3]<110)continue;
-      out.push(x+(rnd()-.5)*.4,y+(rnd()-.5)*.4,near(img[i],img[i+1],img[i+2]));}return out;};
-    return{pal,S:pick(iS),D:pick(iD)};}
+    /* 칸마다 가장 진한 화소 하나 — 칸 가운데 한 점만 보면 1px 선이 격자에 걸릴 때만 잡혀 점선이 된다 */
+    const pick=(img,st)=>{const out=[];for(let y0=0;y0<oh;y0+=st)for(let x0=0;x0<ow;x0+=st){let bi=-1,ba=109,bx=0,by=0;
+        for(let y=Math.floor(y0);y<Math.min(oh,Math.floor(y0+st));y++)for(let x=Math.floor(x0);x<Math.min(ow,Math.floor(x0+st));x++){const i=(y*ow+x)*4;if(img[i+3]>ba){ba=img[i+3];bi=i;bx=x;by=y;}}
+        if(bi<0)continue;out.push(bx+.5+(rnd()-.5)*.4,by+.5+(rnd()-.5)*.4,near(img[bi],img[bi+1],img[bi+2]),st*.92);}return out;};
+    const T=pick(iT,Math.max(1.5,Math.min(step*.5,2.6)));return{pal,S:T.concat(pick(iS,step)),nT:T.length/4,D:pick(iD,step)};}
   const zoneOf=(L,x,y)=>{let best=null,ba=1e18;for(const z of L.zones||[]){if(x>=z.x-1&&x<=z.x+z.w+1&&y>=z.y-1&&y<=z.y+z.h+1){const a=z.w*z.h;if(a<ba){ba=a;best=z;}}}return best;};
   const bake=()=>{lc.clearRect(0,0,W,H);const ps=PAL.map(()=>new Path2D());nSet=nStr=nDat=0;
     for(let j=0;j<N;j++)if(ST[j]===2){ps[C[j]].rect(TX[j]-SZ[j]/2,TY[j]-SZ[j]/2,SZ[j],SZ[j]);nSet++;if(D[j])nDat++;else nStr++;}
     for(let c=0;c<PAL.length;c++){lc.fillStyle=PAL[c];lc.fill(ps[c]);}};
   const fly=(j,now,d)=>{FX[j]=X[j];FY[j]=Y[j];FT[j]=now;FD[j]=d;};
-  /* 목표 바꾸기: 이미 앉은 입자는 같은 자리(1.3px 안 · 같은 색)의 새 점을 먼저 잡는다 → 틀이 같으면 그대로 있고 달라진 곳만 다시 난다.
-     나머지는 읽는 순서(위→아래, 왼→오른)의 분위수로 짝짓는다. 반환값 = 격자 간격(저장해 다음에 같은 격자를 쓴다) */
-  function retarget(L,now){
-    const b=build(L),old=PAL;PAL=b.pal;const sp=b.S,dp=b.D,ns=sp.length/3,nd=dp.length/3;if(!ns&&!nd)return step;
-    let nS=Math.round(N*ns/(ns+nd));if(ns&&!nS)nS=1;if(nd&&nS===N)nS=N-1;const nD=N-nS;
-    const used=new Uint8Array(ns),cell=4,grid=new Map(),key=(x,y)=>Math.floor(x/cell)*65536+Math.floor(y/cell);
-    for(let k=0;k<ns;k++){const q=key(sp[k*3],sp[k*3+1]);let a=grid.get(q);if(!a)grid.set(q,a=[]);a.push(k);}
-    const tgt=new Int32Array(N).fill(-1),kind=new Int8Array(N);let m=0;
-    if(has){const ord=[...Array(N).keys()].filter(j=>!D[j]&&ST[j]>0);for(let i=ord.length-1;i>0;i--){const r=Math.floor(rnd()*(i+1));[ord[i],ord[r]]=[ord[r],ord[i]];}
-      for(const j of ord){if(m>=nS)break;const cx=Math.floor(TX[j]/cell),cy=Math.floor(TY[j]/cell),oc=old[C[j]];let hit=-1;
-        for(let dx=-1;dx<=1&&hit<0;dx++)for(let dy=-1;dy<=1&&hit<0;dy++){const a=grid.get((cx+dx)*65536+cy+dy);if(!a)continue;
-          for(const k of a)if(!used[k]&&Math.abs(sp[k*3]-TX[j])<=1.3&&Math.abs(sp[k*3+1]-TY[j])<=1.3&&b.pal[sp[k*3+2]]===oc){hit=k;break;}}
-        if(hit>=0){used[hit]=1;tgt[j]=hit;kind[j]=1;m++;}}}
-    const rest=[];for(let k=0;k<ns;k++)if(!used[k])rest.push(k);for(let i=rest.length-1;i>0;i--){const r=Math.floor(rnd()*(i+1));[rest[i],rest[r]]=[rest[r],rest[i]];}
-    const sPick=[];for(let i=0;sPick.length<nS-m&&rest.length;i++)sPick.push(rest[i%rest.length]);
-    const dAll=[...Array(nd).keys()];for(let i=nd-1;i>0;i--){const r=Math.floor(rnd()*(i+1));[dAll[i],dAll[r]]=[dAll[r],dAll[i]];}
-    const dPick=[];for(let i=0;dPick.length<nD&&nd;i++)dPick.push(dAll[i%nd]);
-    const rkS=k=>sp[k*3+1]/H*.86+sp[k*3]/W*.1,rkD=k=>dp[k*3+1]/H*.7+dp[k*3]/W*.26;
-    sPick.sort((a,c)=>rkS(a)-rkS(c));dPick.sort((a,c)=>rkD(a)-rkD(c));
-    const U=[];for(let j=0;j<N;j++)if(tgt[j]<0)U.push(j);
-    const uk=new Float32Array(N);for(const j of U)uk[j]=has?(D[j]?1+RK[j]:RK[j]):rnd();U.sort((a,c)=>uk[a]-uk[c]);
-    let ui=0;for(const k of sPick){if(ui>=U.length)break;const j=U[ui++];tgt[j]=k;kind[j]=1;}
-    /* 숫자 · 막대 몫: 기다리던 입자(지난번 틀)가 있으면 가장 가까운 새 점으로 — 순위로 짝지으면 한 줄 안에서 멀리 가로질러 난다 */
-    if(has&&dPick.length){const R=U.slice(ui),cs=16,gd=new Map(),cl=v=>Math.max(0,Math.min(4095,Math.floor(v/cs))),taken=new Uint8Array(dPick.length);
-      dPick.forEach((k,pi)=>{const q=cl(dp[k*3])*65536+cl(dp[k*3+1]);let a=gd.get(q);if(!a)gd.set(q,a=[]);a.push(pi);});
-      for(let i=R.length-1;i>0;i--){const r=Math.floor(rnd()*(i+1));[R[i],R[r]]=[R[r],R[i]];}
-      let got=0;const left=[];
-      for(const j of R){if(got>=dPick.length){left.push(j);continue;}const cx=cl(X[j]),cy=cl(Y[j]);let hit=-1;
-        for(let r=0;r<=24&&hit<0;r++)for(let dx=-r;dx<=r&&hit<0;dx++)for(let dy=-r;dy<=r;dy++){if(Math.max(Math.abs(dx),Math.abs(dy))!==r)continue;
-          const a=gd.get((cx+dx)*65536+cy+dy);if(!a)continue;let f=-1;for(const pi of a)if(!taken[pi]){f=pi;break;}if(f>=0){hit=f;break;}}
-        if(hit<0){left.push(j);continue;}taken[hit]=1;got++;tgt[j]=dPick[hit];kind[j]=2;}
-      const rp=[];dPick.forEach((k,pi)=>{if(!taken[pi])rp.push(k);});let li=0;
-      for(const j of left){tgt[j]=li<rp.length?rp[li]:dPick[li%dPick.length];li++;kind[j]=2;}
-      ui=U.length;}
-    else for(const k of dPick){if(ui>=U.length)break;const j=U[ui++];tgt[j]=k;kind[j]=2;}
-    while(ui<U.length){const j=U[ui++];if(sPick.length){tgt[j]=sPick[ui%sPick.length];kind[j]=1;}else if(dPick.length){tgt[j]=dPick[ui%dPick.length];kind[j]=2;}}
-    let a0=1e9,a1=-1e9,b0=1e9,b1=-1e9;const raw=new Float32Array(N);
-    for(let j=0;j<N;j++){const k=tgt[j],src=kind[j]===2?dp:sp;if(k<0)continue;
-      const tx=src[k*3],ty=src[k*3+1],c=src[k*3+2],dd=kind[j]===2?1:0,moved=Math.abs(tx-TX[j])>.6||Math.abs(ty-TY[j])>.6||!has;
-      const wasFlying=ST[j]===1;
-      if(ST[j]===2&&(moved||dd!==D[j])){ST[j]=1;FVX[j]=FVY[j]=0;fly(j,now,S.loaded||now>S.t0+3600?280+rnd()*100:Math.min(320+rnd()*160,Math.max(220,S.t0+3850-now)));}
-      else if(wasFlying&&moved){const s=Math.min(1,(now-FT[j])/FD[j]),q=1-s,e1=12*s*q*q,g1=q*(1-3*s);
-        FVX[j]=((TX[j]-FX[j])*e1+FVX[j]*FD[j]*g1)/FD[j];FVY[j]=((TY[j]-FY[j])*e1+FVY[j]*FD[j]*g1)/FD[j];fly(j,now,300+rnd()*120);}
-      TX[j]=tx;TY[j]=ty;C[j]=c;D[j]=dd;SZ[j]=step*.92;
-      if(ST[j]===2){X[j]=tx;Y[j]=ty;}
+  /* 고정 장면: 창 크기에 맞춘 대시보드 모양(머리 · 카드 셋 · 장비 줄과 24시간 막대). 난수 씨앗이 같아 늘 같은 그림이다.
+     d:1 = 데이터 몫(숫자 블록 · 색 막대 구간) — 로딩이 끝나야 앉는다. zones = 데이터 몫이 기다릴 자리 */
+  function fixedLayout(){
+    const r2=lib.rnd(1030),texts=[],rects=[],strokes=[],zones=[],R=(x,y,w,h,c,d)=>rects.push({x,y,w,h,c,d:d?1:0});
+    const INK="#16202B",INK2="#5A6673",INK3="#AEB8C4",LINE="#D3DAE2",TRACK="#DFE5EC",ACC="#2E6BA8",ACCS="#DCE7F3",ERR="#C5453C";
+    const SEG=[["#2E6BA8",.62],["#8FB8E0",.14],["#7A5BB5",.08],["#C5453C",.07],["#E8B7B3",.09]];
+    const seg=()=>{let u=r2(),i=0;while(i<SEG.length-1&&u>SEG[i][1]){u-=SEG[i][1];i++;}return SEG[i][0];};
+    const pad=Math.round(Math.max(20,Math.min(W*.03,44))),hh=Math.round(Math.max(52,Math.min(H*.085,72))),cy=hh/2,fs=Math.round(hh*.3);
+    const ir=hh*.2;strokes.push({x:pad,y:cy-ir,w:ir*2,h:ir*2,r:ir,lw:Math.max(2,ir*.3),c:ACC});
+    const tx0=pad+ir*2+fs*.6;texts.push({t:"AOI 가동 현황",x:tx0,y:cy,f:`700 ${fs}px "Segoe UI","Malgun Gothic","Apple SD Gothic Neo",sans-serif`,c:INK,d:0});
+    let tx=tx0+fs*6.6;const tabEnd=W-pad-fs*8;
+    [1,.9,1.1,1.6,1.4,1.1].forEach((k,i)=>{const w=fs*2.3*k,h=hh*.46;if(tx+w>tabEnd)return;if(!i)R(tx,cy-h/2,w,h,ACCS);R(tx+w*.22,cy-fs*.17,w*.56,fs*.34,i?INK3:ACC);tx+=w+fs*.45;});
+    if(W-pad-fs*7>tx)R(W-pad-fs*7,cy-fs*.17,fs*7,fs*.34,INK3);
+    R(0,hh-1,W,1,LINE);
+    const gap=Math.round(pad*.6),y0=hh+pad,kh=Math.round(Math.max(88,Math.min(H*.17,140))),cw=(W-pad*2-gap*2)/3;
+    for(let i=0;i<3;i++){const x=pad+i*(cw+gap),ix=x+Math.min(22,cw*.08);strokes.push({x,y:y0,w:cw,h:kh,r:12,lw:1,c:LINE});
+      R(ix,y0+kh*.17,cw*.24,kh*.075,INK3);
+      const nw=cw*(.16+.06*((i*7)%3)),ny=y0+kh*.33,nh=kh*.27;R(ix,ny,nw,nh,i===1?ERR:INK,1);zones.push({x:ix,y:ny,w:Math.min(cw*.5,nw*1.6),h:nh});
+      R(ix,y0+kh*.72,cw*.62,kh*.055,"#CBD3DC");R(ix,y0+kh*.84,cw*.44,kh*.055,"#CBD3DC");}
+    const capH=Math.max(34,H*.06),py=y0+kh+pad,ph=H-py-capH-pad*.4;
+    if(ph>70){strokes.push({x:pad,y:py,w:W-pad*2,h:ph,r:12,lw:1,c:LINE});
+      const ix=pad+Math.min(22,W*.016),rh=Math.round(Math.max(30,Math.min(44,H*.052))),lx=ix+Math.max(90,W*.11),rx=W-pad-Math.max(70,W*.07);
+      let gx=ix;for(const [c] of SEG){R(gx,py+rh*.42,rh*.24,rh*.24,c);R(gx+rh*.34,py+rh*.46,rh*.9,rh*.16,INK3);gx+=rh*1.6;}
+      R(pad,py+rh*.95,W-pad*2,1,"#E7ECF1");
+      const n=Math.max(1,Math.floor((ph-rh*1.2)/rh));
+      for(let k=0;k<n;k++){const y=py+rh*1.2+k*rh,mid=y+rh/2,th=Math.max(8,rh*.4);
+        R(ix,mid-rh*.09,rh*1.6,rh*.18,INK2);
+        const uw=rh*.8;R(lx-uw-rh*.5,mid-rh*.11,uw,rh*.22,(k%4===1)?ERR:INK,1);zones.push({x:lx-uw-rh*.5,y:mid-rh*.2,w:uw,h:rh*.4});
+        R(lx,mid-th/2,rx-lx,th,TRACK);zones.push({x:lx,y:mid-th/2,w:rx-lx,h:th});
+        let p=r2()*.18;while(p<.92){const w=.015+r2()*.07;if(p+w>1)break;R(lx+(rx-lx)*p,mid-th/2,(rx-lx)*w,th,seg(),1);p+=w+.02+r2()*.12;}
+        if(k%3===0)R(rx+rh*.6,mid-rh*.09,rh*.5,rh*.18,ERR,1);else R(rx+rh*.6,mid-1,rh*.4,2,INK3);
+        if(k<n-1)R(pad,y+rh,W-pad*2,1,"#EEF1F4");}}
+    return{texts,rects,strokes,zones};}
+  /* 목표 정하기(한 번): 틀 몫과 데이터 몫을 나눠 읽는 순서(위→아래, 왼→오른)로 순위를 매긴다 — 틀은 [0, .76], 데이터는 [.79, .99] */
+  function assign(L){
+    const b=build(L);PAL=b.pal;const sp=b.S,dp=b.D,ns=sp.length/4,nd=dp.length/4;if(!ns&&!nd)return;
+    let nS=Math.max(Math.min(b.nT,N-1),Math.round(N*ns/(ns+nd)));if(ns&&!nS)nS=1;if(nd&&nS===N)nS=N-1;
+    const pick=(n,tot)=>{const a=[...Array(tot).keys()];for(let i=tot-1;i>0;i--){const r=Math.floor(rnd()*(i+1));[a[i],a[r]]=[a[r],a[i]];}const o=[];for(let i=0;o.length<n&&tot;i++)o.push(a[i%tot]);return o;};
+    const sP=[...Array(Math.min(b.nT,nS)).keys()].concat(pick(nS-Math.min(b.nT,nS),ns-b.nT).map(k=>k+b.nT)),dP=pick(N-nS,nd);   /* 글자 점은 빠짐없이 */let a0=1e9,a1=-1e9,b0=1e9,b1=-1e9;const raw=new Float32Array(N);
+    for(let j=0;j<N;j++){const dd=j>=sP.length?1:0,k=dd?dP[j-sP.length]:sP[j],src=dd?dp:sp;if(k===undefined)continue;
+      const tx=src[k*4],ty=src[k*4+1];TX[j]=tx;TY[j]=ty;C[j]=src[k*4+2];D[j]=dd;SZ[j]=src[k*4+3];
       raw[j]=dd?ty/H*.7+tx/W*.26+rnd()*.04:ty/H*.86+tx/W*.1+rnd()*.04;
-      if(dd){b0=Math.min(b0,raw[j]);b1=Math.max(b1,raw[j]);}else{a0=Math.min(a0,raw[j]);a1=Math.max(a1,raw[j]);}
-      if(dd){const z=zoneOf(L,tx,ty);if(z){HX[j]=z.x+rnd()*z.w;HY[j]=z.y+z.h*(.15+.7*rnd());}else{HX[j]=tx+(rnd()-.5)*W*.05;HY[j]=ty+(rnd()-.5)*4;}}}
+      if(dd){b0=Math.min(b0,raw[j]);b1=Math.max(b1,raw[j]);const z=zoneOf(L,tx,ty);
+        if(z){HX[j]=z.x+rnd()*z.w;HY[j]=z.y+z.h*(.15+.7*rnd());}else{HX[j]=tx+(rnd()-.5)*W*.05;HY[j]=ty+(rnd()-.5)*4;}}
+      else{a0=Math.min(a0,raw[j]);a1=Math.max(a1,raw[j]);}}
     NS=0;for(let j=0;j<N;j++){RK[j]=D[j]?.79+.2*(raw[j]-b0)/Math.max(1e-6,b1-b0):.76*(raw[j]-a0)/Math.max(1e-6,a1-a0);if(!D[j])NS++;}
-    NS=Math.max(1,NS);ND=Math.max(1,N-NS);has=true;bake();return step;}
+    NS=Math.max(1,NS);ND=Math.max(1,N-NS);has=true;bake();}
+  assign(fixedLayout());
   const fs=1/(W*.22),cv=[0,0],cfs=Math.max(10,Math.min(14,W*.0118)),cx=Math.max(16,W*.024),cy=H-Math.max(18,H*.05);
   ctx.fillStyle=BG;ctx.fillRect(0,0,W,H);
-  return{count:N,retarget,
+  return{count:N,
     frame(now,dt,red){
       const v=S.v,k=dt/16.7,tt=now*.00006,ent=Math.min(1,Math.max(0,S.t)/380),deadline=S.t0+3850;
       /* 목표가 아직 없으면(첫 실행) 계획이 끝난 뒤 흐름을 천천히 늦춘다 — 4초 뒤에는 잔잔하게 떠다닌다 */
@@ -752,59 +748,6 @@ function bootScene(ctx,W,H,dpr,S,lib,opt){
     }};
 }
 
-/* ── 진짜 화면 재기(메인 스레드, AOI_BOOT.done 에서 한 번): 보이는 칸 안의 글자 · 색 칸 · 테두리를 화면 설명(L)으로.
-   숫자가 든 글자(장비 이름 AOI-n · K-n 은 빼고)와 채도 있는 색 칸(머리줄 밖)은 '데이터' — 2막에 앉는다. 색 칸의 부모 줄은 기다릴 자리(zones). */
-function measureApp(root,W,H){
-  const texts=[],rects=[],strokes=[],zones=[],zk=new Set(),vis=r=>r.width>0&&r.height>0&&r.right>0&&r.bottom>0&&r.left<W&&r.top<H;
-  const rgb=s=>{const m=/rgba?\(([^)]+)\)/.exec(s||"");if(!m)return null;const p=m[1].split(/[\s,\/]+/).filter(Boolean).map(Number);const a=p.length>3?p[3]:1;
-    return a<.1?null:{r:p[0],g:p[1],b:p[2]};};
-  const hx=c=>"#"+[c.r,c.g,c.b].map(v=>Math.round(v).toString(16).padStart(2,"0")).join("");
-  const hsl=c=>{const mx=Math.max(c.r,c.g,c.b)/255,mn=Math.min(c.r,c.g,c.b)/255,l=(mx+mn)/2;return{l,s:mx===mn?0:(mx-mn)/(1-Math.abs(2*l-1))};};
-  const pageBg=(()=>{const c=rgb(getComputedStyle(document.body).backgroundColor);return c?hx(c):"";})();
-  const isData=t=>/\d/.test(t.replace(/(?:4F-)?(?:AOI|K)-?\d+/gi,""));
-  const box=r=>({x:Math.round(r.left*10)/10,y:Math.round(r.top*10)/10,w:Math.round(r.width*10)/10,h:Math.round(r.height*10)/10});
-  const hgrad=(bi,r)=>{const i=bi.indexOf("linear-gradient(90deg"),st=i+16;let dep=1,e=st;for(;e<bi.length&&dep;e++){if(bi[e]==="(")dep++;else if(bi[e]===")")dep--;}
-    const parts=[];let d=0,p0=st;for(let k=st;k<e-1;k++){const ch=bi[k];if(ch==="(")d++;else if(ch===")")d--;else if(ch===","&&!d){parts.push(bi.slice(p0,k).trim());p0=k+1;}}parts.push(bi.slice(p0,e-1).trim());
-    const stops=[];for(const q of parts.slice(1)){const m=/^(rgba?\([^)]*\))\s*(.*)$/.exec(q);if(!m)continue;const c=rgb(m[1]),ps=m[2];let x=null,mm;
-      if((mm=/calc\(([\d.]+)%\s*-\s*([\d.]+)px\)/.exec(ps)))x=r.width*mm[1]/100-mm[2];else if((mm=/([\d.]+)%/.exec(ps)))x=r.width*mm[1]/100;else if((mm=/([\d.]+)px/.exec(ps)))x=+mm[1];
-      if(x!=null)stops.push({c,x});}
-    for(let k=0;k+1<stops.length;k++){const A=stops[k],B=stops[k+1];if(!A.c||!B.c||hx(A.c)!==hx(B.c)||B.x-A.x<.5)continue;const q=hsl(A.c);if(q.l>=.965)continue;
-      const d=q.s>.28&&q.l>.12&&q.l<.9;rects.push({x:r.left+A.x,y:r.top,w:B.x-A.x,h:r.height,c:hx(A.c),d:d?1:0});
-      if(d){const z=box(r),zz=z.x+","+z.y+","+z.w+","+z.h;if(!zk.has(zz)&&zones.length<800){zk.add(zz);zones.push(z);}}}};
-  let n=0;
-  for(const el of root.querySelectorAll("*")){if(++n>4000)break;
-    if(el.closest("svg"))continue;
-    const r=el.getBoundingClientRect();if(!vis(r))continue;
-    const cs=getComputedStyle(el);if(cs.visibility==="hidden"||+cs.opacity<.05)continue;
-    const bc=rgb(cs.backgroundColor);
-    if(bc){const c=hx(bc),q=hsl(bc);if(q.l<.965&&c!==pageBg){const d=q.s>.28&&q.l>.12&&q.l<.9&&!el.closest("header");rects.push({...box(r),c,d:d?1:0});
-      if(d){const p=el.parentElement,pr=p&&p.getBoundingClientRect(),z=pr&&pr.height<=r.height*2.5&&pr.width>=r.width?box(pr):box(r),k=z.x+","+z.y+","+z.w+","+z.h;
-        if(!zk.has(k)&&zones.length<800){zk.add(k);zones.push(z);}}}}
-    if(cs.backgroundImage.indexOf("linear-gradient(90deg")>=0)hgrad(cs.backgroundImage,r);   /* 24시간 막대: 색 구간이 가로 gradient 의 멈춤점이다 */
-    const bw=["Top","Right","Bottom","Left"].map(s=>parseFloat(cs["border"+s+"Width"])||0),bcs=["Top","Right","Bottom","Left"].map(s=>rgb(cs["border"+s+"Color"]));
-    if(bw.every(w=>w>=.5)&&bcs.every(c=>c&&bcs[0]&&hx(c)===hx(bcs[0])))strokes.push({...box(r),r:parseFloat(cs.borderTopLeftRadius)||0,lw:bw[0],c:hx(bcs[0])});
-    else{const b=box(r);
-      if(bw[0]>=.5&&bcs[0])rects.push({x:b.x,y:b.y,w:b.w,h:bw[0],c:hx(bcs[0]),d:0});
-      if(bw[2]>=.5&&bcs[2])rects.push({x:b.x,y:b.y+b.h-bw[2],w:b.w,h:bw[2],c:hx(bcs[2]),d:0});
-      if(bw[3]>=.5&&bcs[3])rects.push({x:b.x,y:b.y,w:bw[3],h:b.h,c:hx(bcs[3]),d:0});
-      if(bw[1]>=.5&&bcs[1])rects.push({x:b.x+b.w-bw[1],y:b.y,w:bw[1],h:b.h,c:hx(bcs[1]),d:0});}}
-  const tw=document.createTreeWalker(root,NodeFilter.SHOW_TEXT);let t;
-  while((t=tw.nextNode())&&texts.length<2500){const s=t.textContent.replace(/\s+/g," ").trim();if(!s)continue;const el=t.parentElement;if(!el||el.closest("svg"))continue;
-    const cs=getComputedStyle(el);if(cs.visibility==="hidden"||+cs.opacity<.05)continue;const col=rgb(cs.color);if(!col)continue;
-    const rg=document.createRange();rg.selectNodeContents(t);const rs=[...rg.getClientRects()].filter(vis);if(!rs.length)continue;
-    const d=isData(s)?1:0,c=hx(col);
-    if(rs.length===1){const r=rs[0];texts.push({t:s,x:Math.round(r.left*10)/10,y:Math.round((r.top+r.height/2)*10)/10,f:`${cs.fontStyle} ${cs.fontWeight} ${cs.fontSize} ${cs.fontFamily}`,c,d,w:Math.round(r.width),h:Math.round(r.height)});}
-    else for(const r of rs)rects.push({x:r.left,y:r.top+r.height*.3,w:r.width,h:r.height*.4,c,d});}
-  return{W,H,texts,rects,strokes,zones};
-}
-/* 다음에 열 때 미리 맞출 틀 — 데이터 글자는 내용 없이 칸으로만 남긴다(값은 저장하지 않는다) */
-function forCache(L){return{W:L.W,H:L.H,strokes:L.strokes,zones:L.zones,rects:L.rects,
-  texts:L.texts.filter(t=>!t.d).map(({w,h,...t})=>t)}}
-function cacheRead(W,H){try{const s=localStorage.getItem(CACHE_KEY);if(!s)return null;const c=JSON.parse(s);
-  if(!c||c.path!==location.pathname||Math.abs(c.L.W-W)>2||Math.abs(c.L.H-H)>40||!c.step)return null;
-  const L=c.L;for(const t of (c.dt||[]))L.rects.push({x:t[0],y:t[1],w:t[2],h:t[3],c:t[4],d:1});return{L,step:c.step};}catch(e){return null;}}
-function cacheWrite(L,step){try{const C=forCache(L),dt=L.texts.filter(t=>t.d).map(t=>[t.x,t.y-t.h*.3,t.w,t.h*.6,t.c]);
-  localStorage.setItem(CACHE_KEY,JSON.stringify({path:location.pathname,step,L:C,dt}));}catch(e){}}
 
 /* ── 덮개 만들고 그림 스레드 띄우기 ── */
 try{
@@ -812,18 +755,17 @@ try{
   if(W<240||H<200||!document.body)return;
   let red=false;try{red=!!(window.matchMedia&&window.matchMedia("(prefers-reduced-motion: reduce)").matches);}catch(e){}
   const bg=(getComputedStyle(document.documentElement).getPropertyValue("--bg")||"").trim()||"#F4F6F8";
-  try{if("scrollRestoration" in history)history.scrollRestoration="manual";}catch(e){}   /* 다시 열 때 스크롤을 되살리면 잰 자리와 드러난 화면이 어긋난다 */
   const ov=document.createElement("div");ov.id="aoi-boot";   /* 이 스크립트(id="boot")와 다른 이름 — 같으면 위 줄이 스크립트 자신을 지워 사본에 시작 화면이 빠진다 */
   ov.setAttribute("aria-hidden","true");
-  ov.style.cssText=`position:fixed;left:0;top:0;width:100vw;height:100vh;z-index:2147483000;background:${bg};pointer-events:none;overflow:hidden;opacity:1;transition:opacity .18s cubic-bezier(.23,1,.32,1)`;
+  ov.style.cssText=`position:fixed;left:0;top:0;width:100vw;height:100vh;z-index:2147483000;background:${bg};pointer-events:none;overflow:hidden;opacity:1;transition:opacity .26s cubic-bezier(.23,1,.32,1)`;
   const cv=document.createElement("canvas");cv.style.cssText=`display:block;width:${W}px;height:${H}px`;ov.appendChild(cv);document.body.appendChild(ov);
-  const dpr=Math.min(2,window.devicePixelRatio||1),epoch=performance.timeOrigin||Date.now()-performance.now(),cached=cacheRead(W,H);
+  const dpr=Math.min(2,window.devicePixelRatio||1),epoch=performance.timeOrigin||Date.now()-performance.now();
   let port=null,gone=false,loadedAt=0,fallback=0,revealed=false;const after=[];
   const finish=()=>{if(gone)return;gone=true;clearTimeout(fallback);try{port&&port.kill();}catch(e){}if(ov.parentNode)ov.parentNode.removeChild(ov);window.AOI_BOOT=null;
     for(const f of after.splice(0))setTimeout(()=>{try{f();}catch(e){}},0);};
-  const reveal=()=>{if(revealed||gone)return;revealed=true;ov.style.opacity="0";setTimeout(finish,220);};
-  const onMsg=d=>{if(!d)return;if(d.type==="reveal")reveal();else if(d.type==="built"&&d.step&&port&&port.pending){cacheWrite(port.pending,d.step);port.pending=null;}};
-  const init={type:"init",w:W,h:H,dpr,reduced:red,min:MIN,epoch,labels:LABELS,th:TH,bg,step:cached?cached.step:0,layout:cached?cached.L:null};
+  const reveal=()=>{if(revealed||gone)return;revealed=true;ov.style.opacity="0";setTimeout(finish,300);};
+  const onMsg=d=>{if(d&&d.type==="reveal")reveal();};
+  const init={type:"init",w:W,h:H,dpr,reduced:red,min:MIN,epoch,labels:LABELS,th:TH,bg};
   try{
     if(!cv.transferControlToOffscreen||typeof Worker==="undefined"||typeof OffscreenCanvas==="undefined")throw 0;
     const src=`"use strict";const mulberry=${mulberry};const makeLib=${makeLib};const bootScene=${bootScene};(${bootCore})(self,bootScene,makeLib(mulberry));`;
@@ -838,10 +780,8 @@ try{
   }
   window.AOI_BOOT={
     phase(i){if(gone)return;port.post({type:"phase",i,p:TH[i]||0,pn:(TH[i]||0)+(PW[i]||0)});},
-    /* 진짜 화면이 그려진 뒤 한 번: 재어서 입자 목표로 주고 로딩 끝을 알린다. 4초가 차고 입자가 다 앉으면 그림 스레드가 reveal 을 보낸다 */
-    done(root){if(gone||loadedAt)return;loadedAt=performance.now();
-      let L=null;try{L=measureApp(root||document.body,Math.min(W,window.innerWidth||W),Math.min(H,window.innerHeight||H));}catch(e){}
-      if(L){port.pending=L;port.post({type:"targets",L});}
+    /* 진짜 화면이 그려진 뒤 한 번: 로딩 끝을 알린다. 4초가 차고 입자가 다 앉으면 그림 스레드가 reveal 을 보낸다 */
+    done(){if(gone||loadedAt)return;loadedAt=performance.now();
       port.post({type:"loaded"});
       const left=Math.max(0,MIN-performance.now());   /* 다 그려도 신호가 오지 않으면 — 4초 + 2.5초 뒤 그냥 연다 */
       fallback=setTimeout(reveal,left+2500);},
@@ -952,7 +892,7 @@ function unfold(emb){
   embRowCount=out.length;return out;}
 function errorPanel(msg){try{if(BOOT)BOOT.abort();}catch(e){}_bootQuiet=false;const app=$("#app");if(app)app.innerHTML=`<main><div class="panel" style="padding:28px 24px"><h2>결과 파일을 읽지 못했습니다</h2><p class="muted" style="margin-top:6px">${esc(msg)}</p><p class="muted" style="margin-top:6px">수집 프로그램에서 '수집' 을 다시 실행해 파일을 새로 만드세요. 이 파일의 데이터는 바뀌지 않았습니다.</p></div></main>`;}
 /* 시작 화면(D104): 덮개 · 입자는 위의 boot 스크립트가 이미 띄웠다(별도 스레드라 아래 계산 중에도 돈다). 여기서는 단계만 알리고,
-   첫 화면을 그린 뒤 AOI_BOOT.done 으로 그 화면을 재어 입자 목표로 넘긴다. 첫 렌더의 등장 연출은 끈다(_bootQuiet — 입자가 그 몫이고, 도는 중에 재면 자리가 어긋난다) */
+   첫 화면을 그린 뒤 AOI_BOOT.done 으로 로딩 끝을 알린다. 첫 렌더의 등장 연출은 끈다(_bootQuiet — 덮개 뒤에서 아무도 못 보는 사이에 끝나 버린다) */
 const BOOT=(typeof window!=="undefined"&&window.AOI_BOOT)||null;
 let _bootQuiet=!!BOOT;
 const bootPhase=i=>{try{if(BOOT)BOOT.phase(i);}catch(e){}};
