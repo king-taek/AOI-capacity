@@ -622,7 +622,7 @@ function bootScene(ctx,W,H,dpr,S,lib,opt){
   const rgbOf=h=>[parseInt(h.slice(1,3),16),parseInt(h.slice(3,5),16),parseInt(h.slice(5,7),16)];
   /* 화면 설명(L)을 그려 격자로 입자 자리를 뽑는다 — 틀과 데이터는 따로 그려 둘을 나눈다 */
   function build(L){
-    const cols=new Map();for(const it of [...L.rects,...L.strokes,...L.texts]){const h=hex(it.c);cols.set(h,(cols.get(h)||0)+1);}
+    const cols=new Map();for(const it of [...L.rects,...L.strokes,...L.texts,...(L.arcs||[]),...(L.lines||[])]){const h=hex(it.c);cols.set(h,(cols.get(h)||0)+1);}
     const pal=[...cols.entries()].sort((a,b)=>b[1]-a[1]).slice(0,40).map(e=>e[0]);if(!pal.length)pal.push("#5a6673");
     const prgb=pal.map(rgbOf),memo=new Map();
     const near=(r,g,b)=>{const k=(r<<16)|(g<<8)|b;let v=memo.get(k);if(v!==undefined)return v;let bd=1e9;v=0;
@@ -631,6 +631,8 @@ function bootScene(ctx,W,H,dpr,S,lib,opt){
       if(txt!==1)for(const r of L.rects)if(!!r.d===dat){o.fillStyle=r.c;o.fillRect(r.x,r.y,r.w,r.h);}
       if(!dat&&txt!==1)for(const s of L.strokes){const lw=s.lw||1;o.strokeStyle=s.c;o.lineWidth=lw;o.beginPath();
         if(o.roundRect&&s.r)o.roundRect(s.x+lw/2,s.y+lw/2,Math.max(0,s.w-lw),Math.max(0,s.h-lw),Math.min(s.r,s.w/2,s.h/2));else o.rect(s.x+lw/2,s.y+lw/2,Math.max(0,s.w-lw),Math.max(0,s.h-lw));o.stroke();}
+      if(txt!==1)for(const a of L.arcs||[])if(!!a.d===dat){o.beginPath();o.arc(a.x,a.y,a.r,0,Math.PI*2);if(a.fill){o.fillStyle=a.c;o.fill();}else{o.strokeStyle=a.c;o.lineWidth=a.lw||1;o.stroke();}}
+      if(txt!==1)for(const l of L.lines||[])if(!!l.d===dat){o.strokeStyle=l.c;o.lineWidth=l.lw||1;o.lineCap="round";o.lineJoin="round";o.beginPath();l.pts.forEach((q,i)=>i?o.lineTo(q[0],q[1]):o.moveTo(q[0],q[1]));o.stroke();}
       if(txt!==0){o.textBaseline="middle";for(const t of L.texts)if(!!t.d===dat){o.font=t.f;o.fillStyle=t.c;o.fillText(t.t,t.x,t.y);}}
       return o.getImageData(0,0,ow,oh).data;};
     const iS=draw(false,0),iT=draw(false,1),iD=draw(true);o.clearRect(0,0,ow,oh);   /* 글자는 따로 — 칸과 같은 간격이면 제목이 읽히지 않는다 */
@@ -679,6 +681,62 @@ function bootScene(ctx,W,H,dpr,S,lib,opt){
         if(k%3===0)R(rx+rh*.6,mid-rh*.09,rh*.5,rh*.18,ERR,1);else R(rx+rh*.6,mid-1,rh*.4,2,INK3);
         if(k<n-1)R(pad,y+rh,W-pad*2,1,"#EEF1F4");}}
     return{texts,rects,strokes,zones};}
+
+  /* LOT 추적 배포판(data-boot="lot-…")의 장면 — 같은 연출, LOT 추적 느낌. 공통 머리: 링 + 제목 */
+  const LC={INK:"#16202B",INK2:"#5A6673",INK3:"#AEB8C4",LINE:"#D3DAE2",TRACK:"#DFE5EC",ACC:"#2E6BA8",DUP:"#8FB8DE",ERR:"#C5453C",OV:"#F2C26B",SEV:"#D9731F"};
+  const FONT='"Segoe UI","Malgun Gothic","Apple SD Gothic Neo",sans-serif';
+  function lotHead(L,title){
+    const pad=Math.round(Math.max(20,Math.min(W*.03,44))),hh=Math.round(Math.max(52,Math.min(H*.085,72))),cy=hh/2,fs=Math.round(hh*.3),ir=hh*.2;
+    L.strokes.push({x:pad,y:cy-ir,w:ir*2,h:ir*2,r:ir,lw:Math.max(2,ir*.3),c:LC.ACC});
+    const tx=pad+ir*2+fs*.6;L.texts.push({t:title,x:tx,y:cy,f:`700 ${fs}px ${FONT}`,c:LC.INK,d:0});
+    L.rects.push({x:W-pad-fs*7,y:cy-fs*.17,w:fs*7,h:fs*.34,c:LC.INK3,d:0});L.rects.push({x:0,y:hh-1,w:W,h:1,c:LC.LINE,d:0});
+    const capH=Math.max(34,H*.06);return{pad,hh,fs,top:hh+pad,bot:H-capH-pad*.4};}
+  const pickC=(r,tab)=>{let u=r(),i=0;while(i<tab.length-1&&u>tab[i][1]){u-=tab[i][1];i++;}return tab[i][0];};
+  /* 시안 A '카세트': 25칸 카세트에 옆으로 누운 Wafer, 칸마다 오른쪽으로 검사 이력의 점이 이어진다 */
+  function cassetteLayout(){
+    const L={texts:[],rects:[],strokes:[],zones:[],arcs:[],lines:[]},r2=lib.rnd(2510),R=(x,y,w,h,c,d)=>L.rects.push({x,y,w,h,c,d:d?1:0});
+    const g=lotHead(L,"LOT 추적"),n=25,bh=g.bot-g.top,p=bh/(n+1.2),y0=g.top+p*.6;
+    const cw=Math.max(150,Math.min(W*.26,bh*.62)),cx=g.pad+Math.max(28,p*1.5),nf=Math.max(9,Math.min(13,p*.5));
+    L.strokes.push({x:cx,y:g.top,w:cw,h:bh,r:14,lw:2,c:"#B9C3CE"});
+    const rl=cx+cw*.06,rr=cx+cw*.94;R(rl,g.top+p*.3,2,bh-p*.6,LC.INK3);R(rr-2,g.top+p*.3,2,bh-p*.6,LC.INK3);
+    const ST=[[LC.ACC,.62],[LC.DUP,.12],[LC.OV,.1],[LC.SEV,.05],[LC.ERR,.05],["",.06]];
+    const tx0=cx+cw+Math.max(24,W*.03),tx1=W-g.pad,idw=Math.min(p*3.4,(tx1-tx0)*.16),sx0=tx0+idw+Math.max(16,W*.015),k=Math.max(4,Math.min(7,Math.round((tx1-sx0)/Math.max(110,W*.1))));
+    for(let i=0;i<n;i++){const y=y0+i*p,mid=y+p/2;
+      L.texts.push({t:"#"+(i+1),x:g.pad,y:mid,f:`600 ${nf}px ${FONT}`,c:LC.INK2,d:0});
+      R(rl,mid-1,cw*.05,2,LC.INK3);R(rr-cw*.05,mid-1,cw*.05,2,LC.INK3);
+      const st=pickC(r2,ST);const wh=Math.max(3,p*.24),wx=rl+cw*.07,ww=rr-rl-cw*.14;
+      if(!st){R(wx,mid-.5,ww,1,LC.TRACK);continue;}
+      R(wx,mid-wh/2,ww,wh,st,1);L.zones.push({x:wx,y:mid-wh,w:ww,h:wh*2});
+      R(tx0,mid-p*.12,idw*(.75+r2()*.25),p*.24,LC.INK,1);L.zones.push({x:tx0,y:mid-p*.16,w:idw,h:p*.32});
+      const m=2+Math.floor(r2()*(k-1)),pts=[];let x=sx0+(r2()*.25)*(tx1-sx0)/k;
+      for(let j=0;j<m&&x<tx1-4;j++){pts.push(x);x+=(tx1-sx0)/k*(.75+r2()*.5);}
+      R(sx0,mid-.5,tx1-sx0,1,"#E7ECF1");
+      if(pts.length>1)L.lines.push({pts:pts.map(q=>[q,mid]),c:"#BFD3E8",lw:Math.max(1.5,p*.08),d:1});
+      const dr=Math.max(2.5,Math.min(6,p*.2));
+      pts.forEach((q,j)=>{const last=j===pts.length-1,c=last?st:pickC(r2,[[LC.ACC,.7],[LC.DUP,.15],[LC.OV,.1],[LC.ERR,.05]]);L.arcs.push({x:q,y:mid,r:dr,c,fill:1,d:1});});
+      L.zones.push({x:sx0,y:mid-p*.2,w:tx1-sx0,h:p*.4});}
+    return L;}
+  /* 시안 B '웨이퍼': 한 Wafer 가 검사를 지날 때마다 결과가 쌓인다 — 큰 웨이퍼 셋(넷)과 칩 격자, 화살표로 잇는다 */
+  function waferLayout(){
+    const L={texts:[],rects:[],strokes:[],zones:[],arcs:[],lines:[]},r2=lib.rnd(4410),R=(x,y,w,h,c,d)=>L.rects.push({x,y,w,h,c,d:d?1:0});
+    const g=lotHead(L,"LOT 추적"),bh=g.bot-g.top,k=W<760?2:W/H>1.9?4:3,gap=Math.max(40,W*.05);
+    const D=Math.min((W-g.pad*2-gap*(k-1))/k,bh*.74),r=D/2,cy=g.top+bh*.46,span=k*D+(k-1)*gap,x0=(W-span)/2;
+    const nd=Math.max(9,Math.min(17,Math.round(D/22))),ds=D/nd*.98,gp=Math.max(1,ds*.12);
+    const hot=[...Array(k)].map(()=>({a:r2()*6.28,d:.3+r2()*.5,s:.18+r2()*.2}));
+    for(let w=0;w<k;w++){const cx=x0+w*(D+gap)+r;
+      L.arcs.push({x:cx,y:cy,r:r,c:LC.INK2,lw:2});
+      L.lines.push({pts:[[cx-r*.12,cy+r*.995],[cx,cy+r*.9],[cx+r*.12,cy+r*.995]],c:LC.INK2,lw:2});
+      const lvl=w/(k-1||1);
+      for(let iy=0;iy<nd;iy++)for(let ix=0;ix<nd;ix++){const x=cx-r+ix*D/nd+(D/nd-ds)/2,y=cy-r+iy*D/nd+(D/nd-ds)/2,ex=x+ds/2-cx,ey=y+ds/2-cy;
+        if(Math.hypot(Math.abs(ex)+ds/2,Math.abs(ey)+ds/2)>r*.97)continue;
+        R(x+gp/2,y+gp/2,ds-gp,ds-gp,LC.TRACK);
+        const h=hot[w],hx=Math.cos(h.a)*h.d*r,hy=Math.sin(h.a)*h.d*r,dd=Math.hypot(ex-hx,ey-hy)/r,u=r2();
+        let c=u<.94?LC.ACC:LC.DUP;if(dd<h.s*(.6+lvl*.8)&&u<.9)c=dd<h.s*.45?LC.SEV:LC.OV;else if(u>.988)c=LC.ERR;
+        R(x+gp/2,y+gp/2,ds-gp,ds-gp,c,1);}
+      R(cx-r*.42,cy-r-Math.max(26,bh*.06),r*.36,Math.max(5,bh*.012),LC.INK3);R(cx-r*.42+r*.42,cy-r-Math.max(26,bh*.06)-1,r*.42,Math.max(7,bh*.016),LC.INK,1);
+      const by=cy+r+Math.max(22,bh*.05);R(cx-r*.5,by,r*.3,Math.max(6,bh*.014),LC.INK3);R(cx-r*.5+r*.38,by-1,r*.24,Math.max(8,bh*.018),w===k-1?LC.SEV:LC.INK,1);R(cx+r*.2,by,r*.3,Math.max(6,bh*.014),LC.INK3);
+      if(w<k-1){const ax=cx+r+gap*.18,bx=cx+r+gap*.82,ah=Math.max(5,gap*.12);L.lines.push({pts:[[ax,cy],[bx,cy]],c:LC.INK2,lw:2.5});L.lines.push({pts:[[bx-ah,cy-ah],[bx,cy],[bx-ah,cy+ah]],c:LC.INK2,lw:2.5});}}
+    return L;}
   /* 목표 정하기(한 번): 틀 몫과 데이터 몫을 나눠 읽는 순서(위→아래, 왼→오른)로 순위를 매긴다 — 틀은 [0, .76], 데이터는 [.79, .99] */
   function assign(L){
     const b=build(L);PAL=b.pal;const sp=b.S,dp=b.D,ns=sp.length/4,nd=dp.length/4;if(!ns&&!nd)return;
@@ -693,7 +751,7 @@ function bootScene(ctx,W,H,dpr,S,lib,opt){
       else{a0=Math.min(a0,raw[j]);a1=Math.max(a1,raw[j]);}}
     NS=0;for(let j=0;j<N;j++){RK[j]=D[j]?.79+.2*(raw[j]-b0)/Math.max(1e-6,b1-b0):.76*(raw[j]-a0)/Math.max(1e-6,a1-a0);if(!D[j])NS++;}
     NS=Math.max(1,NS);ND=Math.max(1,N-NS);has=true;bake();}
-  assign(fixedLayout());
+  assign(opt.kind==="lot-a"?cassetteLayout():opt.kind==="lot-b"?waferLayout():fixedLayout());
   const fs=1/(W*.22),cv=[0,0],cfs=Math.max(10,Math.min(14,W*.0118)),cx=Math.max(16,W*.024),cy=H-Math.max(18,H*.05);
   ctx.fillStyle=BG;ctx.fillRect(0,0,W,H);
   return{count:N,
@@ -765,7 +823,7 @@ try{
     for(const f of after.splice(0))setTimeout(()=>{try{f();}catch(e){}},0);};
   const reveal=()=>{if(revealed||gone)return;revealed=true;ov.style.opacity="0";setTimeout(finish,300);};
   const onMsg=d=>{if(d&&d.type==="reveal")reveal();};
-  const init={type:"init",w:W,h:H,dpr,reduced:red,min:MIN,epoch,labels:LABELS,th:TH,bg};
+  const init={type:"init",w:W,h:H,dpr,reduced:red,min:MIN,epoch,labels:LABELS,th:TH,bg,kind:document.documentElement.getAttribute("data-boot")||""};
   try{
     if(!cv.transferControlToOffscreen||typeof Worker==="undefined"||typeof OffscreenCanvas==="undefined")throw 0;
     const src=`"use strict";const mulberry=${mulberry};const makeLib=${makeLib};const bootScene=${bootScene};(${bootCore})(self,bootScene,makeLib(mulberry));`;
