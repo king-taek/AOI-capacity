@@ -2042,14 +2042,14 @@ const RPT_MIN_N=5,RPT_STD=25,RPT_SLOW=0.2;
 /* 표본 제외 이유(한 곳) — 원인 Error 있는 Report(L[10]>=0 — 시작일이 아니어도) · **PASS 5장 미만**(10/30: 건너뜀 · 중단만 있던 Report 가 행 수로 표본에 들었다 — 10/14 C7Y-DIA 6장 모두 Skipped) · 배치 시각 없음.
    중단은 D52 로 Error 이거나 정상 종료라 따로 없다. 회귀의 x 도 같은 PASS 장 수다(스캔된 장만 배치 시간을 만든다). */
 const rptEx=L=>L[10]>=0?"err":((L[18]||0)<RPT_MIN_N?"small":((L[12]>L[11])?"":"noTime"));
-/* 장당 시간 이상치(10/30, 사용자 선택 B — 08/23 7DH-3D RE 는 5장 모두 PASS 인데 장당 1.7분, Kendall BS 보통 3.9분의 44%): 위 이유가 없는 배치를 **같은 Job · 모든 장비**에서
-   모아 장당 시간(배치 시간 ÷ PASS 장 수)이 중앙의 0.5배 미만 · 2배 초과면 뺀다(`odd`). Kendall BS 는 DIA 단계(Lot 이름에 DIA, 장당 ~2분)와 그 밖(~3.9분)이 한 Job 에 섞여 있어
-   **DIA Lot 끼리 · 그 밖끼리** 따로 중앙을 잰다. 한 무리에 표본이 5개 미만이면 판단하지 않는다. b.pw · b.gm(무리 중앙)을 달아 팝업이 이유를 적는다. 30일치 샘플에서 1,234 배치 중 24개. */
-const RPT_ODD_LO=0.5,RPT_ODD_HI=2;
+/* 장당 시간 이상치(10/30, 사용자 선택 B — 08/23 7DH-3D RE 는 5장 모두 PASS 인데 장당 1.7분, Kendall BS 보통 4.7분의 39%): 위 이유가 없는 배치를 **같은 Job · 모든 장비**에서
+   모아 장당 시간(배치 시간 ÷ PASS 장 수)이 중앙의 0.5배 미만이면 뺀다(`odd`). **느린 쪽은 빼지 않는다** — 30일치 전수조사에서 느린 쪽 35개 중 Kendall BS 16개가 AOI-1 이었다(AOI-1 의 일반 Lot 21개 중 16개가 장당 10~13분, 다른 장비는 4~5분) — 느린 장비를 찾는 탭이라 그 신호를 지우면 안 된다. Kendall BS 는 DIA 단계(Lot 이름에 DIA, 장당 ~2분)와 그 밖(~3.9분)이 한 Job 에 섞여 있어
+   **DIA Lot 끼리 · 그 밖끼리** 따로 중앙을 잰다. 한 무리에 표본이 5개 미만이면 판단하지 않는다. b.pw · b.gm(무리 중앙)을 달아 팝업이 이유를 적는다. 30일치 샘플 전수(표본 후보 1,892개)에서 37개. */
+const RPT_ODD_LO=0.5;
 function rptOutliers(bs,P){const G={};
   for(const b of bs){if(b.ex)continue;b.pw=(b.L[12]-b.L[11])/b.L[18];b.dia=/\bDIA\b/i.test(P.lot[b.L[1]]||"");(G[b.dia?"d":"m"]||(G[b.dia?"d":"m"]=[])).push(b);}
   for(const g of Object.values(G)){if(g.length<RPT_MIN_N)continue;const q=g.map(b=>b.pw).sort((x,y)=>x-y),m=q.length>>1,med=q.length%2?q[m]:(q[m-1]+q[m])/2;
-    for(const b of g){b.gm=med;if(b.pw<med*RPT_ODD_LO||b.pw>med*RPT_ODD_HI)b.ex="odd";}}}
+    for(const b of g){b.gm=med;if(b.pw<med*RPT_ODD_LO)b.ex="odd";}}}
 const rptFam=al=>/PI\d/.test(al)?"PI":/RDL/.test(al)?"RDL":"기타";
 function reportHtml(){
   const P=D.pool,days=D.days;   /* 기간은 헤더에서(10/5) */
@@ -2150,7 +2150,7 @@ function reportHtml(){
     <div class="rpt-legend"><span><i style="background-color:${ERR}"></i>중앙보다 20% 넘게 느림</span><span><i style="background-color:${RUN}"></i>20% 넘게 빠름</span><span><i style="background-color:${DUP}"></i>비슷함</span><span><u></u>중앙 ${med!=null?esc(hm(med)):"—"}</span></div>`;
   const right=`<div style="min-width:0"><div class="panel" style="margin-bottom:14px"><div style="padding:18px 22px 14px"><h2 style="margin:0 0 6px;font-size:20px">${esc(cur)}</h2><p style="margin:0;font-size:14.5px;line-height:1.55;word-break:keep-all" class="rpt-sent">${sentence}</p></div></div>
     ${cardsH}<div class="panel" style="padding-bottom:8px">${good.length?ctl+`<div class="rpt-scroll" style="overflow-x:auto"><div class="rpt-in"><div class="rpt-list">${good.map(rowH).join("")}</div></div></div>`:`<p class="empty" style="padding:18px 22px">${esc(sentence.replace(/<[^>]+>/g,""))}</p>`}${badH}
-      <p style="margin:8px 0 0;padding:11px 22px;background:#FBFCFD;font-size:12px;color:#5A6673;border-top:1px solid #EDF1F5">배치시간 = 준비 + 장당 × 장수 로 1차 회귀 — ± 는 회귀 표준오차. 표본 5개 미만이면 내지 않음. 표본은 PASS 5장 이상 · 원인 Error 없는 배치이고, 장당 시간이 같은 Job 의 중앙(DIA Lot 끼리 · 그 밖끼리)보다 0.5배 미만 · 2배 초과인 배치는 뺍니다. 배치시간은 Report 의 배치 시작~종료. 평균 Defect 는 Report 표 Faults 열이 있는 행만(옛 캐시 행은 다시 읽어야 채워짐).</p></div></div>`;
+      <p style="margin:8px 0 0;padding:11px 22px;background:#FBFCFD;font-size:12px;color:#5A6673;border-top:1px solid #EDF1F5">배치시간 = 준비 + 장당 × 장수 로 1차 회귀 — ± 는 회귀 표준오차. 표본 5개 미만이면 내지 않음. 표본은 PASS 5장 이상 · 원인 Error 없는 배치이고, 장당 시간이 같은 Job 의 중앙(DIA Lot 끼리 · 그 밖끼리)의 0.5배 미만인 배치는 뺍니다(느린 쪽은 느린 장비의 신호라 남깁니다). 배치시간은 Report 의 배치 시작~종료. 평균 Defect 는 Report 표 Faults 열이 있는 행만(옛 캐시 행은 다시 읽어야 채워짐).</p></div></div>`;
   return head+`<div class="lotgrid">${left}${right}</div>`;
 }
 

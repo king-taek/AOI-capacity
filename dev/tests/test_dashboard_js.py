@@ -854,12 +854,15 @@ def test_kla_tb500_job_names_are_shortened_for_display_only():
 
 def test_report_tab_leaves_out_a_batch_whose_time_per_wafer_is_far_from_its_group():
     """10/30(사용자 선택 B): 08/23 7DH-3D RE — 5장 모두 PASS 인데 장당 1.7분(같은 Job 보통 3.9분). 같은 Job 의 장당 시간 중앙(DIA Lot 끼리 · 그 밖끼리)의
-    0.5배 미만 · 2배 초과는 표본에서 뺀다. 정상 배치 5개의 회귀는 그대로, DIA Lot 은 자기 무리(느린 쪽 중앙이 아니라)로 잰다."""
+    0.5배 미만은 표본에서 뺀다(느린 쪽은 남김). 정상 배치 5개의 회귀는 그대로, DIA Lot 은 자기 무리(느린 쪽 중앙이 아니라)로 잰다."""
     rows = _clean_batches(5)                                    # 5~9장, 배치시간 10 + 5×장수 → 장당 7.0~6.1분
     bs = "20:00"
     rep = "R_TB500_LIVE_PI3_6321_LOT-F_18-Sep-26_(20.00.00)_BatchReport.htm"
     for k in range(5):                                          # 5장 9분 → 장당 1.8분
         rows.append(w("AOI-1", f"F{k}", _hhmm(bs, k + 1), _hhmm(bs, k + 2), lot="LOT-F", job="R_TB500_LIVE_PI3", report=rep, bs=bs, be=_hhmm(bs, 9)))
+    rep2 = "R_TB500_LIVE_PI3_6321_LOT-G_18-Sep-26_(17.00.00)_BatchReport.htm"
+    for k in range(5):                                          # 5장 150분 → 장당 30분: 느린 쪽은 남긴다(느린 장비의 신호 — 30일치 전수조사에서 AOI-1)
+        rows.append(w("AOI-1", f"G{k}", _hhmm("17:00", k + 1), _hhmm("17:00", k + 2), lot="LOT-G", job="R_TB500_LIVE_PI3", report=rep2, bs="17:00", be=_hhmm("17:00", 150)))
     dia = []                                                    # DIA Lot 5개: 장당 2분 — 그 밖 무리 중앙(~6.5분)으로 재면 전부 빠질 값
     for i in range(5):
         lot = f"D{i}-DIA"
@@ -869,5 +872,7 @@ def test_report_tab_leaves_out_a_batch_whose_time_per_wafer_is_far_from_its_grou
             dia.append(w("AOI-1", f"X{i}{k}", _hhmm(s0, k + 1), _hhmm(s0, k + 2), lot=lot, job="R_TB500_LIVE_PI3", report=r2, bs=s0, be=_hhmm(s0, 12)))
     html, popup = screen(rows + dia, meta("AOI-1"), [["reportHtml"], ["rptDevPopupHtml"]],
                          state={"view": "report", "rptDev": "AOI-1", "rptAll": {"job": "TB500 PI3", "dev": "AOI-1"}})
-    assert "10 / 11" in html and "장당 시간 이상 1" in html      # 표본 = 정상 5 + DIA 5, 이상 1 (배치 11개)
-    assert "제외 — 장당 1.8분, DIA 아닌 Lot 중앙 6.6분의 27%" in popup or "제외 — 장당 1.8분, DIA 아닌 Lot 중앙" in popup
+    assert popup.count('title="제외 — 장당') == 1                      # 빠른 쪽(LOT-F) 하나만 이상치로 뺀다
+    assert "제외 — 장당 1.8분, DIA 아닌 Lot 중앙" in popup
+    g_row = popup[popup.index("LOT-G"):]
+    assert "표본" in g_row[:g_row.index("</div>")]                # 느린 쪽(장당 30분)은 표본으로 남는다
