@@ -29,7 +29,7 @@ from . import collect, i18n, nas_guard
 from .utils import paths
 
 STUB_NAME = "AOI_LOT.html"
-SHORTCUT_NAME = "AOI_LOT_shortcut.url"          # 폴더 안에 두는 인터넷 바로가기 — 팀원은 이 파일을 더블클릭하거나 바탕화면으로 복사
+SHORTCUT_NAME = "AOI LOT.url"                      # 폴더 안에 두는 인터넷 바로가기 — 팀원은 이 파일을 더블클릭하거나 바탕화면으로 복사(10/30 사용자 요청 이름. 같은 이름의 옛 파일은 아이콘 캐시가 남을 수 있어 새 이름으로)
 LATEST_NAME = "latest.js"
 ICON_NAME = "AOI.ico"                              # 배포 폴더에 함께 올리는 앱 아이콘 — 폴더 안 바로가기의 IconFile(D103)
 DATA_DIR = "data"
@@ -47,13 +47,16 @@ class Kind(NamedTuple):
     title: str
     loading: str
     fallback: str
+    icon_asset: str = "logo.ico"                     # 이 배포판 바로가기의 아이콘 — `ui/assets/` 아래 파일. 다른 그림으로 바꾸려면 이 파일만 바꾼다(LOT 추적은 logo_lot.ico)
+    legacy_shortcuts: tuple = ()                     # 이름을 바꾸기 전 우리가 만든 바로가기 — 새 파일을 쓴 뒤 지운다(남으면 옛 아이콘 없는 파일과 둘이 보인다)
 
     @property
     def data_re(self):
         return re.compile(r"^" + self.prefix + r"_\d{8}_\d{4,6}\.html$")
 
 
-LOT = Kind(STUB_NAME, SHORTCUT_NAME, "AOI_LOT_LATEST", "lot", i18n.KO.PUBLISH_STUB_TITLE, i18n.KO.PUBLISH_STUB_LOADING, i18n.KO.PUBLISH_STUB_FALLBACK)
+LOT = Kind(STUB_NAME, SHORTCUT_NAME, "AOI_LOT_LATEST", "lot", i18n.KO.PUBLISH_STUB_TITLE, i18n.KO.PUBLISH_STUB_LOADING, i18n.KO.PUBLISH_STUB_FALLBACK,
+           icon_asset="logo_lot.ico", legacy_shortcuts=("AOI_LOT_shortcut.url",))
 FULL = Kind("AOI_ALL.html", "AOI_ALL_shortcut.url", "AOI_ALL_LATEST", "all", i18n.KO.PUBLISH_FULL_STUB_TITLE,
             i18n.KO.PUBLISH_FULL_STUB_LOADING, i18n.KO.PUBLISH_FULL_STUB_FALLBACK)
 
@@ -114,16 +117,19 @@ def shortcut_bytes(share_dir: str, kind: Kind = LOT, icon: Optional[str] = None)
     return f"[InternetShortcut]\r\nURL={stub_url(share_dir, kind)}\r\n".encode("utf-8")
 
 
-def app_icon() -> Optional[str]:
-    """앱 아이콘(.ico, 결과 화면 브랜드 표식과 같은 그림)의 절대 경로 — 없으면 None(바로가기는 기본 아이콘)."""
-    p = paths.logo_path("logo.ico")
-    return str(p.resolve()) if p.is_file() else None
+def app_icon(kind: Kind = LOT) -> Optional[str]:
+    """`kind` 의 바로가기 아이콘(.ico)의 절대 경로 — 그 종류 전용 파일(`icon_asset`)이 없으면 앱 아이콘(logo.ico), 둘 다 없으면 None(바로가기는 기본 아이콘)."""
+    for name in (kind.icon_asset, "logo.ico"):
+        p = paths.logo_path(name)
+        if p.is_file():
+            return str(p.resolve())
+    return None
 
 
-def _share_icon(share_dir: str, roots: List[str]) -> Optional[str]:
+def _share_icon(share_dir: str, roots: List[str], kind: Kind = LOT) -> Optional[str]:
     """배포 폴더에 앱 아이콘을 `ICON_NAME` 으로 올리고(없거나 다를 때만) 그 경로 — 팀원 PC 에는 앱이 없어 공유 폴더 안 바로가기가 이 파일을 가리킨다.
     앱 아이콘이 없거나 못 쓰면 None(바로가기는 기본 아이콘, 배포는 그대로 성공)."""
-    src = app_icon()
+    src = app_icon(kind)
     if not src:
         return None
     dst = os.path.join(share_dir, ICON_NAME)
@@ -143,7 +149,7 @@ def write_shortcut(dest_dir: str, share_dir: str, cfg: dict, name: str = "", kin
     nas_guard.assert_local(dest_dir, roots)
     os.makedirs(dest_dir, exist_ok=True)
     path = os.path.join(dest_dir, name or kind.shortcut)
-    if not _write_text(path, shortcut_bytes(share_dir, kind, app_icon()), roots, tries=2):
+    if not _write_text(path, shortcut_bytes(share_dir, kind, app_icon(kind)), roots, tries=2):
         raise PermissionError(13, i18n.KO.PUBLISH_SHORTCUT_LOCKED, path)
     return path
 
@@ -171,6 +177,21 @@ def _write_text(path: str, text, roots: List[str], *, tries: int = REPLACE_TRIES
                 os.remove(tmp)
             except OSError:
                 pass
+
+
+def _remove_legacy_shortcuts(share_dir: str, kind: Kind, roots: List[str]) -> int:
+    """이름을 바꾸기 전에 우리가 만든 바로가기를 지운다 — 새 바로가기가 있을 때만, 내용이 우리 바로가기(안내 파일 주소)일 때만. 지운 개수."""
+    nas_guard.assert_local(share_dir, roots)
+    gone = 0
+    for name in kind.legacy_shortcuts:
+        fp = os.path.join(share_dir, name)
+        try:
+            if os.path.isfile(fp) and kind.stub.encode() in open(fp, "rb").read():
+                os.remove(fp)
+                gone += 1
+        except OSError:
+            pass                                         # 열려 있으면 다음에
+    return gone
 
 
 def _prune(data_dir: str, keep: int, roots: List[str], protect=(), kind: Kind = LOT) -> int:
@@ -257,9 +278,11 @@ def _publish(kind: Kind, cfg: dict, share_dir: str, *, rows: Optional[list] = No
         cur_s = open(short, "rb").read() if os.path.isfile(short) else None
     except OSError:
         cur_s = None
-    want_s = shortcut_bytes(share_dir, kind, _share_icon(share_dir, roots))       # 팀원도 같은 아이콘(D103) — 폴더에 올린 AOI.ico 를 가리킨다
+    want_s = shortcut_bytes(share_dir, kind, _share_icon(share_dir, roots, kind))       # 팀원도 같은 아이콘(D103) — 폴더에 올린 AOI.ico 를 가리킨다
     if cur_s != want_s:
         _write_text(short, want_s, roots, tries=2)           # 못 써도 배포는 성공 — 바로가기는 이미 있거나 다음에
+    if os.path.isfile(short):
+        _remove_legacy_shortcuts(share_dir, kind, roots)
     size = os.path.getsize(path)
     pruned = _prune(data_dir, KEEP_FILES, roots, protect={name, _pointed_name(share_dir, kind)}, kind=kind)
     res = {"dir": share_dir, "data": path, "bytes": size, "sec": round(time.perf_counter() - t0, 1),
