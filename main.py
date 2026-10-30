@@ -103,8 +103,7 @@ def _run_gui(logger: logging.Logger) -> int:
     icon = paths.logo_path("logo.ico")
     if icon.is_file():
         app.setWindowIcon(QIcon(str(icon)))
-    p = prefs.load()
-    theme.apply_to_app(app, p.color_mode)
+    theme.apply_to_app(app, prefs.COLOR_MODE_FIXED)
     if paths.ensure_user_files():
         logger.info("copied default devices.csv to %s", paths.devices_csv_path())
     win = MainWindow()

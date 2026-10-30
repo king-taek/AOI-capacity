@@ -25,7 +25,6 @@ from PyQt6.QtWidgets import QApplication, QHBoxLayout, QMainWindow, QStackedWidg
 from .. import devices, i18n
 from ..utils import paths, prefs, results
 from ..workers.collector import CollectorWorker, CollectResult
-from . import theme
 from .pages.collect_page import CollectPage
 from .pages.devices_page import DevicesPage
 from .widgets import sheets
@@ -164,7 +163,6 @@ class MainWindow(QMainWindow):
         self.devices_page.saved.connect(self.collect_page.refresh_plan)
         self.devices_page.error.connect(lambda t, b: sheets.error(self, t, b))
         self.devices_page.message.connect(self.flash_status)
-        self.settings_page.theme_changed.connect(self._on_theme)
         self.settings_page.update_check_requested.connect(lambda: self._check_for_update_async(manual=True))
         self.nav.update_clicked.connect(self._on_update_badge)
 
@@ -198,13 +196,6 @@ class MainWindow(QMainWindow):
     def flash_status(self, text: str) -> None:
         self.nav.set_status(text)
         self._status_timer.start(STATUS_FLASH_MS)
-
-    # ── 테마 ──
-    def _on_theme(self, mode: str) -> None:
-        app = QApplication.instance()
-        if app is not None:
-            theme.apply_to_app(app, mode)
-        self.overlay.update()
 
     # ── 수집 ──
     def is_collecting(self) -> bool:

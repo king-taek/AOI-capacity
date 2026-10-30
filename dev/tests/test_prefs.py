@@ -9,7 +9,7 @@ from aoi_capacity.utils import paths, prefs
 
 def test_defaults_when_missing():
     p = prefs.load()
-    assert p.backfill_days == 30 and p.retention_days == 0 and p.color_mode == "light"   # 9/23: 결과 HTML 과 같은 라이트가 기본
+    assert p.backfill_days == 30
     assert p.output_dir == "" and p.last_view == "collect"      # 수집 전용 — 자동 주기 수집 설정은 없다
     assert not hasattr(p, "auto_collect_minutes")
 
@@ -24,9 +24,9 @@ def test_unknown_keys_ignored_and_roundtrip():
 
 
 def test_patch_persists_and_rejects_unknown():
-    prefs.patch(threshold_util=55, window_maximized=True)
+    prefs.patch(backfill_days=55, window_maximized=True)
     p = prefs.load()
-    assert p.threshold_util == 55 and p.window_maximized is True
+    assert p.backfill_days == 55 and p.window_maximized is True
     try:
         prefs.patch(nope=1)
     except AttributeError:
@@ -37,11 +37,11 @@ def test_patch_persists_and_rejects_unknown():
 
 def test_corrupt_file_falls_back_to_defaults():
     paths.prefs_file().write_text("{not json", encoding="utf-8")
-    assert prefs.load().retention_days == 0
+    assert prefs.load().backfill_days == 30
 
 
 def test_to_collect_cfg_fills_every_default_key(tmp_path):
-    cfg = prefs.to_collect_cfg(prefs.Prefs(output_dir=str(tmp_path / "o"), write_csv=True))
+    cfg = prefs.to_collect_cfg(prefs.Prefs(output_dir=str(tmp_path / "o")))
     assert set(collect.DEFAULT_CONFIG) <= set(cfg)
     assert cfg["devices_csv"] == str(paths.devices_csv_path())
     assert cfg["output_dir"] == str(tmp_path / "o") and cfg["write_csv"] is True
@@ -60,9 +60,27 @@ def test_refresh_window_days_is_off_by_default_and_flows_into_cfg():
     assert set(collect.DEFAULT_CONFIG) <= set(prefs.to_collect_cfg(prefs.load()))
 
 
-def test_v4_moves_only_the_old_dark_default_to_light():
-    """9/23: 기본 화면이 밝은 화면으로 바뀌었다 — v3 이하의 "dark"(옛 기본값)만 옮기고, v4 뒤에 고른 어두운 화면은 남긴다."""
-    old = prefs.migrate(prefs.Prefs.from_dict({"color_mode": "dark", "prefs_version": 3}))
-    assert old.color_mode == "light" and old.prefs_version == prefs.PREFS_VERSION
-    chosen = prefs.migrate(prefs.Prefs.from_dict({"color_mode": "dark", "prefs_version": 4}))
-    assert chosen.color_mode == "dark"
+def test_options_removed_on_10_30_are_fixed_and_old_saved_values_are_ignored():
+    """10/30 사용자 요청: 주의 장비 기준 · CSV 함께 저장 · 이력 보관 기간 · NAS 동시 읽기 · 어두운 화면 옵션을 없앴다.
+    옛 prefs.json 에 값이 남아 있어도 깨지지 않고 무시되며, 고정값이 cfg 로 간다(다음 저장 때 파일에서도 사라진다)."""
+    paths.prefs_file().write_text(json.dumps({
+        "prefs_version": 8, "backfill_days": 7, "read_workers": 16, "retention_days": 45, "write_csv": False,
+        "threshold_util": 55, "threshold_err": 9, "color_mode": "dark"}), encoding="utf-8")
+    p = prefs.load()
+    assert p.backfill_days == 7 and p.prefs_version == prefs.PREFS_VERSION
+    for gone in ("read_workers", "retention_days", "write_csv", "threshold_util", "threshold_err", "color_mode"):
+        assert not hasattr(p, gone), gone
+    cfg = prefs.to_collect_cfg(p)
+    assert cfg["read_workers"] == 4 and cfg["retention_days"] == 0 and cfg["write_csv"] is True
+    assert (cfg["attention_util"], cfg["attention_err"]) == (40, 3)
+    prefs.save(p)
+    saved = json.loads(paths.prefs_file().read_text(encoding="utf-8"))
+    assert not {"read_workers", "retention_days", "write_csv", "threshold_util", "threshold_err", "color_mode"} & set(saved)
+
+
+def test_v9_does_not_expand_an_explicit_scope_saved_at_v8():
+    """v9(설정 옵션 삭제)는 수집 범위와 무관 — v8 에서 고른 범위가 옛 기본값과 같아도 넓히지 않는다. v7 이하는 예전처럼 옮긴다."""
+    kept = prefs.migrate(prefs.Prefs.from_dict({"scope_devices": ["AOI-25"], "prefs_version": 8}))
+    assert kept.scope_devices == ["AOI-25"] and kept.prefs_version == prefs.PREFS_VERSION
+    moved = prefs.migrate(prefs.Prefs.from_dict({"scope_devices": ["AOI-25"], "prefs_version": 7}))
+    assert moved.scope_devices != ["AOI-25"]
