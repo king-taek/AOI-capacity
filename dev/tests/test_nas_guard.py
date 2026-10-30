@@ -177,11 +177,9 @@ def test_dynamic_no_write_under_nas(tmp_path, fake_nas, monkeypatch):
     assert (tmp_path / "out" / "AOI_capacity.html").exists()
 
 
-@pytest.mark.parametrize("modname", ["publish", "path_probe"])      # path_probe = 배포 경로 자동 시험(10/30 임시 — 시험이 끝나면 함께 지운다)
-def test_publish_module_writes_only_in_guarded_functions(modname):
+def test_publish_module_writes_only_in_guarded_functions():
     """배포 모듈(publish.py)의 쓰기도 규칙 1 — 쓰기 호출은 첫 줄에서 assert_local 을 부르는 함수 안에만 둔다."""
-    import importlib
-    publish = importlib.import_module("aoi_capacity." + modname)
+    from aoi_capacity import publish
     tree = ast.parse(Path(publish.__file__).read_text(encoding="utf-8"))
     fns = {n.name: n for n in ast.walk(tree) if isinstance(n, ast.FunctionDef)}
     allowed = set()

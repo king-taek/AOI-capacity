@@ -172,13 +172,13 @@ def test_publish_after_collect_is_silent_and_never_raises(tmp_path, sample):
 def test_shortcut_points_at_the_stub_with_an_encoded_file_url(tmp_path, sample):
     cfg, rows, devs = _publish_cfg(tmp_path, sample)
     url = publish.stub_url(config_mod.PUBLISH_DIR_DEFAULT)
-    assert url == ("file://k5cifsn2/k5tsvdata$/1.%20Conder%20Scan/0.%20%EC%A0%84%EC%82%B0%20X/%EC%9E%84%ED%98%84%ED%83%9D/"
+    assert url == ("file://10.142.80.167/1.Engr/0.%20%EC%A0%84%EC%82%B0%20X/%EC%9E%84%ED%98%84%ED%83%9D%20ENG%27R/"
                    "LOT%EC%B6%94%EC%A0%81/AOI_LOT.html")
     assert publish.stub_url("Z:\\a b\\c\\") == "file:///Z:/a%20b/c/AOI_LOT.html"
     desk = tmp_path / "Desktop"
     path = publish.write_shortcut(str(desk), config_mod.PUBLISH_DIR_DEFAULT, cfg)
     # 바로가기(.url)는 ANSI 로 읽힌다 — 한글을 퍼센트 인코딩하면 셸이 UTF-8 바이트를 ANSI 로 풀어 경로가 깨졌다(10/27 실측). 한글은 그대로 CP949 로
-    raw = "file://k5cifsn2/k5tsvdata$/1.%20Conder%20Scan/0.%20전산%20X/임현택/LOT추적/AOI_LOT.html"
+    raw = "file://10.142.80.167/1.Engr/0.%20전산%20X/임현택%20ENG'R/LOT추적/AOI_LOT.html"
     assert publish.raw_stub_url(config_mod.PUBLISH_DIR_DEFAULT) == raw
     data = Path(path).read_bytes()
     if os.name != "nt":
@@ -201,7 +201,7 @@ def test_shortcut_points_at_the_stub_with_an_encoded_file_url(tmp_path, sample):
 
 def test_publish_dir_is_hardcoded_by_default_and_must_be_absolute(tmp_path, sample):
     assert collect.DEFAULT_CONFIG["publish_dir"] == config_mod.PUBLISH_DIR_DEFAULT
-    assert config_mod.PUBLISH_DIR_DEFAULT.startswith("\\\\k5cifsn2\\")
+    assert config_mod.PUBLISH_DIR_DEFAULT.startswith("\\\\10.142.80.167\\")
     cfg, problems = config_mod.normalize_config(dict(collect.DEFAULT_CONFIG))
     assert cfg["publish_dir"] == config_mod.PUBLISH_DIR_DEFAULT and not [p for p in problems if p.key == "publish_dir"]
     _cfg_, rows, devs = _publish_cfg(tmp_path, sample)
