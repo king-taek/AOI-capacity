@@ -3359,6 +3359,7 @@ def write_html(cfg: dict, rows: List[dict], dev_meta: List[dict], errors: List[d
     if lot_only:
         rg = None
         meta["lot_only"] = True                    # 화면: 탭 줄에 LOT 추적만
+        prefix = prefix.replace('<html lang="ko" ', '<html lang="ko" data-boot="lot" ', 1)   # 시작 화면: 웨이퍼 장면(D104, 현택 10/30)
         # 팀 공유에 올라가는 파일 — 장비 NAS 경로 · 범위 목록 · 시간 · 브랜치는 이 화면이 쓰지 않으니 담지 않는다
         meta["devices"] = [{k: dm[k] for k in ("name", "key", "status", "read_errors") if k in dm} for dm in dev_meta]
         meta["scope"] = {}
