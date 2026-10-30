@@ -468,7 +468,7 @@ def test_tab_indicator_moves_like_a_body_dragged_by_its_front(page):
     """탭 표시자 물리(9/24 4차): 앞 끝이 먼저 가고 뒤가 딸려 와 움직이는 동안 늘어나며, 앞 끝이 도착한 뒤에는 폭이 늘지 않고 줄어들며 선다.
     (3차는 반대였다 — 움직일 때 좁고 도착해서 넓어졌다.) 미리 계산한 표본(`__s.run.fr`)을 본다 — 시계와 무관하다."""
     pg, errors, _ = page
-    pg.locator('button[data-fk="nav:report"]').click()
+    pg.locator('button[data-fk="nav:overkill"]').click()                               # 10/30 Overkill 탭(D99)이 끼어 예전 '두 칸 이동' 은 이 탭
     fr = pg.evaluate("(() => { const s = document.querySelector('.nav .ind').__s; return s && s.run ? s.run.fr.map(q => [q.x[0], q.x[q.x.length - 1]]) : null; })()")
     if fr is None:
         pytest.skip("애니메이션이 꺼진 환경(reduced motion / WAAPI 없음)")
@@ -867,7 +867,7 @@ def rdl2_page(page_factory, tmp_path):
 
 def test_rdl_tab_lot_stat_outlier_x5_rule_and_wording(rdl_page):
     pg, errors = rdl_page
-    assert [t.strip() for t in pg.locator("nav button").all_inner_texts()] == ["가동률", "Error", "TB500 · Kendall", "RDL 단일스캔", "LOT 추적"]
+    assert [t.strip() for t in pg.locator("nav button").all_inner_texts()] == ["가동률", "Error", "Overkill", "TB500 · Kendall", "RDL 단일스캔", "LOT 추적"]
     pg.locator('button[data-fk="nav:recipe"]').click()
     pg.wait_for_selector('main[data-key="view:recipe"]')
     pg.wait_for_timeout(400)
@@ -1068,9 +1068,10 @@ def test_settings_picks_tabs_and_saves_a_copy_with_only_those_tabs(page, page_fa
     pg, errors, requests = page
     pg.keyboard.press("Control+Shift+D")
     pg.locator('button[data-fk="set:btn"]').click()
-    pg.locator('button[data-fk="pick:home"]').click()   # 처음엔 숨기지 않은 탭이 전부 켜져 있다 — 셋을 끈다
+    pg.locator('button[data-fk="pick:home"]').click()   # 처음엔 숨기지 않은 탭이 전부 켜져 있다 — 넷을 끈다
     pg.locator('button[data-fk="pick:recipe"]').click()
     pg.locator('button[data-fk="pick:lot"]').click()
+    pg.locator('button[data-fk="pick:overkill"]').click()   # 10/30 Overkill 탭(D99)도 끈다
     with pg.expect_download() as dl:
         pg.locator('button[data-fk="pick:go"]').click()
     path = tmp_path / "picked.html"                                                # 내려받은 임시 파일은 확장자가 없다
@@ -1096,3 +1097,47 @@ def test_error_job_list_offers_show_all_only_when_more_than_twelve(page):
     pg.wait_for_selector('main[data-key="view:errors"]')
     assert pg.locator('main button[data-key="jobAll"]').count() == 0
     assert errors == []
+
+
+def test_overkill_tab_lists_devices_and_lot_row_opens_lot_tracking_with_colored_cells(page_factory, tmp_path):
+    """D99: Overkill 탭(Error 다음) — 하루 조회에 오버킬 난 장비만, LOT 줄을 누르면 LOT 추적의 그 Lot 이 열리고 Wafer × 검사 칸이 주황 두 단계로 칠해진다."""
+    rows = []
+    for i, f in enumerate(["120", "450", "1300", "80", "2,400"]):
+        r = _row("AOI-1", f"OKWAF00{i}X", f"08:{i*5:02d}", f"08:{i*5+4:02d}", lot="OVK-RDL4", job="TB500_RDL4 - Multi")
+        r["faults"] = f
+        r["slot_no"] = str(i + 1)
+        rows.append(r)
+    mf = _row("AOI-1", "OKWAF009X", "08:30", "08:31", lot="OVK-RDL4", status="Scan 2D - Max Fault Exceeded.", job="TB500_RDL4 - Multi")
+    mf["faults"] = "-"
+    rows.append(mf)
+    for i in range(3):
+        r = _row("AOI-2", f"LOWWAF0{i}Y", f"10:{i*5:02d}", f"10:{i*5+4:02d}", lot="LOW-PI3", job="R_TB500_LIVE_PI3")
+        r["faults"] = "40"
+        rows.append(r)
+    emb = collect._embed_rows(rows)
+    emb["meta"] = _meta()
+    out = tmp_path / "ok.html"
+    out.write_text(TEMPLATE.read_text(encoding="utf-8").replace("__DATA__", json.dumps(emb, ensure_ascii=False).replace("</", "<\\/"), 1), encoding="utf-8")
+    ctx = page_factory.new_context(viewport={"width": 1280, "height": 900})
+    pg = ctx.new_page()
+    errors, requests = [], []
+    pg.on("pageerror", lambda e: errors.append("pageerror: " + str(e)))
+    pg.on("console", lambda m: errors.append("console: " + m.text) if m.type == "error" else None)
+    pg.on("request", lambda r: requests.append(r.url) if not r.url.startswith("file:") else None)
+    try:
+        pg.goto(out.as_uri())
+        pg.wait_for_selector('main[data-key^="view:"]')
+        tabs = pg.eval_on_selector_all("nav.nav button", "bs => bs.map(b => b.getAttribute('data-fk'))")
+        assert tabs[:3] == ["nav:home", "nav:errors", "nav:overkill"]
+        pg.click('[data-fk="nav:overkill"]')
+        pg.wait_for_selector('main[data-key="view:overkill"]')
+        assert pg.locator('[data-key="okd:AOI-1"]').count() == 1 and pg.locator('[data-key="okd:AOI-2"]').count() == 0
+        assert "상한 초과 1" in pg.inner_text('[data-key="okd:AOI-1"]')
+        pg.click('[data-key="okd:AOI-1"] button.okl')
+        pg.wait_for_selector('main[data-key="view:lot"]')
+        assert "OVK-RDL4" in pg.inner_text("main")
+        assert pg.locator(".lotmx .lc.okc").count() == 4          # 450 · 1,300 · 2,400 · 상한 초과
+        assert pg.locator(".lotmx .lc.ok1").count() == 1 and pg.locator(".lotmx .lc.ok3").count() == 1
+        assert errors == [] and requests == []
+    finally:
+        ctx.close()
