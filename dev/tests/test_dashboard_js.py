@@ -373,10 +373,24 @@ def test_report_tab_regresses_only_with_five_or_more_clean_batches_and_lists_exc
     assert "<h1>TB500 · Kendall</h1>" in html and "표기명 21개 Job 만 봅니다" in html
     assert ">PI3</b>" in html and "준비 10분 + 장당 5.0분" in html and "2시간 15분" in html          # 10 + 5×25 = 135분 (25장 환산)
     assert "10.0 ± 0.0분" in html and "5.00 ± 0.00분" in html                                      # 장비 상세의 회귀 값
-    assert "5 / 6" in html and "제외 — Error 1 · 5장 미만 0" in html
+    assert "5 / 6" in html and "제외 — Error 1 · PASS 5장 미만 0" in html
     assert "data-dh=" in html and "이 장비의 모든 배치 보기 (6개)" in html            # 더블클릭 · 단추 = 모든 배치 팝업(10/19)
     (html4,) = screen(_clean_batches(4), meta("AOI-1"), [["reportHtml"]], state={"view": "report"})
     assert "표본 4개 — 5개 미만" in html4 and "2시간 15분" not in html4
+
+
+def test_report_tab_leaves_out_a_batch_whose_wafers_were_all_skipped():
+    """10/30: 스캔된 장이 없는 배치(6장 모두 Skipped · 배치 1분)가 행 수 6 으로 표본에 들었다. 표본은 PASS 장 수로 센다 — 정상 배치 5개는 그대로,
+    모든 배치 팝업에는 '제외 — PASS 5장 미만' 으로 남고 PASS 장수 0 / 행 6 을 보인다."""
+    rows = _clean_batches(5)
+    rep = "R_TB500_LIVE_PI3_6321_LOT-S_18-Sep-26_(13.49.00)_BatchReport.htm"
+    for k in range(6):
+        rows.append(w("AOI-1", f"S{k}", status="Wafer Skipped.", lot="LOT-S", job="R_TB500_LIVE_PI3", report=rep, bs="13:49", be="13:50"))
+    html, popup = screen(rows, meta("AOI-1"), [["reportHtml"], ["rptDevPopupHtml"]],
+                         state={"view": "report", "rptDev": "AOI-1", "rptAll": {"job": "TB500 PI3", "dev": "AOI-1"}})
+    assert "5 / 6" in html and "제외 — Error 0 · PASS 5장 미만 1" in html     # 표본 5 · 배치 6, 건너뜀 배치는 '5장 미만' 으로
+    assert "10.0 ± 0.0분" in html and "5.00 ± 0.00분" in html                  # 회귀는 정상 5개 그대로
+    assert "제외 — PASS 5장 미만" in popup and "PASS 0장" in popup and "/6" in popup
 
 
 def test_error_popup_shows_each_types_own_phrase_when_one_lot_has_two_types():
@@ -836,3 +850,24 @@ def test_kla_tb500_job_names_are_shortened_for_display_only():
     # 이 함수는 KLA 표기 전용 — Camtek 표기명(jobAlias)에는 끼지 않는다(TB500 · Kendall 탭이 KLA Job 을 끌어오지 않게)
     html = (ROOT / "aoi_capacity" / "ui" / "assets" / "template.html").read_text(encoding="utf-8")
     assert "function jobAlias(raw){if(JOB_ALIAS[raw])return JOB_ALIAS[raw];const m=" in html and "klaJobAlias" not in html.split("function jobAlias")[1].split("\n")[0]
+
+
+def test_report_tab_leaves_out_a_batch_whose_time_per_wafer_is_far_from_its_group():
+    """10/30(사용자 선택 B): 08/23 7DH-3D RE — 5장 모두 PASS 인데 장당 1.7분(같은 Job 보통 3.9분). 같은 Job 의 장당 시간 중앙(DIA Lot 끼리 · 그 밖끼리)의
+    0.5배 미만 · 2배 초과는 표본에서 뺀다. 정상 배치 5개의 회귀는 그대로, DIA Lot 은 자기 무리(느린 쪽 중앙이 아니라)로 잰다."""
+    rows = _clean_batches(5)                                    # 5~9장, 배치시간 10 + 5×장수 → 장당 7.0~6.1분
+    bs = "20:00"
+    rep = "R_TB500_LIVE_PI3_6321_LOT-F_18-Sep-26_(20.00.00)_BatchReport.htm"
+    for k in range(5):                                          # 5장 9분 → 장당 1.8분
+        rows.append(w("AOI-1", f"F{k}", _hhmm(bs, k + 1), _hhmm(bs, k + 2), lot="LOT-F", job="R_TB500_LIVE_PI3", report=rep, bs=bs, be=_hhmm(bs, 9)))
+    dia = []                                                    # DIA Lot 5개: 장당 2분 — 그 밖 무리 중앙(~6.5분)으로 재면 전부 빠질 값
+    for i in range(5):
+        lot = f"D{i}-DIA"
+        s0 = f"{21 + (i % 2):02d}:{i * 10:02d}"
+        r2 = f"R_TB500_LIVE_PI3_6321_{lot}_18-Sep-26_({s0.replace(':', '.')}.00)_BatchReport.htm"
+        for k in range(6):
+            dia.append(w("AOI-1", f"X{i}{k}", _hhmm(s0, k + 1), _hhmm(s0, k + 2), lot=lot, job="R_TB500_LIVE_PI3", report=r2, bs=s0, be=_hhmm(s0, 12)))
+    html, popup = screen(rows + dia, meta("AOI-1"), [["reportHtml"], ["rptDevPopupHtml"]],
+                         state={"view": "report", "rptDev": "AOI-1", "rptAll": {"job": "TB500 PI3", "dev": "AOI-1"}})
+    assert "10 / 11" in html and "장당 시간 이상 1" in html      # 표본 = 정상 5 + DIA 5, 이상 1 (배치 11개)
+    assert "제외 — 장당 1.8분, DIA 아닌 Lot 중앙 6.6분의 27%" in popup or "제외 — 장당 1.8분, DIA 아닌 Lot 중앙" in popup

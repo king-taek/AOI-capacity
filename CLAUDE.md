@@ -160,7 +160,7 @@ graphify 는 `--code-only` 로, template.html 인라인 JS 까지 보려면 `pyt
 - HTML 에 박는 JSON 은 `collect._embed_rows` 가 접는다 — `POOLED_COLS`(시각 두 열 빼고 전부)를 문자열 풀의
   번호로 바꾼다. 30대 × 90일이면 행이 십수만 개라 접지 않으면 HTML 이 수십 MB 가 된다. template 의 로더가 편다.
   CSV 는 사람이 읽는 파일이라 접지 않는다.
-- **결과 화면 모델은 template 의 `buildModel(rows, meta, rules)`** — 프로필이 둘이다(`RULES.profile`). **product(기본, `buildModelV3`, MODEL_VERSION 6 — 3 + D76 멀티/단일 Job 나눔 + D78 판정 채우기 + D87 이름 바뀐 재검사 · 모니터 Job)** 가 제품 규칙이고,
+- **결과 화면 모델은 template 의 `buildModel(rows, meta, rules)`** — 프로필이 둘이다(`RULES.profile`). **product(기본, `buildModelV3`, MODEL_VERSION 7 — 3 + D76 멀티/단일 Job 나눔 + D78 판정 채우기 + D87 이름 바뀐 재검사 · 모니터 Job + 10/30 `lots[18]` PASS 장 수)** 가 제품 규칙이고,
   **legacy(`buildModelLegacy`)** 는 `docs/design/dashboard-redesign/scripts/make_aoi_data.js` [원본] 이식으로 네 스위치를 끄면 스크립트와 같은 출력(가드 `test_legacy_profile_equals_the_design_script…`) — 디자인 동일성 근거일 뿐 제품 정답이 아니다.
   공통 도우미(`P`·`lotName`·`jobKey`·`matKey`)는 두 프로필이 같이 쓴다. 규칙을 바꾸면 `MODEL_VERSION` 을 올린다. 열 때마다 원천 행에서 다시 계산한다(저장하지 않는다).
   - **product 알고리즘(D56 · 9/20)**: 장비마다 로드 첫날 00:00 기준 1분 축(`kind` Int8Array)에 ① INI 시각 구간을 Error > Scan > Rescan > Test 순으로 배타 배정(같은 Report 같은 종류의 3분 이하 틈은 이어 칠함)
@@ -168,7 +168,7 @@ graphify 는 `--code-only` 로, template.html 인라인 JS 까지 보려면 `pyt
     ③ **Error 를 담은 Report 가 끝난 뒤** 다음 활동까지(관측 종료·그날 자정 중 이른 것까지, D44)를 '에러 후 대기'(Report 안에서 Error 뒤 스캔이 이어지면 그 사이는 스캔)
     ④ 날짜 경계로 잘라(D04) 장비-일 값을 만든다 — 시간은 걸치는 날마다, Error 건수(Lot 단위)·Wafer 수는 시작일에 한 번. **불변식**: 장비-일마다 r+d+t+x+s ≤ den, seg 는 서로 겹치지 않음(30일치 slow 가드).
   - 장비-일 값 `t`: `r` Scan · `d` Rescan · `t` Test · `x` Error 구간 · `s` 에러 후 대기 (전부 분) · `e` Error 건수(Lot 단위) · `w` 이 날 시작한 행 수 · `seg` [시작,끝,종류] (0 Scan · 1 Error · 2 Test · **3 대기** · 4 Rescan, 배타) ·
-    `ct` {유형:[건수,Error+대기 분]} · `lots` [job,lot,a,b,w,e,dup,test,rep,causes,st,ba,bb,faults 합,faults 행 수,덮어씀 장,나중 시도(st 풀),Report 요약(st 풀)] · `iv` {ov 덮어씀 · nf INI 없음 · km 추정 분 · sk 스캔 안 함 · s1 스캔 후 중단}(있을 때만, 10/11) · `sc` [실제 촬영 분, 그 장들의 INI 분](scan_sec 있는 장만 — 장비 팝업 Scan 카드 밑 '그중 스캔 n%', 가동률 값은 그대로, 10/11) · `cv` 시각 확인 %(이 날 행 기준) · `bseg`/`be` 배치 구간·점유 · `we` 이 날 마지막 대기의 끝 · `ne` 배치 시각을 받은 Pass 행 수 · `den` 분모(분).
+    `ct` {유형:[건수,Error+대기 분]} · `lots` [job,lot,a,b,w,e,dup,test,rep,causes,st,ba,bb,faults 합,faults 행 수,덮어씀 장,나중 시도(st 풀),Report 요약(st 풀),PASS 장 수] · `iv` {ov 덮어씀 · nf INI 없음 · km 추정 분 · sk 스캔 안 함 · s1 스캔 후 중단}(있을 때만, 10/11) · `sc` [실제 촬영 분, 그 장들의 INI 분](scan_sec 있는 장만 — 장비 팝업 Scan 카드 밑 '그중 스캔 n%', 가동률 값은 그대로, 10/11) · `cv` 시각 확인 %(이 날 행 기준) · `bseg`/`be` 배치 구간·점유 · `we` 이 날 마지막 대기의 끝 · `ne` 배치 시각을 받은 Pass 행 수 · `den` 분모(분).
   - 종류: 원인 코드(`CAUSE_RULES` 첫 매치)가 있으면 Error, **Lot 원문에 `TEST` 가 있으면 그 Report 의 행은 전부 Test(D64 — 원인 Error 도 Error 로 세지 않음)**,
     같은 자재의 **앞선 시도의 결과가 PASS 였을 때만** Rescan(D63, 장비 무관), 아니면 Scan. 자재 키 = `jobKey(Job)|Lot 토큰(RE·RESCAN·REWORK·SRD·R 제외)|Wafer ID(영숫자)`.
     **D87(10/11)**: Lot 이름을 바꿔 다시 넣은 재검사도 Rescan — 두 번째 키 `matKey2` = `jobKey|검사 단계 낱말(STEP_TOK: DIA·SRD·3D·EDGE·BUMP·CENTER·PCM·SPT·2D)|Wafer ID`(영숫자 6자 이상 · 숫자만이 아닌 ID 만), 앞 시도 PASS · **레시피(`recipe` 열) 같음** · 첫 키가 다를 때 `rel=2`. **Job 이 `No Pattern` 으로 시작하면 Test**(`MONITOR_JOB_RE` — 모니터 웨이퍼로 보이나 현장 확인 전, 확인되면 이 상수만 고친다).
@@ -216,6 +216,7 @@ graphify 는 `--code-only` 로, template.html 인라인 JS 까지 보려면 `pyt
   장비 줄을 **누르면** 그 장비의 배치 점 · 회귀선 SVG(Job 전체 선과 겹침) + 준비/장당/환산/Error 수치(`rptDev`), **더블클릭하거나 상세의 단추를 누르면** 그 장비의 **모든 배치**(제외된 것과 이유 포함, 필터 · 정렬)를 날짜 순으로 보이는 팝업(`rptdev`, `rptAllOpen`·`rptDevPopupHtml`, 덱에 여섯째 팝업).
   계산 규칙은 D49 그대로(배치시간 = 준비 + 장당 × 장수 1차 회귀, 표본 5개 미만 · 기울기 ≤ 0 · 제외 = 원인 Error · 5장 미만 · 배치 시각 없음). 환산을 25장으로 통일한 것이 달라진 점 — Job 마다 최빈 장수가 달라(8장·25장) 숫자끼리 비교가 안 됐다. 장비 5개 미만 표본은 막대에 없고 '계산 못 한 장비' 한 줄로 이유를 적는다.
   `dblclick` 위임 핸들러는 `data-dh`(클릭의 `data-h` 와 같은 `H` 표).
+  **표본(D99, 10/30)**: 표본은 `rptEx`(원인 Error · **PASS 5장 미만** · 배치 시각 없음) 다음 `rptOutliers` — 같은 Job 의 모든 장비 배치를 모아 장당 시간(배치 시간 ÷ PASS 장 수)이 중앙의 0.5배 미만 · 2배 초과면 뺀다(`odd`). Kendall BS 는 DIA 단계(Lot 이름에 DIA, 장당 ~2분)와 그 밖(~3.9분)이 한 Job 이라 **DIA Lot 끼리 · 그 밖끼리** 따로 중앙을 재고, 한 무리가 5개 미만이면 판단 안 함. 회귀의 장수 x 도 PASS 장 수. 건너뜀만 있던 배치(10/14 C7Y-DIA 6행 모두 Skipped)가 행 수로 표본에 들던 것과 08/23 7DH-3D RE(5장 9분, 장당 1.7분)가 계기. 가드 `test_report_tab_leaves_out_…`.
   **수집 창 시작일**(`D.partialDays` — `meta.retention_days` 로 계산, 보관 기간의 첫날은 수집 창이 도중에 시작해 하루 전체가 아니다): 헤더에 '부분' 표, 홈 카드 안내, 추이의 평균·주/월 묶음에서 제외(막대는 회색으로 남긴다).
   가동률(카드 3 · 층 필터 · 정렬 · 24시간 막대 목록) → **장비 팝업**(통계 6 · 막대 · Lot 이름표 지시선 · 선택 Lot 원문 · **Report 열기**) ↔ **Error 상세 팝업**(언제 났나 · 유형별 · 최근 21일 · Lot 별, 유형/Job 팝업에서 오면 필터 칩, D51) ·
   Error(**KLA 제외**, 10/6 — 층 필터만 · 장비 종류 필터 없음 · `S.devList(true)`; 기간 · 층 · 지표 → 날짜별 → 유형별·장비별·Job별 → 유형/Job 팝업) · **TB500 · Kendall**(D59, 옛 이름 '리포트' — 표기명 21개 Job 만 보는 탭이라 이름을 바꿨고

@@ -551,7 +551,7 @@ button.dbrow:focus-visible{outline:2px solid var(--nav-on);outline-offset:-2px}
       legacy(buildModelLegacy)는 디자인 세션의 make_aoi_data.js [원본] 이식이라 네 스위치를 끄면 그 스크립트와 같은 출력이 나온다(가드 test_dashboard_js).
    ④ 화면: 가동률 · Error · 추이 · 리포트 + 장비/Error/유형·Job 팝업 (docs/design/dashboard-redesign/app/AOI-Dashboard.dc.html 의 로직).
    ============================================================================ */
-const MODEL_VERSION=6;
+const MODEL_VERSION=7;
 const $=s=>document.querySelector(s);
 const esc=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const p2=n=>String(n).padStart(2,"0");
@@ -857,7 +857,8 @@ if(all.length){
         lots.push({a:b>a?a:1441,b:b>a?b:0,ba,bb,arr:[put('job',R.job),put('lot',R.lot),b>a?a:1441,b>a?b:0,rowsHere.length,n,rowsHere.filter(w=>w.rel).length,rowsHere.filter(w=>w.test).length,put('rep',R.rep),cs,causes.length?put('st',st):-1,ba,bb>ba?bb:ba,
           rowsHere.reduce((q,w)=>w.f==null?q:q+w.f,0),rowsHere.filter(w=>w.f!=null).length,   /* [13] faults 합 · [14] faults 가 있는 행 수(D08) */
           lov,later?put('st',later.lot+' · '+later.day.slice(5).replace('-','/')+' '+new Date(later.bs).toTimeString().slice(0,5)+(later.dev!==dv?' · '+later.dev:'')):-1,   /* [15] INI 덮어씀 장 · [16] 나중 시도(10/11) */
-          (rw.wsc||ra.ast)?put('st',(rw.wsc?'Wafers Scanned '+rw.wsc:'')+(rw.wsc&&ra.ast?' · ':'')+(ra.ast?'Avg. Scan Time '+ra.ast:'')):-1]});   /* [17] Report 요약 두 값 */
+          (rw.wsc||ra.ast)?put('st',(rw.wsc?'Wafers Scanned '+rw.wsc:'')+(rw.wsc&&ra.ast?' · ':'')+(ra.ast?'Avg. Scan Time '+ra.ast:'')):-1,
+          rowsHere.filter(w=>w.pass).length]});   /* [17] Report 요약 두 값 · [18] PASS 장 수(10/30 — 건너뜀 · 중단은 빠진다, TB500 · Kendall 표본이 쓴다) */
       }
       lots.sort((p,q)=>(p.a<1441?p.a:p.ba)-(q.a<1441?q.a:q.ba));
       const rct={};for(const[k,v]of Object.entries(ct))rct[k]=[v[0],Math.round(v[1])];
@@ -2038,24 +2039,34 @@ function errPopupHtml(){
    계산 규칙은 그대로다: 배치시간 = 준비 + 장당 × 장수 1차 회귀(S.ols), 표본 5개 미만 · 기울기 ≤ 0 이면 내지 않음, 제외 = 원인 Error 있는 Report · 5장 미만 · 배치 시각 없음.
    환산은 기본 25장으로 통일(Job 마다 최빈 장수가 달라 숫자끼리 비교가 안 됐다) — '이 Job 최빈 장수' 로 바꿀 수 있다. */
 const RPT_MIN_N=5,RPT_STD=25,RPT_SLOW=0.2;
+/* 표본 제외 이유(한 곳) — 원인 Error 있는 Report(L[10]>=0 — 시작일이 아니어도) · **PASS 5장 미만**(10/30: 건너뜀 · 중단만 있던 Report 가 행 수로 표본에 들었다 — 10/14 C7Y-DIA 6장 모두 Skipped) · 배치 시각 없음.
+   중단은 D52 로 Error 이거나 정상 종료라 따로 없다. 회귀의 x 도 같은 PASS 장 수다(스캔된 장만 배치 시간을 만든다). */
+const rptEx=L=>L[10]>=0?"err":((L[18]||0)<RPT_MIN_N?"small":((L[12]>L[11])?"":"noTime"));
+/* 장당 시간 이상치(10/30, 사용자 선택 B — 08/23 7DH-3D RE 는 5장 모두 PASS 인데 장당 1.7분, Kendall BS 보통 3.9분의 44%): 위 이유가 없는 배치를 **같은 Job · 모든 장비**에서
+   모아 장당 시간(배치 시간 ÷ PASS 장 수)이 중앙의 0.5배 미만 · 2배 초과면 뺀다(`odd`). Kendall BS 는 DIA 단계(Lot 이름에 DIA, 장당 ~2분)와 그 밖(~3.9분)이 한 Job 에 섞여 있어
+   **DIA Lot 끼리 · 그 밖끼리** 따로 중앙을 잰다. 한 무리에 표본이 5개 미만이면 판단하지 않는다. b.pw · b.gm(무리 중앙)을 달아 팝업이 이유를 적는다. 30일치 샘플에서 1,234 배치 중 24개. */
+const RPT_ODD_LO=0.5,RPT_ODD_HI=2;
+function rptOutliers(bs,P){const G={};
+  for(const b of bs){if(b.ex)continue;b.pw=(b.L[12]-b.L[11])/b.L[18];b.dia=/\bDIA\b/i.test(P.lot[b.L[1]]||"");(G[b.dia?"d":"m"]||(G[b.dia?"d":"m"]=[])).push(b);}
+  for(const g of Object.values(G)){if(g.length<RPT_MIN_N)continue;const q=g.map(b=>b.pw).sort((x,y)=>x-y),m=q.length>>1,med=q.length%2?q[m]:(q[m-1]+q[m])/2;
+    for(const b of g){b.gm=med;if(b.pw<med*RPT_ODD_LO||b.pw>med*RPT_ODD_HI)b.ex="odd";}}}
 const rptFam=al=>/PI\d/.test(al)?"PI":/RDL/.test(al)?"RDL":"기타";
 function reportHtml(){
   const P=D.pool,days=D.days;   /* 기간은 헤더에서(10/5) */
   const aliasCache={};
   const aliasOf=gi=>{if(aliasCache[gi]!==undefined)return aliasCache[gi];const G=D.jobGroups[gi];let al=jobAlias(P.job[G.l])||null;if(!al)for(const [i] of G.m){if(jobAlias(P.job[i])){al=jobAlias(P.job[i]);break;}}if(al&&G.nm){al=G.nm;}return aliasCache[gi]=al;};
-  const blank=()=>({n:0,err:0,errMin:0,fS:0,fN:0,ex:{err:0,small:0,noTime:0},pts:[]});
+  const blank=()=>({n:0,err:0,errMin:0,fS:0,fN:0,ex:{err:0,small:0,odd:0,noTime:0},pts:[]});
   const byAlias={};let lotAll=0,lotIn=0;
   for(const dy of days)for(const n of D.devices){const t=S.at(dy,n);if(!t)continue;
     for(const L of t.lots){const gi=D.jobG[L[0]],al=aliasOf(gi);lotAll++;if(!al)continue;lotIn++;
       const A=byAlias[al]||(byAlias[al]={name:al,raw:{},all:blank(),devs:{},bt:{}});const rawName=P.job[L[0]];A.raw[rawName]=(A.raw[rawName]||0)+1;
       const dv=A.devs[n]||(A.devs[n]=blank());let em=0;for(const v of Object.values(L[9]))em+=v[1];
       for(const Sx of [A.all,dv]){Sx.n++;Sx.err+=L[5];Sx.errMin+=em;Sx.fS+=L[13]||0;Sx.fN+=L[14]||0;}
-      /* 제외: 원인 Error 가 있는 Report(L[10]>=0 — 시작일이 아니어도) · 5장 미만 · 배치 시각 없음. 중단은 D52 로 Error 이거나 정상 종료라 따로 없다. */
-      const ex=L[10]>=0?"err":(L[4]<5?"small":((L[12]>L[11])?null:"noTime"));
-      (A.bt[n]||(A.bt[n]=[])).push({dy,L,ex:ex||""});   /* 모든 배치(제외된 것도) — 더블클릭 팝업이 보여 준다 */
-      if(ex){A.all.ex[ex]++;dv.ex[ex]++;continue;}
-      A.all.pts.push([L[4],L[12]-L[11]]);dv.pts.push([L[4],L[12]-L[11]]);}}
-  const exTxt=Sx=>"제외 — Error "+Sx.ex.err+" · 5장 미만 "+Sx.ex.small+(Sx.ex.noTime?" · 배치 시각 없음 "+Sx.ex.noTime:"");
+      (A.bt[n]||(A.bt[n]=[])).push({dy,L,ex:rptEx(L)});}}   /* 모든 배치(제외된 것도) — 더블클릭 팝업이 보여 준다 */
+  for(const A of Object.values(byAlias)){const all=[];for(const list of Object.values(A.bt))for(const b of list)all.push(b);rptOutliers(all,P);   /* 장비를 가로지르는 무리 중앙이 필요해 루프 뒤에 */
+    for(const [n,list] of Object.entries(A.bt)){const dv=A.devs[n];for(const b of list){if(b.ex){A.all.ex[b.ex]++;dv.ex[b.ex]++;continue;}
+      const pt=[b.L[18],b.L[12]-b.L[11]];A.all.pts.push(pt);dv.pts.push(pt);}}}
+  const exTxt=Sx=>"제외 — Error "+Sx.ex.err+" · PASS 5장 미만 "+Sx.ex.small+(Sx.ex.odd?" · 장당 시간 이상 "+Sx.ex.odd:"")+(Sx.ex.noTime?" · 배치 시각 없음 "+Sx.ex.noTime:"");
   /* 회귀 → 숫자(basis 장 기준 환산). 못 내면 이유를 단다. */
   const fitN=(Sx,basis)=>{const r=Sx.pts.length>=RPT_MIN_N?S.ols(Sx.pts):null;
     if(!r)return{ok:false,why:"표본 "+Sx.pts.length+"개 — 5개 미만",n:Sx.pts.length};
@@ -2139,7 +2150,7 @@ function reportHtml(){
     <div class="rpt-legend"><span><i style="background-color:${ERR}"></i>중앙보다 20% 넘게 느림</span><span><i style="background-color:${RUN}"></i>20% 넘게 빠름</span><span><i style="background-color:${DUP}"></i>비슷함</span><span><u></u>중앙 ${med!=null?esc(hm(med)):"—"}</span></div>`;
   const right=`<div style="min-width:0"><div class="panel" style="margin-bottom:14px"><div style="padding:18px 22px 14px"><h2 style="margin:0 0 6px;font-size:20px">${esc(cur)}</h2><p style="margin:0;font-size:14.5px;line-height:1.55;word-break:keep-all" class="rpt-sent">${sentence}</p></div></div>
     ${cardsH}<div class="panel" style="padding-bottom:8px">${good.length?ctl+`<div class="rpt-scroll" style="overflow-x:auto"><div class="rpt-in"><div class="rpt-list">${good.map(rowH).join("")}</div></div></div>`:`<p class="empty" style="padding:18px 22px">${esc(sentence.replace(/<[^>]+>/g,""))}</p>`}${badH}
-      <p style="margin:8px 0 0;padding:11px 22px;background:#FBFCFD;font-size:12px;color:#5A6673;border-top:1px solid #EDF1F5">배치시간 = 준비 + 장당 × 장수 로 1차 회귀 — ± 는 회귀 표준오차. 표본 5개 미만이면 내지 않음. 배치시간은 Report 의 배치 시작~종료. 평균 Defect 는 Report 표 Faults 열이 있는 행만(옛 캐시 행은 다시 읽어야 채워짐).</p></div></div>`;
+      <p style="margin:8px 0 0;padding:11px 22px;background:#FBFCFD;font-size:12px;color:#5A6673;border-top:1px solid #EDF1F5">배치시간 = 준비 + 장당 × 장수 로 1차 회귀 — ± 는 회귀 표준오차. 표본 5개 미만이면 내지 않음. 표본은 PASS 5장 이상 · 원인 Error 없는 배치이고, 장당 시간이 같은 Job 의 중앙(DIA Lot 끼리 · 그 밖끼리)보다 0.5배 미만 · 2배 초과인 배치는 뺍니다. 배치시간은 Report 의 배치 시작~종료. 평균 Defect 는 Report 표 Faults 열이 있는 행만(옛 캐시 행은 다시 읽어야 채워짐).</p></div></div>`;
   return head+`<div class="lotgrid">${left}${right}</div>`;
 }
 
@@ -2152,21 +2163,25 @@ function rptDevPopupHtml(){const S0=state.rptAll;if(!S0||!D)return"";
     <div class="dh"><h2 id="dlg-rptdev-title" tabindex="-1" class="mid">${esc(S0.dev+" · "+S0.job)}</h2><span class="sub">${esc(sub)}</span><div class="spacer"></div><button class="x" data-h="${h(close)}" data-fk="x:rptdev" title="닫기 (Esc)">✕</button></div>${body}</div></div>`;
   /* 같은 Job 의 배치 목록을 다시 모은다(화면 기간 안, reportHtml 과 같은 Job 이름 규칙) */
   const aliasOf=gi=>{const G=D.jobGroups[gi];let al=jobAlias(P.job[G.l])||null;if(!al)for(const [i] of G.m){if(jobAlias(P.job[i])){al=jobAlias(P.job[i]);break;}}if(al&&G.nm){al=G.nm;}return al;};
-  const bs=[];for(const dy of D.days){const t=S.at(dy,S0.dev);if(!t)continue;for(const L of t.lots){if(aliasOf(D.jobG[L[0]])!==S0.job)continue;
-    const ex=L[10]>=0?"err":(L[4]<5?"small":((L[12]>L[11])?"":"noTime"));bs.push({dy,L,ex,min:L[12]>L[11]?L[12]-L[11]:null});}}
+  const every=[];for(const dy of D.days)for(const n of D.devices){const t=S.at(dy,n);if(!t)continue;for(const L of t.lots){if(aliasOf(D.jobG[L[0]])!==S0.job)continue;
+    every.push({dy,dev:n,L,ex:rptEx(L),min:L[12]>L[11]?L[12]-L[11]:null});}}
+  rptOutliers(every,P);   /* 장당 시간 이상치는 모든 장비의 무리 중앙으로 재므로 전부 모은 뒤 이 장비만 고른다 */
+  const bs=every.filter(b=>b.dev===S0.dev);
   if(!bs.length)return shell("기록 없음",`<div class="pbody"><p class="empty">이 기간에는 이 장비의 이 Job 배치가 없습니다</p></div>`);
   const F=state.rptAllF||"all",SO=state.rptAllS||"date";
-  const exWhy={err:"제외 — 원인 Error",small:"제외 — 5장 미만",noTime:"제외 — 배치 시각 없음"};
+  const exWhy={err:"제외 — 원인 Error",small:"제외 — PASS 5장 미만",noTime:"제외 — 배치 시각 없음"};
+  const oddWhy=b=>"제외 — 장당 "+b.pw.toFixed(1)+"분, "+(b.dia?"DIA Lot":"DIA 아닌 Lot")+" 중앙 "+b.gm.toFixed(1)+"분의 "+Math.round(b.pw/b.gm*100)+"%";
   const nIn=bs.filter(b=>!b.ex).length,nErr=bs.filter(b=>b.L[5]>0).length,nEx=bs.length-nIn;
   const shown=bs.filter(b=>F==="all"||(F==="err"&&b.L[5]>0)||(F==="in"&&!b.ex)||(F==="ex"&&b.ex));
-  shown.sort((a,b)=>SO==="min"?(b.min||-1)-(a.min||-1):SO==="w"?b.L[4]-a.L[4]:(a.dy<b.dy?1:a.dy>b.dy?-1:(b.L[11]||0)-(a.L[11]||0)));
+  shown.sort((a,b)=>SO==="min"?(b.min||-1)-(a.min||-1):SO==="w"?(b.L[18]||0)-(a.L[18]||0):(a.dy<b.dy?1:a.dy>b.dy?-1:(b.L[11]||0)-(a.L[11]||0)));
   const med=(()=>{const xs=bs.filter(b=>!b.ex).map(b=>b.min).sort((x,y)=>x-y);return xs.length?xs[xs.length>>1]:null;})();
-  const cols="64px 112px 78px 56px minmax(120px,1.4fr) minmax(150px,1.6fr) 74px";
+  const cols="64px 112px 78px 72px minmax(120px,1.4fr) minmax(150px,1.6fr) 74px";
   const rowH=(b,i)=>{const L=b.L,types=Object.entries(L[9]).sort((x,y)=>y[1][1]-x[1][1]);const rp=P.rep[L[8]]||"";const a=L[11]||0;
-    const st=b.ex?`<span class="muted" title="${esc(exWhy[b.ex])}">${esc(exWhy[b.ex])}</span>`:`<span style="color:var(--good);font-weight:600">표본</span>`;
+    const why=b.ex==="odd"?oddWhy(b):exWhy[b.ex];
+    const st=b.ex?`<span class="muted" title="${esc(why)}">${esc(why)}</span>`:`<span style="color:var(--good);font-weight:600">표본</span>`;
     const slow=b.min!=null&&med&&b.min/med-1>=RPT_SLOW&&!b.ex;
     return `<div class="rcpdev" data-key="slot:${i}" data-row="b:${esc(b.dy+"|"+(L[1]||"")+"|"+a)}" style="grid-template-columns:${cols}">
-      <span class="num">${md(b.dy)}</span><span class="num">${b.min!=null?clock(a)+" – "+clock(L[12]):clock(a)+" – ?"}</span><span class="num r" style="font-weight:600${slow?";color:"+ERR:""}">${b.min!=null?esc(hm(b.min)):"—"}</span><span class="num r">${L[4]?L[4]+"장":"—"}</span>
+      <span class="num">${md(b.dy)}</span><span class="num">${b.min!=null?clock(a)+" – "+clock(L[12]):clock(a)+" – ?"}</span><span class="num r" style="font-weight:600${slow?";color:"+ERR:""}">${b.min!=null?esc(hm(b.min)):"—"}</span><span class="num r"${(L[18]||0)!==L[4]?` title="Report 행 ${L[4]}개 중 PASS ${L[18]||0}장 — 나머지는 건너뜀 · 중단"`:""}>${L[4]?(L[18]||0)+"장":"—"}${(L[18]||0)!==L[4]&&L[4]?`<small class="muted"> /${L[4]}</small>`:""}</span>
       <span class="mono" style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(P.lot[L[1]]||"")}">${esc(P.lot[L[1]]||"(Lot 확인 불가)")}</span>
       <span style="min-width:0">${st}${types.map(([k,v])=>` <span class="pill err mono">${esc(k)} ${esc(hm(v[1]))}</span>`).join("")}</span>
       <span style="text-align:right">${rp&&reportUrl({device:S0.dev,report:rp})?`<button class="link" data-h="${h(()=>openReport({device:S0.dev,report:rp}))}" title="이 BatchReport 를 새 탭으로 엽니다(NAS 경로)">Report</button>`:""}</span></div>`;};
@@ -2176,7 +2191,7 @@ function rptDevPopupHtml(){const S0=state.rptAll;if(!S0||!D)return"";
   return shell(md(D.days[0])+" ~ "+md(D.days[D.days.length-1])+" · 배치 "+bs.length+"개",
     `<div class="pbody"><div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:10px">${fSeg}<div class="spacer"></div><span class="muted" style="font-size:12px">정렬</span>${sSeg}</div>
     <p class="muted" style="font-size:12px;margin:0 0 8px">표본 배치 중앙 ${med!=null?esc(hm(med)):"—"} · 빨간 시간 = 중앙보다 20% 넘게 긴 표본 배치 · 제외된 배치도 그대로 적습니다(이유 포함).</p>
-    <div class="panel"><div class="tbl-h" style="grid-template-columns:${cols}"><span>날짜</span><span>시각</span><span class="r">배치 시간</span><span class="r">장수</span><span>Lot</span><span>상태 · Error</span><span></span></div>
+    <div class="panel"><div class="tbl-h" style="grid-template-columns:${cols}"><span>날짜</span><span>시각</span><span class="r">배치 시간</span><span class="r">PASS 장수</span><span>Lot</span><span>상태 · Error</span><span></span></div>
       ${shown.slice(0,MAXR).map(rowH).join("")||`<p class="empty">조건에 맞는 배치가 없습니다</p>`}${shown.length>MAXR?`<p class="muted" style="padding:8px 14px;font-size:12px">${MAXR}개만 표시 — 필터로 줄여 보세요</p>`:""}</div></div>`);}
 /* ---------- 파라미터 탭(D89, 10/11 사용자 Q6~Q10) ----------
    수집기가 Report(= Lot 한 번)마다 INI 를 찾은 첫 Wafer 폴더의 레시피 파라미터를 읽어 두고(측정값 제외), meta.params 에 Job 마다
