@@ -276,7 +276,12 @@ def _enabled(share_dir: str) -> bool:
 
 def _same_folder(a: str, b: str) -> bool:
     key = lambda p: os.path.normcase(os.path.normpath(str(p).strip().rstrip("\\/")))
-    return key(a) == key(b)
+    if key(a) == key(b):
+        return True
+    try:
+        return os.path.samefile(a, b)           # 심볼릭 링크 · 다른 이름의 같은 공유는 파일 시스템 정체로 본다(둘 다 이미 있을 때만)
+    except OSError:
+        return False
 
 
 def publish_after_collect(cfg: dict, rows: list, dev_meta: list, log: Optional[Callable[[str], None]] = None,

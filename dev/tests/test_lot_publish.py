@@ -281,6 +281,16 @@ def test_publish_after_collect_runs_the_full_publish_after_lot_and_reports_it_se
     st = {}
     publish.publish_after_collect(dict(cfg2, publish_full_dir=str(tmp_path / "lot")), rows[:50], devs, log=None, status=st)
     assert st["full_error"] == i18n.KO.PUBLISH_FULL_SAME_DIR and "full_ok" not in st      # 같은 폴더면 서로 덮지 않게 멈춘다
+    alias = tmp_path / "lot_alias"
+    try:
+        os.symlink(tmp_path / "lot", alias, target_is_directory=True)
+    except (OSError, NotImplementedError):
+        alias = None                                                                   # 심볼릭 링크를 못 만드는 환경(권한 없는 Windows)
+    if alias:
+        st = {}
+        publish.publish_after_collect(dict(cfg2, publish_full_dir=str(alias)), rows[:50], devs, log=None, status=st)
+        assert st["full_error"] == i18n.KO.PUBLISH_FULL_SAME_DIR and "full_ok" not in st      # 다른 이름으로 가리킨 같은 폴더도 막는다
+        assert (tmp_path / "lot" / "latest.js").read_text(encoding="utf-8").startswith("window.AOI_LOT_LATEST")
     st = {}
     assert publish.publish_after_collect(dict(cfg2, publish_dir="", publish_full_dir=""), rows[:50], devs, log=None, status=st) is None and st == {}
 
