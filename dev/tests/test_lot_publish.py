@@ -182,12 +182,15 @@ def test_shortcut_points_at_the_stub_with_an_encoded_file_url(tmp_path, sample):
     assert publish.raw_stub_url(config_mod.PUBLISH_DIR_DEFAULT) == raw
     data = Path(path).read_bytes()
     if os.name != "nt":
-        assert data == ("[InternetShortcut]\r\nURL=" + raw + "\r\n").encode("cp949")
+        icon = publish.app_icon()                                                         # 10/30: 바탕화면 바로가기는 앱 아이콘(logo.ico)
+        assert icon and icon.endswith("logo.ico")
+        assert data == ("[InternetShortcut]\r\nURL=" + raw + "\r\nIconFile=" + icon + "\r\nIconIndex=0\r\n").encode("cp949")
     assert "%EC" not in data.decode("cp949", "replace") and b"\xc0\xfc\xbb\xea" in data     # 전산(CP949) 바이트
     assert publish.raw_stub_url("Z:\\a b\\c\\") == "file:///Z:/a%20b/c/AOI_LOT.html"
     share = tmp_path / "share"
     publish.publish_lot(cfg, str(share), rows=rows[:100], dev_meta=devs, now=dt.datetime(2026, 10, 27, 8, 15))
-    assert b"AOI_LOT.html" in (share / "AOI_LOT_shortcut.url").read_bytes()
+    shared = (share / "AOI_LOT_shortcut.url").read_bytes()
+    assert b"AOI_LOT.html" in shared and b"IconFile" not in shared                     # 공유 폴더 안 바로가기: 팀원 PC 에 없는 아이콘 경로는 넣지 않는다
 
 
 def test_publish_dir_is_hardcoded_by_default_and_must_be_absolute(tmp_path, sample):

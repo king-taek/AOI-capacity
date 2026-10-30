@@ -23,6 +23,7 @@ import urllib.parse
 from typing import Callable, Dict, List, Optional
 
 from . import collect, i18n, nas_guard
+from .utils import paths
 
 STUB_NAME = "AOI_LOT.html"
 SHORTCUT_NAME = "AOI_LOT_shortcut.url"          # 폴더 안에 두는 인터넷 바로가기 — 팀원은 이 파일을 더블클릭하거나 바탕화면으로 복사
@@ -69,17 +70,27 @@ def _ansi() -> str:
     return "mbcs" if os.name == "nt" else "cp949"
 
 
-def shortcut_text(share_dir: str) -> str:
-    """바로가기(.url) 내용 — 한글 경로는 이 PC 의 ANSI 코드 페이지로 쓸 수 있을 때 그 글자 그대로(`shortcut_bytes`)."""
-    return f"[InternetShortcut]\r\nURL={raw_stub_url(share_dir)}\r\n"
+def shortcut_text(share_dir: str, icon: Optional[str] = None) -> str:
+    """바로가기(.url) 내용 — 한글 경로는 이 PC 의 ANSI 코드 페이지로 쓸 수 있을 때 그 글자 그대로(`shortcut_bytes`).
+    `icon` = 이 PC 의 .ico 경로(바탕화면 바로가기에 앱 아이콘, 10/30) — 공유 폴더 안 바로가기는 팀원 PC 에 그 파일이 없어 넣지 않는다."""
+    text = f"[InternetShortcut]\r\nURL={raw_stub_url(share_dir)}\r\n"
+    if icon:
+        text += f"IconFile={icon}\r\nIconIndex=0\r\n"
+    return text
 
 
-def shortcut_bytes(share_dir: str) -> bytes:
-    """.url 파일 바이트 — ANSI(한글 윈도의 CP949)로 그대로, 인코딩이 안 되는 글자가 있으면 퍼센트 인코딩 판(UTF-8)으로."""
+def shortcut_bytes(share_dir: str, icon: Optional[str] = None) -> bytes:
+    """.url 파일 바이트 — ANSI(한글 윈도의 CP949)로 그대로, 인코딩이 안 되는 글자가 있으면 퍼센트 인코딩 판(UTF-8, 아이콘 없이)으로."""
     try:
-        return shortcut_text(share_dir).encode(_ansi())
+        return shortcut_text(share_dir, icon).encode(_ansi())
     except (UnicodeEncodeError, LookupError):
         return f"[InternetShortcut]\r\nURL={stub_url(share_dir)}\r\n".encode("utf-8")
+
+
+def app_icon() -> Optional[str]:
+    """앱 아이콘(.ico, 결과 화면 브랜드 표식과 같은 그림)의 절대 경로 — 없으면 None(바로가기는 기본 아이콘)."""
+    p = paths.logo_path("logo.ico")
+    return str(p.resolve()) if p.is_file() else None
 
 
 def write_shortcut(dest_dir: str, share_dir: str, cfg: dict, name: str = SHORTCUT_NAME) -> str:
@@ -88,7 +99,7 @@ def write_shortcut(dest_dir: str, share_dir: str, cfg: dict, name: str = SHORTCU
     nas_guard.assert_local(dest_dir, roots)
     os.makedirs(dest_dir, exist_ok=True)
     path = os.path.join(dest_dir, name)
-    if not _write_text(path, shortcut_bytes(share_dir), roots, tries=2):
+    if not _write_text(path, shortcut_bytes(share_dir, app_icon()), roots, tries=2):
         raise PermissionError(13, i18n.KO.PUBLISH_SHORTCUT_LOCKED, path)
     return path
 
