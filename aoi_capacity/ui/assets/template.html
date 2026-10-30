@@ -1765,7 +1765,7 @@ let _okIx=null;
 function okIndex(){if(_okIx&&_okIx.rows===rows)return _okIx;
   const ws=[],lots=new Map();let skip=0;
   for(const r of rows){if(r.kind)continue;const tt=P(r.wafer_start_time)||P(r.batch_start);if(!tt)continue;
-    if(/\bTEST\b/i.test(String(r.lot||""))||/^no\s*pattern/i.test(String(r.job||""))){skip++;continue;}
+    if(/TEST/i.test(String(r.lot||""))||MONITOR_JOB_RE.test(String(r.job||""))){skip++;continue;}   /* 모델의 Test 판정과 같다(D64 · D87) */
     const st=String(r.status||"").trim(),mf=/max\s*fault/i.test(st),pass=/^pass$/i.test(st),f=parseInt(String(r.faults||"").replace(/,/g,""),10);
     if(!mf&&!(pass&&Number.isFinite(f))){skip++;continue;}
     const lvl=mf||f>=1000?2:f>=400?1:0,t=tt.getTime();
@@ -1773,16 +1773,18 @@ function okIndex(){if(_okIx&&_okIx.rows===rows)return _okIx;
     if(!L){L={k:lk,dev:r.device,job:String(r.job||""),jk:jobKey(r.job),lot:String(r.lot||"").trim(),rep:r.report||"",t,day:dk(tt),n:0,ov:0,sev:0,cap:0,mf:0,mx:0,resc:r.scan_type==="RESCAN",ids:[]};lots.set(lk,L);}
     if(t<L.t){L.t=t;L.day=dk(tt);}
     L.n++;if(lvl>=1)L.ov++;if(lvl>=2)L.sev++;if(mf)L.mf++;if(!mf&&f>L.mx)L.mx=f;L.ids.push(String(r.wafer_id||"").toUpperCase());
-    ws.push({dev:r.device,day:dk(tt),lvl,mf,L});}
+    ws.push({dev:r.device,day:dk(tt),t,f:mf?0:f,lvl,mf,L});}
   return _okIx={rows,ws,lots:[...lots.values()],skip};}
 function okGoLot(L){const X=lotIndex(),a=X.list.find(a=>a.dev===L.dev&&a.rep===L.rep);if(!a)return;
   state.viewDir=1;setState({view:"lot",lotPick:{k:"lot",v:a.cl.lot},lotQ:"",lotWid:null,lotSlotAtt:a.k,stack:[],modalDev:null});window.scrollTo(0,0);}
 function okHtml(){
   const X=okIndex(),tier=state.okTier||"all",TH=tier==="sev"?2:1,mode=state.okMode||"day",by=state.okBy||"job",mk=state.okMk||"cam";
-  const devOk=new Set(S.devList(true).filter(n=>mk==="all"||(mk==="kla")===isKla(n)));
+  const devOk=new Set(D.devices.filter(n=>(state.floor==="all"||S.floorOf(n)===state.floor)&&(mk==="all"||(mk==="kla")===isKla(n))));   /* 다른 탭의 Gen5 는 물려받지 않는다 — 이 탭 단추가 범위 전부 */
   const day=S.dayStr(),daySet=new Set(mode==="day"?[day]:D.days);
   const W=X.ws.filter(w=>devOk.has(w.dev)&&daySet.has(w.day));
   const N=W.length,OV=W.filter(w=>w.lvl>=1).length,SV=W.filter(w=>w.lvl>=2).length,MF=W.filter(w=>w.mf).length;
+  /* LOT 줄은 고른 날 · 기간 안의 장만으로 다시 센다 — 자정을 넘긴 Report 도 위 합계와 맞는다 */
+  const scoped=list=>{const m=new Map();for(const w of list){let s=m.get(w.L);if(!s)m.set(w.L,s={...w.L,n:0,ov:0,sev:0,mf:0,mx:0,t:w.t,day:w.day});s.n++;if(w.lvl>=1)s.ov++;if(w.lvl>=2)s.sev++;if(w.mf)s.mf++;else if(w.f>s.mx)s.mx=w.f;if(w.t<s.t){s.t=w.t;s.day=w.day;}}return [...m.values()];};
   const hitOf=x=>TH===2?x.sev:x.ov,pr=(a,b)=>b?a/b:0,pct=(a,b)=>{if(!b)return"—";const v=a/b*100;return (v>=10?Math.round(v):v.toFixed(1))+"%";};
   const jobName=(jk,names)=>{const nm=[...names].sort((p,q)=>q[1]-p[1])[0];const raw=nm?nm[0]:jk;return (klaJobAlias(raw))||raw;};
   const agg=(keyOf,list)=>{const m=new Map();for(const w of list){const k=keyOf(w);let g=m.get(k);if(!g)m.set(k,g={k,n:0,ov:0,sev:0,names:new Map()});g.n++;if(w.lvl>=1)g.ov++;if(w.lvl>=2)g.sev++;g.names.set(w.L.job,(g.names.get(w.L.job)||0)+1);}return [...m.values()];};
@@ -1808,7 +1810,7 @@ function okHtml(){
   if(mode==="day"){
     const devs=agg(w=>w.dev,W).filter(g=>hitOf(g)>0).sort((a,b)=>pr(hitOf(b),b.n)-pr(hitOf(a),a.n)||hitOf(b)-hitOf(a));
     const max=Math.max(.0001,...devs.map(g=>pr(g.ov,g.n)));
-    const LOTS=X.lots.filter(L=>devOk.has(L.dev)&&L.day===day&&hitOf(L)>0);
+    const LOTS=scoped(W).filter(L=>hitOf(L)>0);
     body=`<section class="panel" data-key="ok:day"><div style="padding:14px 18px 4px;display:flex;gap:10px;align-items:baseline"><h2>${md(day)} 장비별 오버킬</h2><span class="muted" style="font-size:12.5px">오버킬이 난 장비만 · ${TH===2?"심한 오버킬":"오버킬"} 비율 순 · LOT 을 누르면 LOT 추적</span></div>
       ${devs.length?devs.map(g=>`<div class="okdev" data-key="okd:${esc(g.k)}"><div class="okdh"><b>${esc(g.k)}</b>${bar(g,max)}<span class="p num">${pct(hitOf(g),g.n)}</span><span class="m num">오버킬 ${g.ov} / ${g.n}장 · 심한 ${g.sev}</span></div>
         ${lotHead}${LOTS.filter(L=>L.dev===g.k).sort((a,b)=>a.t-b.t).map(L=>lotRow(L,false)).join("")}</div>`).join(""):`<p class="ok-empty">${md(day)} 에는 ${TH===2?"심한 오버킬":"오버킬"}이 난 장비가 없습니다.</p>`}</section>`;
@@ -1832,7 +1834,7 @@ function okHtml(){
       const sub=agg(by==="job"?(w=>w.dev):(w=>w.L.jk),SW.filter(w=>daySet.has(w.day))).filter(g=>g.n).sort((a,b)=>pr(hitOf(b),b.n)-pr(hitOf(a),a.n));
       const smax=Math.max(.0001,...sub.map(g=>pr(g.ov,g.n)));
       const subNm=g=>by==="job"?g.k:jobName(g.k,g.names);
-      const SL=X.lots.filter(L=>devOk.has(L.dev)&&daySet.has(L.day)&&(by==="job"?L.jk===sel.k:L.dev===sel.k)&&hitOf(L)>0).sort((a,b)=>b.t-a.t);
+      const SL=scoped(W.filter(w=>keyOf(w)===sel.k)).filter(L=>hitOf(L)>0).sort((a,b)=>b.t-a.t);
       det=`<section class="panel" data-key="ok:det"><div style="padding:14px 18px 6px"><h2 class="mono" style="font-size:15px">${esc(nm(sel))}</h2><p class="muted" style="margin:2px 0 0;font-size:12.5px">오버킬 ${sel.ov}/${sel.n}장(${pct(sel.ov,sel.n)}) · 심한 ${sel.sev}장 — 막대를 누르면 그날 하루 보기</p></div>
         <div style="padding:6px 14px 12px">${cols}</div>
         <div style="padding:2px 18px 4px"><h3 style="margin:0;font-size:13px">${by==="job"?"이 Job 을 돈 장비":"이 장비가 돈 Job"}</h3></div>

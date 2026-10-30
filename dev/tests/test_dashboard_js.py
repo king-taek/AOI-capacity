@@ -8,6 +8,7 @@
 """
 from __future__ import annotations
 
+import datetime
 import json
 import re
 import shutil
@@ -860,6 +861,20 @@ def test_overkill_day_counts_pass_and_max_fault_and_lists_only_devices_with_over
     assert "상한 초과 1" in html and "1,500" in html                      # LOT 줄: 표 · 최대 Defect(쉼표 원문도 읽음)
     (sev,) = screen(rows, meta("AOI-1", "AOI-2"), [["okHtml"]], state={"okTier": "sev"})
     assert ">50%<" in sev and "심한 오버킬 기준" in sev                  # 심한 단계: 목록 순위·비율이 심한 기준(AOI-1 2 / 4), 카드 1은 늘 400↑
+
+
+def test_overkill_scope_follows_model_test_rule_own_maker_buttons_and_selected_day():
+    """리뷰(PR #9): ① Lot 에 TEST 가 붙어 있으면(TEST_LOT 처럼 밑줄이어도) 모델처럼 Test 로 빼고 ② 다른 탭의 Gen5 를 물려받지 않으며
+    ③ 자정을 넘긴 Report 도 고른 날의 장만으로 LOT 줄을 만든다(합계에 오버킬이 있는데 LOT 줄이 없던 것)."""
+    prev = (datetime.date.fromisoformat(DAY) - datetime.timedelta(days=1)).isoformat()
+    rep = "J1_6321_LOT-N_night_BatchReport.htm"
+    rows = [_okw("AOI-1", "N1", "23:50", "10", day=prev, report=rep, lot="LOT-N"),
+            _okw("AOI-1", "N2", "00:10", "900", report=rep, lot="LOT-N"),
+            _okw("AOI-1", "T1", "09:00", "2000", lot="TEST_LOT")]
+    (html,) = screen(rows, meta("AOI-1", "AOI-2"), [["okHtml"]], state={"maker": "g5", "okMk": "cam"})
+    assert "400개 이상 1장 / 1장" in html                                  # TEST_LOT 은 분모에도 없다 · 전날 장은 이 날이 아니다
+    assert 'data-key="okd:AOI-1"' in html                                  # Gen5 가 아닌 장비도 보인다
+    assert f'data-key="okl:AOI-1|{rep}"' in html                           # 자정 넘긴 Report 의 LOT 줄이 이 날에 있다
 
 
 def test_overkill_period_ranks_jobs_and_defaults_to_camtek():
