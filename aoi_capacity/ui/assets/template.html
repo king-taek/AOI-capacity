@@ -1695,9 +1695,11 @@ function headerHtml(V){
   if(!fixed&&gen)stampTxt+=" · 수집 시각 정보 없음";
   const lotOnly=!!meta.lot_only;
   const only=Array.isArray(meta.only_tabs)&&meta.only_tabs.length?meta.only_tabs:null;   /* 탭 골라 저장한 파일(10/28): 고른 탭만 탭 줄에 */
-  const nav=lotOnly?[["lot","LOT 추적"]]:only?ALL_TABS.filter(([k])=>only.includes(k)):[["home","가동률"],["errors","Error"],["overkill","Overkill"],["report","TB500 · Kendall"],["recipe","RDL 단일스캔"],["lot","LOT 추적"],...HIDDEN_TABS.filter(([k])=>state.unhid.includes(k)||V===k)];
-  const hid=lotOnly?[]:HIDDEN_TABS.filter(([k])=>!state.unhid.includes(k)&&V!==k);
-  const pk=state.pickTabs||ALL_TABS.map(t=>t[0]).filter(k=>!HIDDEN_TABS.some(x=>x[0]===k));
+  const extraHid=Array.isArray(meta.hidden_tabs)?meta.hidden_tabs:[];   /* 배포판이 평소 숨겨 둔 탭(10/30 — 전체 배포는 RDL 단일스캔): 파라미터처럼 설정에서 꺼내 쓴다 */
+  const HID=[...HIDDEN_TABS,...ALL_TABS.filter(([k])=>extraHid.includes(k)&&!HIDDEN_TABS.some(x=>x[0]===k))];
+  const nav=lotOnly?[["lot","LOT 추적"]]:only?ALL_TABS.filter(([k])=>only.includes(k)):[["home","가동률"],["errors","Error"],["overkill","Overkill"],["report","TB500 · Kendall"],["recipe","RDL 단일스캔"],["lot","LOT 추적"]].filter(([k])=>!extraHid.includes(k)||state.unhid.includes(k)||V===k).concat(HIDDEN_TABS.filter(([k])=>state.unhid.includes(k)||V===k));
+  const hid=lotOnly?[]:HID.filter(([k])=>!state.unhid.includes(k)&&V!==k);
+  const pk=state.pickTabs||ALL_TABS.map(t=>t[0]).filter(k=>!HID.some(x=>x[0]===k));
   const pickHtml=`<hr><b>탭 골라 HTML 만들기</b>${ALL_TABS.map(([k,l])=>`<button class="btn" role="menuitemcheckbox" aria-checked="${pk.includes(k)}" data-h="${h(()=>setState({pickTabs:pk.includes(k)?pk.filter(x=>x!==k):[...pk,k]}))}" data-fk="pick:${k}">${pk.includes(k)?"☑":"☐"} ${l}</button>`).join("")}<button class="btn on" ${pk.length?"":"disabled"} data-h="${h(()=>saveHtml({only_tabs:ALL_TABS.map(t=>t[0]).filter(k=>pk.includes(k))},"탭"+pk.length+"개_"))}" data-fk="pick:go">${pk.length?"고른 "+pk.length+"개 탭만 HTML로 저장":"탭을 고르세요"}</button>`;
   const setBtn=state.devOn&&!lotOnly&&!only?`<span class="setwrap"><button class="btn${state.setOpen?" on":""}" data-h="${h(()=>setState({setOpen:!state.setOpen}))}" data-fk="set:btn" aria-haspopup="true" aria-expanded="${state.setOpen}" title="숨긴 탭 설정">⚙ 설정</button>${state.setOpen?`<div class="setpop" role="menu"><b>숨긴 탭</b>${hid.length?hid.map(([k,l])=>`<button class="btn" role="menuitem" data-h="${h(()=>{setState({unhid:[...state.unhid,k],setOpen:false});S.go(k)();})}" title="탭 줄로 복귀하고 엽니다">${l}</button>`).join(""):`<span class="setnone">숨긴 탭이 없습니다</span>`}${hasD?pickHtml:""}</div>`:""}</span>`:"";
   return `<header class="hdr" data-key="hdr"><div class="brand"><span class="lt" data-lottie="scan" data-loop="1" data-static aria-hidden="true"></span>AOI 가동 현황</div>

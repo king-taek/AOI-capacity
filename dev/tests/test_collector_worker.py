@@ -164,3 +164,30 @@ def test_publish_result_reaches_the_done_result(qapp, fake_nas, tmp_path):
     assert not got2["failed"] and res2.published == "" and res2.html_path.endswith(".html")      # 수집은 성공
     assert [x["kind"] for x in res2.warnings] == ["publish"] and res2.state == "completed_with_warnings"
     assert res2.warning_lines[0].startswith(i18n.KO.COLLECT_DONE_PUBLISH_FAILED_FMT.split("{")[0])
+
+
+def test_full_publish_result_reaches_the_done_result(qapp, fake_nas, tmp_path):
+    """10/30: 전체 배포도 LOT 추적과 같은 방식 — 올렸으면 폴더, 못 올렸으면 별도 경고(수집 · LOT 추적 배포는 그대로 성공)."""
+    from aoi_capacity import i18n
+    from aoi_capacity.workers.collector import CollectorWorker
+
+    nas, csv_path = fake_nas
+    full = tmp_path / "all"
+    cfg = make_cfg(tmp_path, csv_path, publish_dir=str(tmp_path / "lot"), publish_full_dir=str(full))
+    w = CollectorWorker(21, cfg)
+    got = _collect_signals(w)
+    w.run()
+    (tok, res), = got["done"]
+    assert not got["failed"] and res.published == str(tmp_path / "lot") and res.published_full == str(full) and not res.warnings
+    assert (full / "AOI_ALL.html").is_file()
+
+    blocker = tmp_path / "not_a_dir"
+    blocker.write_text("x")
+    cfg2 = make_cfg(tmp_path / "again", csv_path, publish_dir=str(tmp_path / "lot2"), publish_full_dir=str(blocker / "sub"))
+    w2 = CollectorWorker(22, cfg2)
+    got2 = _collect_signals(w2)
+    w2.run()
+    (tok, res2), = got2["done"]
+    assert not got2["failed"] and res2.published == str(tmp_path / "lot2") and res2.published_full == ""
+    assert [x["kind"] for x in res2.warnings] == ["publish_full"] and res2.state == "completed_with_warnings"
+    assert res2.warning_lines[0].startswith(i18n.KO.COLLECT_DONE_PUBLISH_FULL_FAILED_FMT.split("{")[0])

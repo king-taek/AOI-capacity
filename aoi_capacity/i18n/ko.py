@@ -534,6 +534,19 @@ SET_PUBLISH_PLACEHOLDER = "비우면 배포 안 함"
 SET_PUBLISH_HELP = ("팀 공유 폴더 경로를 적으면 수집이 끝날 때마다 LOT 추적만 담은 HTML 을 조용히 올립니다(실패해도 수집은 성공, 로그에만 남음). "
                     "폴더 안에 바로가기용 AOI_LOT.html · latest.js · data 폴더(최근 3개)가 생깁니다. 장비 NAS 아래 경로는 거부합니다.")
 PUBLISH_DIR_DEFAULT = "\\\\k5cifsn2\\k5tsvdata$\\1. Conder Scan\\0. 전산 X\\임현택\\LOT추적"   # 10/27 사용자 확정 — 팀 공유 폴더(장비 NAS 와 다른 서버)
+PUBLISH_FULL_DIR_DEFAULT = "\\\\k5cifsn2\\k5tsvdata$\\1. Conder Scan\\0. 전산 X\\임현택\\전체"   # 10/30 사용자 요청 — 모든 탭을 담은 배포판(LOT 추적 폴더 옆)
+SET_PUBLISH_FULL_DIR = "전체 배포 폴더"
+SET_PUBLISH_FULL_HELP = ("팀 공유 폴더 경로를 적으면 수집이 끝날 때마다 모든 탭(최근 90일)을 담은 HTML 을 LOT 추적 뒤에 조용히 올립니다(실패해도 수집은 성공, 로그에만 남음). "
+                         "폴더 안에 바로가기용 AOI_ALL.html · latest.js · data 폴더(최근 3개)가 생깁니다. LOT 추적 배포 폴더와 달라야 하고 장비 NAS 아래 경로는 거부합니다.")
+PUBLISH_FULL_SAME_DIR = "전체 배포 폴더가 LOT 추적 배포 폴더와 같아 올리지 않았습니다(서로 다른 폴더를 적어 주세요)"
+PUBLISH_FULL_STUB_TITLE = "AOI Capacity 전체"
+PUBLISH_FULL_STUB_LOADING = "AOI Capacity 전체 화면을 여는 중…"
+PUBLISH_FULL_STUB_FALLBACK = "자동으로 열리지 않으면 data 폴더에서 가장 최근 all_ 로 시작하는 파일을 여세요."
+COLLECT_DONE_TOAST_PUBLISHED_FULL = " · 전체 배포됨"
+COLLECT_DONE_PUBLISH_FULL_FAILED_FMT = ("전체 배포는 올리지 못했습니다(수집 결과는 정상 저장됨): {path}\n{error}\n"
+                                        "공유 폴더 연결 · 경로를 확인하고 다시 수집하세요.")
+COLLECT_DONE_PUBLISH_FULL_LOCKED_FMT = ("전체 배포 파일은 올렸지만 안내 파일이 열려 있어 최신으로 바꾸지 못했습니다: {path}\n"
+                                        "다음 수집 때 다시 가리킵니다.")
 PUBLISH_STUB_TITLE = "AOI LOT 추적"
 PUBLISH_STUB_LOADING = "LOT 추적 화면을 여는 중…"
 PUBLISH_STUB_FALLBACK = "자동으로 열리지 않으면 data 폴더에서 가장 최근 lot_ 로 시작하는 파일을 여세요."

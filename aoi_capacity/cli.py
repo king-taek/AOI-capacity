@@ -186,7 +186,7 @@ def main(argv=None) -> int:
         return EXIT_CANCELLED
     warnings: list = []
     collect.write_html(cfg, rows, dev_meta, errors, started, mode="auto", log=_print, timing=stats, warnings=warnings)
-    publish.publish_after_collect(cfg, rows, dev_meta, log=_print)       # 10/27: 배포 폴더가 있으면 조용히(실패해도 수집은 성공)
+    publish.publish_after_collect(cfg, rows, dev_meta, log=_print, params_store=stats.get("params_store"))       # 10/27: 배포 폴더가 있으면 조용히(실패해도 수집은 성공)
     if stats.get("cache_status") == collect.CACHE_CORRUPT:
         _print(K.CLI_CACHE_CORRUPT_FMT.format(path=stats.get("cache_preserved", "")))
     bad = [d for d in dev_meta if d.get("error")]

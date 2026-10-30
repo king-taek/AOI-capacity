@@ -12,7 +12,7 @@ Camtek AOI 장비의 BatchReport/WaferInfo.ini 를 읽어 장비별 가동률을
    쓰기(`open(..., "w")`, `os.replace/rename/remove/makedirs`, `shutil.*`)는 `aoi_capacity/collect.py` 의
    `_save_cache` · `write_html` · `_write_csv` 안에만 두고, 각 함수 첫 줄에서 `nas_guard.assert_local` 을 호출한다.
    회귀 가드: `dev/tests/test_nas_guard.py`(정적 AST 검사 + 동적 트립와이어).
-   LOT 추적 배포(`aoi_capacity/publish.py`, 10/27)의 쓰기(`_write_text` · `_prune` · `write_shortcut`)도 같은 규칙 — 첫 줄 `assert_local`, 정적 가드가 publish.py 까지 본다. 대상은 팀 공유 폴더 `publish_dir`(장비 NAS 아래면 거부).
+   LOT 추적 배포(`aoi_capacity/publish.py`, 10/27)의 쓰기(`_write_text` · `_prune` · `write_shortcut`)도 같은 규칙 — 첫 줄 `assert_local`, 정적 가드가 publish.py 까지 본다. 대상은 팀 공유 폴더 `publish_dir`(장비 NAS 아래면 거부). 전체 배포(10/30, D102)는 같은 `publish.py` 의 `FULL` 종류 — 모든 탭 · 최근 `publish_full_days`(90)일, 폴더 `publish_full_dir`, 같은 규칙.
 2. **수집 허용 장비 밖은 건드리지 않는다.** 허용 목록은 `aoi_capacity/scope.py`
    (현재 41대 전부: Camtek `AOI-1`~`AOI-28`(26~28 은 10/16 2층 추가, `J:\`) + `4F-AOI-01`~`05`(4대 현장 테스트 뒤 넓힘) + KLA `K1`~`K6` · `4F-K1` · `4F-K2`(10/5, D73) — 사용자 확정).
    목록에 없는 이름은 여전히 막는다(`AOI-26` 같은 오타·신규 장비). 장비를 새로 추가하려면 이 목록부터 고친다.
