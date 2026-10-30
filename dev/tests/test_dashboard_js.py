@@ -873,9 +873,40 @@ def test_report_tab_leaves_out_a_batch_whose_time_per_wafer_is_far_from_its_grou
     html, popup = screen(rows + dia, meta("AOI-1"), [["reportHtml"], ["rptDevPopupHtml"]],
                          state={"view": "report", "rptDev": "AOI-1", "rptAll": {"job": "TB500 PI3", "dev": "AOI-1"}})
     assert popup.count('title="제외 — 장당') == 1                      # 빠른 쪽(LOT-F) 하나만 이상치로 뺀다
-    assert "제외 — 장당 1.8분, DIA 아닌 Lot 중앙" in popup
+    assert "제외 — 장당 1.8분, 이 장비 DIA 아닌 Lot 중앙" in popup
     g_row = popup[popup.index("LOT-G"):]
     assert "표본" in g_row[:g_row.index("</div>")]                # 느린 쪽(장당 30분)은 표본으로 남는다
+
+
+def test_report_tab_judges_time_per_wafer_within_each_device_not_across_the_fleet():
+    """10/30 실데이터 점검: Kendall BS 비DIA 중앙이 AOI-1 10.5분 · AOI-15 3.9분이라 장비를 가로질러 중앙을 재면 AOI-15 의 정상 배치 34개 중 31개가 이상치로 빠졌다.
+    장당 시간은 그 장비의 같은 종류 중앙으로 잰다 — 느린 장비가 있어도 빠른 장비의 평소 배치는 표본에 남는다."""
+    rows = _clean_batches(5)                                    # AOI-1: 장당 6.1~7.0분
+    for i in range(5):                                          # AOI-2: 6장 180분 = 장당 30분(AOI-1 의 4배 이상)
+        bs = f"{8 + 3 * i:02d}:00"
+        lot = f"SLOW-{i + 1}"
+        rep = f"R_TB500_LIVE_PI3_6321_{lot}_18-Sep-26_({bs.replace(':', '.')}.00)_BatchReport.htm"
+        for k in range(6):
+            rows.append(w("AOI-2", f"S{i}{k}", _hhmm(bs, k + 1), _hhmm(bs, k + 2), lot=lot, job="R_TB500_LIVE_PI3", report=rep, bs=bs, be=_hhmm(bs, 180)))
+    (popup,) = screen(rows, meta("AOI-1", "AOI-2"), [["rptDevPopupHtml"]],
+                      state={"view": "report", "rptDev": "AOI-1", "rptAll": {"job": "TB500 PI3", "dev": "AOI-1"}})
+    assert 'title="제외 — 장당' not in popup                           # 전체 중앙(약 18분)의 0.5배 = 9분이어도 AOI-1 의 6~7분 배치는 빠지지 않는다
+    assert popup.count("표본") >= 5
+
+
+def test_report_tab_reads_dia_after_an_underscore():
+    """실데이터에는 HWH_DIA · DIA_1023S 처럼 밑줄 이웃의 DIA 가 있다 — 낱말 경계(\\b)는 밑줄을 글자로 봐서 놓쳤다. DIA 무리로 읽어 자기 무리 중앙으로 잰다."""
+    rows = []
+    for i in range(5):                                          # 장당 2분 — DIA 무리
+        bs = f"{8 + 2 * i:02d}:00"
+        lot = f"H{i}_DIA"
+        rep = f"R_TB500_LIVE_PI3_6321_{lot}_18-Sep-26_({bs.replace(':', '.')}.00)_BatchReport.htm"
+        for k in range(6):
+            rows.append(w("AOI-1", f"D{i}{k}", _hhmm(bs, k + 1), _hhmm(bs, k + 2), lot=lot, job="R_TB500_LIVE_PI3", report=rep, bs=bs, be=_hhmm(bs, 12)))
+    rows += _clean_batches(5)                                   # 일반 Lot: 장당 6~7분 — 한 무리로 섞이면 DIA 가 절반 아래
+    (popup,) = screen(rows, meta("AOI-1"), [["rptDevPopupHtml"]],
+                      state={"view": "report", "rptDev": "AOI-1", "rptAll": {"job": "TB500 PI3", "dev": "AOI-1"}})
+    assert 'title="제외 — 장당' not in popup
 
 
 def test_report_tab_counts_a_batch_that_crosses_midnight_once():
