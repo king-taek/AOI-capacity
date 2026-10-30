@@ -134,7 +134,7 @@ def page(page_factory, tmp_path):
     ctx.close()
 
 
-_BOOT_WATCH = """(() => { window.__boot = {}; new MutationObserver(() => { const b = document.getElementById('boot');
+_BOOT_WATCH = """(() => { window.__boot = {}; new MutationObserver(() => { const b = document.getElementById('aoi-boot');
   if (b && !window.__boot.seen) window.__boot.seen = performance.now();
   if (!b && window.__boot.seen && !window.__boot.gone) window.__boot.gone = performance.now(); }).observe(document, {childList: true, subtree: true}); })()"""
 
@@ -157,9 +157,10 @@ def test_boot_screen_covers_four_seconds_then_reveals_the_real_screen(page_facto
     pg.add_init_script(_BOOT_WATCH)
     pg.goto(out.as_uri())
     pg.wait_for_selector('main[data-key="view:%s"]' % ("lot" if lot_only else "home"))
-    assert pg.locator("#boot canvas").count() == 1                      # 화면은 이미 그려졌고 덮개는 아직 있다
-    assert pg.evaluate("getComputedStyle(document.getElementById('boot')).pointerEvents") == "none"
-    pg.wait_for_selector("#boot", state="detached", timeout=15000)
+    assert pg.locator("#aoi-boot canvas").count() == 1                      # 화면은 이미 그려졌고 덮개는 아직 있다
+    assert pg.evaluate("getComputedStyle(document.getElementById('aoi-boot')).pointerEvents") == "none"
+    assert pg.locator('script#boot').count() == 1                       # 덮개를 지우는 줄이 스크립트 자신을 지우지 않는다(id 가 다르다)
+    pg.wait_for_selector("#aoi-boot", state="detached", timeout=15000)
     t = pg.evaluate("window.__boot")
     assert t.get("seen") is not None and 3990 <= t["gone"] < 6500, t
     assert not errors and not requests
@@ -254,6 +255,17 @@ def test_home_rows_follow_device_order_and_save_copy_refolds_the_same_columns(pa
     assert rows1 == rows0
     assert meta1["mode"] == "saved" and meta1.get("saved_iso") and meta1["generated_iso"] == emb0["meta"]["generated_iso"]
     assert "__DATA__" not in saved and requests == [] and errors == []
+    # 시작 화면(D104, PR #14 리뷰): 덮개가 아직 있을 때(연 지 4초 안) 저장해도 사본은 boot 스크립트를 품고 덮개는 품지 않는다 —
+    # 예전엔 덮개와 스크립트가 같은 id 라 스크립트가 자기를 지워, 사본을 열면 덮개가 영원히 남을 수 있었다
+    assert saved.count('<script id="boot">') == 1 and '<div id="aoi-boot"' not in saved
+    copy = tmp_path / "saved_copy.html"
+    copy.write_text(saved, encoding="utf-8")
+    pg2 = pg.context.new_page()
+    pg2.goto(copy.as_uri())
+    pg2.wait_for_selector('main[data-key="view:home"]')
+    pg2.wait_for_selector("#aoi-boot", state="attached")
+    pg2.wait_for_selector("#aoi-boot", state="detached", timeout=15000)
+    pg2.close()
 
 
 def test_render_morphs_in_place_instead_of_rebuilding(page):

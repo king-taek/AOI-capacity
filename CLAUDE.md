@@ -183,7 +183,7 @@ graphify 는 `--code-only` 로, template.html 인라인 JS 까지 보려면 `pyt
     **가동률 = (r + d) ÷ den**. 평균은 값이 있는 장비만(`S.fleetUtil`). 화면의 '오늘' 은 열람 시계가 아니라 수집 시각이다(D40) — 집계 경로에 `Date.now()`/`new Date()` 가 없다(가드).
   - **D09 로더**: 날짜는 숫자 범위 + 역변환 검사(2월 30일·25시·월 약어 오타 → null, 그 행은 `badRows` 로 세고 버림), `unfold` 는 cols 중복·행 길이·풀 번호 범위를 검사해 예외를 던지고 `loadDemo` 가 오류 패널로 보여 준다(무한 '불러오는 중…' 없음).
   - 화면 쪽 `S.segsOf` 는 모델의 seg 를 그대로 그리고(같은 종류 8분 이하 틈만 시각 병합, 수치 불변) 대기를 다시 계산하지 않는다. 옛 장비-일 추정(`isEst`/`estBar`)은 P4 에서 지웠다(가드 `test_removed_features_stay_removed`).
-- **시작 화면(D104, 10/30 — 현택 선택 '데이터 입자' A)**: `<script id="boot">`(body 맨 앞, `#embedded` 보다 앞 — 스크립트는 boot · embedded · vendor · 화면 넷)가 파일을 읽는 동안부터 덮개 `#boot`(고정 · `pointer-events:none`)를 띄우고
+- **시작 화면(D104, 10/30 — 현택 선택 '데이터 입자' A)**: `<script id="boot">`(body 맨 앞, `#embedded` 보다 앞 — 스크립트는 boot · embedded · vendor · 화면 넷)가 파일을 읽는 동안부터 덮개 `#aoi-boot`(고정 · `pointer-events:none`)를 띄우고
   **Worker + OffscreenCanvas**(파일 안 함수로 만든 blob 주소 — 바깥 요청 아님, 없으면 같은 장면을 메인 스레드에서)가 입자를 그린다 — JSON 해석 · 모델 계산이 메인 스레드를 막아도 끊기지 않는다(옛 Lottie 로더는 그동안 0프레임이었다, 실측).
   **4초 장면**: 1막 화면 틀(글자 · 칸 · 선) → 2막 숫자 · 색 막대, **페이지를 연 때부터 4초(`MIN`) 안에는 걷히지 않는다**. 로딩이 4초를 넘으면 틀은 멈추고 숫자 · 막대 몫 입자만 제 자리 근처에서 **살랑살랑**(엷은 회청색 — 값을 모르니) 기다리다가 로딩이 끝나면 약 0.5초 안에 앉는다(실측).
   진행 값 하나(`bootCore` — min(4초 계획, 로딩 상한) 을 임계 감쇠 스프링으로)가 장면을 움직이고, 왼쪽 아래 단계 글자는 main 스크립트의 `bootPhase(1~4)` 를 따른다.

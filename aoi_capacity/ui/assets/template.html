@@ -548,7 +548,7 @@ button.dbrow:focus-visible{outline:2px solid var(--nav-on);outline-offset:-2px}
    ============================================================================ */
 (function(){
 "use strict";
-var prev=document.getElementById("boot");if(prev&&prev.parentNode)prev.parentNode.removeChild(prev);   /* '사본 저장' 으로 4초 안에 저장한 파일에 덮개가 남아 있으면 */
+var prev=document.getElementById("aoi-boot");if(prev&&prev.parentNode)prev.parentNode.removeChild(prev);   /* '사본 저장' 으로 4초 안에 저장한 파일에 덮개가 남아 있으면 */
 window.AOI_BOOT=null;
 const MIN=4000,LABELS=["결과 파일 여는 중","데이터 읽는 중","기록 펼치는 중","계산 중","화면 그리는 중"],PW=[.08,.34,.12,.36,.10],TH=[];
 {let a=0;for(const w of PW){TH.push(a);a+=w;}}
@@ -813,7 +813,8 @@ try{
   let red=false;try{red=!!(window.matchMedia&&window.matchMedia("(prefers-reduced-motion: reduce)").matches);}catch(e){}
   const bg=(getComputedStyle(document.documentElement).getPropertyValue("--bg")||"").trim()||"#F4F6F8";
   try{if("scrollRestoration" in history)history.scrollRestoration="manual";}catch(e){}   /* 다시 열 때 스크롤을 되살리면 잰 자리와 드러난 화면이 어긋난다 */
-  const ov=document.createElement("div");ov.id="boot";ov.setAttribute("aria-hidden","true");
+  const ov=document.createElement("div");ov.id="aoi-boot";   /* 이 스크립트(id="boot")와 다른 이름 — 같으면 위 줄이 스크립트 자신을 지워 사본에 시작 화면이 빠진다 */
+  ov.setAttribute("aria-hidden","true");
   ov.style.cssText=`position:fixed;left:0;top:0;width:100vw;height:100vh;z-index:2147483000;background:${bg};pointer-events:none;overflow:hidden;opacity:1;transition:opacity .18s cubic-bezier(.23,1,.32,1)`;
   const cv=document.createElement("canvas");cv.style.cssText=`display:block;width:${W}px;height:${H}px`;ov.appendChild(cv);document.body.appendChild(ov);
   const dpr=Math.min(2,window.devicePixelRatio||1),epoch=performance.timeOrigin||Date.now()-performance.now(),cached=cacheRead(W,H);
@@ -847,7 +848,7 @@ try{
     /* 덮개가 걷힌 뒤에 할 일(미리 계산 등) — 드러나는 순간 메인 스레드가 바쁘면 걷힘이 늦는다 */
     later(f){if(gone)setTimeout(f,0);else after.push(f);},
     abort(){finish();}};
-}catch(e){try{const o=document.getElementById("boot");if(o&&o.parentNode)o.parentNode.removeChild(o);}catch(_){}window.AOI_BOOT=null;}
+}catch(e){try{const o=document.getElementById("aoi-boot");if(o&&o.parentNode)o.parentNode.removeChild(o);}catch(_){}window.AOI_BOOT=null;}
 })();
 </script>
 <div class="toast" id="toast"></div>
@@ -1547,7 +1548,8 @@ function saveHtml(extra,namePart){if(extra&&extra.type)extra=null;   /* 클릭 �
   const cols=embCols.length?embCols:Object.keys(rows[0]);const pooled=embCols.length?embPooled:cols.filter(c=>c!=="wafer_start_time"&&c!=="wafer_end_time");
   const pool=[],idx=new Map(),F=new Set(pooled);const put=v=>{v=v==null?"":String(v);let i=idx.get(v);if(i==null){i=pool.length;pool.push(v);idx.set(v,i);}return i;};
   const emb={cols,pooled,pool,rows:rows.map(r=>cols.map(c=>F.has(c)?put(r[c]):(r[c]??""))),meta:{...meta,...(RG.groups.length||RG_EMB?{recipe_groups:RG}:{}),mode:meta.mode==="demo"?"demo":"saved",...(extra||{}),saved_iso:new Date().toISOString().slice(0,19)}};
-  const clone=document.documentElement.cloneNode(true);clone.querySelector("#embedded").textContent=JSON.stringify(emb).replace(/<\//g,"<\\/");
+  const clone=document.documentElement.cloneNode(true);{const ov=clone.querySelector("#aoi-boot");if(ov)ov.remove();}   /* 시작 화면 덮개가 아직 있을 때 저장해도 사본에는 남기지 않는다(사본의 boot 스크립트가 새로 띄운다) */
+  clone.querySelector("#embedded").textContent=JSON.stringify(emb).replace(/<\//g,"<\\/");
   clone.querySelector("#app").innerHTML='<main><p class="muted" style="padding:40px 0">불러오는 중…</p></main>';clone.querySelector("#toast").classList.remove("on");
   const blob=new Blob(["<!doctype html>\n"+clone.outerHTML],{type:"text/html;charset=utf-8"});const url=URL.createObjectURL(blob);
   const a=document.createElement("a");a.href=url;a.download="AOI_capacity_"+(namePart||"")+stamp()+".html";document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),4000);toast("사본을 저장했습니다");}
