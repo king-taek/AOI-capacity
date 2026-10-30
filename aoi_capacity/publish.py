@@ -80,11 +80,16 @@ def shortcut_text(share_dir: str, icon: Optional[str] = None) -> str:
 
 
 def shortcut_bytes(share_dir: str, icon: Optional[str] = None) -> bytes:
-    """.url 파일 바이트 — ANSI(한글 윈도의 CP949)로 그대로, 인코딩이 안 되는 글자가 있으면 퍼센트 인코딩 판(UTF-8, 아이콘 없이)으로."""
-    try:
-        return shortcut_text(share_dir, icon).encode(_ansi())
-    except (UnicodeEncodeError, LookupError):
-        return f"[InternetShortcut]\r\nURL={stub_url(share_dir)}\r\n".encode("utf-8")
+    """.url 파일 바이트 — ANSI(한글 윈도의 CP949)로 그대로, 인코딩이 안 되는 글자가 있으면 퍼센트 인코딩 판(UTF-8, 아이콘 없이)으로.
+    아이콘 경로만 ANSI 로 못 쓰면 아이콘을 빼고 다시 — 선택 사항인 아이콘 때문에 주소가 퍼센트 인코딩 판(한글 경로가 깨짐)으로 가지 않게."""
+    for ic in ((icon, None) if icon else (None,)):
+        try:
+            return shortcut_text(share_dir, ic).encode(_ansi())
+        except UnicodeEncodeError:
+            continue
+        except LookupError:
+            break
+    return f"[InternetShortcut]\r\nURL={stub_url(share_dir)}\r\n".encode("utf-8")
 
 
 def app_icon() -> Optional[str]:

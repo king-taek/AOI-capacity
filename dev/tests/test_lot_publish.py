@@ -189,6 +189,9 @@ def test_shortcut_points_at_the_stub_with_an_encoded_file_url(tmp_path, sample):
     assert publish.raw_stub_url("Z:\\a b\\c\\") == "file:///Z:/a%20b/c/AOI_LOT.html"
     share = tmp_path / "share"
     publish.publish_lot(cfg, str(share), rows=rows[:100], dev_meta=devs, now=dt.datetime(2026, 10, 27, 8, 15))
+    # 아이콘 경로만 ANSI 로 못 쓰면(이모지 등) 아이콘만 빼고 주소는 그대로 한글 — 퍼센트 인코딩 판으로 가지 않는다(PR #12 리뷰)
+    if os.name != "nt":
+        assert publish.shortcut_bytes(config_mod.PUBLISH_DIR_DEFAULT, "C:\\앱\\😀\\logo.ico") == ("[InternetShortcut]\r\nURL=" + raw + "\r\n").encode("cp949")
     shared = (share / "AOI_LOT_shortcut.url").read_bytes()
     assert b"AOI_LOT.html" in shared and b"IconFile" not in shared                     # 공유 폴더 안 바로가기: 팀원 PC 에 없는 아이콘 경로는 넣지 않는다
 
