@@ -391,7 +391,6 @@ class CollectPage(QWidget):
         lay.itemAt(lay.count() - 1).layout().addWidget(self._b_folder)
 
         # ── 배포 경로 시험(10/30 임시 — 새 공유 폴더 시험이 끝나면 지운다) ──
-        lay.addWidget(self._build_test_paths(body, p))
 
         # ── ① 수집 ──
         pick, pl = _card(body)
@@ -597,7 +596,6 @@ class CollectPage(QWidget):
         sv.setContentsMargins(0, 0, 0, 0)
         sv.setSpacing(0)
         self.settings_page = SettingsPage(sec)
-        self.settings_page.publish_dirs_changed.connect(self._reload_test_paths)       # 시험 카드(10/30 임시)와 설정의 배포 폴더 칸을 같은 값으로
         f = self.settings_page.top_form
         self._out = QLineEdit(p.output_dir, sec)
         self._out.setProperty("role", "mono")
@@ -968,62 +966,6 @@ class CollectPage(QWidget):
         return self._fl_worker is not None or self._gap_worker is not None
 
     # ── LOT 추적 발행 시험(10/27) ──
-    def _build_test_paths(self, parent: QWidget, p) -> QFrame:
-        """배포 경로 시험 카드(10/30 임시) — LOT 추적 · 전체 배포 폴더를 수집 창 맨 위에서 바로 바꾼다(설정의 같은 값, prefs 에 저장)."""
-        card, cl = _tool(parent, K.TEST_PATH_TITLE, K.TEST_PATH_SHORT, K.TEST_PATH_HELP)
-        self._tp_lot = QLineEdit(str(p.publish_dir or ""), card)
-        self._tp_full = QLineEdit(str(p.publish_full_dir or ""), card)
-        for edit in (self._tp_lot, self._tp_full):
-            edit.setProperty("role", "mono")
-            edit.setPlaceholderText(K.SET_PUBLISH_PLACEHOLDER)
-        for label, edit in ((K.TEST_PATH_LOT, self._tp_lot), (K.TEST_PATH_FULL, self._tp_full)):
-            r = _row(_label(label, "muted", card), edit, stretch=False)
-            r.setStretch(1, 1)
-            cl.addLayout(r)
-        self._tp_status = _label("", "muted", card, wrap=True)
-        self._tp_status.hide()
-        self._b_tp_apply = make_button(K.TEST_PATH_APPLY, "primary", card)
-        self._b_tp_reset = make_button(K.TEST_PATH_RESET, "ghost", card)
-        cl.addLayout(_row(self._b_tp_apply, self._b_tp_reset))
-        cl.addWidget(self._tp_status)
-        self._tp_lot.editingFinished.connect(lambda: self._save_test_paths(lot=True))
-        self._tp_full.editingFinished.connect(lambda: self._save_test_paths(full=True))
-        self._b_tp_apply.clicked.connect(self._apply_test_paths)
-        self._b_tp_reset.clicked.connect(self._reset_test_paths)
-        return card
-
-    def _save_test_paths(self, lot: bool = False, full: bool = False) -> None:
-        """고친 칸만 저장한다(다른 칸의 오래된 값을 덮지 않도록) — 설정 화면의 같은 칸도 같은 값으로 맞춘다."""
-        fields = {}
-        if lot:
-            fields["publish_dir"] = self._tp_lot.text().strip()
-        if full:
-            fields["publish_full_dir"] = self._tp_full.text().strip()
-        prefs.patch(**fields)
-        self.settings_page.reload_publish_dirs()
-        self._tp_status.setText(K.TEST_PATH_SAVED)
-        self._tp_status.show()
-
-    def _reload_test_paths(self) -> None:
-        """설정 화면에서 배포 폴더를 고쳤을 때 이 카드의 두 칸도 같은 값으로."""
-        p = prefs.load()
-        for edit, v in ((self._tp_lot, p.publish_dir), (self._tp_full, p.publish_full_dir)):
-            edit.blockSignals(True)
-            edit.setText(str(v or ""))
-            edit.blockSignals(False)
-
-    def _apply_test_paths(self) -> None:
-        root = K.TEST_PATH_ROOT
-        self._tp_lot.setText(root + "\\" + K.TEST_PATH_LOT_DIR)
-        self._tp_full.setText(root + "\\" + K.TEST_PATH_FULL_DIR)
-        self._save_test_paths(lot=True, full=True)
-
-    def _reset_test_paths(self) -> None:
-        from ...utils import config as _config
-        self._tp_lot.setText(_config.PUBLISH_DIR_DEFAULT)
-        self._tp_full.setText(_config.PUBLISH_FULL_DIR_DEFAULT)
-        self._save_test_paths(lot=True, full=True)
-
     def _on_lot_publish(self) -> None:
         if self._lp_worker is not None:
             return

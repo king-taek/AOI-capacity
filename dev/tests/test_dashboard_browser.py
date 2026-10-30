@@ -395,6 +395,30 @@ def test_report_tab_picks_a_job_and_opens_all_batches_of_a_device(page):
     assert errors == []
 
 
+def test_brand_mark_has_no_tile_and_replays_every_10_seconds(page_factory, tmp_path):
+    """브랜드 표식(10/30 현택): 배경 타일 없음 · 10초마다 저절로 다시 그린다(가짜 시계로 20초를 돌려 두 번), 창이 가려지면 건너뛴다."""
+    html = _build_html(tmp_path)
+    ctx = page_factory.new_context(viewport={"width": 1280, "height": 800})
+    pg = ctx.new_page()
+    errors: list = []
+    pg.on("pageerror", lambda e: errors.append(str(e)))
+    pg.clock.install()
+    pg.goto(html.as_uri())
+    pg.clock.run_for(1000)
+    pg.wait_for_selector('main[data-key^="view:"]')
+    assert pg.locator('.brand .mk svg rect').count() == 0                                # 배경 타일 없음
+    pg.evaluate("""window.__replays = 0; new MutationObserver(ms => { for (const m of ms) if (!/\\bplay\\b/.test(m.oldValue || '')) window.__replays++; })
+                   .observe(document.querySelector('.brand .mk'), {attributes: true, attributeOldValue: true, attributeFilter: ['class']})""")
+    pg.clock.run_for(20500)
+    assert pg.evaluate("window.__replays") == 2                                          # 10초 · 20초
+    assert pg.locator('.brand .mk.play').count() == 1                                    # 다시 그린 뒤 play 가 붙어 있다
+    pg.evaluate("Object.defineProperty(document, 'hidden', {configurable: true, get: () => true})")
+    pg.clock.run_for(10000)
+    assert pg.evaluate("window.__replays") == 2                                          # 가려진 창에서는 다시 그리지 않는다
+    assert errors == []
+    ctx.close()
+
+
 def test_motion_hooks_lottie_countup_sweep_and_recede(page):
     """움직임의 자리: 브랜드 표식(인라인 SVG · CSS, 10/30) · 'Error 없음' 의 Lottie 체크 · GSAP 카운트업(끝 값이 정확) · 막대 sweep(끝나면 clip-path 남지 않음) · 팝업 뒤 무대 물러남."""
     pg, errors, _ = page
