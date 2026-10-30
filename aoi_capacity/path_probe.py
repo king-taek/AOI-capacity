@@ -59,8 +59,9 @@ class _Rec:
             self.stopped = True
         return self.stopped
 
-    def check(self, group: str, name: str, fn: Callable[[], tuple]) -> Optional[bool]:
-        if self.stopped or self.stop():
+    def check(self, group: str, name: str, fn: Callable[[], tuple], *, force: bool = False) -> Optional[bool]:
+        """`force` = 멈춤 요청이 있어도 돌린다(시험 파일 지우기)."""
+        if not force and (self.stopped or self.stop()):
             return None
         if self.progress:
             self.progress(f"{group} · {name}")
@@ -185,147 +186,6 @@ def _test_folder(rec: _Rec, kind: publish.Kind, base: str, sizes: tuple, roots: 
         return None, f"latest.js 가 지금 가리키는 파일: {publish._pointed_name(base, kind) or '(없음)'}"
     rec.check(tag, "지금 배포된 파일 확인", pointed)
 
-    def subdirs():
-        a, b = mk(td), mk(dd)
-        return os.path.isdir(dd), f"{TEST_DIR} {'새로' if a else '이미'} · data {'새로' if b else '이미'}"
-    if not rec.check(tag, f"시험 하위 폴더({TEST_DIR}\\data) 만들기", subdirs):
-        rec.check(tag, "시험 중단", lambda: (False, "시험 폴더를 만들지 못해 이 폴더의 나머지 시험을 건너뜁니다"))
-        return
-
-    def korean():
-        p = os.path.join(td, KOREAN_NAME)
-        data = "한글 · 따옴표(') · 공백 시험\n".encode("utf-8")
-        if not put(p, data):
-            return False, "쓰지 못함"
-        names = os.listdir(td)
-        same = _read(p) == data
-        return KOREAN_NAME in names and same, f"목록에 같은 이름 {'있음' if KOREAN_NAME in names else '없음'} · 내용 {'같음' if same else '다름'}"
-    rec.check(tag, "한글 · 따옴표 · 공백 이름 파일 쓰기 · 읽기", korean)
-
-    def stub():
-        p = os.path.join(td, kind.stub)
-        text = publish.stub_text(kind)
-        if not put(p, text):
-            return False, "쓰지 못함"
-        got = _read(p).decode("utf-8")
-        return got == text, f"{kind.stub} {len(text)}자 · 읽어 비교 {'같음' if got == text else '다름'}"
-    rec.check(tag, f"안내 파일 {kind.stub} 쓰기", stub)
-
-    def latest():
-        p = os.path.join(td, publish.LATEST_NAME)
-        v1 = publish.latest_text(f"{kind.prefix}_20260101_0000.html", kind)
-        v2 = publish.latest_text(f"{kind.prefix}_20260101_0001.html", kind)
-        if not put(p, v1):
-            return False, "처음 쓰기 실패"
-        t0 = time.perf_counter()
-        if not put(p, v2):                                 # 같은 이름 덮어쓰기(os.replace) — 실제 배포가 매번 하는 일
-            return False, "덮어쓰기 실패"
-        ms = (time.perf_counter() - t0) * 1000
-        got = _read(p).decode("utf-8")
-        return got == v2, f"덮어쓰기 {ms:.0f}ms · 읽어 비교 {'같음(새 내용)' if got == v2 else '다름'}"
-    rec.check(tag, "latest.js 쓰기 · 덮어쓰기", latest)
-
-    def locked():
-        p = os.path.join(td, publish.LATEST_NAME)
-        v3 = publish.latest_text(f"{kind.prefix}_20260101_0002.html", kind)
-        with open(p, "rb"):                                # 누군가 이 파일을 열고 있는 상태
-            replaced = publish._write_text(p, v3, roots, tries=1)
-        note = "열린 파일도 교체됨" if replaced else "열린 파일은 교체 못 함(Windows 의 정상 동작 — 실제 배포는 다시 시도하고 데이터 파일은 새 이름으로 올린다)"
-        return None, note
-    rec.check(tag, "열려 있는 latest.js 교체(참고)", locked)
-
-    def sizes_run():
-        lines = []
-        for mb in sizes:
-            if rec.stop():
-                break
-            data = os.urandom(mb << 20)
-            name = f"{kind.prefix}_20260102_{mb:04d}.html"
-            p = os.path.join(dd, name)
-            t0 = time.perf_counter()
-            ok = put(p, data)
-            tw = time.perf_counter() - t0
-            if not ok:
-                lines.append(f"{mb}MB 쓰기 실패")
-                return False, " · ".join(lines)
-            t0 = time.perf_counter()
-            got = _read(p)
-            tr = time.perf_counter() - t0
-            if got != data:
-                lines.append(f"{mb}MB 읽어 비교 다름")
-                return False, " · ".join(lines)
-            lines.append(f"{mb}MB 쓰기+이름바꾸기 {tw:.1f}초({_fmt_mb_s(len(data), tw)}) · 읽기 {tr:.1f}초({_fmt_mb_s(len(data), tr)})")
-        return True, " | ".join(lines)
-    rec.check(tag, f"data 파일 쓰기 · 읽기 시간({'/'.join(str(s) for s in sizes)}MB)", sizes_run)
-
-    def prune():
-        for i in range(1, 6):
-            put(os.path.join(dd, f"{kind.prefix}_2026030{i}_0000.html"), b"x")
-        before = sorted(n for n in os.listdir(dd) if kind.data_re.match(n))
-        gone = publish._prune(dd, publish.KEEP_FILES, roots, kind=kind)
-        after = sorted(n for n in os.listdir(dd) if kind.data_re.match(n))
-        for n in before:
-            if n not in after:
-                made[:] = [m for m in made if os.path.basename(m) != n]
-        return len(after) == publish.KEEP_FILES and gone == len(before) - len(after), f"{len(before)}개 → {len(after)}개 남김(지운 {gone}개, 남길 개수 {publish.KEEP_FILES})"
-    rec.check(tag, "오래된 data 파일 정리(삭제 권한)", prune)
-
-    ico_dst = os.path.join(td, publish.ICON_NAME)
-
-    def icon():
-        src = publish.app_icon()
-        if not src:
-            return None, "이 PC 에 앱 아이콘(logo.ico)이 없어 건너뜀"
-        data = _read(src)
-        if not put(ico_dst, data):
-            return False, "쓰지 못함"
-        return _read(ico_dst) == data, f"{publish.ICON_NAME} {len(data):,}바이트 · sha {_sha(data)} · 읽어 비교 같음"
-    rec.check(tag, "AOI.ico 올리기", icon)
-
-    def shortcut():
-        p = os.path.join(td, kind.shortcut)
-        icon_arg = ico_dst if os.path.isfile(ico_dst) else None
-        want = publish.shortcut_bytes(td, kind, icon_arg)
-        if not put(p, want):
-            return False, "쓰지 못함"
-        got = _read(p)
-        rec.artifacts[f"바로가기_샘플/{tag}_{kind.shortcut}"] = got
-        enc = publish._ansi()
-        try:
-            text = got.decode(enc)
-            how = f"{enc}(ANSI)"
-        except (UnicodeDecodeError, LookupError):
-            text, how = got.decode("utf-8", "replace"), "UTF-8(퍼센트 인코딩 판)"
-        url_ok = "URL=file:" in text
-        icon_ok = (not icon_arg) or ("IconFile=" in text)
-        return got == want and url_ok, f"{how} · {len(got)}바이트 · 아이콘 줄 {'있음' if icon_ok and icon_arg else '없음'}\n{text.strip()}"
-    rec.check(tag, f"바로가기 {kind.shortcut} 만들기", shortcut)
-
-    def urls():
-        s, r = publish.stub_url(td, kind), publish.raw_stub_url(td, kind)
-        back = urllib.parse.unquote(s)
-        want = "file:" + "//" + td.replace("\\", "/").lstrip("/") + "/" + kind.stub if td.startswith("\\\\") else None
-        ok = (back == want) if want else True
-        return ok, f"stub_url={s}\nraw_stub_url={r}\n되돌린 주소 {'같음' if ok else '다름: ' + back}"
-    rec.check(tag, "주소 변환(file://, 한글 · 따옴표 · 공백)", urls)
-
-    def latency():
-        xs = []
-        for _ in range(STAT_ROUNDS):
-            t0 = time.perf_counter()
-            os.stat(td)
-            xs.append((time.perf_counter() - t0) * 1000)
-        t0 = time.perf_counter()
-        n = len(os.listdir(td))
-        lm = (time.perf_counter() - t0) * 1000
-        return None, f"stat {STAT_ROUNDS}번 중앙 {statistics.median(xs):.1f}ms · 95% {_p95(xs):.1f}ms · 최대 {max(xs):.1f}ms · 폴더 나열 {n}개 {lm:.1f}ms"
-    rec.check(tag, "왕복 지연", latency)
-
-    def free():
-        b = _free_bytes(td, roots)
-        return b > (200 << 20), f"남은 용량 {b / (1 << 30):.1f}GB"
-    rec.check(tag, "남은 용량", free)
-
     def cleanup():
         left = []
         for p in reversed(made):
@@ -341,7 +201,150 @@ def _test_folder(rec: _Rec, kind: publish.Kind, base: str, sizes: tuple, roots: 
                 except OSError:
                     left.append(os.path.basename(d) + "\\")
         return not left, ("시험 파일을 모두 지웠다" if not left else "못 지운 것: " + ", ".join(left))
-    rec.check(tag, "시험 파일 지우기", cleanup)
+
+    try:
+        def subdirs():
+            a, b = mk(td), mk(dd)
+            return os.path.isdir(dd), f"{TEST_DIR} {'새로' if a else '이미'} · data {'새로' if b else '이미'}"
+        if not rec.check(tag, f"시험 하위 폴더({TEST_DIR}\\data) 만들기", subdirs):
+            rec.check(tag, "시험 중단", lambda: (False, "시험 폴더를 만들지 못해 이 폴더의 나머지 시험을 건너뜁니다"))
+            return
+
+        def korean():
+            p = os.path.join(td, KOREAN_NAME)
+            data = "한글 · 따옴표(') · 공백 시험\n".encode("utf-8")
+            if not put(p, data):
+                return False, "쓰지 못함"
+            names = os.listdir(td)
+            same = _read(p) == data
+            return KOREAN_NAME in names and same, f"목록에 같은 이름 {'있음' if KOREAN_NAME in names else '없음'} · 내용 {'같음' if same else '다름'}"
+        rec.check(tag, "한글 · 따옴표 · 공백 이름 파일 쓰기 · 읽기", korean)
+
+        def stub():
+            p = os.path.join(td, kind.stub)
+            text = publish.stub_text(kind)
+            if not put(p, text):
+                return False, "쓰지 못함"
+            got = _read(p).decode("utf-8")
+            return got == text, f"{kind.stub} {len(text)}자 · 읽어 비교 {'같음' if got == text else '다름'}"
+        rec.check(tag, f"안내 파일 {kind.stub} 쓰기", stub)
+
+        def latest():
+            p = os.path.join(td, publish.LATEST_NAME)
+            v1 = publish.latest_text(f"{kind.prefix}_20260101_0000.html", kind)
+            v2 = publish.latest_text(f"{kind.prefix}_20260101_0001.html", kind)
+            if not put(p, v1):
+                return False, "처음 쓰기 실패"
+            t0 = time.perf_counter()
+            if not put(p, v2):                                 # 같은 이름 덮어쓰기(os.replace) — 실제 배포가 매번 하는 일
+                return False, "덮어쓰기 실패"
+            ms = (time.perf_counter() - t0) * 1000
+            got = _read(p).decode("utf-8")
+            return got == v2, f"덮어쓰기 {ms:.0f}ms · 읽어 비교 {'같음(새 내용)' if got == v2 else '다름'}"
+        rec.check(tag, "latest.js 쓰기 · 덮어쓰기", latest)
+
+        def locked():
+            p = os.path.join(td, publish.LATEST_NAME)
+            v3 = publish.latest_text(f"{kind.prefix}_20260101_0002.html", kind)
+            with open(p, "rb"):                                # 누군가 이 파일을 열고 있는 상태
+                replaced = publish._write_text(p, v3, roots, tries=1)
+            note = "열린 파일도 교체됨" if replaced else "열린 파일은 교체 못 함(Windows 의 정상 동작 — 실제 배포는 다시 시도하고 데이터 파일은 새 이름으로 올린다)"
+            return None, note
+        rec.check(tag, "열려 있는 latest.js 교체(참고)", locked)
+
+        def sizes_run():
+            lines = []
+            for mb in sizes:
+                if rec.stop():
+                    break
+                data = os.urandom(mb << 20)
+                name = f"{kind.prefix}_20260102_{mb:04d}.html"
+                p = os.path.join(dd, name)
+                t0 = time.perf_counter()
+                ok = put(p, data)
+                tw = time.perf_counter() - t0
+                if not ok:
+                    lines.append(f"{mb}MB 쓰기 실패")
+                    return False, " · ".join(lines)
+                t0 = time.perf_counter()
+                got = _read(p)
+                tr = time.perf_counter() - t0
+                if got != data:
+                    lines.append(f"{mb}MB 읽어 비교 다름")
+                    return False, " · ".join(lines)
+                lines.append(f"{mb}MB 쓰기+이름바꾸기 {tw:.1f}초({_fmt_mb_s(len(data), tw)}) · 읽기 {tr:.1f}초({_fmt_mb_s(len(data), tr)})")
+            return True, " | ".join(lines)
+        rec.check(tag, f"data 파일 쓰기 · 읽기 시간({'/'.join(str(s) for s in sizes)}MB)", sizes_run)
+
+        def prune():
+            for i in range(1, 6):
+                put(os.path.join(dd, f"{kind.prefix}_2026030{i}_0000.html"), b"x")
+            before = sorted(n for n in os.listdir(dd) if kind.data_re.match(n))
+            gone = publish._prune(dd, publish.KEEP_FILES, roots, kind=kind)
+            after = sorted(n for n in os.listdir(dd) if kind.data_re.match(n))
+            for n in before:
+                if n not in after:
+                    made[:] = [m for m in made if os.path.basename(m) != n]
+            return len(after) == publish.KEEP_FILES and gone == len(before) - len(after), f"{len(before)}개 → {len(after)}개 남김(지운 {gone}개, 남길 개수 {publish.KEEP_FILES})"
+        rec.check(tag, "오래된 data 파일 정리(삭제 권한)", prune)
+
+        ico_dst = os.path.join(td, publish.ICON_NAME)
+
+        def icon():
+            src = publish.app_icon()
+            if not src:
+                return None, "이 PC 에 앱 아이콘(logo.ico)이 없어 건너뜀"
+            data = _read(src)
+            if not put(ico_dst, data):
+                return False, "쓰지 못함"
+            return _read(ico_dst) == data, f"{publish.ICON_NAME} {len(data):,}바이트 · sha {_sha(data)} · 읽어 비교 같음"
+        rec.check(tag, "AOI.ico 올리기", icon)
+
+        def shortcut():
+            p = os.path.join(td, kind.shortcut)
+            icon_arg = ico_dst if os.path.isfile(ico_dst) else None
+            want = publish.shortcut_bytes(td, kind, icon_arg)
+            if not put(p, want):
+                return False, "쓰지 못함"
+            got = _read(p)
+            rec.artifacts[f"바로가기_샘플/{tag}_{kind.shortcut}"] = got
+            enc = publish._ansi()
+            try:
+                text = got.decode(enc)
+                how = f"{enc}(ANSI)"
+            except (UnicodeDecodeError, LookupError):
+                text, how = got.decode("utf-8", "replace"), "UTF-8(퍼센트 인코딩 판)"
+            url_ok = "URL=file:" in text
+            icon_ok = (not icon_arg) or ("IconFile=" in text)
+            return got == want and url_ok, f"{how} · {len(got)}바이트 · 아이콘 줄 {'있음' if icon_ok and icon_arg else '없음'}\n{text.strip()}"
+        rec.check(tag, f"바로가기 {kind.shortcut} 만들기", shortcut)
+
+        def urls():
+            s, r = publish.stub_url(td, kind), publish.raw_stub_url(td, kind)
+            back = urllib.parse.unquote(s)
+            want = "file:" + "//" + td.replace("\\", "/").lstrip("/") + "/" + kind.stub if td.startswith("\\\\") else None
+            ok = (back == want) if want else True
+            return ok, f"stub_url={s}\nraw_stub_url={r}\n되돌린 주소 {'같음' if ok else '다름: ' + back}"
+        rec.check(tag, "주소 변환(file://, 한글 · 따옴표 · 공백)", urls)
+
+        def latency():
+            xs = []
+            for _ in range(STAT_ROUNDS):
+                t0 = time.perf_counter()
+                os.stat(td)
+                xs.append((time.perf_counter() - t0) * 1000)
+            t0 = time.perf_counter()
+            n = len(os.listdir(td))
+            lm = (time.perf_counter() - t0) * 1000
+            return None, f"stat {STAT_ROUNDS}번 중앙 {statistics.median(xs):.1f}ms · 95% {_p95(xs):.1f}ms · 최대 {max(xs):.1f}ms · 폴더 나열 {n}개 {lm:.1f}ms"
+        rec.check(tag, "왕복 지연", latency)
+
+        def free():
+            b = _free_bytes(td, roots)
+            return b > (200 << 20), f"남은 용량 {b / (1 << 30):.1f}GB"
+        rec.check(tag, "남은 용량", free)
+    finally:                                              # 멈춤 요청 · 예상 밖 오류에도 시험 파일은 지운다
+        rec.check(tag, "시험 파일 지우기", cleanup, force=True)
     rec.artifacts[f"폴더목록/{tag}_시험_후.txt"] = (_listing(base) + "\n").encode("utf-8")
 
 

@@ -75,3 +75,20 @@ def test_stop_request_ends_early_but_still_writes_the_zip(tmp_path):
     share.mkdir()
     res = path_probe.run(_cfg(tmp_path), str(tmp_path / "res"), root=str(share), should_stop=lambda: True)
     assert res["stopped"] and Path(res["path"]).is_file()
+
+
+def test_stop_in_the_middle_still_removes_the_test_files(tmp_path):
+    """멈춤 요청이 파일을 쓴 뒤에 와도 시험 파일은 지워지고, 지운 결과가 표에 남는다(자동 리뷰 지적)."""
+    share = tmp_path / "s"
+    share.mkdir()
+    calls = {"n": 0}
+
+    def stop():
+        calls["n"] += 1
+        return calls["n"] > 9                                    # 안내 파일 · latest.js 를 쓴 뒤
+
+    res = path_probe.run(_cfg(tmp_path), str(tmp_path / "res"), root=str(share), should_stop=stop)
+    assert res["stopped"]
+    assert not list(share.rglob(path_probe.TEST_DIR)), _tree(share)
+    assert any(r["name"] == "시험 파일 지우기" and r["ok"] is True for r in res["rows"])
+    assert any("latest.js" in r["name"] for r in res["rows"])        # 정말 쓴 뒤에 멈췄다
