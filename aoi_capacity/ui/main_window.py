@@ -287,6 +287,8 @@ class MainWindow(QMainWindow):
         self._finish_collect(token)
         unreachable, partial = result.unreachable_devices, result.partial_devices
         toast = i18n.KO.COLLECT_DONE_TOAST_FMT.format(devices=max(0, result.devices - len(unreachable)), elapsed=dur_text(result.elapsed))
+        if result.published and not any(w.get("kind") == "publish_locked" for w in result.warnings):
+            toast += i18n.KO.COLLECT_DONE_TOAST_PUBLISHED                    # 10/30: 올렸다는 것도 한 줄로 — 조용히만 하면 되는지 알 수 없었다
         self.collect_page.set_status(toast)
         self.collect_page.append_log(toast)
         self._refresh_last_collect()

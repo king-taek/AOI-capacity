@@ -8,6 +8,7 @@
 """
 from __future__ import annotations
 
+import datetime
 import json
 import re
 import shutil
@@ -436,10 +437,10 @@ def test_header_has_four_tabs_and_each_popup_renders_an_accessible_dialog():
         ["devPopupHtml"], ["errPopupHtml"], ["typePopupHtml"],
         ["errorsHtml"], ["typePopupHtml"]],
         state={"modalDev": "AOI-1", "modalDayI": 0, "errDev": "AOI-1", "errDayI": 0})
-    assert re.findall(r'data-fk="nav:([a-z]+)"', head) == ["home", "errors", "report", "recipe", "lot"]   # 10/5: KLA 탭 · 추이 탭 없음, 10/11 LOT 추적, 10/22 파라미터 탭은 기본 숨김(HIDDEN_TABS)
+    assert re.findall(r'data-fk="nav:([a-z]+)"', head) == ["home", "errors", "overkill", "report", "recipe", "lot"]   # 10/5: KLA 탭 · 추이 탭 없음, 10/11 LOT 추적, 10/22 파라미터 탭은 기본 숨김(HIDDEN_TABS), 10/30 Overkill(D99)
     shown, = screen(rows, meta("AOI-1"), [["headerHtml", "home"]], state={"unhid": ["param"]})
     assert re.findall(r'data-fk="nav:([a-z]+)"', shown)[-1] == "param"   # 설정 버튼에서 꺼내면 탭 줄 맨 뒤로 돌아온다
-    for label in (">가동률<", ">Error<", ">TB500 · Kendall<", ">RDL 단일스캔<", ">사본 저장<"):
+    for label in (">가동률<", ">Error<", ">Overkill<", ">TB500 · Kendall<", ">RDL 단일스캔<", ">사본 저장<"):
         assert label in head, label
     assert ">추이<" not in head and ">KLA<" not in head
     assert 'data-dlg="dev"' in dev and 'aria-labelledby="dlg-dev-title"' in dev and 'role="dialog"' in dev
@@ -836,3 +837,54 @@ def test_kla_tb500_job_names_are_shortened_for_display_only():
     # 이 함수는 KLA 표기 전용 — Camtek 표기명(jobAlias)에는 끼지 않는다(TB500 · Kendall 탭이 KLA Job 을 끌어오지 않게)
     html = (ROOT / "aoi_capacity" / "ui" / "assets" / "template.html").read_text(encoding="utf-8")
     assert "function jobAlias(raw){if(JOB_ALIAS[raw])return JOB_ALIAS[raw];const m=" in html and "klaJobAlias" not in html.split("function jobAlias")[1].split("\n")[0]
+
+
+def _okw(dev, wafer, s, faults, **kw):
+    r = w(dev, wafer, s, s[:3] + "09", **kw)
+    r["faults"] = faults
+    return r
+
+
+def test_overkill_day_counts_pass_and_max_fault_and_lists_only_devices_with_overkill():
+    """D99: 400↑ = 오버킬, 1,000↑ · 'Scan 2D - Max Fault Exceeded.' = 심한 오버킬. 분모 = PASS(Defect 있음) + 상한 초과, Error · Test 는 제외. 하루 조회는 난 장비만."""
+    rows = [_okw("AOI-1", "W1", "08:00", "100"), _okw("AOI-1", "W2", "08:10", "500"), _okw("AOI-1", "W3", "08:20", "1,500"),
+            _okw("AOI-1", "W4", "08:30", "-", status="Scan 2D - Max Fault Exceeded."),
+            _okw("AOI-1", "W5", "08:40", "", status="Alignment Error."),
+            _okw("AOI-1", "T1", "09:00", "2000", lot="TEST-LOT"),
+            _okw("AOI-2", "V1", "10:00", "50", lot="LOT-B")]
+    (html,) = screen(rows, meta("AOI-1", "AOI-2"), [["okHtml"]])
+    assert ">60%<" in html and "400개 이상 3장 / 5장" in html          # 500 · 1,500 · 상한 초과 / PASS 4(AOI-2 포함) + 상한 초과 1
+    assert ">75%<" in html and "오버킬 3 / 4장 · 심한 2" in html        # AOI-1 줄
+    assert ">2장<" in html and "상한 초과 1장 포함" in html
+    assert "제외 2장" in html                                             # Alignment Error · TEST Lot
+    assert 'data-key="okd:AOI-1"' in html and 'data-key="okd:AOI-2"' not in html   # 오버킬이 난 장비만
+    assert "상한 초과 1" in html and "1,500" in html                      # LOT 줄: 표 · 최대 Defect(쉼표 원문도 읽음)
+    (sev,) = screen(rows, meta("AOI-1", "AOI-2"), [["okHtml"]], state={"okTier": "sev"})
+    assert ">50%<" in sev and "심한 오버킬 기준" in sev                  # 심한 단계: 목록 순위·비율이 심한 기준(AOI-1 2 / 4), 카드 1은 늘 400↑
+
+
+def test_overkill_scope_follows_model_test_rule_own_maker_buttons_and_selected_day():
+    """리뷰(PR #9): ① Lot 에 TEST 가 붙어 있으면(TEST_LOT 처럼 밑줄이어도) 모델처럼 Test 로 빼고 ② 다른 탭의 Gen5 를 물려받지 않으며
+    ③ 자정을 넘긴 Report 도 고른 날의 장만으로 LOT 줄을 만든다(합계에 오버킬이 있는데 LOT 줄이 없던 것)."""
+    prev = (datetime.date.fromisoformat(DAY) - datetime.timedelta(days=1)).isoformat()
+    rep = "J1_6321_LOT-N_night_BatchReport.htm"
+    rows = [_okw("AOI-1", "N1", "23:50", "10", day=prev, report=rep, lot="LOT-N"),
+            _okw("AOI-1", "N2", "00:10", "900", report=rep, lot="LOT-N"),
+            _okw("AOI-1", "T1", "09:00", "2000", lot="TEST_LOT")]
+    (html,) = screen(rows, meta("AOI-1", "AOI-2"), [["okHtml"]], state={"maker": "g5", "okMk": "cam"})
+    assert "400개 이상 1장 / 1장" in html                                  # TEST_LOT 은 분모에도 없다 · 전날 장은 이 날이 아니다
+    assert 'data-key="okd:AOI-1"' in html                                  # Gen5 가 아닌 장비도 보인다
+    assert f'data-key="okl:AOI-1|{rep}"' in html                           # 자정 넘긴 Report 의 LOT 줄이 이 날에 있다
+
+
+def test_overkill_period_ranks_jobs_and_defaults_to_camtek():
+    """기간 조회는 Job별 순위(오버킬 난 것만) + 고른 Job 의 날짜별 막대 · 장비 · LOT. 장비 종류 기본은 Camtek(KLA 는 단추로)."""
+    rows = [_okw("AOI-1", "A1", "08:00", "900", job="TB500_RDL3 - Multi"), _okw("AOI-1", "A2", "08:10", "10", job="TB500_RDL3 - Multi"),
+            _okw("AOI-2", "B1", "09:00", "20", job="R_TB500_LIVE_PI3", lot="LOT-B"),
+            _okw("K1", "C1", "10:00", "5000", job="ROOT-HVM-4DT-TB500-H-M1-RDL3_K1", lot="KL@6322")]
+    mt = meta("AOI-1", "AOI-2", more=[{"name": "K1", "note": "Y:\\", "report_dir": "", "status": "ok", "kind": "kla"}])
+    (cam, kla) = screen(rows, mt, [["okHtml"], ["okHtml"]], state={"okMode": "span"})
+    assert "TB500_RDL3 - Multi" in cam and "오버킬 난 1개" in cam and "없는 1개 숨김" in cam
+    assert "이 Job 을 돈 장비" in cam and "RDL3_K1" not in cam
+    (k,) = screen(rows, mt, [["okHtml"]], state={"okMode": "span", "okMk": "kla"})
+    assert "TB500 RDL3" in k                                              # KLA Job 은 화면 표기(D96)

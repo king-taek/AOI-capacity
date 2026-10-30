@@ -158,6 +158,11 @@ COLLECT_LOG_TITLE = "로그"
 COLLECT_RUNNING = "수집 중…"
 COLLECT_IDLE = ""
 COLLECT_DONE_TOAST_FMT = "수집 완료 · 장비 {devices}대 · {elapsed}"
+COLLECT_DONE_TOAST_PUBLISHED = " · LOT 추적 배포됨"
+COLLECT_DONE_PUBLISH_FAILED_FMT = ("LOT 추적 배포는 올리지 못했습니다(수집 결과는 정상 저장됨): {path}\n{error}\n"
+                                   "공유 폴더 연결 · 경로를 확인하고 다시 수집하세요.")
+COLLECT_DONE_PUBLISH_LOCKED_FMT = ("LOT 추적 배포 파일은 올렸지만 안내 파일이 열려 있어 최신으로 바꾸지 못했습니다: {path}\n"
+                                   "다음 수집 때 다시 가리킵니다.")
 DUR_SEC_FMT = "{s}초"
 DUR_MIN_FMT = "{m}분 {s}초"
 DUR_HOUR_FMT = "{h}시간 {m}분"

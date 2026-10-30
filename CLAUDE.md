@@ -27,7 +27,7 @@ Camtek AOI 장비의 BatchReport/WaferInfo.ini 를 읽어 장비별 가동률을
    `AOI_capacity.html` 한 장을 사용자가 더블클릭해 브라우저에서 본다. QtWebEngine·로컬 서버·localhost 를 쓰지 않는다.
    그 HTML 은 데이터·CSS·JS 를 모두 품고 **바깥으로 요청을 한 건도 보내지 않는다**(가드: `test_template_contract.py`).
    브라우저가 NAS 를 직접 읽는 경로도 두지 않는다 — 수집은 Python 만 한다. 자동 주기 수집은 없다(수동 실행만, D50).
-   화면은 **재설계 구조**(D47, 9/20): 가동률 · Error · TB500 · Kendall(D59) · RDL 단일스캔(옛 레시피 D70, D80) · LOT 추적(D88) · 파라미터(D89) 6탭(10/5 — 추이 · KLA 탭 없앰, KLA 는 장비 종류 필터) + 장비/Error/유형·Job · 레시피 묶음 팝업, 라이트 단일. 모델은 아래 '레이아웃' 의 화면 절.
+   화면은 **재설계 구조**(D47, 9/20): 가동률 · Error · Overkill(D99, 10/30) · TB500 · Kendall(D59) · RDL 단일스캔(옛 레시피 D70, D80) · LOT 추적(D88) · 파라미터(D89) 7탭(10/5 — 추이 · KLA 탭 없앰, KLA 는 장비 종류 필터) + 장비/Error/유형·Job · 레시피 묶음 팝업, 라이트 단일. 모델은 아래 '레이아웃' 의 화면 절.
 4. **Scanresult 를 재귀 검색하지 않는다.** INI 경로는 `{scan}/{job}/{setup}/{lot}/{wafer}/WaferInfo.ini` 로 계산해 존재만 확인한다.
    `job`·`setup` 의 출처는 **Report 안의 `Job/Setup` 값**이다(파일명이 아니다 — 실장비 516개 중 옛 파일명 규칙에 맞는 건 6개뿐이었다).
    `Job/Setup` 이 없는 옛 형식만 파일명 규칙(`{job}_{4자리}_{lot}_…`)으로 되돌아가고, 그것도 안 맞으면
@@ -244,6 +244,7 @@ graphify 는 `--code-only` 로, template.html 인라인 JS 까지 보려면 `pyt
   LOT별 목록에 **Clean ref · AF 열**(Recipe.ini 의 CleanReferenceEvery · AutoFocusEvery — Wafer 는 붉은 굵은 글씨)과 그 위 요약 한 줄(Lot 수, `crCell` · `crSummary`, 10/11 사용자: 이 설정은 이 탭에서만 확인).
   하위 레시피 칸(`recipe` 열 — `x20`·`x5`·`x20|x5`) 수집 순서(D74 — **RDL Job 만**, `collect.is_rdl_job`; 다른 Job 은 RecipesInfo.ini 를 열지 않고 Report 값 그대로 · scan_mode 는 표에 `|` 가 있을 때만): Wafer 폴더 `RecipesInfo.ini` 의 `[Recipe-n] Name` 전부(멀티 스캔에만 있는 파일, `|` 로 이음) → `WaferInfo.ini` `[Recipe] Name`(단일) → Report 표 Recipe 칸 → 요약 Recipe. 표 칸은 멀티여도 `x20` 만 찍혀 믿지 않는다(실물 10/5). 덮어써진(STALE) INI 의 것은 쓰지 않는다. 날짜는 Wafer 시작일, 파일의 기간(`D.days`) 안만.
   입력 칸은 `data-in` + `INPUT_KEYS`(같은 이름의 state). 좁은 화면은 신경 쓰지 않는다(사용자 10/6 — PC 전용).
+- **Overkill 탭(D99, 10/30 — `okHtml` · `okIndex` · `okGoLot`)**: Wafer 한 장의 Defect(`faults`) **400개 이상 = 오버킬 · 1,000개 이상 = 심한 오버킬**, 개수만 본다. `Scan 2D - Max Fault Exceeded.`(장당 fault 상한 초과)는 **이 탭에서만** 심한 오버킬 + 분모 + '상한 초과' 표 — Error 탭 · 원인 규칙(`CAUSE_RULES`)은 그대로(UNKNOWN). 분모 = Defect 값 있는 PASS 장 + Max Fault 행, Error · 건너뜀 · Test(Lot TEST · `MONITOR_JOB_RE`) · 빈 값은 '제외 n장'. 재스캔도 검사마다 센다. 색인은 원천 행에서(모델 값 불변). 기준 단추 400↑ | 1,000↑(`state.okTier`, 순위 = 고른 단계 비율, 막대는 두 단계를 쌓음) · 조회 하루(헤더 하루 날짜 — 오버킬 난 장비만) | 기간(Job별 | 장비별) | 개별(`data-in="okQ"`) · 장비 종류 기본 Camtek · 층 필터. LOT 줄은 LOT 추적의 그 Lot 으로(`okGoLot` — dev · Report 로 시도를 찾음), LOT 추적 Wafer × 검사 칸은 주황 두 단계(`OK_OV` 400↑ · `OK_SEV` 1,000↑/상한 초과).
 - **LOT 추적 탭(D88 → D92, 10/19 — `lotHtml` · `lotIndex` · `lotFamily`)**: Lot 이름은 사람이 적어 틀리고 세 글자 코드는 몇 달 뒤 다른 Wafer 에 다시 쓰인다 — 기계가 OCR 로 읽은 **Wafer ID**(`lotIdOk`: 영숫자 6자 이상 · 숫자만 아님 · `SLOT\d*` 아님)로 묶는다.
   **Lot = 같은 Wafer ID 를 가진 Report(시도)를 이어 붙인 덩어리, 합친 Wafer 가 25장(`LOT_MAX`, 한 Lot 은 25장 이하 — 사용자 확정)을 넘으면 합치지 않는다.** 이름 · 코드는 별칭일 뿐 묶는 근거가 아니고(확인 필요 상자 · localStorage 없음), 합치지 못한 쌍은 고른 Lot 검사 순서에 흐린 '다른 LOT 이름' 줄 · 목록 '겹침 n' 으로 보인다.
   KLA 이름은 `Lot이름@공정코드`(`lotParse`) — 이름과 공정 코드를 나눠 보인다. 왼쪽 검색(`data-in="lotQ"` — Lot 이름 · Wafer ID, 비우면 최근 Lot 30개) + 전체/Camtek/KLA 필터 → 고른 Lot 의 모든 Report(헤더 기간과 무관)를 시간 순 한 줄씩:
