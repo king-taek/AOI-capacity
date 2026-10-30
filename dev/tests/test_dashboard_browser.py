@@ -127,10 +127,42 @@ def page(page_factory, tmp_path):
     pg.on("pageerror", lambda e: errors.append("pageerror: " + str(e)))
     pg.on("console", lambda m: errors.append("console: " + m.text) if m.type == "error" else None)
     requests: list = []
-    pg.on("request", lambda r: requests.append(r.url) if not r.url.startswith("file:") else None)
+    pg.on("request", lambda r: requests.append(r.url) if not r.url.startswith(("file:", "blob:")) else None)   # blob: = 시작 화면 Worker(파일 안 스크립트로 만든 주소)
     pg.goto(html.as_uri())
     pg.wait_for_selector('main[data-key^="view:"]')          # 로더(main) 가 먼저 그려지고 다음 틱에 화면이 온다
     yield pg, errors, requests
+    ctx.close()
+
+
+_BOOT_WATCH = """(() => { window.__boot = {}; new MutationObserver(() => { const b = document.getElementById('boot');
+  if (b && !window.__boot.seen) window.__boot.seen = performance.now();
+  if (!b && window.__boot.seen && !window.__boot.gone) window.__boot.gone = performance.now(); }).observe(document, {childList: true, subtree: true}); })()"""
+
+
+@pytest.mark.parametrize("lot_only", [False, True])
+def test_boot_screen_covers_four_seconds_then_reveals_the_real_screen(page_factory, tmp_path, lot_only):
+    """시작 화면(D104): 덮개가 곧바로 뜨고, 화면은 그 아래에서 먼저 그려지며, 페이지를 연 때부터 4초가 차기 전에는 걷히지 않는다.
+    로딩이 짧으면 4초 무렵 걷힌다. LOT 추적 배포 파일(lot_only)도 같다. 바깥 요청 0건(blob: 은 파일 안에서 만든 Worker)."""
+    emb = _embedded()
+    if lot_only:
+        emb["meta"]["lot_only"] = True
+    out = tmp_path / "boot.html"
+    out.write_text(TEMPLATE.read_text(encoding="utf-8").replace("__DATA__", json.dumps(emb, ensure_ascii=False).replace("</", "<\\/"), 1), encoding="utf-8")
+    ctx = page_factory.new_context(viewport={"width": 1280, "height": 800})
+    pg = ctx.new_page()
+    errors, requests = [], []
+    pg.on("pageerror", lambda e: errors.append(str(e)))
+    pg.on("console", lambda m: errors.append(m.text) if m.type == "error" else None)
+    pg.on("request", lambda r: requests.append(r.url) if not r.url.startswith(("file:", "blob:")) else None)
+    pg.add_init_script(_BOOT_WATCH)
+    pg.goto(out.as_uri())
+    pg.wait_for_selector('main[data-key="view:%s"]' % ("lot" if lot_only else "home"))
+    assert pg.locator("#boot canvas").count() == 1                      # 화면은 이미 그려졌고 덮개는 아직 있다
+    assert pg.evaluate("getComputedStyle(document.getElementById('boot')).pointerEvents") == "none"
+    pg.wait_for_selector("#boot", state="detached", timeout=15000)
+    t = pg.evaluate("window.__boot")
+    assert t.get("seen") is not None and 3990 <= t["gone"] < 6500, t
+    assert not errors and not requests
     ctx.close()
 
 
@@ -1123,7 +1155,7 @@ def test_overkill_tab_lists_devices_and_lot_row_opens_lot_tracking_with_colored_
     errors, requests = [], []
     pg.on("pageerror", lambda e: errors.append("pageerror: " + str(e)))
     pg.on("console", lambda m: errors.append("console: " + m.text) if m.type == "error" else None)
-    pg.on("request", lambda r: requests.append(r.url) if not r.url.startswith("file:") else None)
+    pg.on("request", lambda r: requests.append(r.url) if not r.url.startswith(("file:", "blob:")) else None)
     try:
         pg.goto(out.as_uri())
         pg.wait_for_selector('main[data-key^="view:"]')

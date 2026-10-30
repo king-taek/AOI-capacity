@@ -123,7 +123,6 @@ button{font:inherit;color:inherit}
 .nav .ind:not(.run) .l,.nav .ind:not(.run) .m,.nav .ind:not(.run) .r{opacity:0}.nav .ind.run .s{opacity:0}
 .nav .ind .l{width:7px;border-radius:7px 0 0 7px;transform-origin:0 50%}.nav .ind .r{width:7px;border-radius:0 7px 7px 0;transform-origin:0 50%}.nav .ind .m{width:1px;transform-origin:0 50%}
 .nav button{position:relative;z-index:1}.nav button.on{background:transparent;color:var(--nav-on)}.nav button:not(.on):hover{color:var(--ink)}
-.loader{display:flex;flex-direction:column;align-items:center;gap:12px;padding:80px 0;color:var(--ink-3)}.loader .lt{width:56px;height:56px}
 [data-reveal]{overflow:hidden}
 .thead button.th{all:unset;cursor:pointer;display:inline-flex;align-items:center;gap:4px;justify-content:flex-end;width:100%;color:var(--ink-3);font-weight:600;font-size:11.5px;white-space:nowrap}
 .thead button.th:hover,.thead button.th.on{color:var(--ink)}
@@ -535,7 +534,322 @@ button.dbrow:focus-visible{outline:2px solid var(--nav-on);outline-offset:-2px}
 </style>
 </head>
 <body>
-<div id="app"><main><div class="loader"><span class="lt" data-lottie="scan" data-loop="1" data-static aria-hidden="true"></span><p class="muted">불러오는 중…</p></div></main></div>
+<div id="app"><main><p class="muted" style="padding:40px 0">불러오는 중…</p></main></div>
+<script id="boot">
+/* ============================================================================
+   시작 화면(10/30, D104 — 현택 선택 '데이터 입자' A): 흩어진 입자가 곧 열릴 화면으로 모이는 4초 장면.
+   · 이 스크립트는 큰 데이터(#embedded)보다 앞에 있어서 파일을 읽는 동안부터 돈다. 그림은 별도 스레드(Worker + OffscreenCanvas)가
+     그리므로 JSON 해석 · 모델 계산이 메인 스레드를 막아도 끊기지 않는다(옛 Lottie 로더는 그동안 0프레임이었다 — 실측).
+   · 1막 화면 틀(글자 · 칸 · 선), 2막 숫자 · 색 막대. 페이지를 연 때부터 4초 안에는 드러나지 않고, 로딩이 4초를 넘으면
+     틀은 멈춰 있고 숫자 · 막대 몫 입자만 제 자리 근처에서 살랑살랑 흔들리며 기다린다(값을 모르니 엷은 회청색).
+   · 틀은 지난번에 이 파일을 연 화면(localStorage, 같은 창 너비일 때만 — 숫자 · 값은 저장하지 않고 자리만)으로 미리 맞추고,
+     진짜 화면이 그려지면 그것을 재어(main 스크립트가 AOI_BOOT.done) 달라진 입자만 다시 날아간다.
+   · 바깥 요청 0건 — Worker 는 이 스크립트 안의 함수로 만든 blob 주소다. 덮개는 클릭을 막지 않는다(pointer-events:none).
+   ============================================================================ */
+(function(){
+"use strict";
+var prev=document.getElementById("boot");if(prev&&prev.parentNode)prev.parentNode.removeChild(prev);   /* '사본 저장' 으로 4초 안에 저장한 파일에 덮개가 남아 있으면 */
+window.AOI_BOOT=null;
+const MIN=4000,LABELS=["결과 파일 여는 중","데이터 읽는 중","기록 펼치는 중","계산 중","화면 그리는 중"],PW=[.08,.34,.12,.36,.10],TH=[];
+{let a=0;for(const w of PW){TH.push(a);a+=w;}}
+const CACHE_KEY="aoi.bootLayout.v1";
+
+function mulberry(a){return function(){a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296;};}
+function makeLib(mulberry){
+  const P=new Uint8Array(512);{const p=[...Array(256).keys()],r=mulberry(5);for(let i=255;i>0;i--){const j=Math.floor(r()*(i+1));[p[i],p[j]]=[p[j],p[i]];}for(let i=0;i<512;i++)P[i]=p[i&255];}
+  const g=(h,x,y)=>((h&1)?-x:x)+((h&2)?-y:y),L=(t,a,b)=>a+t*(b-a);
+  function noise(x,y){let X=Math.floor(x),Y=Math.floor(y);x-=X;y-=Y;X&=255;Y&=255;const u=x*x*x*(x*(x*6-15)+10),v=y*y*y*(y*(y*6-15)+10),a=P[X]+Y,b=P[X+1]+Y;
+    return L(v,L(u,g(P[a],x,y),g(P[b],x-1,y)),L(u,g(P[a+1],x,y-1),g(P[b+1],x-1,y-1)));}
+  /* curl noise: 잡음 퍼텐셜의 회전 — 흐름이 서로 부딪히거나 한곳에 몰리지 않는다 */
+  function curl(x,y,out){const e=.35,a=(noise(x,y+e)-noise(x,y-e))/(2*e),b=(noise(x+e,y)-noise(x-e,y))/(2*e);out[0]=a;out[1]=-b;}
+  const mk=(w,h)=>{if(typeof OffscreenCanvas!=="undefined")return new OffscreenCanvas(w,h);const c=document.createElement("canvas");c.width=w;c.height=h;return c;};
+  return{curl,rnd:mulberry,mk};
+}
+
+/* 진행 값 v 하나가 장면을 움직인다. v 의 목표 = min(4초 계획 곡선, 로딩이 허락한 상한) — 임계 감쇠 스프링으로 따라가서
+   상한이 풀리는 순간에도 속도가 이어진다. 로딩이 끝나고 계획도 끝났으면 1을 살짝 넘겨 겨눠 꼬리를 줄인다(v 는 1에서 멈춤). */
+function bootCore(self,scene0,lib){
+  let ctx,scene,running=false,reduced=false,last=0;
+  const S={t0:0,t:0,MIN:4000,real:0,rp:0,rpn:0,ri:0,tPh:0,loaded:false,v:0,vv:0,capA:.77,capR:0,capTau:800,planEnd:3300,
+    labels:[],th:[],li:0,lp:-1,lat:-1e9,complete:false,doneAt:0,revealAt:0,shown:0};
+  const plan=t=>{const x=Math.min(1,Math.max(0,(t-120)/(S.planEnd-120)));return 1-(1-x)*(1-x);};
+  S.plan=plan;
+  S.step=(now,dt)=>{const t=S.t=now-S.t0;
+    const kk=1-Math.exp(-(now-S.tPh)/1700),rt=S.rp+(S.rpn-S.rp)*.85*kk;if(rt>S.real)S.real+=(rt-S.real)*Math.min(1,dt/140);
+    const pl=plan(t),cap=S.loaded?1:S.capA*(1-Math.exp(-Math.max(0,t)/S.capTau))+S.capR*S.real,tg=S.loaded&&pl>=1?1.06:Math.min(pl,cap);
+    if(reduced){if(tg>S.v)S.v=Math.min(1,tg);return;}
+    const w=S.loaded?(S.t>S.MIN?26:18):10,n=dt>20?3:1,h=dt/1000/n;
+    for(let i=0;i<n;i++){const a=w*w*(tg-S.v)-2*w*S.vv;S.vv+=a*h;const nv=S.v+S.vv*h;if(nv<S.v)S.vv=0;else S.v=Math.min(1,nv);}};
+  S.idx=v=>{let i=0;while(i<S.th.length-1&&v>=S.th[i+1])i++;return i;};
+  /* 단계 글자: 계획과 실제 중 늦은 쪽. 바뀌면 위로 빠지고 아래에서 들어온다(easeOutCubic 0.24초) */
+  S.cap=(c,now,x,y,fs,col,alpha)=>{const k=Math.min(1,(now-S.lat)/240),e=1-Math.pow(1-k,3);
+    c.font=`600 ${fs}px "Segoe UI","Malgun Gothic","Apple SD Gothic Neo",sans-serif`;c.textBaseline="alphabetic";c.fillStyle=col;
+    if(k<1&&S.lp>=0){c.globalAlpha=alpha*(1-e);c.fillText(S.labels[S.lp],x,y-fs*.45*e);}
+    c.globalAlpha=alpha*e;c.fillText(S.labels[S.li],x,y+fs*.45*(1-e));c.globalAlpha=1;
+    return Math.max(c.measureText(S.labels[S.li]).width,k<1&&S.lp>=0?c.measureText(S.labels[S.lp]).width*(1-e)+c.measureText(S.labels[S.li]).width*e:0);};
+  S.capAlpha=now=>S.doneAt?Math.max(0,1-(now-S.doneAt)/220):Math.min(1,Math.max(0,S.t)/300);
+  self.onmessage=e=>{const m=e.data;
+    if(m.type==="init"){const c=m.canvas;c.width=Math.round(m.w*m.dpr);c.height=Math.round(m.h*m.dpr);ctx=c.getContext("2d");ctx.setTransform(m.dpr,0,0,m.dpr,0,0);
+      reduced=m.reduced;S.MIN=m.min;S.labels=m.labels;S.th=m.th;S.t0=m.epoch-performance.timeOrigin;last=performance.now();S.tPh=last;
+      scene=scene0(ctx,m.w,m.h,m.dpr,S,lib,m);running=true;
+      if(m.layout){try{scene.retarget(m.layout,last);}catch(err){}}
+      loop();}
+    else if(m.type==="phase"){S.ri=Math.max(S.ri,m.i);S.rp=m.p;S.rpn=m.pn;S.tPh=performance.now();}
+    else if(m.type==="targets"){S.loaded=true;S.ri=S.labels.length-1;let step=0;try{step=scene.retarget(m.L,performance.now());}catch(err){}self.postMessage({type:"built",step});}
+    else if(m.type==="loaded"){S.loaded=true;S.ri=S.labels.length-1;}
+    else if(m.type==="stop"){running=false;}};
+  function loop(){if(!running)return;const now=performance.now(),dt=Math.min(48,now-last);last=now;
+    S.step(now,dt);
+    const li=Math.min(S.ri,S.idx(plan(S.t)));if(li!==S.li){S.lp=S.li;S.li=li;S.lat=now;}
+    scene.frame(now,dt,reduced);
+    if(S.loaded&&S.complete&&!S.doneAt)S.doneAt=now;
+    if(S.doneAt&&S.t>=S.MIN&&!S.revealAt){S.revealAt=now;self.postMessage({type:"reveal",t:S.t});}
+    if(S.revealAt&&now-S.revealAt>700){running=false;return;}
+    self.requestAnimationFrame(loop);}
+}
+
+/* 입자 비행: 출발 속도를 물려받고(C1 연속) 끝에서 멈춘다.
+   E(s)=1-(1-s)^3(1+3s) — E'(0)=0, E'(1)=0. g(s)=s(1-s)^2 가 출발 속도를 실어 나른다. */
+function bootScene(ctx,W,H,dpr,S,lib,opt){
+  const rnd=lib.rnd(77),BG=opt.bg||"#F4F6F8",HOV="#9DB4CE",PRE=["#5A6673","#2E6BA8","#8FB8E0","#AEB8C4"];
+  const N=Math.max(600,Math.round(Math.min(10000,W*H/80)));
+  const F=()=>new Float32Array(N),X=F(),Y=F(),VX=F(),VY=F(),PX=F(),PY=F(),TX=F(),TY=F(),RK=F(),SZ=F(),SP=F(),FX=F(),FY=F(),FVX=F(),FVY=F(),FT=F(),FD=F(),
+        HX=F(),HY=F(),HA=F(),HW=F(),HP=F(),D=new Uint8Array(N),C=new Uint16Array(N),ST=new Uint8Array(N);
+  let PAL=PRE.slice(),has=false,step=opt.step||0,NS=0,ND=1,nSet=0,nStr=0,nDat=0,relaunched=false;
+  for(let j=0;j<N;j++){X[j]=PX[j]=rnd()*W*1.25-W*.25;Y[j]=PY[j]=rnd()*H;SP[j]=.7+rnd()*.8;VX[j]=1.4*SP[j];C[j]=j%PRE.length;RK[j]=2;SZ[j]=2;
+    HA[j]=3+rnd()*6;HW[j]=(2*Math.PI)/(2600+rnd()*1800);HP[j]=rnd()*6.283;}
+  const ow=Math.max(1,Math.ceil(W)),oh=Math.max(1,Math.ceil(H)),off=lib.mk(ow,oh),o=off.getContext("2d",{willReadFrequently:true});
+  const lay=lib.mk(Math.max(1,Math.round(W*dpr)),Math.max(1,Math.round(H*dpr))),lc=lay.getContext("2d");lc.scale(dpr,dpr);
+  const hex=s=>{s=String(s||"");if(s[0]==="#")return s.length===4?"#"+s[1]+s[1]+s[2]+s[2]+s[3]+s[3]:s.slice(0,7).toLowerCase();
+    const m=/rgba?\(([^)]+)\)/.exec(s);if(!m)return"#5a6673";const p=m[1].split(/[\s,\/]+/).filter(Boolean).map(Number);
+    return"#"+p.slice(0,3).map(v=>Math.max(0,Math.min(255,Math.round(v||0))).toString(16).padStart(2,"0")).join("");};
+  const rgbOf=h=>[parseInt(h.slice(1,3),16),parseInt(h.slice(3,5),16),parseInt(h.slice(5,7),16)];
+  /* 화면 설명(L)을 그려 격자로 입자 자리를 뽑는다 — 틀과 데이터는 따로 그려 둘을 나눈다 */
+  function build(L){
+    const cols=new Map();for(const it of [...L.rects,...L.strokes,...L.texts]){const h=hex(it.c);cols.set(h,(cols.get(h)||0)+1);}
+    const pal=[...cols.entries()].sort((a,b)=>b[1]-a[1]).slice(0,40).map(e=>e[0]);if(!pal.length)pal.push("#5a6673");
+    const prgb=pal.map(rgbOf),memo=new Map();
+    const near=(r,g,b)=>{const k=(r<<16)|(g<<8)|b;let v=memo.get(k);if(v!==undefined)return v;let bd=1e9;v=0;
+      for(let i=0;i<prgb.length;i++){const q=prgb[i],d=(q[0]-r)**2+(q[1]-g)**2+(q[2]-b)**2;if(d<bd){bd=d;v=i;}}memo.set(k,v);return v;};
+    const draw=dat=>{o.clearRect(0,0,ow,oh);
+      for(const r of L.rects)if(!!r.d===dat){o.fillStyle=r.c;o.fillRect(r.x,r.y,r.w,r.h);}
+      if(!dat)for(const s of L.strokes){const lw=s.lw||1;o.strokeStyle=s.c;o.lineWidth=lw;o.beginPath();
+        if(o.roundRect&&s.r)o.roundRect(s.x+lw/2,s.y+lw/2,Math.max(0,s.w-lw),Math.max(0,s.h-lw),Math.min(s.r,s.w/2,s.h/2));else o.rect(s.x+lw/2,s.y+lw/2,Math.max(0,s.w-lw),Math.max(0,s.h-lw));o.stroke();}
+      o.textBaseline="middle";for(const t of L.texts)if(!!t.d===dat){o.font=t.f;o.fillStyle=t.c;o.fillText(t.t,t.x,t.y);}
+      return o.getImageData(0,0,ow,oh).data;};
+    const iS=draw(false),iD=draw(true);o.clearRect(0,0,ow,oh);
+    if(!step){let ink=0;for(let y=0;y<oh;y+=2)for(let x=0;x<ow;x+=2){const i=(y*ow+x)*4+3;if(iS[i]>=110||iD[i]>=110)ink+=4;}
+      step=Math.max(1.5,Math.min(8,Math.sqrt(ink/(N*1.1))));}
+    const pick=img=>{const out=[];for(let y=step/2;y<oh;y+=step)for(let x=step/2;x<ow;x+=step){const i=(Math.floor(y)*ow+Math.floor(x))*4;if(img[i+3]<110)continue;
+      out.push(x+(rnd()-.5)*.4,y+(rnd()-.5)*.4,near(img[i],img[i+1],img[i+2]));}return out;};
+    return{pal,S:pick(iS),D:pick(iD)};}
+  const zoneOf=(L,x,y)=>{let best=null,ba=1e18;for(const z of L.zones||[]){if(x>=z.x-1&&x<=z.x+z.w+1&&y>=z.y-1&&y<=z.y+z.h+1){const a=z.w*z.h;if(a<ba){ba=a;best=z;}}}return best;};
+  const bake=()=>{lc.clearRect(0,0,W,H);const ps=PAL.map(()=>new Path2D());nSet=nStr=nDat=0;
+    for(let j=0;j<N;j++)if(ST[j]===2){ps[C[j]].rect(TX[j]-SZ[j]/2,TY[j]-SZ[j]/2,SZ[j],SZ[j]);nSet++;if(D[j])nDat++;else nStr++;}
+    for(let c=0;c<PAL.length;c++){lc.fillStyle=PAL[c];lc.fill(ps[c]);}};
+  const fly=(j,now,d)=>{FX[j]=X[j];FY[j]=Y[j];FT[j]=now;FD[j]=d;};
+  /* 목표 바꾸기: 이미 앉은 입자는 같은 자리(1.3px 안 · 같은 색)의 새 점을 먼저 잡는다 → 틀이 같으면 그대로 있고 달라진 곳만 다시 난다.
+     나머지는 읽는 순서(위→아래, 왼→오른)의 분위수로 짝짓는다. 반환값 = 격자 간격(저장해 다음에 같은 격자를 쓴다) */
+  function retarget(L,now){
+    const b=build(L),old=PAL;PAL=b.pal;const sp=b.S,dp=b.D,ns=sp.length/3,nd=dp.length/3;if(!ns&&!nd)return step;
+    let nS=Math.round(N*ns/(ns+nd));if(ns&&!nS)nS=1;if(nd&&nS===N)nS=N-1;const nD=N-nS;
+    const used=new Uint8Array(ns),cell=4,grid=new Map(),key=(x,y)=>Math.floor(x/cell)*65536+Math.floor(y/cell);
+    for(let k=0;k<ns;k++){const q=key(sp[k*3],sp[k*3+1]);let a=grid.get(q);if(!a)grid.set(q,a=[]);a.push(k);}
+    const tgt=new Int32Array(N).fill(-1),kind=new Int8Array(N);let m=0;
+    if(has){const ord=[...Array(N).keys()].filter(j=>!D[j]&&ST[j]>0);for(let i=ord.length-1;i>0;i--){const r=Math.floor(rnd()*(i+1));[ord[i],ord[r]]=[ord[r],ord[i]];}
+      for(const j of ord){if(m>=nS)break;const cx=Math.floor(TX[j]/cell),cy=Math.floor(TY[j]/cell),oc=old[C[j]];let hit=-1;
+        for(let dx=-1;dx<=1&&hit<0;dx++)for(let dy=-1;dy<=1&&hit<0;dy++){const a=grid.get((cx+dx)*65536+cy+dy);if(!a)continue;
+          for(const k of a)if(!used[k]&&Math.abs(sp[k*3]-TX[j])<=1.3&&Math.abs(sp[k*3+1]-TY[j])<=1.3&&b.pal[sp[k*3+2]]===oc){hit=k;break;}}
+        if(hit>=0){used[hit]=1;tgt[j]=hit;kind[j]=1;m++;}}}
+    const rest=[];for(let k=0;k<ns;k++)if(!used[k])rest.push(k);for(let i=rest.length-1;i>0;i--){const r=Math.floor(rnd()*(i+1));[rest[i],rest[r]]=[rest[r],rest[i]];}
+    const sPick=[];for(let i=0;sPick.length<nS-m&&rest.length;i++)sPick.push(rest[i%rest.length]);
+    const dAll=[...Array(nd).keys()];for(let i=nd-1;i>0;i--){const r=Math.floor(rnd()*(i+1));[dAll[i],dAll[r]]=[dAll[r],dAll[i]];}
+    const dPick=[];for(let i=0;dPick.length<nD&&nd;i++)dPick.push(dAll[i%nd]);
+    const rkS=k=>sp[k*3+1]/H*.86+sp[k*3]/W*.1,rkD=k=>dp[k*3+1]/H*.7+dp[k*3]/W*.26;
+    sPick.sort((a,c)=>rkS(a)-rkS(c));dPick.sort((a,c)=>rkD(a)-rkD(c));
+    const U=[];for(let j=0;j<N;j++)if(tgt[j]<0)U.push(j);
+    const uk=new Float32Array(N);for(const j of U)uk[j]=has?(D[j]?1+RK[j]:RK[j]):rnd();U.sort((a,c)=>uk[a]-uk[c]);
+    let ui=0;for(const k of sPick){if(ui>=U.length)break;const j=U[ui++];tgt[j]=k;kind[j]=1;}
+    /* 숫자 · 막대 몫: 기다리던 입자(지난번 틀)가 있으면 가장 가까운 새 점으로 — 순위로 짝지으면 한 줄 안에서 멀리 가로질러 난다 */
+    if(has&&dPick.length){const R=U.slice(ui),cs=16,gd=new Map(),cl=v=>Math.max(0,Math.min(4095,Math.floor(v/cs))),taken=new Uint8Array(dPick.length);
+      dPick.forEach((k,pi)=>{const q=cl(dp[k*3])*65536+cl(dp[k*3+1]);let a=gd.get(q);if(!a)gd.set(q,a=[]);a.push(pi);});
+      for(let i=R.length-1;i>0;i--){const r=Math.floor(rnd()*(i+1));[R[i],R[r]]=[R[r],R[i]];}
+      let got=0;const left=[];
+      for(const j of R){if(got>=dPick.length){left.push(j);continue;}const cx=cl(X[j]),cy=cl(Y[j]);let hit=-1;
+        for(let r=0;r<=24&&hit<0;r++)for(let dx=-r;dx<=r&&hit<0;dx++)for(let dy=-r;dy<=r;dy++){if(Math.max(Math.abs(dx),Math.abs(dy))!==r)continue;
+          const a=gd.get((cx+dx)*65536+cy+dy);if(!a)continue;let f=-1;for(const pi of a)if(!taken[pi]){f=pi;break;}if(f>=0){hit=f;break;}}
+        if(hit<0){left.push(j);continue;}taken[hit]=1;got++;tgt[j]=dPick[hit];kind[j]=2;}
+      const rp=[];dPick.forEach((k,pi)=>{if(!taken[pi])rp.push(k);});let li=0;
+      for(const j of left){tgt[j]=li<rp.length?rp[li]:dPick[li%dPick.length];li++;kind[j]=2;}
+      ui=U.length;}
+    else for(const k of dPick){if(ui>=U.length)break;const j=U[ui++];tgt[j]=k;kind[j]=2;}
+    while(ui<U.length){const j=U[ui++];if(sPick.length){tgt[j]=sPick[ui%sPick.length];kind[j]=1;}else if(dPick.length){tgt[j]=dPick[ui%dPick.length];kind[j]=2;}}
+    let a0=1e9,a1=-1e9,b0=1e9,b1=-1e9;const raw=new Float32Array(N);
+    for(let j=0;j<N;j++){const k=tgt[j],src=kind[j]===2?dp:sp;if(k<0)continue;
+      const tx=src[k*3],ty=src[k*3+1],c=src[k*3+2],dd=kind[j]===2?1:0,moved=Math.abs(tx-TX[j])>.6||Math.abs(ty-TY[j])>.6||!has;
+      const wasFlying=ST[j]===1;
+      if(ST[j]===2&&(moved||dd!==D[j])){ST[j]=1;FVX[j]=FVY[j]=0;fly(j,now,S.loaded||now>S.t0+3600?280+rnd()*100:Math.min(320+rnd()*160,Math.max(220,S.t0+3850-now)));}
+      else if(wasFlying&&moved){const s=Math.min(1,(now-FT[j])/FD[j]),q=1-s,e1=12*s*q*q,g1=q*(1-3*s);
+        FVX[j]=((TX[j]-FX[j])*e1+FVX[j]*FD[j]*g1)/FD[j];FVY[j]=((TY[j]-FY[j])*e1+FVY[j]*FD[j]*g1)/FD[j];fly(j,now,300+rnd()*120);}
+      TX[j]=tx;TY[j]=ty;C[j]=c;D[j]=dd;SZ[j]=step*.92;
+      if(ST[j]===2){X[j]=tx;Y[j]=ty;}
+      raw[j]=dd?ty/H*.7+tx/W*.26+rnd()*.04:ty/H*.86+tx/W*.1+rnd()*.04;
+      if(dd){b0=Math.min(b0,raw[j]);b1=Math.max(b1,raw[j]);}else{a0=Math.min(a0,raw[j]);a1=Math.max(a1,raw[j]);}
+      if(dd){const z=zoneOf(L,tx,ty);if(z){HX[j]=z.x+rnd()*z.w;HY[j]=z.y+z.h*(.15+.7*rnd());}else{HX[j]=tx+(rnd()-.5)*W*.05;HY[j]=ty+(rnd()-.5)*4;}}}
+    NS=0;for(let j=0;j<N;j++){RK[j]=D[j]?.79+.2*(raw[j]-b0)/Math.max(1e-6,b1-b0):.76*(raw[j]-a0)/Math.max(1e-6,a1-a0);if(!D[j])NS++;}
+    NS=Math.max(1,NS);ND=Math.max(1,N-NS);has=true;bake();return step;}
+  const fs=1/(W*.22),cv=[0,0],cfs=Math.max(10,Math.min(14,W*.0118)),cx=Math.max(16,W*.024),cy=H-Math.max(18,H*.05);
+  ctx.fillStyle=BG;ctx.fillRect(0,0,W,H);
+  return{count:N,retarget,
+    frame(now,dt,red){
+      const v=S.v,k=dt/16.7,tt=now*.00006,ent=Math.min(1,Math.max(0,S.t)/380),deadline=S.t0+3850;
+      /* 목표가 아직 없으면(첫 실행) 계획이 끝난 뒤 흐름을 천천히 늦춘다 — 4초 뒤에는 잔잔하게 떠다닌다 */
+      const fl=has?1:Math.max(.35,1-Math.max(0,S.t-S.planEnd)/1500*.65);
+      ctx.globalAlpha=red?1:.32;ctx.fillStyle=BG;ctx.fillRect(0,0,W,H);ctx.globalAlpha=1;
+      const lines=PAL.map(()=>new Path2D()),dots=PAL.map(()=>new Path2D()),fresh=PAL.map(()=>new Path2D()),hl=new Path2D(),hd=new Path2D();let nf=0;
+      if(S.loaded&&has&&!relaunched){relaunched=true;for(let j=0;j<N;j++){if(ST[j]!==1)continue;const s=Math.min(1,(now-FT[j])/FD[j]);if(FD[j]*(1-s)<=340)continue;
+        const q=1-s,e1=12*s*q*q,g1=q*(1-3*s);FVX[j]=((TX[j]-FX[j])*e1+FVX[j]*FD[j]*g1)/FD[j];FVY[j]=((TY[j]-FY[j])*e1+FVY[j]*FD[j]*g1)/FD[j];
+        fly(j,now,280+rnd()*60);}}
+      /* 바람: 줄 전체를 왼쪽에서 오른쪽으로 천천히 지나가는 한 결 */
+      const wind=x=>2.2*Math.sin(now*.0012-x*.012);
+      /* 꼬리는 14px 까지만 — 첫 실행에서 목표가 한꺼번에 생기면 빠른 입자의 긴 선이 화면을 그물처럼 덮는다 */
+      const seg=(p,j)=>{let ax=PX[j],ay=PY[j];const dx=X[j]-ax,dy=Y[j]-ay,l=Math.hypot(dx,dy);if(l>14){ax=X[j]-dx*14/l;ay=Y[j]-dy*14/l;}p.moveTo(ax,ay);p.lineTo(X[j]+.01,Y[j]);};
+      for(let j=0;j<N;j++){
+        if(ST[j]===2)continue;PX[j]=X[j];PY[j]=Y[j];
+        if(ST[j]===0&&v>=RK[j]){
+          if(red){ST[j]=2;fresh[C[j]].rect(TX[j]-SZ[j]/2,TY[j]-SZ[j]/2,SZ[j],SZ[j]);nSet++;if(D[j])nDat++;else nStr++;nf++;continue;}
+          ST[j]=1;FVX[j]=VX[j]/16.7;FVY[j]=VY[j]/16.7;
+          let d=S.loaded?(now>deadline?200+rnd()*90:now>deadline-250?260+rnd()*120:320+rnd()*160):440+rnd()*220;if(now<deadline)d=Math.min(d,Math.max(220,deadline-now));fly(j,now,d);}
+        if(ST[j]===0){
+          const an=D[j]?Math.min(1,Math.max(0,(v-.45)/.25)):0;
+          if(red){if(an>0)hd.rect(HX[j]-SZ[j]/2,HY[j]-SZ[j]/2,SZ[j],SZ[j]);continue;}
+          if(X[j]<-2&&an<.3){X[j]+=VX[j]*k*fl;PX[j]=X[j];continue;}
+          if(an<1){lib.curl(X[j]*fs+tt,Y[j]*fs,cv);const r=.07*(1-an)*k;VX[j]+=((cv[0]*2.2+1.25)*SP[j]*fl-VX[j])*r;VY[j]+=(cv[1]*2.2*SP[j]*fl-VY[j])*r;}
+          if(an>0){ /* 살랑살랑: 기다릴 자리 + 느린 흔들림(주기 2.6~4.4초, 폭 3~9px) + 바람 한 결. 약하게 감쇠된 스프링으로 다가간다 */
+            const gx=HX[j]+HA[j]*Math.sin(now*HW[j]+HP[j])+wind(HX[j]),gy=HY[j]+.9*Math.sin(now*HW[j]*1.37+HP[j]*2);
+            VX[j]+=(gx-X[j])*.011*an*k;VY[j]+=(gy-Y[j])*.011*an*k;const dm=Math.pow(1-.13*an,k);VX[j]*=dm;VY[j]*=dm;
+            const vm=Math.hypot(VX[j],VY[j]);if(vm>9){VX[j]*=9/vm;VY[j]*=9/vm;}}
+          X[j]+=VX[j]*k;Y[j]+=VY[j]*k;
+          if(an<.5){if(X[j]>W+6){X[j]=-6-rnd()*40;PX[j]=X[j];Y[j]=PY[j]=an>0?HY[j]+(rnd()-.5)*H*.08:rnd()*H;VX[j]=1.4*SP[j];}if(Y[j]<-6){Y[j]+=H+12;PY[j]=Y[j];}else if(Y[j]>H+6){Y[j]-=H+12;PY[j]=Y[j];}}
+          /* 값이 나오기 전의 숫자 · 막대 몫은 색을 모르므로 엷은 회청색 */
+          if(D[j]){seg(hl,j);if(an>.6)hd.rect(X[j]-SZ[j]*.4,Y[j]-SZ[j]*.4,SZ[j]*.8,SZ[j]*.8);}
+          else seg(lines[C[j]],j);
+          continue;}
+        const s=Math.min(1,(now-FT[j])/FD[j]),q=1-s,E=1-q*q*q*(1+3*s),g=s*q*q;
+        X[j]=FX[j]+(TX[j]-FX[j])*E+FVX[j]*FD[j]*g;Y[j]=FY[j]+(TY[j]-FY[j])*E+FVY[j]*FD[j]*g;
+        if(s>=1){ST[j]=2;X[j]=TX[j];Y[j]=TY[j];fresh[C[j]].rect(TX[j]-SZ[j]/2,TY[j]-SZ[j]/2,SZ[j],SZ[j]);nSet++;if(D[j])nDat++;else nStr++;nf++;continue;}
+        seg(lines[C[j]],j);dots[C[j]].rect(X[j]-SZ[j]/2,Y[j]-SZ[j]/2,SZ[j],SZ[j]);}
+      if(nf)for(let c=0;c<PAL.length;c++){lc.fillStyle=PAL[c];lc.fill(fresh[c]);}
+      ctx.drawImage(lay,0,0,W,H);
+      ctx.lineWidth=1;ctx.lineCap="round";
+      ctx.strokeStyle=HOV;ctx.globalAlpha=.4*ent;ctx.stroke(hl);ctx.globalAlpha=.75;ctx.fillStyle=HOV;ctx.fill(hd);ctx.globalAlpha=1;
+      for(let c=0;c<PAL.length;c++){ctx.strokeStyle=PAL[c];ctx.globalAlpha=.38*ent;ctx.stroke(lines[c]);ctx.globalAlpha=1;ctx.fillStyle=PAL[c];ctx.fill(dots[c]);}
+      S.complete=has&&nSet>=N;
+      /* 진행선: 틀 60% + 나머지는 실제 진행(로딩 끝나면 숫자 · 막대가 앉는 만큼) */
+      S.shown=Math.max(S.shown,has?.6*nStr/NS+.4*(S.loaded?Math.max(.9*S.real,nDat/ND):.9*S.real)*(nStr/NS):.5*S.real);
+      const ca=S.capAlpha(now);if(ca>0){const tw=S.cap(ctx,now,cx,cy,cfs,"#46525E",ca),lx=cx+tw+cfs*.9,lw=Math.max(60,W*.08),ly=cy-cfs*.36;
+        ctx.globalAlpha=ca;ctx.fillStyle="#DCE2E9";ctx.fillRect(lx,ly,lw,2);ctx.fillStyle="#2E6BA8";ctx.fillRect(lx,ly,lw*S.shown,2);ctx.globalAlpha=1;}
+    }};
+}
+
+/* ── 진짜 화면 재기(메인 스레드, AOI_BOOT.done 에서 한 번): 보이는 칸 안의 글자 · 색 칸 · 테두리를 화면 설명(L)으로.
+   숫자가 든 글자(장비 이름 AOI-n · K-n 은 빼고)와 채도 있는 색 칸(머리줄 밖)은 '데이터' — 2막에 앉는다. 색 칸의 부모 줄은 기다릴 자리(zones). */
+function measureApp(root,W,H){
+  const texts=[],rects=[],strokes=[],zones=[],zk=new Set(),vis=r=>r.width>0&&r.height>0&&r.right>0&&r.bottom>0&&r.left<W&&r.top<H;
+  const rgb=s=>{const m=/rgba?\(([^)]+)\)/.exec(s||"");if(!m)return null;const p=m[1].split(/[\s,\/]+/).filter(Boolean).map(Number);const a=p.length>3?p[3]:1;
+    return a<.1?null:{r:p[0],g:p[1],b:p[2]};};
+  const hx=c=>"#"+[c.r,c.g,c.b].map(v=>Math.round(v).toString(16).padStart(2,"0")).join("");
+  const hsl=c=>{const mx=Math.max(c.r,c.g,c.b)/255,mn=Math.min(c.r,c.g,c.b)/255,l=(mx+mn)/2;return{l,s:mx===mn?0:(mx-mn)/(1-Math.abs(2*l-1))};};
+  const pageBg=(()=>{const c=rgb(getComputedStyle(document.body).backgroundColor);return c?hx(c):"";})();
+  const isData=t=>/\d/.test(t.replace(/(?:4F-)?(?:AOI|K)-?\d+/gi,""));
+  const box=r=>({x:Math.round(r.left*10)/10,y:Math.round(r.top*10)/10,w:Math.round(r.width*10)/10,h:Math.round(r.height*10)/10});
+  const hgrad=(bi,r)=>{const i=bi.indexOf("linear-gradient(90deg"),st=i+16;let dep=1,e=st;for(;e<bi.length&&dep;e++){if(bi[e]==="(")dep++;else if(bi[e]===")")dep--;}
+    const parts=[];let d=0,p0=st;for(let k=st;k<e-1;k++){const ch=bi[k];if(ch==="(")d++;else if(ch===")")d--;else if(ch===","&&!d){parts.push(bi.slice(p0,k).trim());p0=k+1;}}parts.push(bi.slice(p0,e-1).trim());
+    const stops=[];for(const q of parts.slice(1)){const m=/^(rgba?\([^)]*\))\s*(.*)$/.exec(q);if(!m)continue;const c=rgb(m[1]),ps=m[2];let x=null,mm;
+      if((mm=/calc\(([\d.]+)%\s*-\s*([\d.]+)px\)/.exec(ps)))x=r.width*mm[1]/100-mm[2];else if((mm=/([\d.]+)%/.exec(ps)))x=r.width*mm[1]/100;else if((mm=/([\d.]+)px/.exec(ps)))x=+mm[1];
+      if(x!=null)stops.push({c,x});}
+    for(let k=0;k+1<stops.length;k++){const A=stops[k],B=stops[k+1];if(!A.c||!B.c||hx(A.c)!==hx(B.c)||B.x-A.x<.5)continue;const q=hsl(A.c);if(q.l>=.965)continue;
+      const d=q.s>.28&&q.l>.12&&q.l<.9;rects.push({x:r.left+A.x,y:r.top,w:B.x-A.x,h:r.height,c:hx(A.c),d:d?1:0});
+      if(d){const z=box(r),zz=z.x+","+z.y+","+z.w+","+z.h;if(!zk.has(zz)&&zones.length<800){zk.add(zz);zones.push(z);}}}};
+  let n=0;
+  for(const el of root.querySelectorAll("*")){if(++n>4000)break;
+    if(el.closest("svg"))continue;
+    const r=el.getBoundingClientRect();if(!vis(r))continue;
+    const cs=getComputedStyle(el);if(cs.visibility==="hidden"||+cs.opacity<.05)continue;
+    const bc=rgb(cs.backgroundColor);
+    if(bc){const c=hx(bc),q=hsl(bc);if(q.l<.965&&c!==pageBg){const d=q.s>.28&&q.l>.12&&q.l<.9&&!el.closest("header");rects.push({...box(r),c,d:d?1:0});
+      if(d){const p=el.parentElement,pr=p&&p.getBoundingClientRect(),z=pr&&pr.height<=r.height*2.5&&pr.width>=r.width?box(pr):box(r),k=z.x+","+z.y+","+z.w+","+z.h;
+        if(!zk.has(k)&&zones.length<800){zk.add(k);zones.push(z);}}}}
+    if(cs.backgroundImage.indexOf("linear-gradient(90deg")>=0)hgrad(cs.backgroundImage,r);   /* 24시간 막대: 색 구간이 가로 gradient 의 멈춤점이다 */
+    const bw=["Top","Right","Bottom","Left"].map(s=>parseFloat(cs["border"+s+"Width"])||0),bcs=["Top","Right","Bottom","Left"].map(s=>rgb(cs["border"+s+"Color"]));
+    if(bw.every(w=>w>=.5)&&bcs.every(c=>c&&bcs[0]&&hx(c)===hx(bcs[0])))strokes.push({...box(r),r:parseFloat(cs.borderTopLeftRadius)||0,lw:bw[0],c:hx(bcs[0])});
+    else{const b=box(r);
+      if(bw[0]>=.5&&bcs[0])rects.push({x:b.x,y:b.y,w:b.w,h:bw[0],c:hx(bcs[0]),d:0});
+      if(bw[2]>=.5&&bcs[2])rects.push({x:b.x,y:b.y+b.h-bw[2],w:b.w,h:bw[2],c:hx(bcs[2]),d:0});
+      if(bw[3]>=.5&&bcs[3])rects.push({x:b.x,y:b.y,w:bw[3],h:b.h,c:hx(bcs[3]),d:0});
+      if(bw[1]>=.5&&bcs[1])rects.push({x:b.x+b.w-bw[1],y:b.y,w:bw[1],h:b.h,c:hx(bcs[1]),d:0});}}
+  const tw=document.createTreeWalker(root,NodeFilter.SHOW_TEXT);let t;
+  while((t=tw.nextNode())&&texts.length<2500){const s=t.textContent.replace(/\s+/g," ").trim();if(!s)continue;const el=t.parentElement;if(!el||el.closest("svg"))continue;
+    const cs=getComputedStyle(el);if(cs.visibility==="hidden"||+cs.opacity<.05)continue;const col=rgb(cs.color);if(!col)continue;
+    const rg=document.createRange();rg.selectNodeContents(t);const rs=[...rg.getClientRects()].filter(vis);if(!rs.length)continue;
+    const d=isData(s)?1:0,c=hx(col);
+    if(rs.length===1){const r=rs[0];texts.push({t:s,x:Math.round(r.left*10)/10,y:Math.round((r.top+r.height/2)*10)/10,f:`${cs.fontStyle} ${cs.fontWeight} ${cs.fontSize} ${cs.fontFamily}`,c,d,w:Math.round(r.width),h:Math.round(r.height)});}
+    else for(const r of rs)rects.push({x:r.left,y:r.top+r.height*.3,w:r.width,h:r.height*.4,c,d});}
+  return{W,H,texts,rects,strokes,zones};
+}
+/* 다음에 열 때 미리 맞출 틀 — 데이터 글자는 내용 없이 칸으로만 남긴다(값은 저장하지 않는다) */
+function forCache(L){return{W:L.W,H:L.H,strokes:L.strokes,zones:L.zones,rects:L.rects,
+  texts:L.texts.filter(t=>!t.d).map(({w,h,...t})=>t)}}
+function cacheRead(W,H){try{const s=localStorage.getItem(CACHE_KEY);if(!s)return null;const c=JSON.parse(s);
+  if(!c||c.path!==location.pathname||Math.abs(c.L.W-W)>2||Math.abs(c.L.H-H)>40||!c.step)return null;
+  const L=c.L;for(const t of (c.dt||[]))L.rects.push({x:t[0],y:t[1],w:t[2],h:t[3],c:t[4],d:1});return{L,step:c.step};}catch(e){return null;}}
+function cacheWrite(L,step){try{const C=forCache(L),dt=L.texts.filter(t=>t.d).map(t=>[t.x,t.y-t.h*.3,t.w,t.h*.6,t.c]);
+  localStorage.setItem(CACHE_KEY,JSON.stringify({path:location.pathname,step,L:C,dt}));}catch(e){}}
+
+/* ── 덮개 만들고 그림 스레드 띄우기 ── */
+try{
+  const W=Math.max(1,window.innerWidth||document.documentElement.clientWidth||0),H=Math.max(1,window.innerHeight||document.documentElement.clientHeight||0);
+  if(W<240||H<200||!document.body)return;
+  let red=false;try{red=!!(window.matchMedia&&window.matchMedia("(prefers-reduced-motion: reduce)").matches);}catch(e){}
+  const bg=(getComputedStyle(document.documentElement).getPropertyValue("--bg")||"").trim()||"#F4F6F8";
+  try{if("scrollRestoration" in history)history.scrollRestoration="manual";}catch(e){}   /* 다시 열 때 스크롤을 되살리면 잰 자리와 드러난 화면이 어긋난다 */
+  const ov=document.createElement("div");ov.id="boot";ov.setAttribute("aria-hidden","true");
+  ov.style.cssText=`position:fixed;left:0;top:0;width:100vw;height:100vh;z-index:2147483000;background:${bg};pointer-events:none;overflow:hidden;opacity:1;transition:opacity .18s cubic-bezier(.23,1,.32,1)`;
+  const cv=document.createElement("canvas");cv.style.cssText=`display:block;width:${W}px;height:${H}px`;ov.appendChild(cv);document.body.appendChild(ov);
+  const dpr=Math.min(2,window.devicePixelRatio||1),epoch=performance.timeOrigin||Date.now()-performance.now(),cached=cacheRead(W,H);
+  let port=null,gone=false,loadedAt=0,fallback=0,revealed=false;const after=[];
+  const finish=()=>{if(gone)return;gone=true;clearTimeout(fallback);try{port&&port.kill();}catch(e){}if(ov.parentNode)ov.parentNode.removeChild(ov);window.AOI_BOOT=null;
+    for(const f of after.splice(0))setTimeout(()=>{try{f();}catch(e){}},0);};
+  const reveal=()=>{if(revealed||gone)return;revealed=true;ov.style.opacity="0";setTimeout(finish,220);};
+  const onMsg=d=>{if(!d)return;if(d.type==="reveal")reveal();else if(d.type==="built"&&d.step&&port&&port.pending){cacheWrite(port.pending,d.step);port.pending=null;}};
+  const init={type:"init",w:W,h:H,dpr,reduced:red,min:MIN,epoch,labels:LABELS,th:TH,bg,step:cached?cached.step:0,layout:cached?cached.L:null};
+  try{
+    if(!cv.transferControlToOffscreen||typeof Worker==="undefined"||typeof OffscreenCanvas==="undefined")throw 0;
+    const src=`"use strict";const mulberry=${mulberry};const makeLib=${makeLib};const bootScene=${bootScene};(${bootCore})(self,bootScene,makeLib(mulberry));`;
+    const url=URL.createObjectURL(new Blob([src],{type:"text/javascript"})),wk=new Worker(url);URL.revokeObjectURL(url);
+    const offc=cv.transferControlToOffscreen();wk.onmessage=e=>onMsg(e.data);wk.onerror=()=>reveal();
+    wk.postMessage({...init,canvas:offc},[offc]);
+    port={post:m=>wk.postMessage(m),kill:()=>wk.terminate()};
+  }catch(e){   /* OffscreenCanvas 가 없는 브라우저: 같은 장면을 메인 스레드에서(계산 중에는 멈춘다) */
+    const shim={postMessage:m=>setTimeout(()=>onMsg(m)),requestAnimationFrame:f=>requestAnimationFrame(f),onmessage:null};
+    bootCore(shim,bootScene,makeLib(mulberry));shim.onmessage({data:{...init,canvas:cv}});
+    port={post:m=>shim.onmessage({data:m}),kill:()=>shim.onmessage({data:{type:"stop"}})};
+  }
+  window.AOI_BOOT={
+    phase(i){if(gone)return;port.post({type:"phase",i,p:TH[i]||0,pn:(TH[i]||0)+(PW[i]||0)});},
+    /* 진짜 화면이 그려진 뒤 한 번: 재어서 입자 목표로 주고 로딩 끝을 알린다. 4초가 차고 입자가 다 앉으면 그림 스레드가 reveal 을 보낸다 */
+    done(root){if(gone||loadedAt)return;loadedAt=performance.now();
+      let L=null;try{L=measureApp(root||document.body,Math.min(W,window.innerWidth||W),Math.min(H,window.innerHeight||H));}catch(e){}
+      if(L){port.pending=L;port.post({type:"targets",L});}
+      port.post({type:"loaded"});
+      const left=Math.max(0,MIN-performance.now());   /* 다 그려도 신호가 오지 않으면 — 4초 + 2.5초 뒤 그냥 연다 */
+      fallback=setTimeout(reveal,left+2500);},
+    /* 덮개가 걷힌 뒤에 할 일(미리 계산 등) — 드러나는 순간 메인 스레드가 바쁘면 걷힘이 늦는다 */
+    later(f){if(gone)setTimeout(f,0);else after.push(f);},
+    abort(){finish();}};
+}catch(e){try{const o=document.getElementById("boot");if(o&&o.parentNode)o.parentNode.removeChild(o);}catch(_){}window.AOI_BOOT=null;}
+})();
+</script>
 <div class="toast" id="toast"></div>
 <script type="application/json" id="embedded">__DATA__</script>
 <script id="vendor">
@@ -635,14 +949,20 @@ function unfold(emb){
   const out=emb.rows.map((a,ri)=>{if(!Array.isArray(a)||a.length!==emb.cols.length)throw new Error("행 "+ri+" 의 열 수가 다릅니다");
     const o={};emb.cols.forEach((c,i)=>{if(P&&F.has(c)){const v=P[a[i]];if(v===undefined)throw new Error("행 "+ri+" 열 "+c+" 의 풀 번호가 범위 밖입니다");o[c]=v;}else o[c]=a[i];});return o;});
   embRowCount=out.length;return out;}
-function errorPanel(msg){const app=$("#app");if(app)app.innerHTML=`<main><div class="panel" style="padding:28px 24px"><h2>결과 파일을 읽지 못했습니다</h2><p class="muted" style="margin-top:6px">${esc(msg)}</p><p class="muted" style="margin-top:6px">수집 프로그램에서 '수집' 을 다시 실행해 파일을 새로 만드세요. 이 파일의 데이터는 바뀌지 않았습니다.</p></div></main>`;}
+function errorPanel(msg){try{if(BOOT)BOOT.abort();}catch(e){}_bootQuiet=false;const app=$("#app");if(app)app.innerHTML=`<main><div class="panel" style="padding:28px 24px"><h2>결과 파일을 읽지 못했습니다</h2><p class="muted" style="margin-top:6px">${esc(msg)}</p><p class="muted" style="margin-top:6px">수집 프로그램에서 '수집' 을 다시 실행해 파일을 새로 만드세요. 이 파일의 데이터는 바뀌지 않았습니다.</p></div></main>`;}
+/* 시작 화면(D104): 덮개 · 입자는 위의 boot 스크립트가 이미 띄웠다(별도 스레드라 아래 계산 중에도 돈다). 여기서는 단계만 알리고,
+   첫 화면을 그린 뒤 AOI_BOOT.done 으로 그 화면을 재어 입자 목표로 넘긴다. 첫 렌더의 등장 연출은 끈다(_bootQuiet — 입자가 그 몫이고, 도는 중에 재면 자리가 어긋난다) */
+const BOOT=(typeof window!=="undefined"&&window.AOI_BOOT)||null;
+let _bootQuiet=!!BOOT;
+const bootPhase=i=>{try{if(BOOT)BOOT.phase(i);}catch(e){}};
 function loadDemo(){
-  /* 로더(Lottie 스캔 표식)를 한 프레임 먼저 그리고, 무거운 JSON 해석과 모델 계산은 그 다음 틱에 — 30일치는 몇 초 걸린다 */
-  try{mountLotties(document);}catch(e){}
-  const run=()=>{let emb;try{emb=JSON.parse($("#embedded").textContent);}catch(e){errorPanel("embedded JSON 을 해석할 수 없습니다: "+(e&&e.message||e));return;}
+  const run=()=>{let emb;bootPhase(1);try{emb=JSON.parse($("#embedded").textContent);}catch(e){errorPanel("embedded JSON 을 해석할 수 없습니다: "+(e&&e.message||e));return;}
+    bootPhase(2);
     try{rows=emb.cols?unfold(emb):(emb.rows||[]);meta=emb.meta||{generated:"",mode:"saved"};if(meta.lot_only)state.view="lot";else if(Array.isArray(meta.only_tabs)&&meta.only_tabs.length)state.view=meta.only_tabs[0];}   /* 공유 발행 파일(10/27): LOT 추적 탭만 */
     catch(e){log("로더 오류: "+(e&&e.message||e));errorPanel(String(e&&e.message||e));return;}
-    setTimeout(()=>{try{init();navWarm();}catch(e){log("로더 오류: "+(e&&e.message||e));errorPanel(String(e&&e.message||e));}},0);};
+    bootPhase(3);
+    setTimeout(()=>{try{init();}catch(e){log("로더 오류: "+(e&&e.message||e));errorPanel(String(e&&e.message||e));return;}
+      let w=false;try{if(BOOT){BOOT.done($("#app"));BOOT.later(navWarm);w=true;}}catch(e){}_bootQuiet=false;if(!w)navWarm();},0);};
   if(typeof requestAnimationFrame==="function")requestAnimationFrame(()=>setTimeout(run,0));else run();}
 
 /* ---------- ③ 모델 ----------
@@ -1149,7 +1469,7 @@ function init(){
     if((k==="vf"||k==="vt")&&/^\d{4}-\d{2}-\d{2}$/.test(el.value)){const o=document.querySelector(`[data-in="${k==="vf"?"vt":"vf"}"]`);setRange(k==="vf"?el.value:o&&o.value,k==="vt"?el.value:o&&o.value,"custom");}});
   if(document.fonts&&document.fonts.ready)document.fonts.ready.then(()=>layoutPairLabels(document));   /* 글꼴이 늦게 오면 숫자 폭이 바뀐다 */
   log(meta.mode==="demo"?"데모 데이터":"수집 결과를 불러왔습니다. 장비 "+D.devices.length+"대 · "+D.days.length+"일");
-  render();}
+  bootPhase(4);render();}
 
 /* ── 계산 도우미(AOI-Dashboard.dc.html 의 메서드 그대로) ── */
 const S={
@@ -1260,7 +1580,7 @@ const barsHtml=(bars,height,btn)=>`<div class="chart" style="height:${height}px"
 const EASE="cubic-bezier(.16,1,.3,1)";
 const reduced=()=>{try{return !!(window.matchMedia&&window.matchMedia("(prefers-reduced-motion: reduce)").matches);}catch(e){return false;}};
 /* GSAP 3 + Flip 플러그인(인라인 vendor) — 없으면(하네스 등) 애니메이션 없이 morph 만 한다 */
-const G=()=>(typeof gsap!=="undefined"&&typeof Flip!=="undefined")?gsap:null;
+const G=()=>(!_bootQuiet&&typeof gsap!=="undefined"&&typeof Flip!=="undefined")?gsap:null;
 let _gReady=false;function gInit(){if(_gReady||!G())return;gsap.registerPlugin(Flip);gsap.defaults({ease:"power3.out",overwrite:"auto"});_gReady=true;}
 const canAnim=()=>!!G();
 const keyOf=n=>n&&n.nodeType===1?n.getAttribute("data-key"):null;
@@ -1286,8 +1606,8 @@ function morph(from,to){
   if(from.hasAttribute("data-static"))return;      /* Lottie 가 그린 SVG 처럼 렌더가 만들지 않은 자식은 건드리지 않는다 */
   morphChildren(from,to);
 }
-/* ── Lottie(인라인 vendor, animationData 만 — 파일을 읽지 않는다): 브랜드의 웨이퍼 스캔 표식(반복) · 'Error 없음' 의 체크(한 번) ── */
-const LOTTIE={"scan":{"v":"5.7.4","fr":30,"ip":0,"op":72,"w":32,"h":32,"nm":"wafer-scan","ddd":0,"assets":[],"layers":[{"ddd":0,"ind":1,"ty":4,"nm":"beam","sr":1,"ks":{"o":{"a":1,"k":[{"t":0,"s":[0],"i":{"x":[0.4],"y":[1]},"o":{"x":[0.6],"y":[0]}},{"t":8,"s":[100],"i":{"x":[0.4],"y":[1]},"o":{"x":[0.6],"y":[0]}},{"t":60,"s":[100],"i":{"x":[0.4],"y":[1]},"o":{"x":[0.6],"y":[0]}},{"t":72,"s":[0]}]},"r":{"a":0,"k":0},"p":{"a":1,"k":[{"t":0,"s":[16,7,0],"i":{"x":0.42,"y":1},"o":{"x":0.58,"y":0},"to":[0,0,0],"ti":[0,0,0]},{"t":72,"s":[16,25,0]}]},"a":{"a":0,"k":[0,0,0]},"s":{"a":0,"k":[100,100,100]}},"ao":0,"shapes":[{"ty":"gr","nm":"g","it":[{"ty":"rc","d":1,"s":{"a":0,"k":[18,2.4]},"p":{"a":0,"k":[0,0]},"r":{"a":0,"k":1.2}},{"ty":"fl","c":{"a":0,"k":[0.18,0.42,0.659,1]},"o":{"a":0,"k":100},"r":1},{"ty":"tr","p":{"a":0,"k":[0,0]},"a":{"a":0,"k":[0,0]},"s":{"a":0,"k":[100,100]},"r":{"a":0,"k":0},"o":{"a":0,"k":100},"sk":{"a":0,"k":0},"sa":{"a":0,"k":0}}]}],"ip":0,"op":72,"st":0,"bm":0},{"ddd":0,"ind":2,"ty":4,"nm":"wafer","sr":1,"ks":{"o":{"a":0,"k":100},"r":{"a":0,"k":0},"p":{"a":0,"k":[16,16,0]},"a":{"a":0,"k":[0,0,0]},"s":{"a":0,"k":[100,100,100]}},"ao":0,"shapes":[{"ty":"gr","nm":"g","it":[{"ty":"el","d":1,"s":{"a":0,"k":[24,24]},"p":{"a":0,"k":[0,0]}},{"ty":"st","c":{"a":0,"k":[0.18,0.42,0.659,1]},"o":{"a":0,"k":100},"w":{"a":0,"k":2.2},"lc":2,"lj":2},{"ty":"tr","p":{"a":0,"k":[0,0]},"a":{"a":0,"k":[0,0]},"s":{"a":0,"k":[100,100]},"r":{"a":0,"k":0},"o":{"a":0,"k":100},"sk":{"a":0,"k":0},"sa":{"a":0,"k":0}}]}],"ip":0,"op":72,"st":0,"bm":0},{"ddd":0,"ind":3,"ty":4,"nm":"notch","sr":1,"ks":{"o":{"a":0,"k":100},"r":{"a":0,"k":0},"p":{"a":0,"k":[16,27.2,0]},"a":{"a":0,"k":[0,0,0]},"s":{"a":0,"k":[100,100,100]}},"ao":0,"shapes":[{"ty":"gr","nm":"g","it":[{"ty":"rc","d":1,"s":{"a":0,"k":[6,2.2]},"p":{"a":0,"k":[0,0]},"r":{"a":0,"k":1.1}},{"ty":"fl","c":{"a":0,"k":[1,1,1,1]},"o":{"a":0,"k":100},"r":1},{"ty":"tr","p":{"a":0,"k":[0,0]},"a":{"a":0,"k":[0,0]},"s":{"a":0,"k":[100,100]},"r":{"a":0,"k":0},"o":{"a":0,"k":100},"sk":{"a":0,"k":0},"sa":{"a":0,"k":0}}]}],"ip":0,"op":72,"st":0,"bm":0}]},"check":{"v":"5.7.4","fr":30,"ip":0,"op":40,"w":64,"h":64,"nm":"wafer-check","ddd":0,"assets":[],"layers":[{"ddd":0,"ind":1,"ty":4,"nm":"tick","sr":1,"ks":{"o":{"a":0,"k":100},"r":{"a":0,"k":0},"p":{"a":0,"k":[32,33,0]},"a":{"a":0,"k":[0,0,0]},"s":{"a":0,"k":[100,100,100]}},"ao":0,"shapes":[{"ty":"gr","nm":"g","it":[{"ty":"sh","d":1,"ks":{"a":0,"k":{"i":[[0,0],[0,0],[0,0]],"o":[[0,0],[0,0],[0,0]],"v":[[-11,1],[-3,9],[13,-9]],"c":false}}},{"ty":"tm","s":{"a":0,"k":0},"e":{"a":1,"k":[{"t":12,"s":[0],"i":{"x":[0.2],"y":[1]},"o":{"x":[0.6],"y":[0]}},{"t":32,"s":[100]}]},"o":{"a":0,"k":0},"m":1},{"ty":"st","c":{"a":0,"k":[0.18,0.49,0.31,1]},"o":{"a":0,"k":100},"w":{"a":0,"k":4},"lc":2,"lj":2},{"ty":"tr","p":{"a":0,"k":[0,0]},"a":{"a":0,"k":[0,0]},"s":{"a":0,"k":[100,100]},"r":{"a":0,"k":0},"o":{"a":0,"k":100},"sk":{"a":0,"k":0},"sa":{"a":0,"k":0}}]}],"ip":0,"op":40,"st":0,"bm":0},{"ddd":0,"ind":2,"ty":4,"nm":"ring","sr":1,"ks":{"o":{"a":0,"k":100},"r":{"a":0,"k":-90},"p":{"a":0,"k":[32,32,0]},"a":{"a":0,"k":[0,0,0]},"s":{"a":1,"k":[{"t":0,"s":[80,80,100],"i":{"x":[0.2,0.2,0.2],"y":[1,1,1]},"o":{"x":[0.6,0.6,0.6],"y":[0,0,0]}},{"t":16,"s":[100,100,100]}]}},"ao":0,"shapes":[{"ty":"gr","nm":"g","it":[{"ty":"el","d":1,"s":{"a":0,"k":[50,50]},"p":{"a":0,"k":[0,0]}},{"ty":"tm","s":{"a":0,"k":0},"e":{"a":1,"k":[{"t":0,"s":[0],"i":{"x":[0.2],"y":[1]},"o":{"x":[0.6],"y":[0]}},{"t":18,"s":[100]}]},"o":{"a":0,"k":0},"m":1},{"ty":"st","c":{"a":0,"k":[0.18,0.49,0.31,1]},"o":{"a":0,"k":100},"w":{"a":0,"k":3},"lc":2,"lj":2},{"ty":"tr","p":{"a":0,"k":[0,0]},"a":{"a":0,"k":[0,0]},"s":{"a":0,"k":[100,100]},"r":{"a":0,"k":0},"o":{"a":0,"k":100},"sk":{"a":0,"k":0},"sa":{"a":0,"k":0}}]}],"ip":0,"op":40,"st":0,"bm":0}]}};
+/* ── Lottie(인라인 vendor, animationData 만 — 파일을 읽지 않는다): 'Error 없음' 의 체크(한 번) — 웨이퍼 스캔 표식은 머리 아이콘(D103) · 시작 화면(D104)으로 바뀌어 지웠다 ── */
+const LOTTIE={"check":{"v":"5.7.4","fr":30,"ip":0,"op":40,"w":64,"h":64,"nm":"wafer-check","ddd":0,"assets":[],"layers":[{"ddd":0,"ind":1,"ty":4,"nm":"tick","sr":1,"ks":{"o":{"a":0,"k":100},"r":{"a":0,"k":0},"p":{"a":0,"k":[32,33,0]},"a":{"a":0,"k":[0,0,0]},"s":{"a":0,"k":[100,100,100]}},"ao":0,"shapes":[{"ty":"gr","nm":"g","it":[{"ty":"sh","d":1,"ks":{"a":0,"k":{"i":[[0,0],[0,0],[0,0]],"o":[[0,0],[0,0],[0,0]],"v":[[-11,1],[-3,9],[13,-9]],"c":false}}},{"ty":"tm","s":{"a":0,"k":0},"e":{"a":1,"k":[{"t":12,"s":[0],"i":{"x":[0.2],"y":[1]},"o":{"x":[0.6],"y":[0]}},{"t":32,"s":[100]}]},"o":{"a":0,"k":0},"m":1},{"ty":"st","c":{"a":0,"k":[0.18,0.49,0.31,1]},"o":{"a":0,"k":100},"w":{"a":0,"k":4},"lc":2,"lj":2},{"ty":"tr","p":{"a":0,"k":[0,0]},"a":{"a":0,"k":[0,0]},"s":{"a":0,"k":[100,100]},"r":{"a":0,"k":0},"o":{"a":0,"k":100},"sk":{"a":0,"k":0},"sa":{"a":0,"k":0}}]}],"ip":0,"op":40,"st":0,"bm":0},{"ddd":0,"ind":2,"ty":4,"nm":"ring","sr":1,"ks":{"o":{"a":0,"k":100},"r":{"a":0,"k":-90},"p":{"a":0,"k":[32,32,0]},"a":{"a":0,"k":[0,0,0]},"s":{"a":1,"k":[{"t":0,"s":[80,80,100],"i":{"x":[0.2,0.2,0.2],"y":[1,1,1]},"o":{"x":[0.6,0.6,0.6],"y":[0,0,0]}},{"t":16,"s":[100,100,100]}]}},"ao":0,"shapes":[{"ty":"gr","nm":"g","it":[{"ty":"el","d":1,"s":{"a":0,"k":[50,50]},"p":{"a":0,"k":[0,0]}},{"ty":"tm","s":{"a":0,"k":0},"e":{"a":1,"k":[{"t":0,"s":[0],"i":{"x":[0.2],"y":[1]},"o":{"x":[0.6],"y":[0]}},{"t":18,"s":[100]}]},"o":{"a":0,"k":0},"m":1},{"ty":"st","c":{"a":0,"k":[0.18,0.49,0.31,1]},"o":{"a":0,"k":100},"w":{"a":0,"k":3},"lc":2,"lj":2},{"ty":"tr","p":{"a":0,"k":[0,0]},"a":{"a":0,"k":[0,0]},"s":{"a":0,"k":[100,100]},"r":{"a":0,"k":0},"o":{"a":0,"k":100},"sk":{"a":0,"k":0},"sa":{"a":0,"k":0}}]}],"ip":0,"op":40,"st":0,"bm":0}]}};
 const _lts=new Set();
 /* 브랜드 표식 SVG(겹 링) — 22px 자리라 바로가기 16~40px 그림과 같은 고리 둘. --C = 둘레, 애니메이션은 CSS(.mk.play) */
 const BRAND_SVG=`<svg viewBox="0 0 64 64" focusable="false"><rect x="1" y="1" width="62" height="62" rx="12" fill="#fff" stroke="#CCD6E1" stroke-width="1.2"/><circle cx="32" cy="32" r="21.5" fill="none" stroke="#E6EBF1" stroke-width="7.2"/><circle class="bm-a" style="--C:135.09;--dl:0ms;--du:820ms" cx="32" cy="32" r="21.5" fill="none" stroke="#2E6BA8" stroke-width="7.2" stroke-linecap="round" stroke-dasharray="108.07 135.09" transform="rotate(-90 32 32)"/><circle cx="32" cy="32" r="12.2" fill="none" stroke="#E6EBF1" stroke-width="7.2"/><circle class="bm-a" style="--C:76.65;--dl:140ms;--du:820ms" cx="32" cy="32" r="12.2" fill="none" stroke="#5E95CC" stroke-width="7.2" stroke-linecap="round" stroke-dasharray="50.59 76.65" transform="rotate(-90 32 32)"/><circle class="bm-e" style="--C:135.09;--dl:900ms;--du:140ms" cx="32" cy="32" r="21.5" fill="none" stroke="#C5453C" stroke-width="7.2" stroke-dasharray="4.05 135.09" stroke-dashoffset="-113.47" transform="rotate(-90 32 32)"/><circle class="bm-c" cx="32" cy="32" r="3.6" fill="#1D4E82"/></svg>`;

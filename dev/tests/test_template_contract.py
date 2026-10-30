@@ -56,7 +56,21 @@ def test_no_network_use_at_all():
     for bad in ("fetch(", "api.github.com", "fonts.googleapis.com", "XMLHttpRequest", "navigator.sendBeacon", "new WebSocket", "import(",
                 "<script src=", '<link rel="stylesheet"', "http://", "https://"):
         assert bad not in body, bad
-    assert HTML.count("<script") == 3, "embedded JSON · 인라인 라이브러리(vendor) · 화면 스크립트 — 셋뿐"
+    assert HTML.count("<script") == 4, "시작 화면(boot) · embedded JSON · 인라인 라이브러리(vendor) · 화면 스크립트 — 넷뿐"
+
+
+def test_boot_screen_runs_before_the_data_and_draws_off_the_main_thread():
+    """시작 화면(D104): 큰 데이터보다 앞에서 돌고, 그림은 Worker(파일 안 함수로 만든 blob 주소)가 그린다 — 바깥 주소 없음.
+    페이지를 연 때부터 4초 안에는 드러나지 않고, 덮개는 클릭을 막지 않는다. 첫 렌더의 등장 연출은 끈다(_bootQuiet)."""
+    m = re.search(r'<script id="boot">(.*?)</script>', HTML, re.S)
+    assert m and HTML.index('<script id="boot">') < HTML.index('id="embedded"') < HTML.index('<script id="vendor">')
+    boot = m.group(1)
+    assert "MIN=4000" in boot and "pointer-events:none" in boot
+    assert "URL.createObjectURL(new Blob([src]" in boot and "new Worker(url)" in boot and "transferControlToOffscreen" in boot
+    assert "localStorage" in boot and "forCache" in boot          # 다음에 열 때의 틀 — 데이터 글자는 내용 없이 칸으로만
+    assert "BOOT.done(" in HTML and "BOOT.later(navWarm)" in HTML and "BOOT.abort()" in HTML
+    assert "const G=()=>(!_bootQuiet&&" in HTML
+    assert 'class="loader"' not in HTML and ".loader{" not in HTML    # 옛 Lottie 로더는 지웠다
 
 
 def test_vendor_block_makes_no_requests_either():
