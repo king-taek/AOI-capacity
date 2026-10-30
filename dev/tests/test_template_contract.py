@@ -69,6 +69,7 @@ def test_boot_screen_runs_before_the_data_and_draws_off_the_main_thread():
     assert 'ov.id="aoi-boot"' in boot and 'getElementById("boot")' not in boot   # 덮개와 스크립트는 다른 id(같으면 스크립트가 자기를 지운다)
     assert 'clone.querySelector("#aoi-boot")' in HTML                             # 사본 저장은 덮개를 빼고 담는다
     assert "URL.createObjectURL(new Blob([src]" in boot and "new Worker(url)" in boot and "transferControlToOffscreen" in boot
+    assert "waferLayout" in boot and 'opt.kind==="lot"' in boot and 'getAttribute("data-boot")' in boot   # LOT 추적 배포판은 웨이퍼 장면
     assert "fixedLayout" in boot and "localStorage" not in boot and "getBoundingClientRect" not in boot   # 늘 같은 장면(현택 10/30) — 화면을 재거나 기억하지 않는다
     assert "BOOT.done(" in HTML and "BOOT.later(navWarm)" in HTML and "BOOT.abort()" in HTML
     assert "const G=()=>(!_bootQuiet&&" in HTML

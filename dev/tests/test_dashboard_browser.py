@@ -147,7 +147,10 @@ def test_boot_screen_covers_four_seconds_then_reveals_the_real_screen(page_facto
     if lot_only:
         emb["meta"]["lot_only"] = True
     out = tmp_path / "boot.html"
-    out.write_text(TEMPLATE.read_text(encoding="utf-8").replace("__DATA__", json.dumps(emb, ensure_ascii=False).replace("</", "<\\/"), 1), encoding="utf-8")
+    tpl = TEMPLATE.read_text(encoding="utf-8")
+    if lot_only:                                    # write_html(lot_only) 처럼 웨이퍼 장면을 고른다
+        tpl = tpl.replace('<html lang="ko" ', '<html lang="ko" data-boot="lot" ', 1)
+    out.write_text(tpl.replace("__DATA__", json.dumps(emb, ensure_ascii=False).replace("</", "<\\/"), 1), encoding="utf-8")
     ctx = page_factory.new_context(viewport={"width": 1280, "height": 800})
     pg = ctx.new_page()
     errors, requests = [], []

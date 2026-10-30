@@ -541,7 +541,7 @@ button.dbrow:focus-visible{outline:2px solid var(--nav-on);outline-offset:-2px}
    · 이 스크립트는 큰 데이터(#embedded)보다 앞에 있어서 파일을 읽는 동안부터 돈다. 그림은 별도 스레드(Worker + OffscreenCanvas)가
      그리므로 JSON 해석 · 모델 계산이 메인 스레드를 막아도 끊기지 않는다(옛 Lottie 로더는 그동안 0프레임이었다 — 실측).
    · 모양은 늘 같다(현택 10/30: 처음 불러올 때는 데이터가 없으니 화면마다 다르게 만들 이유가 없다) — 창 크기에 맞춰 그린 머리 · 카드 셋 ·
-     장비 줄과 24시간 막대. 가짜 숫자는 쓰지 않고 숫자 자리는 블록이다. 1막 틀(제목 · 칸 · 선), 2막 숫자 블록 · 색 막대.
+     장비 줄과 24시간 막대(LOT 추적 배포판은 검사를 지나며 결과가 쌓이는 웨이퍼 맵 — <html data-boot="lot">). 가짜 숫자는 쓰지 않고 숫자 자리는 블록이다. 1막 틀(제목 · 칸 · 선), 2막 숫자 블록 · 색 막대.
    · 페이지를 연 때부터 4초 안에는 걷히지 않고, 로딩이 4초를 넘으면 틀은 멈춰 있고 숫자 · 막대 몫 입자만 제 자리 근처에서
      살랑살랑 흔들리며 기다린다(엷은 회청색). 로딩이 끝나면(AOI_BOOT.done) 제 색으로 앉고, 진짜 화면이 덮개 뒤에서 드러난다.
    · 바깥 요청 0건 — Worker 는 이 스크립트 안의 함수로 만든 blob 주소다. 덮개는 클릭을 막지 않는다(pointer-events:none).
@@ -682,7 +682,7 @@ function bootScene(ctx,W,H,dpr,S,lib,opt){
         if(k<n-1)R(pad,y+rh,W-pad*2,1,"#EEF1F4");}}
     return{texts,rects,strokes,zones};}
 
-  /* LOT 추적 배포판(data-boot="lot-…")의 장면 — 같은 연출, LOT 추적 느낌. 공통 머리: 링 + 제목 */
+  /* LOT 추적 배포판(<html data-boot="lot">, write_html(lot_only))의 장면 — 같은 연출, LOT 추적 느낌. 머리: 링 + 제목 */
   const LC={INK:"#16202B",INK2:"#5A6673",INK3:"#AEB8C4",LINE:"#D3DAE2",TRACK:"#DFE5EC",ACC:"#2E6BA8",DUP:"#8FB8DE",ERR:"#C5453C",OV:"#F2C26B",SEV:"#D9731F"};
   const FONT='"Segoe UI","Malgun Gothic","Apple SD Gothic Neo",sans-serif';
   function lotHead(L,title){
@@ -692,31 +692,7 @@ function bootScene(ctx,W,H,dpr,S,lib,opt){
     L.rects.push({x:W-pad-fs*7,y:cy-fs*.17,w:fs*7,h:fs*.34,c:LC.INK3,d:0});L.rects.push({x:0,y:hh-1,w:W,h:1,c:LC.LINE,d:0});
     const capH=Math.max(34,H*.06);return{pad,hh,fs,top:hh+pad,bot:H-capH-pad*.4};}
   const pickC=(r,tab)=>{let u=r(),i=0;while(i<tab.length-1&&u>tab[i][1]){u-=tab[i][1];i++;}return tab[i][0];};
-  /* 시안 A '카세트': 25칸 카세트에 옆으로 누운 Wafer, 칸마다 오른쪽으로 검사 이력의 점이 이어진다 */
-  function cassetteLayout(){
-    const L={texts:[],rects:[],strokes:[],zones:[],arcs:[],lines:[]},r2=lib.rnd(2510),R=(x,y,w,h,c,d)=>L.rects.push({x,y,w,h,c,d:d?1:0});
-    const g=lotHead(L,"LOT 추적"),n=25,bh=g.bot-g.top,p=bh/(n+1.2),y0=g.top+p*.6;
-    const cw=Math.max(150,Math.min(W*.26,bh*.62)),cx=g.pad+Math.max(28,p*1.5),nf=Math.max(9,Math.min(13,p*.5));
-    L.strokes.push({x:cx,y:g.top,w:cw,h:bh,r:14,lw:2,c:"#B9C3CE"});
-    const rl=cx+cw*.06,rr=cx+cw*.94;R(rl,g.top+p*.3,2,bh-p*.6,LC.INK3);R(rr-2,g.top+p*.3,2,bh-p*.6,LC.INK3);
-    const ST=[[LC.ACC,.62],[LC.DUP,.12],[LC.OV,.1],[LC.SEV,.05],[LC.ERR,.05],["",.06]];
-    const tx0=cx+cw+Math.max(24,W*.03),tx1=W-g.pad,idw=Math.min(p*3.4,(tx1-tx0)*.16),sx0=tx0+idw+Math.max(16,W*.015),k=Math.max(4,Math.min(7,Math.round((tx1-sx0)/Math.max(110,W*.1))));
-    for(let i=0;i<n;i++){const y=y0+i*p,mid=y+p/2;
-      L.texts.push({t:"#"+(i+1),x:g.pad,y:mid,f:`600 ${nf}px ${FONT}`,c:LC.INK2,d:0});
-      R(rl,mid-1,cw*.05,2,LC.INK3);R(rr-cw*.05,mid-1,cw*.05,2,LC.INK3);
-      const st=pickC(r2,ST);const wh=Math.max(3,p*.24),wx=rl+cw*.07,ww=rr-rl-cw*.14;
-      if(!st){R(wx,mid-.5,ww,1,LC.TRACK);continue;}
-      R(wx,mid-wh/2,ww,wh,st,1);L.zones.push({x:wx,y:mid-wh,w:ww,h:wh*2});
-      R(tx0,mid-p*.12,idw*(.75+r2()*.25),p*.24,LC.INK,1);L.zones.push({x:tx0,y:mid-p*.16,w:idw,h:p*.32});
-      const m=2+Math.floor(r2()*(k-1)),pts=[];let x=sx0+(r2()*.25)*(tx1-sx0)/k;
-      for(let j=0;j<m&&x<tx1-4;j++){pts.push(x);x+=(tx1-sx0)/k*(.75+r2()*.5);}
-      R(sx0,mid-.5,tx1-sx0,1,"#E7ECF1");
-      if(pts.length>1)L.lines.push({pts:pts.map(q=>[q,mid]),c:"#BFD3E8",lw:Math.max(1.5,p*.08),d:1});
-      const dr=Math.max(2.5,Math.min(6,p*.2));
-      pts.forEach((q,j)=>{const last=j===pts.length-1,c=last?st:pickC(r2,[[LC.ACC,.7],[LC.DUP,.15],[LC.OV,.1],[LC.ERR,.05]]);L.arcs.push({x:q,y:mid,r:dr,c,fill:1,d:1});});
-      L.zones.push({x:sx0,y:mid-p*.2,w:tx1-sx0,h:p*.4});}
-    return L;}
-  /* 시안 B '웨이퍼': 한 Wafer 가 검사를 지날 때마다 결과가 쌓인다 — 큰 웨이퍼 셋(넷)과 칩 격자, 화살표로 잇는다 */
+  /* LOT 추적 배포판 '웨이퍼'(현택 10/30, 시안 둘 중 B): 한 Wafer 가 검사를 지날 때마다 결과가 쌓인다 — 큰 웨이퍼 셋(넷)과 칩 격자, 화살표로 잇는다 */
   function waferLayout(){
     const L={texts:[],rects:[],strokes:[],zones:[],arcs:[],lines:[]},r2=lib.rnd(4410),R=(x,y,w,h,c,d)=>L.rects.push({x,y,w,h,c,d:d?1:0});
     const g=lotHead(L,"LOT 추적"),bh=g.bot-g.top,k=W<760?2:W/H>1.9?4:3,gap=Math.max(40,W*.05);
@@ -751,7 +727,7 @@ function bootScene(ctx,W,H,dpr,S,lib,opt){
       else{a0=Math.min(a0,raw[j]);a1=Math.max(a1,raw[j]);}}
     NS=0;for(let j=0;j<N;j++){RK[j]=D[j]?.79+.2*(raw[j]-b0)/Math.max(1e-6,b1-b0):.76*(raw[j]-a0)/Math.max(1e-6,a1-a0);if(!D[j])NS++;}
     NS=Math.max(1,NS);ND=Math.max(1,N-NS);has=true;bake();}
-  assign(opt.kind==="lot-a"?cassetteLayout():opt.kind==="lot-b"?waferLayout():fixedLayout());
+  assign(opt.kind==="lot"?waferLayout():fixedLayout());
   const fs=1/(W*.22),cv=[0,0],cfs=Math.max(10,Math.min(14,W*.0118)),cx=Math.max(16,W*.024),cy=H-Math.max(18,H*.05);
   ctx.fillStyle=BG;ctx.fillRect(0,0,W,H);
   return{count:N,
