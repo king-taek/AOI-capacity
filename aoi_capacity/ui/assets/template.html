@@ -2046,6 +2046,19 @@ const rptEx=L=>L[10]>=0?"err":((L[18]||0)<RPT_MIN_N?"small":((L[12]>L[11])?"":"n
    모아 장당 시간(배치 시간 ÷ PASS 장 수)이 중앙의 0.5배 미만이면 뺀다(`odd`). **느린 쪽은 빼지 않는다** — 30일치 전수조사에서 느린 쪽 35개 중 Kendall BS 16개가 AOI-1 이었다(AOI-1 의 일반 Lot 21개 중 16개가 장당 10~13분, 다른 장비는 4~5분) — 느린 장비를 찾는 탭이라 그 신호를 지우면 안 된다. Kendall BS 는 DIA 단계(Lot 이름에 DIA, 장당 ~2분)와 그 밖(~3.9분)이 한 Job 에 섞여 있어
    **DIA Lot 끼리 · 그 밖끼리** 따로 중앙을 잰다. 한 무리에 표본이 5개 미만이면 판단하지 않는다. b.pw · b.gm(무리 중앙)을 달아 팝업이 이유를 적는다. 30일치 샘플 전수(표본 후보 1,892개)에서 37개. */
 const RPT_ODD_LO=0.5;
+/* 자정을 걸친 배치 합치기(10/30 전수조사): 모델의 lots 는 하루 단위라 두 날에 걸친 Report 가 둘로 나뉜다(시간은 그날 부분, 장수는 그날 시작한 장) — 30일치 샘플에서 Report 의 6.5%, 표본에 같은 Report 가
+   두 번 든 것 86개. 같은 장비 · 같은 Report(L[8])의 조각을 한 배치로 합친다: 장수 · 행 · Error 건수 · 유형별 분은 더하고, 시작 = 첫 조각의 ba, 끝 = 마지막 조각의 bb(첫 날 0시 기준 분 — 하루를 넘으면 1440 이상). 입력은 날짜 순. */
+const dayGap=(a,b)=>Math.round((Date.parse(b)-Date.parse(a))/864e5);
+function rptMerge(items){const seen=new Map(),out=[];
+  for(const b of items){const k=b.L[8]>=0?b.dev+"\u0001"+b.L[8]:null;
+    if(k==null){out.push(b);continue;}
+    const f=seen.get(k);
+    if(!f){const m={...b,L:b.L.slice(),d0:b.dy,parts:1};m.L[9]={...b.L[9]};seen.set(k,m);out.push(m);continue;}
+    const off=dayGap(f.d0,b.dy)*1440,F=f.L,L=b.L;f.parts++;
+    F[4]+=L[4];F[5]+=L[5];F[13]+=L[13];F[14]+=L[14];F[18]=(F[18]||0)+(L[18]||0);if(F[10]<0&&L[10]>=0)F[10]=L[10];
+    for(const [c,v] of Object.entries(L[9])){const g=F[9][c]||(F[9][c]=[0,0]);F[9][c]=[g[0]+v[0],g[1]+v[1]];}
+    if(L[12]>L[11]){if(F[12]>F[11])F[12]=off+L[12];else{F[11]=off+L[11];F[12]=off+L[12];}}}
+  return out;}
 function rptOutliers(bs,P){const G={};
   for(const b of bs){if(b.ex)continue;b.pw=(b.L[12]-b.L[11])/b.L[18];b.dia=/\bDIA\b/i.test(P.lot[b.L[1]]||"");(G[b.dia?"d":"m"]||(G[b.dia?"d":"m"]=[])).push(b);}
   for(const g of Object.values(G)){if(g.length<RPT_MIN_N)continue;const q=g.map(b=>b.pw).sort((x,y)=>x-y),m=q.length>>1,med=q.length%2?q[m]:(q[m-1]+q[m])/2;
@@ -2062,8 +2075,10 @@ function reportHtml(){
       const A=byAlias[al]||(byAlias[al]={name:al,raw:{},all:blank(),devs:{},bt:{}});const rawName=P.job[L[0]];A.raw[rawName]=(A.raw[rawName]||0)+1;
       const dv=A.devs[n]||(A.devs[n]=blank());let em=0;for(const v of Object.values(L[9]))em+=v[1];
       for(const Sx of [A.all,dv]){Sx.n++;Sx.err+=L[5];Sx.errMin+=em;Sx.fS+=L[13]||0;Sx.fN+=L[14]||0;}
-      (A.bt[n]||(A.bt[n]=[])).push({dy,L,ex:rptEx(L)});}}   /* 모든 배치(제외된 것도) — 더블클릭 팝업이 보여 준다 */
-  for(const A of Object.values(byAlias)){const all=[];for(const list of Object.values(A.bt))for(const b of list)all.push(b);rptOutliers(all,P);   /* 장비를 가로지르는 무리 중앙이 필요해 루프 뒤에 */
+      (A.bt[n]||(A.bt[n]=[])).push({dy,dev:n,L});}}   /* 모든 배치(제외된 것도) — 더블클릭 팝업이 보여 준다 */
+  for(const A of Object.values(byAlias)){const all=[];A.all.n=0;
+    for(const n of Object.keys(A.bt)){const list=A.bt[n]=rptMerge(A.bt[n]);A.devs[n].n=list.length;A.all.n+=list.length;for(const b of list){b.ex=rptEx(b.L);all.push(b);}}   /* 자정 걸친 조각은 한 배치로 */
+    rptOutliers(all,P);   /* 장비를 가로지르는 무리 중앙이 필요해 루프 뒤에 */
     for(const [n,list] of Object.entries(A.bt)){const dv=A.devs[n];for(const b of list){if(b.ex){A.all.ex[b.ex]++;dv.ex[b.ex]++;continue;}
       const pt=[b.L[18],b.L[12]-b.L[11]];A.all.pts.push(pt);dv.pts.push(pt);}}}
   const exTxt=Sx=>"제외 — Error "+Sx.ex.err+" · PASS 5장 미만 "+Sx.ex.small+(Sx.ex.odd?" · 장당 시간 이상 "+Sx.ex.odd:"")+(Sx.ex.noTime?" · 배치 시각 없음 "+Sx.ex.noTime:"");
@@ -2164,9 +2179,10 @@ function rptDevPopupHtml(){const S0=state.rptAll;if(!S0||!D)return"";
   /* 같은 Job 의 배치 목록을 다시 모은다(화면 기간 안, reportHtml 과 같은 Job 이름 규칙) */
   const aliasOf=gi=>{const G=D.jobGroups[gi];let al=jobAlias(P.job[G.l])||null;if(!al)for(const [i] of G.m){if(jobAlias(P.job[i])){al=jobAlias(P.job[i]);break;}}if(al&&G.nm){al=G.nm;}return al;};
   const every=[];for(const dy of D.days)for(const n of D.devices){const t=S.at(dy,n);if(!t)continue;for(const L of t.lots){if(aliasOf(D.jobG[L[0]])!==S0.job)continue;
-    every.push({dy,dev:n,L,ex:rptEx(L),min:L[12]>L[11]?L[12]-L[11]:null});}}
-  rptOutliers(every,P);   /* 장당 시간 이상치는 모든 장비의 무리 중앙으로 재므로 전부 모은 뒤 이 장비만 고른다 */
-  const bs=every.filter(b=>b.dev===S0.dev);
+    every.push({dy,dev:n,L});}}
+  const merged=rptMerge(every);for(const b of merged){b.ex=rptEx(b.L);b.min=b.L[12]>b.L[11]?b.L[12]-b.L[11]:null;}
+  rptOutliers(merged,P);   /* 장당 시간 이상치는 모든 장비의 무리 중앙으로 재므로 전부 모은 뒤 이 장비만 고른다 */
+  const bs=merged.filter(b=>b.dev===S0.dev);
   if(!bs.length)return shell("기록 없음",`<div class="pbody"><p class="empty">이 기간에는 이 장비의 이 Job 배치가 없습니다</p></div>`);
   const F=state.rptAllF||"all",SO=state.rptAllS||"date";
   const exWhy={err:"제외 — 원인 Error",small:"제외 — PASS 5장 미만",noTime:"제외 — 배치 시각 없음"};
@@ -2181,7 +2197,7 @@ function rptDevPopupHtml(){const S0=state.rptAll;if(!S0||!D)return"";
     const st=b.ex?`<span class="muted" title="${esc(why)}">${esc(why)}</span>`:`<span style="color:var(--good);font-weight:600">표본</span>`;
     const slow=b.min!=null&&med&&b.min/med-1>=RPT_SLOW&&!b.ex;
     return `<div class="rcpdev" data-key="slot:${i}" data-row="b:${esc(b.dy+"|"+(L[1]||"")+"|"+a)}" style="grid-template-columns:${cols}">
-      <span class="num">${md(b.dy)}</span><span class="num">${b.min!=null?clock(a)+" – "+clock(L[12]):clock(a)+" – ?"}</span><span class="num r" style="font-weight:600${slow?";color:"+ERR:""}">${b.min!=null?esc(hm(b.min)):"—"}</span><span class="num r"${(L[18]||0)!==L[4]?` title="Report 행 ${L[4]}개 중 PASS ${L[18]||0}장 — 나머지는 건너뜀 · 중단"`:""}>${L[4]?(L[18]||0)+"장":"—"}${(L[18]||0)!==L[4]&&L[4]?`<small class="muted"> /${L[4]}</small>`:""}</span>
+      <span class="num">${md(b.dy)}</span><span class="num">${b.min!=null?clock(a%1440)+" – "+clock(L[12]%1440)+(L[12]>=1440?" <small class=\"muted\">+"+Math.floor(L[12]/1440)+"일</small>":""):clock(a%1440)+" – ?"}</span><span class="num r" style="font-weight:600${slow?";color:"+ERR:""}">${b.min!=null?esc(hm(b.min)):"—"}</span><span class="num r"${(L[18]||0)!==L[4]?` title="Report 행 ${L[4]}개 중 PASS ${L[18]||0}장 — 나머지는 건너뜀 · 중단"`:""}>${L[4]?(L[18]||0)+"장":"—"}${(L[18]||0)!==L[4]&&L[4]?`<small class="muted"> /${L[4]}</small>`:""}</span>
       <span class="mono" style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(P.lot[L[1]]||"")}">${esc(P.lot[L[1]]||"(Lot 확인 불가)")}</span>
       <span style="min-width:0">${st}${types.map(([k,v])=>` <span class="pill err mono">${esc(k)} ${esc(hm(v[1]))}</span>`).join("")}</span>
       <span style="text-align:right">${rp&&reportUrl({device:S0.dev,report:rp})?`<button class="link" data-h="${h(()=>openReport({device:S0.dev,report:rp}))}" title="이 BatchReport 를 새 탭으로 엽니다(NAS 경로)">Report</button>`:""}</span></div>`;};

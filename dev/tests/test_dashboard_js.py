@@ -876,3 +876,18 @@ def test_report_tab_leaves_out_a_batch_whose_time_per_wafer_is_far_from_its_grou
     assert "제외 — 장당 1.8분, DIA 아닌 Lot 중앙" in popup
     g_row = popup[popup.index("LOT-G"):]
     assert "표본" in g_row[:g_row.index("</div>")]                # 느린 쪽(장당 30분)은 표본으로 남는다
+
+
+def test_report_tab_counts_a_batch_that_crosses_midnight_once():
+    """10/30 전수조사: 자정을 걸친 Report 가 하루씩 둘로 잘려 표본에 두 번 들어갔다(30일치 샘플에서 Report 의 6.5%). 한 배치로 합쳐 장수 12 · 시간 3시간 30분."""
+    rep = "R_TB500_LIVE_PI3_6321_LOT-M_17-Sep-26_(22.00.00)_BatchReport.htm"
+    bs, be = ts("2026-09-17", "22:00"), ts("2026-09-18", "01:30")
+    rows = []
+    for k in range(6):                                                    # 17일 밤: 6장
+        rows.append(w("AOI-1", f"M{k}", _hhmm("22:00", 10 + 25 * k), _hhmm("22:00", 30 + 25 * k), lot="LOT-M", job="R_TB500_LIVE_PI3", report=rep, day="2026-09-17") | {"batch_start": bs, "batch_end": be})
+    for k in range(6, 12):                                                # 18일 새벽: 6장
+        rows.append(w("AOI-1", f"M{k}", _hhmm("00:00", 5 + 14 * (k - 6)), _hhmm("00:00", 15 + 14 * (k - 6)), lot="LOT-M", job="R_TB500_LIVE_PI3", report=rep, day="2026-09-18") | {"batch_start": bs, "batch_end": be})
+    (popup,) = screen(rows, meta("AOI-1"), [["rptDevPopupHtml"]], state={"view": "report", "rptAll": {"job": "TB500 PI3", "dev": "AOI-1"}})
+    assert popup.count("LOT-M</span>") == 1                                # 두 줄이 아니라 한 줄
+    assert "배치 1개" in popup and "12장" in popup and "3시간 30분" in popup and "22:00 – 01:30" in popup
+    assert "제외 — PASS 5장 미만" not in popup                              # 조각(6장 · 6장)이 아니라 합친 12장으로 판단
