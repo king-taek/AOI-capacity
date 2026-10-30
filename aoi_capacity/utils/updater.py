@@ -540,7 +540,8 @@ _UPDATE_TOP_ALLOW = ("main.py", "requirements.txt", "aoi_capacity", "scripts")
 _UPDATE_KEEP_ONLY = {"scripts": {"run_aoi.bat", "run_aoi_debug.bat", "run_collect.bat",
                                 "make_sample.bat", "collect_sample.py",
                                 "make_wafer_logs.bat", "collect_wafer_logs.py",
-                                "share_probe.bat", "share_probe.py"}}
+                                "share_probe.bat", "share_probe.py",
+                                "icon_probe.bat", "icon_probe.py"}}
 # 스테이징 최상위에 있어야 하는 이름 전부(VERSION 은 스테이징 때 생성).
 STAGED_TOP_LEVEL = frozenset(_UPDATE_TOP_ALLOW) | {"VERSION"}
 _REQUIRED_IN_STAGING = ("main.py", "requirements.txt", "aoi_capacity/ui/main_window.py",

@@ -84,3 +84,16 @@ def test_v9_does_not_expand_an_explicit_scope_saved_at_v8():
     assert kept.scope_devices == ["AOI-25"] and kept.prefs_version == prefs.PREFS_VERSION
     moved = prefs.migrate(prefs.Prefs.from_dict({"scope_devices": ["AOI-25"], "prefs_version": 7}))
     assert moved.scope_devices != ["AOI-25"]
+
+
+def test_v10_moves_only_the_old_default_publish_folders_to_the_new_share():
+    """v10(10/30) — 배포 폴더 기본값이 새 공유로 옮겨 갔다. 옛 기본값 그대로인 것만 옮기고 직접 고른 경로 · 빈 값(배포 끔)은 보존한다."""
+    from aoi_capacity import i18n
+    K = i18n.KO
+    old = prefs.migrate(prefs.Prefs.from_dict({"prefs_version": 9, "publish_dir": K.PUBLISH_DIR_PAST + "\\", "publish_full_dir": K.PUBLISH_FULL_DIR_PAST}))
+    assert (old.publish_dir, old.publish_full_dir) == (K.PUBLISH_DIR_DEFAULT, K.PUBLISH_FULL_DIR_DEFAULT)
+    assert K.PUBLISH_DIR_DEFAULT.startswith("\\\\10.142.80.167\\") and "k5cifsn2" not in K.PUBLISH_FULL_DIR_DEFAULT
+    mine = prefs.migrate(prefs.Prefs.from_dict({"prefs_version": 9, "publish_dir": "D:\\내 폴더", "publish_full_dir": ""}))
+    assert (mine.publish_dir, mine.publish_full_dir) == ("D:\\내 폴더", "")
+    new = prefs.migrate(prefs.Prefs.from_dict({"prefs_version": 10, "publish_dir": K.PUBLISH_DIR_PAST}))
+    assert new.publish_dir == K.PUBLISH_DIR_PAST                 # 이미 v10 인 설정은 다시 옮기지 않는다(사용자가 일부러 옛 경로로 돌린 경우)
