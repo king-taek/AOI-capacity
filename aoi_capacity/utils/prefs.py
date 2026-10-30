@@ -14,11 +14,11 @@ import os
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
-from .. import scope as _scope
+from .. import i18n, scope as _scope
 from . import config as _config
 from . import paths
 
-PREFS_VERSION = 9
+PREFS_VERSION = 10
 SCOPE_MIGRATED_AT = 8         # 수집 범위 기본값 이동이 마지막으로 일어난 버전(v8). 범위를 다시 늘릴 때만 올린다 — 그 밖의 v 올림은 고른 범위를 건드리지 않는다
 
 # 10/30: 설정 화면에서 뺀 옵션들의 고정값 — 옛 prefs.json 에 남은 값은 읽을 때 버려지고 이 값이 쓰인다
@@ -85,6 +85,10 @@ class Prefs:
         return cls(**known)
 
 
+def _norm_dir(v) -> str:
+    return str(v or "").strip().rstrip("\\/").lower()
+
+
 def migrate(p: Prefs) -> Prefs:
     """버전 간 기본값 이동 — **옛 기본값 그대로인 값만** 새 기본값으로 옮긴다(사용자가 고른 값은 보존).
 
@@ -100,11 +104,17 @@ def migrate(p: Prefs) -> Prefs:
     v9(10/30, 사용자 요청): 설정 화면에서 주의 장비 기준 · CSV 함께 저장 · 이력 보관 기간 · NAS 동시 읽기 · 어두운 화면 옵션을 없앴다.
         이 값들은 이제 Prefs 의 필드가 아니라서 옛 파일에 남은 값은 `from_dict` 가 버린다(다음 저장 때 파일에서도 사라진다) —
         수집 범위(`scope_devices`)는 건드리지 않는다 — 범위 이동은 `SCOPE_MIGRATED_AT` 미만인 파일만.
-        CSV 는 항상 저장, 보관 기간은 기한 없음, 동시 읽기 4, 화면은 라이트, 주의 장비 기준은 기본값(가동률 40% 미만 · Error 3건 이상)."""
+        CSV 는 항상 저장, 보관 기간은 기한 없음, 동시 읽기 4, 화면은 라이트, 주의 장비 기준은 기본값(가동률 40% 미만 · Error 3건 이상).
+    v10(10/30, 사용자 확정): 배포 폴더 기본값이 새 공유(`\\\\10.142.80.167\\1.Engr\\…`)로 옮겨 갔다 — 옛 기본값(`k5cifsn2`) 그대로인 LOT 추적 · 전체 배포 폴더만 옮기고, 직접 고른 경로·빈 값(배포 끔)은 그대로."""
     if p.prefs_version < SCOPE_MIGRATED_AT and list(p.scope_devices or []) in _scope.PAST_DEFAULTS:
         p.scope_devices = list(_scope.DEFAULT_SCOPE)
     if p.prefs_version < 7 and int(p.html_days) == 60:
         p.html_days = 30
+    if p.prefs_version < 10:
+        if _norm_dir(p.publish_dir) == _norm_dir(i18n.KO.PUBLISH_DIR_PAST):
+            p.publish_dir = _config.PUBLISH_DIR_DEFAULT
+        if _norm_dir(p.publish_full_dir) == _norm_dir(i18n.KO.PUBLISH_FULL_DIR_PAST):
+            p.publish_full_dir = _config.PUBLISH_FULL_DIR_DEFAULT
     if p.prefs_version < PREFS_VERSION:
         p.prefs_version = PREFS_VERSION
     return p

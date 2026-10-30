@@ -17,7 +17,6 @@ from ..widgets.inputs import NoWheelSpinBox as QSpinBox
 
 class SettingsPage(QWidget):
     update_check_requested = pyqtSignal()
-    publish_dirs_changed = pyqtSignal()          # 배포 폴더 칸을 고쳤다 — 수집 창 맨 위 시험 카드(10/30 임시)가 같은 값을 보이게
 
     def __init__(self, parent: Optional[QWidget] = None):
         super().__init__(parent)
@@ -96,20 +95,12 @@ class SettingsPage(QWidget):
 
         self._backfill.valueChanged.connect(lambda v: prefs.patch(backfill_days=int(v)))
         self._html_days.valueChanged.connect(lambda v: prefs.patch(html_days=int(v)))
-        self._publish.editingFinished.connect(lambda: (prefs.patch(publish_dir=self._publish.text().strip()), self.publish_dirs_changed.emit()))
-        self._publish_full.editingFinished.connect(lambda: (prefs.patch(publish_full_dir=self._publish_full.text().strip()), self.publish_dirs_changed.emit()))
+        self._publish.editingFinished.connect(lambda: prefs.patch(publish_dir=self._publish.text().strip()))
+        self._publish_full.editingFinished.connect(lambda: prefs.patch(publish_full_dir=self._publish_full.text().strip()))
         b_open.clicked.connect(lambda: QDesktopServices.openUrl(QUrl.fromLocalFile(str(paths.data_root()))))
         b_log.clicked.connect(lambda: QDesktopServices.openUrl(QUrl.fromLocalFile(str(paths.log_file()))))
         b_upd.clicked.connect(self.update_check_requested.emit)
         self.refresh_version()
-
-    def reload_publish_dirs(self) -> None:
-        """prefs 의 배포 폴더 두 값을 칸에 다시 보인다(다른 곳에서 바꿨을 때) — 신호는 보내지 않는다."""
-        p = prefs.load()
-        for edit, v in ((self._publish, p.publish_dir), (self._publish_full, p.publish_full_dir)):
-            edit.blockSignals(True)
-            edit.setText(str(v or ""))
-            edit.blockSignals(False)
 
     def add_row(self, label: str, item) -> None:
         """설정 줄들 위에 '이름 | 값' 한 줄을 더한다 — 수집 페이지의 결과 폴더 · CSV · 결과 파일."""
