@@ -895,6 +895,16 @@ def test_report_tab_judges_time_per_wafer_within_each_device_not_across_the_flee
     assert popup.count("표본") >= 5
 
 
+def test_report_tab_keeps_batches_apart_when_the_report_name_is_empty():
+    """PR #11 리뷰: Report 이름이 빈 행은 풀 번호가 같아도 같은 Report 가 아니다 — 합치면 Lot 이 다른 정상 배치 5개가 한 배치가 되어 회귀 표본이 사라진다."""
+    rows = _clean_batches(5)
+    for r in rows:
+        r["report"] = ""
+    (popup,) = screen(rows, meta("AOI-1"), [["rptDevPopupHtml"]],
+                      state={"view": "report", "rptDev": "AOI-1", "rptAll": {"job": "TB500 PI3", "dev": "AOI-1"}})
+    assert "배치 5개" in popup
+
+
 def test_report_tab_reads_dia_after_an_underscore():
     """실데이터에는 HWH_DIA · DIA_1023S 처럼 밑줄 이웃의 DIA 가 있다 — 낱말 경계(\\b)는 밑줄을 글자로 봐서 놓쳤다. DIA 무리로 읽어 자기 무리 중앙으로 잰다."""
     rows = []

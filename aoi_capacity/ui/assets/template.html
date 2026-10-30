@@ -2149,7 +2149,7 @@ const RPT_ODD_LO=0.5;
    두 번 든 것 86개. 같은 장비 · 같은 Report(L[8])의 조각을 한 배치로 합친다: 장수 · 행 · Error 건수 · 유형별 분은 더하고, 시작 = 첫 조각의 ba, 끝 = 마지막 조각의 bb(첫 날 0시 기준 분 — 하루를 넘으면 1440 이상). 입력은 날짜 순. */
 const dayGap=(a,b)=>Math.round((Date.parse(b)-Date.parse(a))/864e5);
 function rptMerge(items){const seen=new Map(),out=[];
-  for(const b of items){const k=b.L[8]>=0?b.dev+"\u0001"+b.L[8]:null;
+  for(const b of items){const k=b.L[8]>=0&&D.pool.rep[b.L[8]]?b.dev+"\u0001"+b.L[8]:null;   /* Report 이름이 비면 풀 번호는 있어도 같은 Report 라는 근거가 없다 */
     if(k==null){out.push(b);continue;}
     const f=seen.get(k);
     if(!f){const m={...b,L:b.L.slice(),d0:b.dy,parts:1};m.L[9]={...b.L[9]};seen.set(k,m);out.push(m);continue;}
