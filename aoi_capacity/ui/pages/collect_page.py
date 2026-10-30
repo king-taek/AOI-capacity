@@ -597,6 +597,7 @@ class CollectPage(QWidget):
         sv.setContentsMargins(0, 0, 0, 0)
         sv.setSpacing(0)
         self.settings_page = SettingsPage(sec)
+        self.settings_page.publish_dirs_changed.connect(self._reload_test_paths)       # 시험 카드(10/30 임시)와 설정의 배포 폴더 칸을 같은 값으로
         f = self.settings_page.top_form
         self._out = QLineEdit(p.output_dir, sec)
         self._out.setProperty("role", "mono")
@@ -985,28 +986,43 @@ class CollectPage(QWidget):
         self._b_tp_reset = make_button(K.TEST_PATH_RESET, "ghost", card)
         cl.addLayout(_row(self._b_tp_apply, self._b_tp_reset))
         cl.addWidget(self._tp_status)
-        self._tp_lot.editingFinished.connect(self._save_test_paths)
-        self._tp_full.editingFinished.connect(self._save_test_paths)
+        self._tp_lot.editingFinished.connect(lambda: self._save_test_paths(lot=True))
+        self._tp_full.editingFinished.connect(lambda: self._save_test_paths(full=True))
         self._b_tp_apply.clicked.connect(self._apply_test_paths)
         self._b_tp_reset.clicked.connect(self._reset_test_paths)
         return card
 
-    def _save_test_paths(self) -> None:
-        prefs.patch(publish_dir=self._tp_lot.text().strip(), publish_full_dir=self._tp_full.text().strip())
+    def _save_test_paths(self, lot: bool = False, full: bool = False) -> None:
+        """고친 칸만 저장한다(다른 칸의 오래된 값을 덮지 않도록) — 설정 화면의 같은 칸도 같은 값으로 맞춘다."""
+        fields = {}
+        if lot:
+            fields["publish_dir"] = self._tp_lot.text().strip()
+        if full:
+            fields["publish_full_dir"] = self._tp_full.text().strip()
+        prefs.patch(**fields)
+        self.settings_page.reload_publish_dirs()
         self._tp_status.setText(K.TEST_PATH_SAVED)
         self._tp_status.show()
+
+    def _reload_test_paths(self) -> None:
+        """설정 화면에서 배포 폴더를 고쳤을 때 이 카드의 두 칸도 같은 값으로."""
+        p = prefs.load()
+        for edit, v in ((self._tp_lot, p.publish_dir), (self._tp_full, p.publish_full_dir)):
+            edit.blockSignals(True)
+            edit.setText(str(v or ""))
+            edit.blockSignals(False)
 
     def _apply_test_paths(self) -> None:
         root = K.TEST_PATH_ROOT
         self._tp_lot.setText(root + "\\" + K.TEST_PATH_LOT_DIR)
         self._tp_full.setText(root + "\\" + K.TEST_PATH_FULL_DIR)
-        self._save_test_paths()
+        self._save_test_paths(lot=True, full=True)
 
     def _reset_test_paths(self) -> None:
         from ...utils import config as _config
         self._tp_lot.setText(_config.PUBLISH_DIR_DEFAULT)
         self._tp_full.setText(_config.PUBLISH_FULL_DIR_DEFAULT)
-        self._save_test_paths()
+        self._save_test_paths(lot=True, full=True)
 
     def _on_lot_publish(self) -> None:
         if self._lp_worker is not None:

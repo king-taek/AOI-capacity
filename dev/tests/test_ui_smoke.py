@@ -375,3 +375,13 @@ def test_test_path_card_saves_both_publish_folders_and_resets(window):
     page._tp_full.setText("")
     page._tp_full.editingFinished.emit()
     assert prefs.load().publish_full_dir == ""                    # 비우면 전체 배포 안 함
+    # 칸 하나만 고치면 그 칸만 저장하고 설정 화면의 칸도 같은 값이 된다(다른 칸의 오래된 값을 덮지 않는다)
+    sp = page.settings_page
+    sp._publish_full.setText("D:\\전체시험")
+    sp._publish_full.editingFinished.emit()
+    assert page._tp_full.text() == "D:\\전체시험"                 # 설정 → 카드
+    page._tp_lot.setText("D:\\LOT시험")
+    page._tp_lot.editingFinished.emit()
+    p = prefs.load()
+    assert (p.publish_dir, p.publish_full_dir) == ("D:\\LOT시험", "D:\\전체시험")
+    assert sp._publish.text() == "D:\\LOT시험" and sp._publish_full.text() == "D:\\전체시험"      # 카드 → 설정
