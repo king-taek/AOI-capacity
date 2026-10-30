@@ -355,3 +355,33 @@ def test_periodic_update_check_only_shows_a_badge_and_badge_asks(window, styled_
     window._update_worker = w2
     window._on_update_checked(window._update_token, False, ("update", info))
     assert len(asked) == 3
+
+
+def test_test_path_card_saves_both_publish_folders_and_resets(window):
+    """10/30 임시 카드(수집 창 맨 위) — '시험 경로 넣기'가 LOT 추적 · 전체 폴더를 prefs 에 저장하고 '원래 경로로'가 기본값으로 돌린다. 시험이 끝나면 카드와 함께 지운다."""
+    from aoi_capacity import i18n
+    from aoi_capacity.utils import config, prefs
+
+    page = window.collect_page
+    page._b_tp_apply.click()
+    root = i18n.KO.TEST_PATH_ROOT
+    lot, full = root + "\\" + i18n.KO.TEST_PATH_LOT_DIR, root + "\\" + i18n.KO.TEST_PATH_FULL_DIR
+    assert page._tp_lot.text() == lot and page._tp_full.text() == full
+    p = prefs.load()
+    assert (p.publish_dir, p.publish_full_dir) == (lot, full)
+    page._b_tp_reset.click()
+    p = prefs.load()
+    assert (p.publish_dir, p.publish_full_dir) == (config.PUBLISH_DIR_DEFAULT, config.PUBLISH_FULL_DIR_DEFAULT)
+    page._tp_full.setText("")
+    page._tp_full.editingFinished.emit()
+    assert prefs.load().publish_full_dir == ""                    # 비우면 전체 배포 안 함
+    # 칸 하나만 고치면 그 칸만 저장하고 설정 화면의 칸도 같은 값이 된다(다른 칸의 오래된 값을 덮지 않는다)
+    sp = page.settings_page
+    sp._publish_full.setText("D:\\전체시험")
+    sp._publish_full.editingFinished.emit()
+    assert page._tp_full.text() == "D:\\전체시험"                 # 설정 → 카드
+    page._tp_lot.setText("D:\\LOT시험")
+    page._tp_lot.editingFinished.emit()
+    p = prefs.load()
+    assert (p.publish_dir, p.publish_full_dir) == ("D:\\LOT시험", "D:\\전체시험")
+    assert sp._publish.text() == "D:\\LOT시험" and sp._publish_full.text() == "D:\\전체시험"      # 카드 → 설정
