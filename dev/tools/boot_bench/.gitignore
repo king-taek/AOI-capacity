@@ -1,0 +1,6 @@
+shots/
+html/
+demos/
+report_preview/
+*.err
+*.log

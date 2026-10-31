@@ -1,0 +1,4 @@
+[["Math.min(16000,W*H/60)", "Math.min(8000,W*H/120)"],
+ ["const dpr=Math.min(2,window.devicePixelRatio||1)", "const dpr=1"],
+ ["if(!red){cv.style.filter=\"blur(5px)\";cv.style.transform=\"scale(1.025)\";}", ""],
+ ["self.requestAnimationFrame(loop);}", "self.requestAnimationFrame(()=>self.requestAnimationFrame(loop));}"]]

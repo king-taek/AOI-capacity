@@ -1,0 +1,68 @@
+{
+ "label": "cheap/dpr1_cpu1",
+ "html": "/tmp/claude-0/-home-user-AOI-capacity/5ec71db5-3a70-543c-a239-d984b58d7e59/scratchpad/bench/html/cheap.html",
+ "cpu": 1,
+ "dpr": 1,
+ "w": 1920,
+ "h": 1080,
+ "errors": [],
+ "workers": 1,
+ "t": {
+  "seen": 52.4,
+  "view": 3713.3,
+  "done": 3713,
+  "revealAt": 4163.7,
+  "gone": 5024.2
+ },
+ "worker": {
+  "frames": 239,
+  "fpsEff": 54.5,
+  "intP50": 16.7,
+  "intP95": 35.5,
+  "intMax": 51.1,
+  "over20": 36,
+  "over34": 12,
+  "durP50": 0.2,
+  "durP95": 5.5,
+  "durMax": 18.6,
+  "durSum": 317.6
+ },
+ "main": {
+  "rafFrames": 84,
+  "intP50": 16.8,
+  "intP95": 78.3,
+  "intMax": 2991.3,
+  "over34": 16,
+  "loafCount": 7,
+  "loafSum": 3640.5,
+  "loafMax": 2991.3,
+  "blocking": 3227.4,
+  "loafAfterSum": 449.8,
+  "reveal": {
+   "frames": 45,
+   "intP95": 49.6,
+   "intMax": 78.3,
+   "over34": 11
+  }
+ },
+ "compositor": {
+  "reported": 466,
+  "dropped": 221,
+  "droppedSmooth": 219,
+  "droppedEv": 219,
+  "states": {
+   "STATE_PRESENTED_ALL": 68,
+   "STATE_NO_UPDATE_DESIRED": 127,
+   "STATE_DROPPED": 221,
+   "STATE_PRESENTED_PARTIAL": 50
+  }
+ },
+ "metrics": {
+  "LayoutDuration": 0.1,
+  "RecalcStyleDuration": 0,
+  "ScriptDuration": 3.6,
+  "TaskDuration": 4.4,
+  "ThreadTime": 4.1,
+  "JSHeapUsedSize": 170597116
+ }
+}
