@@ -154,11 +154,9 @@ const BARS_CSS=`
 #aoi-boot .tx .tk>.f>i{position:absolute;left:0;top:0;width:100%;height:100%;display:block}
 #aoi-boot .tx .tk>.f>.g{background:${TXT.WAIT}}#aoi-boot .tx .tk>.f>.c{opacity:0;transition:opacity .5s cubic-bezier(.33,1,.68,1)}
 #aoi-boot .tx.ld .tk>.f>.g{opacity:0;transition:opacity .5s cubic-bezier(.33,1,.68,1)}#aoi-boot .tx.ld .tk>.f>.c{opacity:1}
-#aoi-boot .tx .now{position:absolute;width:2px;background:${TXT.INK2};opacity:0;will-change:transform;transition:opacity .4s}
-#aoi-boot .tx.ld .now{opacity:0;animation:none}
 @keyframes txTk{from{opacity:0;transform:translateX(-6px)}to{opacity:1;transform:none}}
 @keyframes txFill{from{transform:scaleX(0)}to{transform:scaleX(1)}}
-@keyframes txNow{from{transform:translateX(0)}to{transform:translateX(var(--span))}}`;
+`;
 /* 로딩 신호 처리는 셋이 같다 */
 function barsCtl(T,waitAt){const waitT=setTimeout(()=>{if(!T.root.classList.contains("ld"))T.root.classList.add("wait");},waitAt);
   return{post(m){if(m.type==="loaded"){clearTimeout(waitT);T.root.classList.remove("wait");T.root.classList.add("ld");}},kill(){clearTimeout(waitT);},reveal(){}};}
@@ -167,16 +165,19 @@ function barsCtl(T,waitAt){const waitT=setTimeout(()=>{if(!T.root.classList.cont
 const BARS_IDLE={
   sway:`#aoi-boot .tx.wait .tk,#aoi-boot .tx.wait .num,#aoi-boot .tx.wait .nm{animation:txTk .35s cubic-bezier(.22,1,.36,1) both,txSway 2.8s cubic-bezier(.45,.05,.55,.95) infinite alternate}
 @keyframes txSway{from{transform:translateY(-1.5px)}to{transform:translateY(1.5px)}}
-#aoi-boot .tx.wait .now{opacity:.55;animation:txNow 4.2s cubic-bezier(.45,.05,.55,.95) infinite}`,
+#aoi-boot .tx .now{position:absolute;width:2px;background:${TXT.INK2};opacity:0;will-change:transform;transition:opacity .4s}
+#aoi-boot .tx.wait .now{opacity:.55;animation:txNow 4.2s cubic-bezier(.45,.05,.55,.95) infinite}#aoi-boot .tx.ld .now{opacity:0;animation:none}
+@keyframes txNow{from{transform:translateX(0)}to{transform:translateX(var(--span))}}`,
   /* 파도: 글자 구간이 왼쪽에서 오른쪽으로 한 번씩 살짝 들렸다 내려온다(열마다 위상) — 'AOI' 가 파도를 탄다 */
   wave:`#aoi-boot .tx.wait .tk>.f{animation:txFill .6s cubic-bezier(.16,1,.3,1) both,txWave 2.6s cubic-bezier(.45,.05,.55,.95) infinite}
 @keyframes txWave{0%,38%,100%{transform:translateY(0) scaleX(1)}19%{transform:translateY(-4px) scaleX(1)}}`,
   /* 흐름: 줄 전체(구간 · 숫자 · 이름)가 아주 천천히 오른쪽으로 6px 흘렀다 돌아온다 — 하루가 흐른다 */
   drift:`#aoi-boot .tx.wait .tk>.f{animation:txFill .6s cubic-bezier(.16,1,.3,1) both,txDrift 5.2s cubic-bezier(.45,.05,.55,.95) infinite alternate}
 @keyframes txDrift{from{transform:translateX(0) scaleX(1)}to{transform:translateX(var(--dx,6px)) scaleX(1)}}`,
-  /* 점등: 구간이 읽는 순서로 하나씩 밝아졌다 돌아온다 — 데이터가 차례로 들어오는 중 */
+  /* 점등(D105 대기 동작, 현택 11/1): 구간이 읽는 순서로 차례로 밝아졌다 돌아온다 — 한 번에 4~5칸이 꼬리처럼 이어져 잘 보인다.
+     회청색 겹(.g)의 opacity 만 움직인다(합성 스레드, 요소당 레이어 하나, JS 0) — 밑의 밝은 트랙 색이 비쳐 '불이 켜진' 것처럼 보인다 */
   glow:`#aoi-boot .tx.wait .tk>.f>.g{animation:txGlow var(--gp,5.4s) cubic-bezier(.45,.05,.55,.95) infinite}
-@keyframes txGlow{0%,9%,100%{opacity:1}4%{opacity:.35}}`,
+@keyframes txGlow{0%,14%,100%{opacity:1}5%{opacity:.08}}`,
   /* 셈: 숫자 블록이 값을 세듯 폭이 줄었다 늘었다(scaleX, 왼쪽 기준) + 트랙은 가만히 — 계산 중 */
   count:`#aoi-boot .tx.wait .num{transform-origin:0 50%;animation:txTk .35s cubic-bezier(.22,1,.36,1) both,txCount 1.9s cubic-bezier(.45,.05,.55,.95) infinite alternate}
 @keyframes txCount{from{transform:scaleX(.55)}to{transform:scaleX(1)}}`};
@@ -200,7 +201,7 @@ function barsListScene(ov,env,idle){
     tk.querySelectorAll(".f").forEach((f,i)=>{const s=segs[i],ph=Math.round(-(s.p*1400));   /* 파도 · 흐름: 왼쪽 구간이 먼저(위상 = 가로 위치) */
       f.style.animationDelay=`${s.d}ms,${ph}ms`;f.style.setProperty("--dx",(4+r%3)+"px");const g=f.firstChild;const gi=idxOf(r,i);g.style.animationDelay=`${-gi*120}ms`;g.style.setProperty("--gp",(nSeg*120)+"ms");});
     if(r<6){const sp=document.createElement("i");sp.className="sep";sp.style.cssText=`left:${x0-nameW-gap-numW-gap}px;top:${y+cell-1}px;width:${nameW+gap+numW+gap+trackW}px;animation-delay:${d+80}ms`;T.root.appendChild(sp);}}
-  const now=document.createElement("i");now.className="now";now.style.cssText=`left:${x0-cell*.4}px;top:${G.y0-cell*.3}px;height:${cell*7.6}px;--span:${trackW}px`;T.root.appendChild(now);
+  if(idle==="sway"){const now=document.createElement("i");now.className="now";now.style.cssText=`left:${x0-cell*.4}px;top:${G.y0-cell*.3}px;height:${cell*7.6}px;--span:${trackW}px`;T.root.appendChild(now);}
   return barsCtl(T,3000);
 }
 

@@ -72,7 +72,7 @@ def test_boot_screen_runs_before_the_data_and_moves_on_the_compositor_only():
     for bad in ("new Worker(", "OffscreenCanvas", "getContext(", "self.requestAnimationFrame", "blur(", "localStorage", "getBoundingClientRect"):
         assert bad not in boot, bad
     assert "BAR_G" in boot and '"#####"' in boot and "@keyframes txFill" in boot and "scaleX" in boot      # 5×7 비트맵 막대가 글자를 쓴다
-    assert "@keyframes txSway" in boot and ".tx.wait" in boot and "txNow" in boot                             # 4초 넘게 기다릴 땐 흔들흔들 + '지금' 선
+    assert "@keyframes txGlow" in boot and ".tx.wait" in boot and 'barsListScene(ov,env,"glow")' in boot        # 4초 넘게 기다릴 땐 점등(현택 11/1 — '지금' 선 · 흔들림은 sway 에만)
     assert "prefers-reduced-motion" in boot and "animation:none!important" in boot
     assert "BOOT.done(" in HTML and "BOOT.later(navWarm)" in HTML and "BOOT.abort()" in HTML
     assert "const G=()=>(!_bootQuiet&&" in HTML
