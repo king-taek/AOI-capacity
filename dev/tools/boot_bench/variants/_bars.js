@@ -9,7 +9,7 @@ function barsGeom(T,opt){
 function barsColor(rnd){const u=rnd();return u<.66?TXT.ACC:u<.82?TXT.ACC2:u<.92?"#7A5BB5":TXT.ERR;}
 /* 막대 하나: 트랙(회색) 안에 구간 여러 개. 구간은 .f(scaleX 로 자람) > .g(값 전 회청색) + .c(제 색). 로딩 끝 = .g → .c crossfade */
 function barsMake(root,b,segs,delay,opts){
-  const tk=document.createElement("div");tk.className="tk";tk.style.cssText=`left:${b.x}px;top:${b.y}px;width:${b.w}px;height:${b.h}px;animation-delay:${delay}ms;${(opts&&opts.tkExtra)||""}`;
+  const tk=document.createElement("div");tk.className="tk";tk.style.cssText=`left:${b.x}px;top:${b.y}px;width:${b.w}px;height:${b.h}px;animation-delay:${delay}ms,${-(b.r||0)*350}ms;${(opts&&opts.tkExtra)||""}`;   /* 둘째 지연 = 흔들림 위상(.wait 일 때만 쓰인다) */
   segs.forEach((s,i)=>{const f=document.createElement("i");f.className="f";f.style.cssText=`left:${(s.p*100).toFixed(2)}%;width:${(s.w*100).toFixed(2)}%;animation-delay:${s.d}ms`;
     const g=document.createElement("i");g.className="g";const c=document.createElement("i");c.className="c";c.style.background=s.c;f.appendChild(g);f.appendChild(c);tk.appendChild(f);});
   root.appendChild(tk);return tk;}
@@ -19,6 +19,9 @@ const BARS_CSS=`
 #aoi-boot .tx .tk>.f>i{position:absolute;left:0;top:0;width:100%;height:100%;display:block}
 #aoi-boot .tx .tk>.f>.g{background:${TXT.WAIT}}#aoi-boot .tx .tk>.f>.c{opacity:0;transition:opacity .5s cubic-bezier(.33,1,.68,1)}
 #aoi-boot .tx.ld .tk>.f>.g{opacity:0;transition:opacity .5s cubic-bezier(.33,1,.68,1)}#aoi-boot .tx.ld .tk>.f>.c{opacity:1}
+/* 4초가 지나도 로딩 중이면(.wait): 줄마다 위상을 달리해 가볍게 흔들흔들(translateY ±1.5px, 2.8초) — 합성 스레드만, '지금' 선과 함께(현택 11/1) */
+#aoi-boot .tx.wait .tk,#aoi-boot .tx.wait .num,#aoi-boot .tx.wait .nm{animation:txTk .35s cubic-bezier(.22,1,.36,1) both,txSway 2.8s cubic-bezier(.45,.05,.55,.95) infinite alternate}
+@keyframes txSway{from{transform:translateY(-1.5px)}to{transform:translateY(1.5px)}}
 #aoi-boot .tx .now{position:absolute;width:2px;background:${TXT.INK2};opacity:0;will-change:transform;transition:opacity .4s}
 #aoi-boot .tx.wait .now{opacity:.55;animation:txNow 4.2s cubic-bezier(.45,.05,.55,.95) infinite}
 #aoi-boot .tx.ld .now{opacity:0;animation:none}

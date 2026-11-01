@@ -59,18 +59,21 @@ def test_no_network_use_at_all():
     assert HTML.count("<script") == 4, "시작 화면(boot) · embedded JSON · 인라인 라이브러리(vendor) · 화면 스크립트 — 넷뿐"
 
 
-def test_boot_screen_runs_before_the_data_and_draws_off_the_main_thread():
-    """시작 화면(D104): 큰 데이터보다 앞에서 돌고, 그림은 Worker(파일 안 함수로 만든 blob 주소)가 그린다 — 바깥 주소 없음. 장면은 고정.
-    페이지를 연 때부터 4초 안에는 드러나지 않고, 덮개는 클릭을 막지 않는다. 첫 렌더의 등장 연출은 끈다(_bootQuiet)."""
+def test_boot_screen_runs_before_the_data_and_moves_on_the_compositor_only():
+    """시작 화면(D105, 11/1 — 현택 결정 T2-B '장비 목록'): 큰 데이터보다 앞에서 돌고, 움직임은 CSS 키프레임 · WAAPI(transform · opacity) 뿐이라 프레임마다 도는 JS 가 없다
+    (Worker · 캔버스 · rAF 루프 없음 — 옛 D104 입자 장면은 현장에서 끊겼다, docs/proposals/boot_lag_2026-10-31). 페이지를 연 때부터 4초 안에는 드러나지 않고,
+    덮개는 클릭을 막지 않으며, 걷힘은 opacity 만(blur 없음). 첫 렌더의 등장 연출은 끈다(_bootQuiet)."""
     m = re.search(r'<script id="boot">(.*?)</script>', HTML, re.S)
     assert m and HTML.index('<script id="boot">') < HTML.index('id="embedded"') < HTML.index('<script id="vendor">')
     boot = m.group(1)
     assert "MIN=4000" in boot and "pointer-events:none" in boot
     assert 'ov.id="aoi-boot"' in boot and 'getElementById("boot")' not in boot   # 덮개와 스크립트는 다른 id(같으면 스크립트가 자기를 지운다)
     assert 'clone.querySelector("#aoi-boot")' in HTML                             # 사본 저장은 덮개를 빼고 담는다
-    assert "URL.createObjectURL(new Blob([src]" in boot and "new Worker(url)" in boot and "transferControlToOffscreen" in boot
-    assert "waferLayout" in boot and 'opt.kind==="lot"' in boot and 'getAttribute("data-boot")' in boot   # LOT 추적 배포판은 웨이퍼 장면
-    assert "fixedLayout" in boot and "localStorage" not in boot and "getBoundingClientRect" not in boot   # 늘 같은 장면(현택 10/30) — 화면을 재거나 기억하지 않는다
+    for bad in ("new Worker(", "OffscreenCanvas", "getContext(", "self.requestAnimationFrame", "blur(", "localStorage", "getBoundingClientRect"):
+        assert bad not in boot, bad
+    assert "BAR_G" in boot and '"#####"' in boot and "@keyframes txFill" in boot and "scaleX" in boot      # 5×7 비트맵 막대가 글자를 쓴다
+    assert "@keyframes txSway" in boot and ".tx.wait" in boot and "txNow" in boot                             # 4초 넘게 기다릴 땐 흔들흔들 + '지금' 선
+    assert "prefers-reduced-motion" in boot and "animation:none!important" in boot
     assert "BOOT.done(" in HTML and "BOOT.later(navWarm)" in HTML and "BOOT.abort()" in HTML
     assert "const G=()=>(!_bootQuiet&&" in HTML
     assert 'class="loader"' not in HTML and ".loader{" not in HTML    # 옛 Lottie 로더는 지웠다

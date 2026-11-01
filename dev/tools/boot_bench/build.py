@@ -9,10 +9,13 @@ def embedded_text(sample):
     return t[h:e]
 def build(variant, sample, out, lot=False):
     page = tpl
-    if variant != "baseline":
+    if True:   # template 의 boot 는 11/1 부터 T2-B — 'baseline' 은 떼어 둔 옛 D104 스크립트(variants/_baseline_d104.js)
         a = page.index('<script id="boot">'); b = page.index("</script>", a)+len("</script>")
-        if (S/"variants"/f"{variant}.patch.json").exists():          # baseline 스크립트에 치환만 적용하는 변형
-            js = page[a+len('<script id="boot">'):b-len("</script>")]
+        base = (S/"variants"/"_baseline_d104.js").read_text(encoding="utf-8")
+        if variant == "baseline": js = base
+        elif variant == "current": js = page[a+len('<script id="boot">'):b-len("</script>")]
+        elif (S/"variants"/f"{variant}.patch.json").exists():          # 옛 스크립트에 치환만 적용하는 변형
+            js = base
             for old, new in json.loads((S/"variants"/f"{variant}.patch.json").read_text(encoding="utf-8")):
                 assert js.count(old) == 1, (variant, old)
                 js = js.replace(old, new)

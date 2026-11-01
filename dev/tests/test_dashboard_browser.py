@@ -141,8 +141,8 @@ _BOOT_WATCH = """(() => { window.__boot = {}; new MutationObserver(() => { const
 
 @pytest.mark.parametrize("lot_only", [False, True])
 def test_boot_screen_covers_four_seconds_then_reveals_the_real_screen(page_factory, tmp_path, lot_only):
-    """시작 화면(D104): 덮개가 곧바로 뜨고, 화면은 그 아래에서 먼저 그려지며, 페이지를 연 때부터 4초가 차기 전에는 걷히지 않는다.
-    로딩이 짧으면 4초 무렵 걷힌다. LOT 추적 배포 파일(lot_only)도 같다. 바깥 요청 0건(blob: 은 파일 안에서 만든 Worker)."""
+    """시작 화면(D105): 덮개가 곧바로 뜨고, 화면은 그 아래에서 먼저 그려지며, 페이지를 연 때부터 4초가 차기 전에는 걷히지 않는다.
+    로딩이 짧으면 4초 무렵 걷힌다. LOT 추적 배포 파일(lot_only)도 같은 장면. 바깥 요청 0건."""
     emb = _embedded()
     if lot_only:
         emb["meta"]["lot_only"] = True
@@ -160,7 +160,8 @@ def test_boot_screen_covers_four_seconds_then_reveals_the_real_screen(page_facto
     pg.add_init_script(_BOOT_WATCH)
     pg.goto(out.as_uri())
     pg.wait_for_selector('main[data-key="view:%s"]' % ("lot" if lot_only else "home"))
-    assert pg.locator("#aoi-boot canvas").count() == 1                      # 화면은 이미 그려졌고 덮개는 아직 있다
+    assert pg.locator("#aoi-boot .tx .tk").count() >= 7                     # 화면은 이미 그려졌고 덮개(막대 글자 줄 7개)는 아직 있다 — 캔버스 · Worker 없음
+    assert pg.evaluate("document.querySelectorAll('#aoi-boot canvas').length") == 0
     assert pg.evaluate("getComputedStyle(document.getElementById('aoi-boot')).pointerEvents") == "none"
     assert pg.locator('script#boot').count() == 1                       # 덮개를 지우는 줄이 스크립트 자신을 지우지 않는다(id 가 다르다)
     pg.wait_for_selector("#aoi-boot", state="detached", timeout=15000)
@@ -258,7 +259,7 @@ def test_home_rows_follow_device_order_and_save_copy_refolds_the_same_columns(pa
     assert rows1 == rows0
     assert meta1["mode"] == "saved" and meta1.get("saved_iso") and meta1["generated_iso"] == emb0["meta"]["generated_iso"]
     assert "__DATA__" not in saved and requests == [] and errors == []
-    # 시작 화면(D104, PR #14 리뷰): 덮개가 아직 있을 때(연 지 4초 안) 저장해도 사본은 boot 스크립트를 품고 덮개는 품지 않는다 —
+    # 시작 화면(D105, PR #14 리뷰): 덮개가 아직 있을 때(연 지 4초 안) 저장해도 사본은 boot 스크립트를 품고 덮개는 품지 않는다 —
     # 예전엔 덮개와 스크립트가 같은 id 라 스크립트가 자기를 지워, 사본을 열면 덮개가 영원히 남을 수 있었다
     assert saved.count('<script id="boot">') == 1 and '<div id="aoi-boot"' not in saved
     copy = tmp_path / "saved_copy.html"
@@ -531,7 +532,7 @@ def test_heavy_tab_indexes_are_built_in_idle_time_after_load(page):
     """10/19 실측: LOT 추적 · RDL 단일스캔 첫 진입이 색인을 만드느라 0.7초 멈추면 탭 표시자 이동 시간이 그동안 흘러 한 번에 건너뛴다.
     화면이 뜬 뒤 한가할 때(navWarm) 미리 만들어 두면 첫 클릭에는 색인 비용이 없다."""
     pg, errors, _ = page
-    # 시작 화면이 걷힌 뒤(AOI_BOOT.later)에 만든다 — 덮개는 4초 + 걷힘 약 0.9초(D104)라 그만큼 여유를 둔다
+    # 시작 화면이 걷힌 뒤(AOI_BOOT.later)에 만든다 — 덮개는 4초 + 걷힘 약 0.7초(D105)라 그만큼 여유를 둔다
     pg.wait_for_function("typeof _lotIx !== 'undefined' && _lotIx && typeof _rcp !== 'undefined' && _rcp", timeout=8000)
     assert errors == []
 

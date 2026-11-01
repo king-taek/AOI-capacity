@@ -44,7 +44,7 @@ def test_lot_only_file_has_all_days_blank_columns_and_no_csv(tmp_path, sample):
     emb = sample_rows.embedded(Path(path).read_text(encoding="utf-8"))
     m = emb["meta"]
     assert m["lot_only"] is True
-    assert '<html lang="ko" data-boot="lot" ' in Path(path).read_text(encoding="utf-8")[:200]   # 시작 화면: 웨이퍼 장면(D104)
+    assert '<html lang="ko" data-boot="lot" ' in Path(path).read_text(encoding="utf-8")[:200]   # 시작 화면 표식(D104 웨이퍼 장면 때 둔 것 — D105 부터는 같은 글자 장면이라 쓰지 않지만 표식은 그대로)
     assert "params" not in m and "recipe_groups" not in m, [k for k in ("params", "recipe_groups") if k in m]
     assert (m["range"]["from"], m["range"]["to"]) == (m["data_from"], m["data_to"])      # html_days=7 이어도 가진 데이터 전부
     back, _ = sample_rows.unfold(emb)

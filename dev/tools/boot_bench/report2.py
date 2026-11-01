@@ -125,7 +125,7 @@ ul{{padding-left:20px;margin:6px 0}}li{{margin:3px 0}}code{{font-family:var(--mo
 <div class="lead"><b>결론</b> — 지금 장면은 프레임마다 입자 16,000개를 선으로 긋느라 끊긴다. 그리는 방식만 바꾼 <b>V2 픽셀 버퍼</b>가 같은 장면을 {b['p95']/px['p95']:.0f}배 매끄럽게(프레임 간격 p95 기준) 만들고, 디자인을 바꿀 수 있다면 <b>스캔 라인 · CSS · 글자 안</b>은 프레임마다 JS 가 0 이라 어떤 PC 에서도 끊길 거리가 없다. 어느 안이든 걷힐 때의 전체 화면 blur 는 뺀다.</div>
 
 <h2>결정 — T2 '막대로 쓴 AOI' 세 버전</h2>
-<p class="muted">현택이 고른 T2 를 세 가지로. 셋 다 프레임마다 JS 0(CSS 키프레임 · transform · opacity 만), 값이 오기 전엔 회청색, 로딩이 끝나면 범례 색(Scan 파랑 · Rescan 연파랑 · Test 보라 · Error 빨강). 차이는 <b>글자를 어떻게 쓰느냐</b>뿐이다.</p>
+<p class="muted"><b>11/1 결정: T2-B '장비 목록'</b> — template 에 적용했고(D105), 4초를 넘겨 기다릴 땐 줄들이 가볍게 흔들흔들(±1.5px · 합성 스레드) + '지금' 선. 아래 세 버전은 비교용으로 남긴다. 셋 다 프레임마다 JS 0(CSS 키프레임 · transform · opacity 만), 값이 오기 전엔 회청색, 로딩이 끝나면 범례 색(Scan 파랑 · Rescan 연파랑 · Test 보라 · Error 빨강). 차이는 <b>글자를 어떻게 쓰느냐</b>뿐이다.</p>
 <div class="grid3">
 {"".join(t2card(v) for v in ["bars_a","bars_b","bars_c"])}
 </div>

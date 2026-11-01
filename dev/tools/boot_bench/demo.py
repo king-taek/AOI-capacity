@@ -4,8 +4,9 @@ from pathlib import Path
 S = Path(__file__).resolve().parent; ROOT = S.parents[2]
 tpl = (ROOT/"aoi_capacity/ui/assets/template.html").read_text(encoding="utf-8")
 def boot_js(variant):
-    a = tpl.index('<script id="boot">')+len('<script id="boot">'); b = tpl.index("</script>", a)
-    js = tpl[a:b]
+    if variant == "current":   # 지금 template 의 boot(11/1 부터 T2-B)
+        a = tpl.index('<script id="boot">')+len('<script id="boot">'); b = tpl.index("</script>", a); return tpl[a:b]
+    js = (S/"variants"/"_baseline_d104.js").read_text(encoding="utf-8")   # 옛 D104 입자 장면
     if variant == "baseline": return js
     pj = S/"variants"/f"{variant}.patch.json"
     if pj.exists():
