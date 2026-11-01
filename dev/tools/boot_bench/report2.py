@@ -52,13 +52,13 @@ for v in [x[0] for x in V] + ["noblur"]:
 names = {x[0]: x[1] for x in V}
 def grade(v):
     r = R[v]["dpr1_cpu1"]; r15 = R[v]["dpr15_cpu1"]
-    if r["p95"] is None: return ("JS 0", "g3", "프레임마다 도는 JS 가 없다")
+    if r["p95"] is None or r["fps"] is None: return ("JS 0", "g3", "프레임마다 도는 JS 가 없다")
     worst = max(r["p95"] or 0, r15["p95"] or 0)
     if worst <= 40: return ("매끄러움", "g2", f"p95 {f0(r['p95'])}ms · dpr 1.5 {f0(r15['p95'])}ms")
     if worst <= 80: return ("가끔 끊김", "g1", f"p95 {f0(r['p95'])}ms · dpr 1.5 {f0(r15['p95'])}ms")
     return ("끊김", "g0", f"p95 {f0(r['p95'])}ms · dpr 1.5 {f0(r15['p95'])}ms")
 def mainok(v):
-    return ("영향 없음", "g3") if R[v]["dpr1_cpu1"]["p95"] is None else ("CPU 를 나눠 씀", "g1" if v == "baseline" else "g2")
+    return ("영향 없음", "g3") if R[v]["dpr1_cpu1"]["fps"] is None else ("CPU 를 나눠 씀", "g1" if v == "baseline" else "g2")
 def rec(v):
     return {"pixel": ("추천", "g3"), "cheap": ("임시 조치", "g1"), "baseline": ("", ""), "scan": ("새 디자인이면 추천", "g2"), "text_lens": ("글자면 추천", "g2")}.get(v, ("", ""))
 chip = lambda t, c: f'<span class="chip {c}">{t}</span>' if t else ""
@@ -86,7 +86,7 @@ def t2card(v):
 def vcard(v):
     k, name, grp, one, design, code, desc = next(x for x in V if x[0] == v); r = R[v]["dpr1_cpu1"]; g = grade(v)
     shots = "".join(f'<figure><img src="{img(f"{v}_{t}.png")}" alt="{name} {t}ms" loading="lazy"><figcaption>{t/1000:.1f}초</figcaption></figure>' for t in (1200, 2600, 3800) if (S/"shots"/f"{v}_{t}.png").exists())
-    stat = "프레임마다 JS 0" if r["p95"] is None else f"그림 {f0(r['fps'])}fps · 간격 p95 {f0(r['p95'])}ms · 콜백 {f1(r['dur'])}ms"
+    stat = "프레임마다 JS 0" if r["fps"] is None else f"그림 {f0(r['fps'])}fps · 간격 p95 {f0(r['p95'])}ms · 콜백 {f1(r['dur'])}ms"
     return f"""<article class="vc" id="v-{v}"><div class="vh"><h3>{name}</h3>{chip(*g[:2])}<span class="stat">{stat}</span><button class="btn" data-demo="{v}">데모 보기</button></div>
 <p>{desc}</p><div class="shots">{shots}</div></article>"""
 
