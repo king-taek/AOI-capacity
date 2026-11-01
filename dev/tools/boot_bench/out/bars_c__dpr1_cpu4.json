@@ -1,0 +1,68 @@
+{
+ "label": "bars_c/dpr1_cpu4",
+ "html": "/home/user/AOI-capacity/dev/tools/boot_bench/html/bars_c.html",
+ "cpu": 4,
+ "dpr": 1,
+ "w": 1920,
+ "h": 1080,
+ "errors": [],
+ "workers": 0,
+ "t": {
+  "seen": 171.5,
+  "view": 14585.3,
+  "done": 14583.4,
+  "revealAt": 15105.4,
+  "gone": 15798.2
+ },
+ "worker": {
+  "frames": 0,
+  "fpsEff": 0,
+  "intP50": 0,
+  "intP95": 0,
+  "intMax": 0,
+  "over20": 0,
+  "over34": 0,
+  "durP50": 0,
+  "durP95": 0,
+  "durMax": 0,
+  "durSum": 0
+ },
+ "main": {
+  "rafFrames": 83,
+  "intP50": 26.3,
+  "intP95": 168.3,
+  "intMax": 11449.5,
+  "over34": 24,
+  "loafCount": 13,
+  "loafSum": 14074.2,
+  "loafMax": 11447.8,
+  "blocking": 13317.7,
+  "loafAfterSum": 0,
+  "reveal": {
+   "frames": 42,
+   "intP95": 40.9,
+   "intMax": 42.7,
+   "over34": 5
+  }
+ },
+ "compositor": {
+  "reported": 1150,
+  "dropped": 336,
+  "droppedSmooth": 336,
+  "droppedEv": 494,
+  "states": {
+   "STATE_NO_UPDATE_DESIRED": 474,
+   "STATE_PRESENTED_ALL": 116,
+   "STATE_DROPPED": 336,
+   "STATE_PRESENTED_PARTIAL": 224
+  }
+ },
+ "metrics": {
+  "LayoutDuration": 0.2,
+  "RecalcStyleDuration": 0.2,
+  "ScriptDuration": 13.7,
+  "TaskDuration": 17,
+  "ThreadTime": 17.5,
+  "JSHeapUsedSize": 53639164
+ }
+}

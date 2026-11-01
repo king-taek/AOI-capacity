@@ -14,6 +14,9 @@ V = [  # 키, 이름, 묶음, 한 줄, 디자인 변화, 코드 변경, 설명
  ("text_lens","T1 'O 는 렌즈'","text","O 가 A 와 I 를 검사한다","글자 AOI","CSS 만","렌즈(O)가 A 로 가서 결함 하나(빨강)를 찾고 I 는 통과(파랑 점) 뒤 제자리로. 기다릴 땐 초점을 더듬는다."),
  ("text_bars","T2 '막대로 쓴 AOI'","text","가동률 막대로 글자를 쓴다","글자 AOI","CSS 만","5×7 비트맵의 줄마다 막대가 왼쪽에서 차오른다. 색은 범례 그대로(Scan · Rescan · Test · Error). 기다릴 땐 '지금' 선이 지나간다."),
  ("text_story","T3 '검사 이력 4초'","text","Scan → Error → Rescan → PASS","글자 AOI","CSS 만","빔이 지나며 파랑이 되고, I 가 Error 로 잡혀 흔들린 뒤 Rescan(연파랑) 을 거쳐 PASS(파랑)."),
+ ("bars_a","T2-A '줄마다 차오름'","t2","막대마다 구간 1~3개, 읽는 순서로","글자 AOI","CSS 만","막대 하나가 하루의 24시간 막대처럼 구간 1~3개(Scan · Rescan · Test · Error)로 나뉘고, 위에서 아래 · 왼쪽에서 오른쪽 순서로 차오른다. 기다릴 땐 '지금' 선이 하루를 가로지른다."),
+ ("bars_b","T2-B '장비 목록'","t2","가동률 목록 줄 7개 안에 글자가 숨어 있다","글자 AOI","CSS 만","가동률 화면과 같은 줄(장비 이름 자리 · 숫자 블록 · 24시간 트랙)이 7개 깔리고, 트랙 안의 바쁜 구간이 자라서 AOI 를 쓴다 — 쉬는 시간은 회색 트랙. 기다릴 땐 '지금' 선."),
+ ("bars_c","T2-C '스캔 헤드'","t2","스캔 헤드가 지나가며 글자를 쓴다","글자 AOI","CSS 만","빈 트랙이 먼저 깔리고 스캔 헤드가 왼쪽에서 오른쪽으로 지나가면 닿은 구간부터 차오른다(AOI 검사처럼). 지나간 뒤 기다릴 땐 헤드가 천천히 오간다."),
 ]
 def load():
     runs = {}
@@ -76,6 +79,10 @@ p95_items = [(names[v], R[v]["dpr1_cpu1"]["p95"], "e" if v == "baseline" else "a
 p95_items.sort(key=lambda x: -x[1])
 drop_items = sorted([(names[v], R[v]["dpr1_cpu1"]["drop"], "e" if v == "baseline" else "a") for v, *_ in V], key=lambda x: -x[1])
 
+def t2card(v):
+    k, name, grp, one, design, code, desc = next(x for x in V if x[0] == v)
+    shots = "".join(f'<figure><img src="{img(f"{v}_{t}.png", 560)}" alt="{name} {t}ms" loading="lazy"><figcaption>{t/1000:.1f}초</figcaption></figure>' for t in (1200, 2600, 3800) if (S/"shots"/f"{v}_{t}.png").exists())
+    return f"""<article class="vc t2"><div class="vh"><h3>{name}</h3><button class="btn" data-demo="{v}">데모 보기</button></div><p>{desc}</p><div class="shots">{shots}</div></article>"""
 def vcard(v):
     k, name, grp, one, design, code, desc = next(x for x in V if x[0] == v); r = R[v]["dpr1_cpu1"]; g = grade(v)
     shots = "".join(f'<figure><img src="{img(f"{v}_{t}.png")}" alt="{name} {t}ms" loading="lazy"><figcaption>{t/1000:.1f}초</figcaption></figure>' for t in (1200, 2600, 3800) if (S/"shots"/f"{v}_{t}.png").exists())
@@ -96,7 +103,7 @@ body{{margin:0;background:var(--bg);color:var(--ink);font:14px/1.6 var(--sans)}}
 h1{{font-size:24px;margin:0 0 6px;text-wrap:balance}}h2{{font-size:18px;margin:36px 0 10px;text-wrap:balance}}h3{{font-size:15px;margin:0}}
 .muted{{color:var(--ink2)}}small{{color:var(--ink2);font-size:12px}}
 .lead{{font-size:16px;background:var(--card);border:1px solid var(--line);border-left:4px solid var(--acc);border-radius:10px;padding:14px 18px;margin:14px 0}}
-.grid{{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:12px}}.grid>*{{min-width:0}}
+.grid{{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:12px}}.grid3{{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:12px}}.grid3>*{{min-width:0;margin:0}}.t2 .shots figure{{flex:1 1 120px;max-width:none}}.grid>*{{min-width:0}}
 .diff{{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px 16px}}.diff .t{{font-weight:600;color:var(--ink2);font-size:12.5px}}.diff .n{{font:600 28px/1.2 var(--mono);margin:4px 0;font-variant-numeric:tabular-nums}}.diff .n em{{font-style:normal;color:var(--err)}}.diff .n b{{color:var(--acc)}}.diff .n s{{text-decoration:none;color:var(--ink3);font-weight:500;font-size:18px;margin:0 6px}}.diff p{{margin:4px 0 0}}
 .chip{{display:inline-block;padding:1px 9px;border-radius:999px;font-size:12px;font-weight:600;white-space:nowrap}}.g0{{background:var(--chip0);color:var(--err)}}.g1{{background:var(--chip1);color:var(--warn)}}.g2{{background:var(--chip2);color:var(--acc)}}.g3{{background:var(--chip3);color:var(--ok)}}
 .tw{{overflow-x:auto;min-width:0}}table{{border-collapse:collapse;width:100%;min-width:820px;font-size:13px;background:var(--card);border:1px solid var(--line);border-radius:10px;font-variant-numeric:tabular-nums}}th,td{{padding:8px 10px;border-bottom:1px solid var(--sep);text-align:left;vertical-align:top}}thead th{{background:var(--card2);color:var(--ink2);font-weight:600;white-space:nowrap}}tbody th{{font-weight:600}}tr.base td,tr.base th{{background:var(--baserow)}}td.r,th.r{{text-align:right}}
@@ -114,8 +121,19 @@ ul{{padding-left:20px;margin:6px 0}}li{{margin:3px 0}}code{{font-family:var(--mo
 </style>
 <div class="wrap">
 <h1>시작 화면 렉 개선안</h1>
-<p class="muted">결과 HTML 을 열 때 나오는 4초 랜딩 애니메이션(D104 '데이터 입자')이 끊기는 원인과 고친 안 9개. 2026-10-31 계측, 30일치 19MB 파일 기준.</p>
+<p class="muted">결과 HTML 을 열 때 나오는 4초 랜딩 애니메이션(D104 '데이터 입자')이 끊기는 원인과 고친 안 9개 + 결정된 T2 의 세 버전. 2026-10-31~11-01 계측, 30일치 19MB 파일 기준.</p>
 <div class="lead"><b>결론</b> — 지금 장면은 프레임마다 입자 16,000개를 선으로 긋느라 끊긴다. 그리는 방식만 바꾼 <b>V2 픽셀 버퍼</b>가 같은 장면을 {b['p95']/px['p95']:.0f}배 매끄럽게(프레임 간격 p95 기준) 만들고, 디자인을 바꿀 수 있다면 <b>스캔 라인 · CSS · 글자 안</b>은 프레임마다 JS 가 0 이라 어떤 PC 에서도 끊길 거리가 없다. 어느 안이든 걷힐 때의 전체 화면 blur 는 뺀다.</div>
+
+<h2>결정 — T2 '막대로 쓴 AOI' 세 버전</h2>
+<p class="muted">현택이 고른 T2 를 세 가지로. 셋 다 프레임마다 JS 0(CSS 키프레임 · transform · opacity 만), 값이 오기 전엔 회청색, 로딩이 끝나면 범례 색(Scan 파랑 · Rescan 연파랑 · Test 보라 · Error 빨강). 차이는 <b>글자를 어떻게 쓰느냐</b>뿐이다.</p>
+<div class="grid3">
+{"".join(t2card(v) for v in ["bars_a","bars_b","bars_c"])}
+</div>
+<div class="tw"><table><thead><tr><th>버전</th><th>움직임</th><th>어디서 온 모양</th><th>기다릴 때</th><th>렉</th></tr></thead><tbody>
+<tr><th>T2-A 줄마다 차오름</th><td>막대가 읽는 순서로 하나씩 차오름(약 2.4초)</td><td>장비 팝업의 24시간 막대(구간 1~3개)</td><td>'지금' 선이 지나감</td><td>{chip(*grade("bars_a")[:2])}<br><small>{grade("bars_a")[2]} · 드롭 {f0(R["bars_a"]["dpr1_cpu1"]["drop"])}</small></td></tr>
+<tr><th>T2-B 장비 목록</th><td>줄 7개가 깔리고 구간이 자람 — 글자가 '나타난다'</td><td>가동률 목록(이름 · 숫자 · 트랙)</td><td>'지금' 선이 지나감</td><td>{chip(*grade("bars_b")[:2])}<br><small>{grade("bars_b")[2]} · 드롭 {f0(R["bars_b"]["dpr1_cpu1"]["drop"])}</small></td></tr>
+<tr><th>T2-C 스캔 헤드</th><td>헤드가 지나가면 닿은 구간부터 차오름(2.3초)</td><td>AOI 스캔 · V5 스캔 라인</td><td>헤드가 천천히 오감</td><td>{chip(*grade("bars_c")[:2])}<br><small>{grade("bars_c")[2]} · 드롭 {f0(R["bars_c"]["dpr1_cpu1"]["drop"])}</small></td></tr>
+</tbody></table></div>
 
 <h2>가장 큰 차이 4가지</h2>
 <div class="grid">
@@ -133,13 +151,13 @@ ul{{padding-left:20px;margin:6px 0}}li{{margin:3px 0}}code{{font-family:var(--mo
 <h2>직접 보기</h2>
 <div class="viewer">
 <div class="tabs">{demo_tabs}</div>
-<div class="opts"><span class="muted">상황:</span><label><input type="radio" name="sit" id="sit-fast" value="load=2500" checked> 빠른 로딩 2.5초</label><label><input type="radio" name="sit" id="sit-slow" value="load=7000"> 느린 로딩 7초</label><label><input type="radio" name="sit" id="sit-busy" value="load=7000&busy=1"> 메인 스레드 7초 막힘(실제 파일과 비슷)</label><label><input type="checkbox" id="sit-lot"> LOT 배포판 장면</label><button class="btn" id="replay">다시 보기</button><a class="btn" id="openNew" href="demos/pixel.html" target="_blank" rel="noopener">새 탭으로</a></div>
-<div class="frame"><iframe id="demo" title="시작 화면 데모" src="demos/pixel.html?load=2500"></iframe></div>
+<div class="opts"><span class="muted">상황:</span><label><input type="radio" name="sit" id="sit-fast" value="load=2500" checked> 빠른 로딩 2.5초</label><label><input type="radio" name="sit" id="sit-slow" value="load=7000"> 느린 로딩 7초</label><label><input type="radio" name="sit" id="sit-busy" value="load=7000&busy=1"> 메인 스레드 7초 막힘(실제 파일과 비슷)</label><label><input type="checkbox" id="sit-lot"> LOT 배포판 장면</label><button class="btn" id="replay">다시 보기</button><a class="btn" id="openNew" href="demos/bars_a.html" target="_blank" rel="noopener">새 탭으로</a></div>
+<div class="frame"><iframe id="demo" title="시작 화면 데모" src="demos/bars_a.html?load=2500"></iframe></div>
 <p class="muted" style="margin:8px 0 0">4초 안에는 걷히지 않는 규칙이 그대로라 빠른 로딩도 4초 장면을 다 보여 준다. '메인 스레드 7초 막힘' 은 실제 19MB 파일에서 JSON 을 해석하는 동안과 같은 상황이다 — 현재 안은 이때 가장 많이 끊긴다.</p>
 </div>
 
 <h2>안마다 한 장</h2>
-{"".join(vcard(x[0]) for x in V)}
+{"".join(vcard(x[0]) for x in V if x[2]!="t2")}
 
 <details><summary>자세한 수치</summary>
 <div class="box"><b>그림 스레드 프레임 간격 p95(기본 조건, 낮을수록 좋음)</b>{bars(p95_items, "ms")}</div>
@@ -168,7 +186,7 @@ ul{{padding-left:20px;margin:6px 0}}li{{margin:3px 0}}code{{font-family:var(--mo
 <div class="box">안을 고르면 template 의 <code>&lt;script id="boot"&gt;</code> 만 교체하고 가드(<code>test_boot_screen_*</code> · 브라우저 테스트 · 사본 저장)를 맞춘 뒤 현장 Windows 에서 확인한다. 계측 도구 · 변형 스크립트는 <code>dev/tools/boot_bench/</code>.</div>
 </div>
 <script>
-(function(){{const fr=document.getElementById("demo"),tabs=[...document.querySelectorAll(".tab")],open=document.getElementById("openNew");let cur="pixel";
+(function(){{const fr=document.getElementById("demo"),tabs=[...document.querySelectorAll(".tab")],open=document.getElementById("openNew");let cur="bars_a";
   const q=()=>{{const s=document.querySelector('input[name="sit"]:checked').value,lot=document.getElementById("sit-lot").checked;return s+(lot?"&lot=1":"");}};
   const go=()=>{{tabs.forEach(t=>t.classList.toggle("on",t.dataset.demo===cur));const u="demos/"+cur+".html?"+q();fr.src=u+"&t="+Date.now();open.href=u;}};
   document.addEventListener("click",e=>{{const b=e.target.closest("[data-demo]");if(b){{cur=b.dataset.demo;go();if(b.classList.contains("btn"))document.querySelector(".viewer").scrollIntoView({{behavior:"smooth",block:"start"}});}}

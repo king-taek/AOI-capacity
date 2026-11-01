@@ -16,6 +16,7 @@ def boot_js(variant):
     if "workerScene(" in vj: parts.append("_engine.js")
     if "cssFrame(" in vj: parts.append("_css.js")
     if "textStage(" in vj: parts.append("_text.js")
+    if "barsGeom(" in vj: parts.append("_bars.js")
     return "(function(){\n\"use strict\";\n" + "\n".join((S/"variants"/f).read_text(encoding="utf-8") for f in parts) + "\n" + vj + "\n})();"
 PAGE = """<!doctype html>
 <html lang="ko" data-theme="light"><head><meta charset="utf-8"><title>시작 화면 데모 — {title}</title>
@@ -56,7 +57,7 @@ def rows():
     return "\n".join(out)
 if __name__ == "__main__":
     out = Path(sys.argv[1]); out.mkdir(parents=True, exist_ok=True)
-    names = {"baseline":"현재(기준)","lite":"V1 경량화","pixel":"V2 픽셀 버퍼","css":"V3 CSS 스켈레톤","hybrid":"V4 하이브리드","scan":"V5 스캔 라인","cheap":"V6 최소 변경(30fps)","text_lens":"T1 O 는 렌즈","text_bars":"T2 막대로 쓴 AOI","text_story":"T3 검사 이력 4초"}
+    names = {"baseline":"현재(기준)","lite":"V1 경량화","pixel":"V2 픽셀 버퍼","css":"V3 CSS 스켈레톤","hybrid":"V4 하이브리드","scan":"V5 스캔 라인","cheap":"V6 최소 변경(30fps)","text_lens":"T1 O 는 렌즈","text_bars":"T2 막대로 쓴 AOI","text_story":"T3 검사 이력 4초","bars_a":"T2-A 줄마다 차오름","bars_b":"T2-B 장비 목록","bars_c":"T2-C 스캔 헤드"}
     for v, t in names.items():
         (out/f"{v}.html").write_text(PAGE.format(title=t, boot=boot_js(v), rows=rows()), encoding="utf-8")
         print(v, (out/f"{v}.html").stat().st_size)

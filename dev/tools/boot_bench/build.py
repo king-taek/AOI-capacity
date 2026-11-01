@@ -22,6 +22,7 @@ def build(variant, sample, out, lot=False):
             if "workerScene(" in vj: parts.append("_engine.js")
             if "cssFrame(" in vj or "cssScene(" in vj: parts.append("_css.js")
             if "textStage(" in vj: parts.append("_text.js")
+            if "barsGeom(" in vj: parts.append("_bars.js")
             js = "(function(){\n\"use strict\";\n" + "\n".join((S/"variants"/f).read_text(encoding="utf-8") for f in parts) + "\n" + vj + "\n})();"
         page = page[:a] + '<script id="boot">\n' + js + "\n</script>" + page[b:]
     if lot: page = page.replace('<html lang="ko" ', '<html lang="ko" data-boot="lot" ', 1)
