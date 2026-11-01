@@ -16,6 +16,10 @@ V = [  # 키, 이름, 묶음, 한 줄, 디자인 변화, 코드 변경, 설명
  ("text_story","T3 '검사 이력 4초'","text","Scan → Error → Rescan → PASS","글자 AOI","CSS 만","빔이 지나며 파랑이 되고, I 가 Error 로 잡혀 흔들린 뒤 Rescan(연파랑) 을 거쳐 PASS(파랑)."),
  ("bars_a","T2-A '줄마다 차오름'","t2","막대마다 구간 1~3개, 읽는 순서로","글자 AOI","CSS 만","막대 하나가 하루의 24시간 막대처럼 구간 1~3개(Scan · Rescan · Test · Error)로 나뉘고, 위에서 아래 · 왼쪽에서 오른쪽 순서로 차오른다. 기다릴 땐 '지금' 선이 하루를 가로지른다."),
  ("bars_b","T2-B '장비 목록'","t2","가동률 목록 줄 7개 안에 글자가 숨어 있다","글자 AOI","CSS 만","가동률 화면과 같은 줄(장비 이름 자리 · 숫자 블록 · 24시간 트랙)이 7개 깔리고, 트랙 안의 바쁜 구간이 자라서 AOI 를 쓴다 — 쉬는 시간은 회색 트랙. 기다릴 땐 '지금' 선."),
+ ("bars_b_wave","W1 파도","idle","글자 구간이 왼→오른으로 살짝 들렸다 내려온다","—","CSS 만","열마다 위상을 달리해 구간이 4px 들렸다 내려온다(2.6초 주기). 'AOI' 가 파도를 탄다."),
+ ("bars_b_drift","W2 흐름","idle","구간이 아주 천천히 오른쪽으로 흘렀다 돌아온다","—","CSS 만","줄마다 4~6px 를 5.2초에 걸쳐 흘렀다 돌아온다. 하루가 흐른다는 뜻, 가장 조용하다."),
+ ("bars_b_glow","W3 점등","idle","구간이 읽는 순서로 하나씩 밝아졌다 돌아온다","—","CSS 만","구간 하나가 0.2초쯤 옅어졌다 돌아오며 다음 구간으로 넘어간다(읽는 순서, 한 바퀴 약 5초). 데이터가 차례로 들어오는 중."),
+ ("bars_b_count","W4 셈","idle","숫자 블록이 값을 세듯 폭이 줄었다 늘었다","—","CSS 만","줄 왼쪽의 숫자 블록이 왼쪽 기준으로 55~100% 사이를 1.9초에 오간다(줄마다 위상). 트랙은 가만히 — 계산 중."),
  ("bars_c","T2-C '스캔 헤드'","t2","스캔 헤드가 지나가며 글자를 쓴다","글자 AOI","CSS 만","빈 트랙이 먼저 깔리고 스캔 헤드가 왼쪽에서 오른쪽으로 지나가면 닿은 구간부터 차오른다(AOI 검사처럼). 지나간 뒤 기다릴 땐 헤드가 천천히 오간다."),
 ]
 def load():
@@ -77,8 +81,11 @@ def bars(items, unit, cap=None):
     return "".join(out)
 p95_items = [(names[v], R[v]["dpr1_cpu1"]["p95"], "e" if v == "baseline" else "a") for v in ["baseline", "cheap", "hybrid", "lite", "pixel"]]
 p95_items.sort(key=lambda x: -x[1])
-drop_items = sorted([(names[v], R[v]["dpr1_cpu1"]["drop"], "e" if v == "baseline" else "a") for v, *_ in V], key=lambda x: -x[1])
+drop_items = sorted([(names[v], R[v]["dpr1_cpu1"]["drop"], "e" if v == "baseline" else "a") for v, *_ in V if R[v]["dpr1_cpu1"]["drop"] is not None], key=lambda x: -x[1])
 
+def idlecard(v):
+    k, name, grp, one, design, code, desc = next(x for x in V if x[0] == v)
+    return f"""<article class="vc t2"><div class="vh"><h3>{name}</h3><span class="stat">{one}</span><button class="btn" data-demo="{v}" data-slow="1">데모 보기</button></div><p>{desc}</p></article>"""
 def t2card(v):
     k, name, grp, one, design, code, desc = next(x for x in V if x[0] == v)
     shots = "".join(f'<figure><img src="{img(f"{v}_{t}.png", 560)}" alt="{name} {t}ms" loading="lazy"><figcaption>{t/1000:.1f}초</figcaption></figure>' for t in (1200, 2600, 3800) if (S/"shots"/f"{v}_{t}.png").exists())
@@ -90,7 +97,7 @@ def vcard(v):
     return f"""<article class="vc" id="v-{v}"><div class="vh"><h3>{name}</h3>{chip(*g[:2])}<span class="stat">{stat}</span><button class="btn" data-demo="{v}">데모 보기</button></div>
 <p>{desc}</p><div class="shots">{shots}</div></article>"""
 
-demo_tabs = "".join(f'<button class="tab" data-demo="{x[0]}">{x[1]}</button>' for x in V)
+demo_tabs = "".join(f'<button class="tab" data-demo="{x[0]}"{" data-slow=1" if x[2]=="idle" else ""}>{x[1]}</button>' for x in V)
 html = f"""<title>시작 화면 렉 개선안</title>
 <meta name="claude:viewport-fit-sides" content="cover">
 <style>
@@ -135,6 +142,10 @@ ul{{padding-left:20px;margin:6px 0}}li{{margin:3px 0}}code{{font-family:var(--mo
 <tr><th>T2-C 스캔 헤드</th><td>헤드가 지나가면 닿은 구간부터 차오름(2.3초)</td><td>AOI 스캔 · V5 스캔 라인</td><td>헤드가 천천히 오감</td><td>{chip(*grade("bars_c")[:2])}<br><small>{grade("bars_c")[2]} · 드롭 {f0(R["bars_c"]["dpr1_cpu1"]["drop"])}</small></td></tr>
 </tbody></table></div>
 
+<h2>대기 동작 대안 — '지금' 선 대신</h2>
+<p class="muted">4초를 넘겨도 로딩 중일 때의 움직임. 현택 11/1 "'지금' 선은 구리다" → 넷. 전부 transform · opacity 키프레임(합성 스레드), 글자는 그대로 읽힌다. 뷰어에서 '느린 로딩 7초' 로 보면 4초 뒤부터 보인다.</p>
+<div class="grid3">{"".join(idlecard(v) for v in ["bars_b_wave","bars_b_drift","bars_b_glow","bars_b_count"])}</div>
+
 <h2>가장 큰 차이 4가지</h2>
 <div class="grid">
 <div class="diff"><div class="t">① 프레임 간격 p95 — 입자 장면</div><div class="n"><em>{f0(b['p95'])}</em><s>→</s><b>{f0(px['p95'])}</b> ms</div><p>현재 → V2 픽셀 버퍼. 60fps 는 16.7ms. 프레임당 JS 도 {f1(b['dur'])} → {f1(px['dur'])}ms.</p></div>
@@ -157,13 +168,13 @@ ul{{padding-left:20px;margin:6px 0}}li{{margin:3px 0}}code{{font-family:var(--mo
 </div>
 
 <h2>안마다 한 장</h2>
-{"".join(vcard(x[0]) for x in V if x[2]!="t2")}
+{"".join(vcard(x[0]) for x in V if x[2] not in ("t2","idle"))}
 
 <details><summary>자세한 수치</summary>
 <div class="box"><b>그림 스레드 프레임 간격 p95(기본 조건, 낮을수록 좋음)</b>{bars(p95_items, "ms")}</div>
 <div class="box"><b>합성기가 놓친 프레임(열기~걷힘, 기본 조건)</b>{bars(drop_items, "")}</div>
 <div class="tw"><table><thead><tr><th>안</th><th class="r">기본 fps</th><th class="r">기본 p95 ms</th><th class="r">콜백 p50 ms</th><th class="r">dpr 1.5 fps</th><th class="r">dpr 1.5 p95</th><th class="r">CPU 4배 fps</th><th class="r">드롭(기본)</th><th class="r">걷힘 p95 ms</th></tr></thead><tbody>
-{"".join(f"<tr{' class=base' if x[0]=='baseline' else ''}><th>{x[1]}</th><td class=r>{'JS 0' if R[x[0]]['dpr1_cpu1']['fps'] is None else f0(R[x[0]]['dpr1_cpu1']['fps'])}</td><td class=r>{f0(R[x[0]]['dpr1_cpu1']['p95'])}</td><td class=r>{f1(R[x[0]]['dpr1_cpu1']['dur'])}</td><td class=r>{'JS 0' if R[x[0]]['dpr15_cpu1']['fps'] is None else f0(R[x[0]]['dpr15_cpu1']['fps'])}</td><td class=r>{f0(R[x[0]]['dpr15_cpu1']['p95'])}</td><td class=r>{'JS 0' if R[x[0]]['dpr1_cpu4']['fps'] is None else f0(R[x[0]]['dpr1_cpu4']['fps'])}</td><td class=r>{f0(R[x[0]]['dpr1_cpu1']['drop'])}</td><td class=r>{f0(R[x[0]]['dpr1_cpu1']['rev'])}</td></tr>" for x in V)}
+{"".join(f"<tr{' class=base' if x[0]=='baseline' else ''}><th>{x[1]}</th><td class=r>{'JS 0' if R[x[0]]['dpr1_cpu1']['fps'] is None else f0(R[x[0]]['dpr1_cpu1']['fps'])}</td><td class=r>{f0(R[x[0]]['dpr1_cpu1']['p95'])}</td><td class=r>{f1(R[x[0]]['dpr1_cpu1']['dur'])}</td><td class=r>{'JS 0' if R[x[0]]['dpr15_cpu1']['fps'] is None else f0(R[x[0]]['dpr15_cpu1']['fps'])}</td><td class=r>{f0(R[x[0]]['dpr15_cpu1']['p95'])}</td><td class=r>{'JS 0' if R[x[0]]['dpr1_cpu4']['fps'] is None else f0(R[x[0]]['dpr1_cpu4']['fps'])}</td><td class=r>{f0(R[x[0]]['dpr1_cpu1']['drop'])}</td><td class=r>{f0(R[x[0]]['dpr1_cpu1']['rev'])}</td></tr>" for x in V if x[2]!="idle")}
 </tbody></table></div>
 <p class="muted">fps · p95 = Worker 가 실제로 그린 프레임 간격(V6 은 30fps 상한). 콜백 = 프레임 하나의 JS + 캔버스 명령. 드롭 = CDP 트레이스 PipelineReporter 의 STATE_DROPPED(메인 스레드 레이어 트리 기준이라 Worker 캔버스 안에서는 메인이 막힌 동안의 드롭이 섞인다). 반복 실행 평균(기준 3회 · 주요 안 2~3회).</p>
 </details>
@@ -189,7 +200,7 @@ ul{{padding-left:20px;margin:6px 0}}li{{margin:3px 0}}code{{font-family:var(--mo
 (function(){{const fr=document.getElementById("demo"),tabs=[...document.querySelectorAll(".tab")],open=document.getElementById("openNew");let cur="bars_a";
   const q=()=>{{const s=document.querySelector('input[name="sit"]:checked').value,lot=document.getElementById("sit-lot").checked;return s+(lot?"&lot=1":"");}};
   const go=()=>{{tabs.forEach(t=>t.classList.toggle("on",t.dataset.demo===cur));const u="demos/"+cur+".html?"+q();fr.src=u+"&t="+Date.now();open.href=u;}};
-  document.addEventListener("click",e=>{{const b=e.target.closest("[data-demo]");if(b){{cur=b.dataset.demo;go();if(b.classList.contains("btn"))document.querySelector(".viewer").scrollIntoView({{behavior:"smooth",block:"start"}});}}
+  document.addEventListener("click",e=>{{const b=e.target.closest("[data-demo]");if(b){{cur=b.dataset.demo;if(b.dataset.slow)document.getElementById("sit-slow").checked=true;go();if(b.classList.contains("btn"))document.querySelector(".viewer").scrollIntoView({{behavior:"smooth",block:"start"}});}}
     if(e.target.id==="replay")go();}});
   document.querySelectorAll('input[name="sit"],#sit-lot').forEach(i=>i.addEventListener("change",go));go();}})();
 </script>

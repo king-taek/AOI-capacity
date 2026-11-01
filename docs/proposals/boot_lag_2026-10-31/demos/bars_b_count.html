@@ -1,0 +1,238 @@
+<!doctype html>
+<html lang="ko" data-theme="light"><head><meta charset="utf-8"><title>시작 화면 데모 — W4 셈</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<style>:root{--bg:#F4F6F8;--sans:"Segoe UI","Malgun Gothic","Apple SD Gothic Neo",sans-serif}html,body{margin:0;background:var(--bg);font-family:var(--sans);color:#16202B}
+.wrap{max-width:1200px;margin:0 auto;padding:28px 24px}h1{font-size:20px;margin:0 0 6px}.muted{color:#5A6673;font-size:13px}
+.cards{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin:22px 0}.card{background:#fff;border:1px solid #D3DAE2;border-radius:12px;padding:18px}.card b{display:block;font-size:30px;margin:6px 0}
+.panel{background:#fff;border:1px solid #D3DAE2;border-radius:12px;padding:14px 18px}.row{display:grid;grid-template-columns:120px 60px 1fr 60px;gap:14px;align-items:center;padding:9px 0;border-bottom:1px solid #EEF1F4;font-size:13px}
+.bar{height:14px;background:#DFE5EC;border-radius:3px;position:relative;overflow:hidden}.bar i{position:absolute;top:0;height:100%;background:#2E6BA8}
+.ctl{position:fixed;left:0;right:0;bottom:0;background:#fff;border-top:1px solid #D3DAE2;padding:10px 24px;font-size:13px;display:flex;gap:14px;flex-wrap:wrap;align-items:center}.ctl a{color:#2E6BA8}.ctl a.back{display:inline-block;padding:5px 11px;border:1px solid #2E6BA8;border-radius:8px;font-weight:600;text-decoration:none;margin-right:6px}
+</style>
+<script>if(/[?&]lot=1/.test(location.search))document.documentElement.setAttribute("data-boot","lot");</script>
+</head><body>
+<script id="boot">
+(function(){
+"use strict";
+/* 공통 껍데기 — 덮개 · 단계 글자(DOM, 합성 스레드 애니메이션) · AOI_BOOT API · 4초 최소 · 걷힘(opacity 만). 장면은 make() 가 만든다. */
+var prev=document.getElementById("aoi-boot");if(prev&&prev.parentNode)prev.parentNode.removeChild(prev);
+window.AOI_BOOT=null;
+const MIN=4000,LABELS=["결과 파일 여는 중","데이터 읽는 중","기록 펼치는 중","계산 중","화면 그리는 중"],PW=[.08,.34,.12,.36,.10],TH=[];
+{let a=0;for(const w of PW){TH.push(a);a+=w;}}
+const FONT='"Segoe UI","Malgun Gothic","Apple SD Gothic Neo",sans-serif';
+function mulberry(a){return function(){a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296;};}
+/* 창 크기에 맞춘 고정 대시보드 모양(baseline 의 fixedLayout 과 같은 자리) — 모든 변형이 같은 틀을 쓴다 */
+function layoutSpec(W,H,rnd){
+  const SEG=[["#2E6BA8",.62],["#8FB8E0",.14],["#7A5BB5",.08],["#C5453C",.07],["#E8B7B3",.09]];
+  const seg=()=>{let u=rnd(),i=0;while(i<SEG.length-1&&u>SEG[i][1]){u-=SEG[i][1];i++;}return SEG[i][0];};
+  const pad=Math.round(Math.max(20,Math.min(W*.03,44))),gap=Math.round(pad*.6),y0=Math.round(pad*1.2),kh=Math.round(Math.max(88,Math.min(H*.17,140))),cw=(W-pad*2-gap*2)/3;
+  const cards=[];for(let i=0;i<3;i++){const x=pad+i*(cw+gap),ix=x+Math.min(22,cw*.08);
+    cards.push({x,y:y0,w:cw,h:kh,ix,label:{x:ix,y:y0+kh*.17,w:cw*.24,h:kh*.075},num:{x:ix,y:y0+kh*.33,w:cw*(.16+.06*((i*7)%3)),h:kh*.27,err:i===1},
+      l1:{x:ix,y:y0+kh*.72,w:cw*.62,h:kh*.055},l2:{x:ix,y:y0+kh*.84,w:cw*.44,h:kh*.055}});}
+  const capH=Math.max(34,H*.06),py=y0+kh+pad,ph=H-py-capH-pad*.4,rows=[],legend=[];let panel=null;
+  if(ph>70){panel={x:pad,y:py,w:W-pad*2,h:ph};
+    const ix=pad+Math.min(22,W*.016),rh=Math.round(Math.max(30,Math.min(44,H*.052))),lx=ix+Math.max(90,W*.11),rx=W-pad-Math.max(70,W*.07);
+    let gx=ix;for(const [c] of SEG){legend.push({dot:{x:gx,y:py+rh*.42,w:rh*.24,h:rh*.24,c},txt:{x:gx+rh*.34,y:py+rh*.46,w:rh*.9,h:rh*.16}});gx+=rh*1.6;}
+    panel.rule={x:pad,y:py+rh*.95,w:W-pad*2,h:1};
+    const n=Math.max(1,Math.floor((ph-rh*1.2)/rh));
+    for(let k=0;k<n;k++){const y=py+rh*1.2+k*rh,mid=y+rh/2,th=Math.max(8,rh*.4),uw=rh*.8,segs=[];
+      let p=rnd()*.18;while(p<.92){const w=.015+rnd()*.07;if(p+w>1)break;segs.push({x:lx+(rx-lx)*p,w:(rx-lx)*w,c:seg()});p+=w+.02+rnd()*.12;}
+      rows.push({y,mid,name:{x:ix,y:mid-rh*.09,w:rh*1.6,h:rh*.18},num:{x:lx-uw-rh*.5,y:mid-rh*.11,w:uw,h:rh*.22,err:k%4===1},track:{x:lx,y:mid-th/2,w:rx-lx,h:th},segs,
+        badge:k%3===0?{x:rx+rh*.6,y:mid-rh*.09,w:rh*.5,h:rh*.18,err:true}:{x:rx+rh*.6,y:mid-1,w:rh*.4,h:2,err:false},sep:k<n-1?{x:pad,y:y+rh,w:W-pad*2,h:1}:null});}}
+  return{pad,cards,panel,legend,rows,capH};}
+function bootShell(o){
+  try{
+    const W=Math.max(1,window.innerWidth||document.documentElement.clientWidth||0),H=Math.max(1,window.innerHeight||document.documentElement.clientHeight||0);
+    if(W<240||H<200||!document.body)return;
+    let red=false;try{red=!!(window.matchMedia&&window.matchMedia("(prefers-reduced-motion: reduce)").matches);}catch(e){}
+    const bg=(getComputedStyle(document.documentElement).getPropertyValue("--bg")||"").trim()||"#F4F6F8";
+    const ov=document.createElement("div");ov.id="aoi-boot";ov.setAttribute("aria-hidden","true");
+    const fade=o.fadeMs||600;
+    ov.style.cssText=`position:fixed;left:0;top:0;width:100vw;height:100vh;z-index:2147483000;background:${bg};pointer-events:none;overflow:hidden;opacity:1;transition:opacity ${fade}ms cubic-bezier(.33,0,.15,1)`;
+    document.body.appendChild(ov);
+    /* 단계 글자 + 진행선: DOM. 글자 교체는 WAAPI(transform · opacity), 진행선은 scaleX 전환 — 둘 다 합성 스레드 */
+    const cfs=Math.max(10,Math.min(14,W*.0118)),cx=Math.max(16,W*.024),cy=Math.max(18,H*.05),lw=Math.max(60,W*.08);
+    const cap=document.createElement("div");cap.style.cssText=`position:absolute;left:${cx}px;bottom:${cy-cfs*.9}px;display:flex;align-items:center;gap:${cfs*.9}px;font:600 ${cfs}px ${FONT};color:#46525E;opacity:0;transition:opacity .3s ease-out;will-change:opacity`;
+    const lab=document.createElement("span");lab.style.cssText=`position:relative;display:inline-block;height:${cfs*1.4}px;line-height:${cfs*1.4}px;overflow:hidden`;
+    const bar=document.createElement("span");bar.style.cssText=`position:relative;display:inline-block;width:${lw}px;height:2px;background:#DCE2E9`;
+    const fill=document.createElement("i");fill.style.cssText="position:absolute;left:0;top:0;width:100%;height:100%;background:#2E6BA8;transform:scaleX(0);transform-origin:0 50%;transition:transform .45s cubic-bezier(.2,.7,.2,1)";
+    bar.appendChild(fill);cap.appendChild(lab);cap.appendChild(bar);ov.appendChild(cap);
+    let li=-1,curS=null;const setLabel=i=>{if(i===li)return;const old=curS;li=i;const s=document.createElement("span");s.textContent=LABELS[i];s.style.cssText="display:inline-block;white-space:nowrap";lab.appendChild(s);curS=s;
+      if(red){if(old)old.remove();return;}
+      if(old){old.style.position="absolute";old.style.left="0";old.animate([{transform:"translateY(0)",opacity:1},{transform:`translateY(-${cfs*.45}px)`,opacity:0}],{duration:240,easing:"cubic-bezier(.33,1,.68,1)",fill:"forwards"}).onfinish=()=>old.remove();}
+      s.animate([{transform:`translateY(${cfs*.45}px)`,opacity:0},{transform:"translateY(0)",opacity:1}],{duration:240,easing:"cubic-bezier(.33,1,.68,1)"});};
+    const setFill=p=>{fill.style.transform=`scaleX(${Math.max(0,Math.min(1,p))})`;};
+    requestAnimationFrame(()=>{cap.style.opacity="1";setLabel(0);setFill(.04);});
+    /* 계획 단계(4초 계획 곡선) — 실제 단계보다 앞서지 않는다 */
+    let real=0;const planT=[0,120+PW[0]*3200,120+(TH[1]+PW[1])*3200,120+(TH[2]+PW[2])*3200,120+(TH[3]+PW[3])*3200];
+    const tick=()=>{if(gone)return;const t=performance.now();let i=0;while(i<4&&t>=planT[i+1])i++;setLabel(Math.min(i,real));if(!loadedAt)setFill(Math.min(.9,.04+t/MIN*.6));
+      if(!loadedAt||t<MIN+1000)setTimeout(tick,200);};setTimeout(tick,200);
+    const env={W,H,red,bg,kind:document.documentElement.getAttribute("data-boot")||"",epoch:performance.timeOrigin||Date.now()-performance.now(),MIN,LABELS,TH,PW};
+    let gone=false,loadedAt=0,fallback=0,revealed=false;const after=[];let scene=null;
+    const finish=()=>{if(gone)return;gone=true;clearTimeout(fallback);try{scene&&scene.kill&&scene.kill();}catch(e){}if(ov.parentNode)ov.parentNode.removeChild(ov);window.AOI_BOOT=null;
+      for(const f of after.splice(0))setTimeout(()=>{try{f();}catch(e){}},0);};
+    const reveal=()=>{if(revealed||gone)return;revealed=true;cap.style.opacity="0";try{scene&&scene.reveal&&scene.reveal();}catch(e){}ov.style.opacity="0";setTimeout(finish,fade+80);};
+    const api={reveal,env,ov};
+    scene=o.make(ov,env,api)||{};
+    window.AOI_BOOT={
+      phase(i){if(gone)return;real=Math.max(real,i);try{scene.post&&scene.post({type:"phase",i,p:TH[i]||0,pn:(TH[i]||0)+(PW[i]||0)});}catch(e){}},
+      done(){if(gone||loadedAt)return;loadedAt=performance.now();real=4;setFill(1);try{scene.post&&scene.post({type:"loaded"});}catch(e){}
+        const left=Math.max(0,MIN-performance.now());
+        if(!o.sceneReveals)setTimeout(reveal,Math.max(left,o.settleMs||400));
+        fallback=setTimeout(reveal,left+2500);},
+      later(f){if(gone)setTimeout(f,0);else after.push(f);},
+      abort(){finish();}};
+    document.addEventListener("visibilitychange",()=>{try{scene.post&&scene.post({type:document.hidden?"pause":"resume"});}catch(e){}});
+  }catch(e){try{const x=document.getElementById("aoi-boot");if(x&&x.parentNode)x.parentNode.removeChild(x);}catch(_){}window.AOI_BOOT=null;try{console.warn("시작 화면을 띄우지 못했습니다(화면은 그대로 열립니다):",e);}catch(_){}}
+}
+
+/* 장면 설명 L {rects,strokes,texts,arcs,lines,zones} — 대시보드(layoutSpec) · 웨이퍼(baseline waferLayout 이식). d:1 = 데이터 몫 */
+function layoutDraw(W,H,kind){
+  const L={texts:[],rects:[],strokes:[],zones:[],arcs:[],lines:[]},R=(x,y,w,h,c,d)=>L.rects.push({x,y,w,h,c,d:d?1:0});
+  const INK="#16202B",INK2="#5A6673",INK3="#AEB8C4",LINE="#D3DAE2",TRACK="#DFE5EC",ERR="#C5453C";
+  if(kind==="lot"){
+    const LC={INK,INK2,INK3,LINE,TRACK,ACC:"#2E6BA8",DUP:"#8FB8DE",ERR,OV:"#F2C26B",SEV:"#D9731F"},r2=mulberry(4410);
+    const pad=Math.round(Math.max(20,Math.min(W*.03,44))),capH=Math.max(34,H*.06),top=Math.round(pad*1.2),bot=H-capH-pad*.4,bh=bot-top,k=W<760?2:W/H>1.9?4:3,gap=Math.max(40,W*.05);
+    const D=Math.min((W-pad*2-gap*(k-1))/k,bh*.74),r=D/2,cy=top+bh*.46,span=k*D+(k-1)*gap,x0=(W-span)/2;
+    const nd=Math.max(9,Math.min(17,Math.round(D/22))),ds=D/nd*.98,gp=Math.max(1,ds*.12);
+    const hot=[...Array(k)].map(()=>({a:r2()*6.28,d:.3+r2()*.5,s:.18+r2()*.2}));
+    for(let w=0;w<k;w++){const cx=x0+w*(D+gap)+r;
+      L.arcs.push({x:cx,y:cy,r:r,c:LC.INK2,lw:2});L.lines.push({pts:[[cx-r*.12,cy+r*.995],[cx,cy+r*.9],[cx+r*.12,cy+r*.995]],c:LC.INK2,lw:2});
+      const lvl=w/(k-1||1);
+      for(let iy=0;iy<nd;iy++)for(let ix=0;ix<nd;ix++){const x=cx-r+ix*D/nd+(D/nd-ds)/2,y=cy-r+iy*D/nd+(D/nd-ds)/2,ex=x+ds/2-cx,ey=y+ds/2-cy;
+        if(Math.hypot(Math.abs(ex)+ds/2,Math.abs(ey)+ds/2)>r*.97)continue;
+        R(x+gp/2,y+gp/2,ds-gp,ds-gp,LC.TRACK);
+        const h=hot[w],hx=Math.cos(h.a)*h.d*r,hy=Math.sin(h.a)*h.d*r,dd=Math.hypot(ex-hx,ey-hy)/r,u=r2();
+        let c=u<.94?LC.ACC:LC.DUP;if(dd<h.s*(.6+lvl*.8)&&u<.9)c=dd<h.s*.45?LC.SEV:LC.OV;else if(u>.988)c=LC.ERR;
+        R(x+gp/2,y+gp/2,ds-gp,ds-gp,c,1);}
+      L.zones.push({x:cx-r,y:cy-r,w:D,h:D});
+      R(cx-r*.42,cy-r-Math.max(26,bh*.06),r*.36,Math.max(5,bh*.012),LC.INK3);R(cx-r*.42+r*.42,cy-r-Math.max(26,bh*.06)-1,r*.42,Math.max(7,bh*.016),LC.INK,1);
+      const by=cy+r+Math.max(22,bh*.05);R(cx-r*.5,by,r*.3,Math.max(6,bh*.014),LC.INK3);R(cx-r*.5+r*.38,by-1,r*.24,Math.max(8,bh*.018),w===k-1?LC.SEV:LC.INK,1);R(cx+r*.2,by,r*.3,Math.max(6,bh*.014),LC.INK3);
+      if(w<k-1){const ax=cx+r+gap*.18,bx=cx+r+gap*.82,ah=Math.max(5,gap*.12);L.lines.push({pts:[[ax,cy],[bx,cy]],c:LC.INK2,lw:2.5});L.lines.push({pts:[[bx-ah,cy-ah],[bx,cy],[bx-ah,cy+ah]],c:LC.INK2,lw:2.5});}}
+    return L;}
+  const sp=layoutSpec(W,H,mulberry(1030));
+  for(const c of sp.cards){L.strokes.push({x:c.x,y:c.y,w:c.w,h:c.h,r:12,lw:1,c:LINE});const b=c.label;R(b.x,b.y,b.w,b.h,INK3);
+    R(c.num.x,c.num.y,c.num.w,c.num.h,c.num.err?ERR:INK,1);L.zones.push({x:c.num.x,y:c.num.y,w:Math.min(c.w*.5,c.num.w*1.6),h:c.num.h});
+    R(c.l1.x,c.l1.y,c.l1.w,c.l1.h,"#CBD3DC");R(c.l2.x,c.l2.y,c.l2.w,c.l2.h,"#CBD3DC");}
+  if(sp.panel){const p=sp.panel;L.strokes.push({x:p.x,y:p.y,w:p.w,h:p.h,r:12,lw:1,c:LINE});
+    for(const g of sp.legend){R(g.dot.x,g.dot.y,g.dot.w,g.dot.h,g.dot.c);R(g.txt.x,g.txt.y,g.txt.w,g.txt.h,INK3);}
+    R(p.rule.x,p.rule.y,p.rule.w,p.rule.h,"#E7ECF1");
+    for(const r of sp.rows){R(r.name.x,r.name.y,r.name.w,r.name.h,INK2);R(r.num.x,r.num.y,r.num.w,r.num.h,r.num.err?ERR:INK,1);L.zones.push({x:r.num.x,y:r.num.y-r.num.h*.4,w:r.num.w,h:r.num.h*1.8});
+      R(r.track.x,r.track.y,r.track.w,r.track.h,TRACK);L.zones.push({x:r.track.x,y:r.track.y,w:r.track.w,h:r.track.h});
+      for(const s of r.segs)R(s.x,r.track.y,s.w,r.track.h,s.c,1);
+      R(r.badge.x,r.badge.y,r.badge.w,r.badge.h,r.badge.err?ERR:INK3,r.badge.err);if(r.sep)R(r.sep.x,r.sep.y,r.sep.w,r.sep.h,"#EEF1F4");}}
+  return L;}
+
+/* 'AOI' 글자 장면 공통: 가운데 큰 글자 영역, 글꼴은 시스템(바깥 요청 0). 전부 합성 스레드(transform · opacity · clip-path), 프레임마다 JS 0 */
+const TXT={INK:"#16202B",INK2:"#5A6673",INK3:"#AEB8C4",LINE:"#D3DAE2",ACC:"#2E6BA8",ACC2:"#8FB8E0",ERR:"#C5453C",WAIT:"#9DB4CE"};
+function textStage(ov,env,css){
+  const {W,H,red}=env,root=document.createElement("div");root.className="tx"+(red?" red":"");
+  root.style.cssText=`position:absolute;left:0;top:0;width:${W}px;height:${H}px;overflow:hidden;font-family:${FONT}`;
+  const st=document.createElement("style");st.textContent=`#aoi-boot .tx *{box-sizing:border-box}\n#aoi-boot .tx.red *{animation:none!important;transition:none!important;opacity:1}\n`+css;root.appendChild(st);
+  ov.insertBefore(root,ov.firstChild);
+  const fs=Math.round(Math.max(96,Math.min(W*.19,H*.34)));   /* 글자 크기 */
+  return{root,fs,cx:W/2,cy:H*.46};
+}
+
+/* '막대로 쓴 AOI' 공통 — 5×7 비트맵의 가로 줄(run) 목록과 자리. 세 버전이 같은 글자 · 같은 색 규칙을 쓴다 */
+const BAR_G={A:[".###.","#...#","#...#","#####","#...#","#...#","#...#"],O:[".###.","#...#","#...#","#...#","#...#","#...#",".###."],I:["#####","..#..","..#..","..#..","..#..","..#..","#####"]};
+function barsGeom(T,opt){
+  const cell=(opt&&opt.cell)||T.fs/7,bh=cell*.62,gapL=cell*1.4,W3=cell*5*3+gapL*2,x0=(opt&&opt.x0!=null)?opt.x0:T.cx-W3/2,y0=T.cy-cell*3.5,runs=[];
+  ["A","O","I"].forEach((ch,li)=>{BAR_G[ch].forEach((row,r)=>{let c=0;while(c<5){if(row[c]!=="#"){c++;continue;}let e=c;while(e<5&&row[e]==="#")e++;
+    runs.push({li,r,x:x0+li*(cell*5+gapL)+c*cell,w:(e-c)*cell-cell*.18,y:y0+r*cell+(cell-bh)/2,h:bh,cells:e-c});c=e;}});});
+  return{cell,bh,gapL,W3,x0,y0,runs};}
+/* 구간 색: 범례 비율대로(Scan 파랑 대부분 · Rescan 연파랑 · Test 보라 · Error 빨강) */
+function barsColor(rnd){const u=rnd();return u<.66?TXT.ACC:u<.82?TXT.ACC2:u<.92?"#7A5BB5":TXT.ERR;}
+/* 막대 하나: 트랙(회색) 안에 구간 여러 개. 구간은 .f(scaleX 로 자람) > .g(값 전 회청색) + .c(제 색). 로딩 끝 = .g → .c crossfade */
+function barsMake(root,b,segs,delay,opts){
+  const tk=document.createElement("div");tk.className="tk";tk.style.cssText=`left:${b.x}px;top:${b.y}px;width:${b.w}px;height:${b.h}px;animation-delay:${delay}ms,${-(b.r||0)*350}ms;${(opts&&opts.tkExtra)||""}`;   /* 둘째 지연 = 흔들림 위상(.wait 일 때만 쓰인다) */
+  segs.forEach((s,i)=>{const f=document.createElement("i");f.className="f";f.style.cssText=`left:${(s.p*100).toFixed(2)}%;width:${(s.w*100).toFixed(2)}%;animation-delay:${s.d}ms`;
+    const g=document.createElement("i");g.className="g";const c=document.createElement("i");c.className="c";c.style.background=s.c;f.appendChild(g);f.appendChild(c);tk.appendChild(f);});
+  root.appendChild(tk);return tk;}
+const BARS_CSS=`
+#aoi-boot .tx .tk{position:absolute;border-radius:3px;background:${TXT.LINE};opacity:0;animation:txTk .35s cubic-bezier(.22,1,.36,1) both}
+#aoi-boot .tx .tk>.f{position:absolute;top:0;height:100%;display:block;transform:scaleX(0);transform-origin:0 50%;animation:txFill .6s cubic-bezier(.16,1,.3,1) both;will-change:transform;border-radius:3px;overflow:hidden}
+#aoi-boot .tx .tk>.f>i{position:absolute;left:0;top:0;width:100%;height:100%;display:block}
+#aoi-boot .tx .tk>.f>.g{background:${TXT.WAIT}}#aoi-boot .tx .tk>.f>.c{opacity:0;transition:opacity .5s cubic-bezier(.33,1,.68,1)}
+#aoi-boot .tx.ld .tk>.f>.g{opacity:0;transition:opacity .5s cubic-bezier(.33,1,.68,1)}#aoi-boot .tx.ld .tk>.f>.c{opacity:1}
+#aoi-boot .tx .now{position:absolute;width:2px;background:${TXT.INK2};opacity:0;will-change:transform;transition:opacity .4s}
+#aoi-boot .tx.ld .now{opacity:0;animation:none}
+@keyframes txTk{from{opacity:0;transform:translateX(-6px)}to{opacity:1;transform:none}}
+@keyframes txFill{from{transform:scaleX(0)}to{transform:scaleX(1)}}
+@keyframes txNow{from{transform:translateX(0)}to{transform:translateX(var(--span))}}`;
+/* 로딩 신호 처리는 셋이 같다 */
+function barsCtl(T,waitAt){const waitT=setTimeout(()=>{if(!T.root.classList.contains("ld"))T.root.classList.add("wait");},waitAt);
+  return{post(m){if(m.type==="loaded"){clearTimeout(waitT);T.root.classList.remove("wait");T.root.classList.add("ld");}},kill(){clearTimeout(waitT);},reveal(){}};}
+
+/* 대기 동작(4초를 넘겨도 로딩 중일 때, .tx.wait) — 전부 transform · opacity 키프레임. 현택 11/1 "'지금' 선은 구리다" → 대안 넷 */
+const BARS_IDLE={
+  sway:`#aoi-boot .tx.wait .tk,#aoi-boot .tx.wait .num,#aoi-boot .tx.wait .nm{animation:txTk .35s cubic-bezier(.22,1,.36,1) both,txSway 2.8s cubic-bezier(.45,.05,.55,.95) infinite alternate}
+@keyframes txSway{from{transform:translateY(-1.5px)}to{transform:translateY(1.5px)}}
+#aoi-boot .tx.wait .now{opacity:.55;animation:txNow 4.2s cubic-bezier(.45,.05,.55,.95) infinite}`,
+  /* 파도: 글자 구간이 왼쪽에서 오른쪽으로 한 번씩 살짝 들렸다 내려온다(열마다 위상) — 'AOI' 가 파도를 탄다 */
+  wave:`#aoi-boot .tx.wait .tk>.f{animation:txFill .6s cubic-bezier(.16,1,.3,1) both,txWave 2.6s cubic-bezier(.45,.05,.55,.95) infinite}
+@keyframes txWave{0%,38%,100%{transform:translateY(0) scaleX(1)}19%{transform:translateY(-4px) scaleX(1)}}`,
+  /* 흐름: 줄 전체(구간 · 숫자 · 이름)가 아주 천천히 오른쪽으로 6px 흘렀다 돌아온다 — 하루가 흐른다 */
+  drift:`#aoi-boot .tx.wait .tk>.f{animation:txFill .6s cubic-bezier(.16,1,.3,1) both,txDrift 5.2s cubic-bezier(.45,.05,.55,.95) infinite alternate}
+@keyframes txDrift{from{transform:translateX(0) scaleX(1)}to{transform:translateX(var(--dx,6px)) scaleX(1)}}`,
+  /* 점등: 구간이 읽는 순서로 하나씩 밝아졌다 돌아온다 — 데이터가 차례로 들어오는 중 */
+  glow:`#aoi-boot .tx.wait .tk>.f>.g{animation:txGlow var(--gp,5.4s) cubic-bezier(.45,.05,.55,.95) infinite}
+@keyframes txGlow{0%,9%,100%{opacity:1}4%{opacity:.35}}`,
+  /* 셈: 숫자 블록이 값을 세듯 폭이 줄었다 늘었다(scaleX, 왼쪽 기준) + 트랙은 가만히 — 계산 중 */
+  count:`#aoi-boot .tx.wait .num{transform-origin:0 50%;animation:txTk .35s cubic-bezier(.22,1,.36,1) both,txCount 1.9s cubic-bezier(.45,.05,.55,.95) infinite alternate}
+@keyframes txCount{from{transform:scaleX(.55)}to{transform:scaleX(1)}}`};
+function barsListScene(ov,env,idle){
+  const T=textStage(ov,env,BARS_CSS+(BARS_IDLE[idle]||BARS_IDLE.sway)+`
+#aoi-boot .tx .nm{position:absolute;border-radius:2px;background:${TXT.INK3};opacity:0;animation:txTk .35s cubic-bezier(.22,1,.36,1) both}
+#aoi-boot .tx .num{position:absolute;border-radius:2px;opacity:0;animation:txTk .35s cubic-bezier(.22,1,.36,1) both}
+#aoi-boot .tx .num>i{position:absolute;left:0;top:0;width:100%;height:100%;display:block;border-radius:2px}#aoi-boot .tx .num>.g{background:${TXT.WAIT}}#aoi-boot .tx .num>.c{opacity:0;transition:opacity .5s cubic-bezier(.33,1,.68,1)}
+#aoi-boot .tx.ld .num>.g{opacity:0;transition:opacity .5s}#aoi-boot .tx.ld .num>.c{opacity:1}
+#aoi-boot .tx .sep{position:absolute;height:1px;background:${TXT.LINE};opacity:0;animation:txTk .35s both}`);
+  const cell=Math.min(T.fs/7,(env.W*.5)/17),nameW=cell*2.2,numW=cell*1.1,gap=cell*.5,x0=T.cx-(nameW+gap+numW+gap+cell*17.8)/2+nameW+gap+numW+gap;
+  const G=barsGeom(T,{cell,x0}),rnd=mulberry(2027),trackW=G.W3+cell*.8;
+  const nSeg=G.runs.length,idxOf=(r,i)=>G.runs.findIndex(b=>b.r===r)+i;   /* 점등 순서 = 읽는 순서 */
+  for(let r=0;r<7;r++){const y=G.y0+r*cell,d=120+r*95,mid=y+cell/2;
+    const nm=document.createElement("i");nm.className="nm";nm.style.cssText=`left:${x0-nameW-gap-numW-gap}px;top:${mid-cell*.1}px;width:${nameW*(.7+(r*3%4)*.08)}px;height:${cell*.2}px;animation-delay:${d}ms,${-r*350}ms`;T.root.appendChild(nm);
+    const num=document.createElement("i");num.className="num";num.style.cssText=`left:${x0-numW-gap}px;top:${mid-cell*.13}px;width:${numW*.85}px;height:${cell*.26}px;animation-delay:${d+40}ms,${-r*350}ms`;
+    const g=document.createElement("i");g.className="g";const c=document.createElement("i");c.className="c";c.style.background=r%4===1?TXT.ERR:TXT.INK;num.appendChild(g);num.appendChild(c);T.root.appendChild(num);
+    /* 줄의 트랙 하나(회색) — 글자 구간들은 그 안의 바쁜 시간 */
+    const runs=G.runs.filter(b=>b.r===r),segs=runs.map((b,i)=>({p:(b.x-(x0-cell*.4))/trackW,w:b.w/trackW,c:barsColor(rnd),d:d+180+b.li*160+i*60}));
+    const tk=barsMake(T.root,{x:x0-cell*.4,y:y,w:trackW,h:G.bh,r},segs,d+60,{tkExtra:`top:${mid-G.bh/2}px`});
+    tk.querySelectorAll(".f").forEach((f,i)=>{const s=segs[i],ph=Math.round(-(s.p*1400));   /* 파도 · 흐름: 왼쪽 구간이 먼저(위상 = 가로 위치) */
+      f.style.animationDelay=`${s.d}ms,${ph}ms`;f.style.setProperty("--dx",(4+r%3)+"px");const g=f.firstChild;const gi=idxOf(r,i);g.style.animationDelay=`${-gi*120}ms`;g.style.setProperty("--gp",(nSeg*120)+"ms");});
+    if(r<6){const sp=document.createElement("i");sp.className="sep";sp.style.cssText=`left:${x0-nameW-gap-numW-gap}px;top:${y+cell-1}px;width:${nameW+gap+numW+gap+trackW}px;animation-delay:${d+80}ms`;T.root.appendChild(sp);}}
+  const now=document.createElement("i");now.className="now";now.style.cssText=`left:${x0-cell*.4}px;top:${G.y0-cell*.3}px;height:${cell*7.6}px;--span:${trackW}px`;T.root.appendChild(now);
+  return barsCtl(T,3000);
+}
+
+/* T2-B 대기 동작 W4 셈 — 숫자 블록이 값을 세듯 폭이 줄었다 늘었다(계산 중) */
+bootShell({sceneReveals:false,settleMs:500,fadeMs:600,make(ov,env,api){return barsListScene(ov,env,"count");}});
+
+})();
+</script>
+<div class="wrap"><h1>AOI 가동 현황 — 데모 화면(W4 셈)</h1><p class="muted">이 페이지는 시작 화면 동작만 보는 자리표시 화면입니다. 숫자는 가짜입니다.</p>
+<div class="cards"><div class="card"><span class="muted">평균 가동률</span><b>62.4%</b><span class="muted">장비 30대</span></div><div class="card"><span class="muted">Error</span><b style="color:#C5453C">17건</b><span class="muted">Lot 단위</span></div><div class="card"><span class="muted">살펴볼 장비</span><b>5대</b><span class="muted">40% 미만 · Error 3건 이상</span></div></div>
+<div class="panel"><div class="row"><span>AOI-1</span><b>37%</b><div class="bar"><i style="left:4.9%;width:4.5%;background:#7A5BB5"></i><i style="left:11.8%;width:11.2%;background:#2E6BA8"></i><i style="left:28.7%;width:3.6%;background:#C5453C"></i><i style="left:36.4%;width:3.9%;background:#8FB8E0"></i><i style="left:43.0%;width:3.9%;background:#8FB8E0"></i><i style="left:49.5%;width:8.7%;background:#2E6BA8"></i><i style="left:66.5%;width:8.8%;background:#2E6BA8"></i><i style="left:83.1%;width:7.0%;background:#2E6BA8"></i></div><span class="muted">2건</span></div>
+<div class="row"><span>AOI-2</span><b>78%</b><div class="bar"><i style="left:6.3%;width:8.4%;background:#C5453C"></i><i style="left:19.8%;width:11.2%;background:#2E6BA8"></i><i style="left:34.0%;width:8.7%;background:#2E6BA8"></i><i style="left:48.4%;width:8.5%;background:#2E6BA8"></i><i style="left:64.5%;width:9.2%;background:#8FB8E0"></i><i style="left:82.5%;width:7.3%;background:#2E6BA8"></i></div><span class="muted">2건</span></div>
+<div class="row"><span>AOI-3</span><b>29%</b><div class="bar"><i style="left:4.5%;width:10.9%;background:#7A5BB5"></i><i style="left:25.2%;width:3.8%;background:#2E6BA8"></i><i style="left:36.3%;width:11.8%;background:#7A5BB5"></i><i style="left:54.5%;width:9.1%;background:#2E6BA8"></i><i style="left:66.8%;width:7.2%;background:#2E6BA8"></i><i style="left:77.5%;width:7.9%;background:#2E6BA8"></i></div><span class="muted">4건</span></div>
+<div class="row"><span>AOI-4</span><b>69%</b><div class="bar"><i style="left:8.6%;width:11.8%;background:#2E6BA8"></i><i style="left:25.8%;width:6.5%;background:#8FB8E0"></i><i style="left:40.1%;width:7.6%;background:#2E6BA8"></i><i style="left:59.1%;width:7.7%;background:#7A5BB5"></i><i style="left:69.5%;width:10.3%;background:#2E6BA8"></i><i style="left:88.2%;width:12.9%;background:#8FB8E0"></i></div><span class="muted">2건</span></div>
+<div class="row"><span>AOI-5</span><b>68%</b><div class="bar"><i style="left:0.3%;width:7.6%;background:#2E6BA8"></i><i style="left:16.1%;width:7.9%;background:#2E6BA8"></i><i style="left:33.7%;width:4.3%;background:#2E6BA8"></i><i style="left:44.0%;width:12.2%;background:#8FB8E0"></i><i style="left:58.9%;width:7.5%;background:#C5453C"></i><i style="left:71.2%;width:4.4%;background:#8FB8E0"></i><i style="left:86.2%;width:5.8%;background:#8FB8E0"></i></div><span class="muted">1건</span></div>
+<div class="row"><span>AOI-6</span><b>70%</b><div class="bar"><i style="left:2.3%;width:4.8%;background:#2E6BA8"></i><i style="left:15.6%;width:3.1%;background:#C5453C"></i><i style="left:22.6%;width:5.8%;background:#2E6BA8"></i><i style="left:34.6%;width:6.7%;background:#C5453C"></i><i style="left:46.4%;width:4.3%;background:#C5453C"></i><i style="left:62.2%;width:9.5%;background:#7A5BB5"></i><i style="left:74.3%;width:12.0%;background:#7A5BB5"></i></div><span class="muted">3건</span></div>
+<div class="row"><span>AOI-7</span><b>80%</b><div class="bar"><i style="left:6.0%;width:4.0%;background:#7A5BB5"></i><i style="left:16.0%;width:4.9%;background:#2E6BA8"></i><i style="left:27.3%;width:4.1%;background:#C5453C"></i><i style="left:34.0%;width:3.0%;background:#2E6BA8"></i><i style="left:44.3%;width:12.5%;background:#C5453C"></i><i style="left:59.1%;width:11.7%;background:#C5453C"></i><i style="left:76.6%;width:9.3%;background:#2E6BA8"></i></div><span class="muted">0건</span></div>
+<div class="row"><span>AOI-8</span><b>53%</b><div class="bar"><i style="left:1.7%;width:7.9%;background:#8FB8E0"></i><i style="left:16.4%;width:6.1%;background:#2E6BA8"></i><i style="left:25.6%;width:6.4%;background:#2E6BA8"></i><i style="left:38.8%;width:9.9%;background:#C5453C"></i><i style="left:50.9%;width:12.5%;background:#C5453C"></i><i style="left:69.0%;width:9.9%;background:#2E6BA8"></i><i style="left:88.5%;width:6.0%;background:#7A5BB5"></i></div><span class="muted">4건</span></div>
+<div class="row"><span>AOI-9</span><b>80%</b><div class="bar"><i style="left:5.5%;width:4.7%;background:#2E6BA8"></i><i style="left:17.5%;width:10.8%;background:#2E6BA8"></i><i style="left:36.7%;width:9.1%;background:#2E6BA8"></i><i style="left:55.8%;width:11.2%;background:#7A5BB5"></i><i style="left:77.1%;width:5.0%;background:#8FB8E0"></i><i style="left:87.6%;width:3.3%;background:#2E6BA8"></i></div><span class="muted">2건</span></div>
+<div class="row"><span>AOI-10</span><b>30%</b><div class="bar"><i style="left:2.9%;width:9.1%;background:#2E6BA8"></i><i style="left:18.4%;width:12.4%;background:#2E6BA8"></i><i style="left:42.3%;width:6.6%;background:#2E6BA8"></i><i style="left:52.0%;width:7.7%;background:#2E6BA8"></i><i style="left:63.8%;width:9.2%;background:#C5453C"></i><i style="left:83.4%;width:7.8%;background:#7A5BB5"></i></div><span class="muted">0건</span></div>
+<div class="row"><span>AOI-11</span><b>38%</b><div class="bar"><i style="left:13.6%;width:10.8%;background:#2E6BA8"></i><i style="left:31.3%;width:4.8%;background:#7A5BB5"></i><i style="left:41.4%;width:11.0%;background:#7A5BB5"></i><i style="left:58.3%;width:7.0%;background:#2E6BA8"></i><i style="left:74.6%;width:4.7%;background:#2E6BA8"></i><i style="left:81.6%;width:8.9%;background:#8FB8E0"></i></div><span class="muted">4건</span></div>
+<div class="row"><span>AOI-12</span><b>95%</b><div class="bar"><i style="left:12.4%;width:12.8%;background:#7A5BB5"></i><i style="left:36.6%;width:4.6%;background:#C5453C"></i><i style="left:44.4%;width:3.1%;background:#7A5BB5"></i><i style="left:56.1%;width:8.3%;background:#2E6BA8"></i><i style="left:70.7%;width:11.7%;background:#2E6BA8"></i><i style="left:84.7%;width:5.1%;background:#C5453C"></i></div><span class="muted">2건</span></div>
+<div class="row"><span>AOI-13</span><b>80%</b><div class="bar"><i style="left:3.9%;width:7.2%;background:#2E6BA8"></i><i style="left:13.7%;width:10.4%;background:#8FB8E0"></i><i style="left:32.7%;width:11.2%;background:#C5453C"></i><i style="left:50.1%;width:12.2%;background:#C5453C"></i><i style="left:65.6%;width:4.5%;background:#C5453C"></i><i style="left:72.3%;width:7.4%;background:#2E6BA8"></i><i style="left:87.7%;width:10.8%;background:#2E6BA8"></i></div><span class="muted">4건</span></div>
+<div class="row"><span>AOI-14</span><b>84%</b><div class="bar"><i style="left:10.9%;width:8.6%;background:#2E6BA8"></i><i style="left:28.3%;width:8.3%;background:#8FB8E0"></i><i style="left:46.4%;width:4.1%;background:#C5453C"></i><i style="left:53.0%;width:4.9%;background:#2E6BA8"></i><i style="left:67.7%;width:8.1%;background:#C5453C"></i><i style="left:78.0%;width:11.9%;background:#2E6BA8"></i></div><span class="muted">4건</span></div></div></div>
+<div class="ctl"><a class="back" href="../index.html" onclick="if(history.length>1){history.back();return false;}">← 보고서로</a><span>다시 보기:</span><a href="?load=2500">빠른 로딩(2.5초)</a><a href="?load=7000">느린 로딩(7초)</a><a href="?load=7000&busy=1">메인 스레드 7초 막힘(JSON 해석 흉내)</a><a href="?lot=1&load=2500">LOT 배포판 장면</a><a href="?lot=1&load=7000&busy=1">LOT + 막힘</a><span class="muted" id="st"></span></div>
+<script>
+(function(){const q=new URLSearchParams(location.search),load=Math.max(300,Number(q.get("load")||2500)),busy=q.get("busy")==="1",B=window.AOI_BOOT;
+  const st=document.getElementById("st");const t0=performance.now();
+  const ph=[.08,.42,.54,.9].map(f=>f*load);
+  if(busy){ // 메인 스레드를 load ms 동안 통째로 막는다 — 실제 파일에서 JSON 해석 · 모델 계산이 하는 일
+    setTimeout(()=>{const until=performance.now()+load-60;let k=0,i=0;while(performance.now()<until){k=(k*31+1)%1e9;const el=performance.now()-t0;if(i<4&&el>=ph[i]){try{B&&B.phase(i+1);}catch(e){}i++;}}
+      try{B&&B.done();}catch(e){}st.textContent="로딩 흉내 "+Math.round(load)+"ms(막힘) 끝";},60);}
+  else{ph.forEach((t,i)=>setTimeout(()=>{try{B&&B.phase(i+1);}catch(e){}},t));setTimeout(()=>{try{B&&B.done();}catch(e){}st.textContent="로딩 흉내 "+Math.round(load)+"ms 끝";},load);}
+})();
+</script></body></html>

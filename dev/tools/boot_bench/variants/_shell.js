@@ -67,5 +67,5 @@ function bootShell(o){
       later(f){if(gone)setTimeout(f,0);else after.push(f);},
       abort(){finish();}};
     document.addEventListener("visibilitychange",()=>{try{scene.post&&scene.post({type:document.hidden?"pause":"resume"});}catch(e){}});
-  }catch(e){try{const x=document.getElementById("aoi-boot");if(x&&x.parentNode)x.parentNode.removeChild(x);}catch(_){}window.AOI_BOOT=null;}
+  }catch(e){try{const x=document.getElementById("aoi-boot");if(x&&x.parentNode)x.parentNode.removeChild(x);}catch(_){}window.AOI_BOOT=null;try{console.warn("시작 화면을 띄우지 못했습니다(화면은 그대로 열립니다):",e);}catch(_){}}
 }
