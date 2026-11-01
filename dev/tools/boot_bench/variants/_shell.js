@@ -41,7 +41,7 @@ function bootShell(o){
     const bar=document.createElement("span");bar.style.cssText=`position:relative;display:inline-block;width:${lw}px;height:2px;background:#DCE2E9`;
     const fill=document.createElement("i");fill.style.cssText="position:absolute;left:0;top:0;width:100%;height:100%;background:#2E6BA8;transform:scaleX(0);transform-origin:0 50%;transition:transform .45s cubic-bezier(.2,.7,.2,1)";
     bar.appendChild(fill);cap.appendChild(lab);cap.appendChild(bar);ov.appendChild(cap);
-    let li=-1;const setLabel=i=>{if(i===li)return;const old=lab.firstChild;li=i;const s=document.createElement("span");s.textContent=LABELS[i];s.style.cssText="display:inline-block;white-space:nowrap";lab.appendChild(s);
+    let li=-1,curS=null;const setLabel=i=>{if(i===li)return;const old=curS;li=i;const s=document.createElement("span");s.textContent=LABELS[i];s.style.cssText="display:inline-block;white-space:nowrap";lab.appendChild(s);curS=s;
       if(red){if(old)old.remove();return;}
       if(old){old.style.position="absolute";old.style.left="0";old.animate([{transform:"translateY(0)",opacity:1},{transform:`translateY(-${cfs*.45}px)`,opacity:0}],{duration:240,easing:"cubic-bezier(.33,1,.68,1)",fill:"forwards"}).onfinish=()=>old.remove();}
       s.animate([{transform:`translateY(${cfs*.45}px)`,opacity:0},{transform:"translateY(0)",opacity:1}],{duration:240,easing:"cubic-bezier(.33,1,.68,1)"});};

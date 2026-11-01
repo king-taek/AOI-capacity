@@ -25,7 +25,7 @@ PAGE = """<!doctype html>
 .cards{{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin:22px 0}}.card{{background:#fff;border:1px solid #D3DAE2;border-radius:12px;padding:18px}}.card b{{display:block;font-size:30px;margin:6px 0}}
 .panel{{background:#fff;border:1px solid #D3DAE2;border-radius:12px;padding:14px 18px}}.row{{display:grid;grid-template-columns:120px 60px 1fr 60px;gap:14px;align-items:center;padding:9px 0;border-bottom:1px solid #EEF1F4;font-size:13px}}
 .bar{{height:14px;background:#DFE5EC;border-radius:3px;position:relative;overflow:hidden}}.bar i{{position:absolute;top:0;height:100%;background:#2E6BA8}}
-.ctl{{position:fixed;left:0;right:0;bottom:0;background:#fff;border-top:1px solid #D3DAE2;padding:10px 24px;font-size:13px;display:flex;gap:14px;flex-wrap:wrap;align-items:center}}.ctl a{{color:#2E6BA8}}
+.ctl{{position:fixed;left:0;right:0;bottom:0;background:#fff;border-top:1px solid #D3DAE2;padding:10px 24px;font-size:13px;display:flex;gap:14px;flex-wrap:wrap;align-items:center}}.ctl a{{color:#2E6BA8}}.ctl a.back{{display:inline-block;padding:5px 11px;border:1px solid #2E6BA8;border-radius:8px;font-weight:600;text-decoration:none;margin-right:6px}}
 </style>
 <script>if(/[?&]lot=1/.test(location.search))document.documentElement.setAttribute("data-boot","lot");</script>
 </head><body>
@@ -35,7 +35,7 @@ PAGE = """<!doctype html>
 <div class="wrap"><h1>AOI 가동 현황 — 데모 화면({title})</h1><p class="muted">이 페이지는 시작 화면 동작만 보는 자리표시 화면입니다. 숫자는 가짜입니다.</p>
 <div class="cards"><div class="card"><span class="muted">평균 가동률</span><b>62.4%</b><span class="muted">장비 30대</span></div><div class="card"><span class="muted">Error</span><b style="color:#C5453C">17건</b><span class="muted">Lot 단위</span></div><div class="card"><span class="muted">살펴볼 장비</span><b>5대</b><span class="muted">40% 미만 · Error 3건 이상</span></div></div>
 <div class="panel">{rows}</div></div>
-<div class="ctl"><span>다시 보기:</span><a href="?load=2500">빠른 로딩(2.5초)</a><a href="?load=7000">느린 로딩(7초)</a><a href="?load=7000&busy=1">메인 스레드 7초 막힘(JSON 해석 흉내)</a><a href="?lot=1&load=2500">LOT 배포판 장면</a><a href="?lot=1&load=7000&busy=1">LOT + 막힘</a><span class="muted" id="st"></span></div>
+<div class="ctl"><a class="back" href="../index.html" onclick="if(history.length>1){{history.back();return false;}}">← 보고서로</a><span>다시 보기:</span><a href="?load=2500">빠른 로딩(2.5초)</a><a href="?load=7000">느린 로딩(7초)</a><a href="?load=7000&busy=1">메인 스레드 7초 막힘(JSON 해석 흉내)</a><a href="?lot=1&load=2500">LOT 배포판 장면</a><a href="?lot=1&load=7000&busy=1">LOT + 막힘</a><span class="muted" id="st"></span></div>
 <script>
 (function(){{const q=new URLSearchParams(location.search),load=Math.max(300,Number(q.get("load")||2500)),busy=q.get("busy")==="1",B=window.AOI_BOOT;
   const st=document.getElementById("st");const t0=performance.now();
