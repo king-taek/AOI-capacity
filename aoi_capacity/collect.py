@@ -709,7 +709,7 @@ def _patch_rdl_modes(cfg, cache, devs, should_stop, log, progress, stats, dirty,
                 if w:
                     tasks.append((e, r, w, d["name"]))
     devs_hit = sorted({t[3] for t in tasks})
-    _say(log, f"RDL 영역 INI 패치: RDL 행 {len(tasks)}장 · 장비 {len(devs_hit)}대({', '.join(devs_hit) or '없음'}) — Report 는 다시 읽지 않습니다")
+    _say_unless_empty(log, len(tasks), f"RDL 영역 INI 패치: RDL 행 {len(tasks)}장 · 장비 {len(devs_hit)}대({', '.join(devs_hit) or '없음'}) — Report 는 다시 읽지 않습니다")
     memo, done, total = _IniMemo(), _Counter(), len(tasks)
 
     def one(t):
@@ -739,7 +739,7 @@ def _patch_rdl_modes(cfg, cache, devs, should_stop, log, progress, stats, dirty,
     if tasks:
         dirty.add(DIRTY_UPDATED)
     stats.update({"rdl_rows": len(tasks), "rdl_patched": n_ok, "rdl_devices": len(devs_hit)})
-    _say(log, f"RDL 영역 INI 패치: {n_ok}/{len(tasks)}장 판정 — 나머지는 폴더가 그 뒤 다시 쓰였거나 INI 를 읽지 못했습니다")
+    _say_unless_empty(log, len(tasks), f"RDL 영역 INI 패치: {n_ok}/{len(tasks)}장 판정 — 나머지는 폴더가 그 뒤 다시 쓰였거나 INI 를 읽지 못했습니다")
 
 
 # ----------------------------------------------------------------------------- 예상 시간(10/11) · 파라미터 빈 구간
@@ -841,7 +841,7 @@ def _fill_params_into(cfg: dict, cache: dict, devs: List[dict], fixed: float, lo
                     tasks.append((key, e, r, w, d["name"]))
                     break
     days = sorted(x for x in (_first_day(t[1]) for t in tasks) if x)
-    _say(log, f"파라미터 빈 구간 채우기: 대상 Report {len(tasks)}개 · 장비 {len({t[4] for t in tasks})}대"
+    _say_unless_empty(log, len(tasks), f"파라미터 빈 구간 채우기: 대상 Report {len(tasks)}개 · 장비 {len({t[4] for t in tasks})}대"
               + (f" · {days[0]} ~ {days[-1]}" if days else "") + " — Report 는 다시 읽지 않습니다")
     done, total = _Counter(), len(tasks)
 
@@ -878,7 +878,7 @@ def _fill_params_into(cfg: dict, cache: dict, devs: List[dict], fixed: float, lo
         if dirty:
             _save_cache(cfg, cache)
             dirty = _Dirty()
-    _say(log, "파라미터 빈 구간 채우기: " + " · ".join(f"{k}={v}" for k, v in st.items()))
+    _say_unless_empty(log, int(st.get("targets", 0)), "파라미터 빈 구간 채우기: " + " · ".join(f"{k}={v}" for k, v in st.items()))
     return st
 
 
@@ -917,7 +917,7 @@ def _fill_scan_sec_into(cfg: dict, cache: dict, devs: List[dict], fixed: float, 
             rep_left[id(e)] = len(mine)
         else:
             e["sec_checked"] = marked = True            # 되짚을 폴더가 없다 — 다음에도 마찬가지
-    _say(log, f"스캔 비율 채우기: 대상 {len(tasks)}장 · Report {len(rep_left)}개 · 장비 {len({t[3] for t in tasks})}대 — Report 는 다시 읽지 않습니다")
+    _say_unless_empty(log, len(tasks), f"스캔 비율 채우기: 대상 {len(tasks)}장 · Report {len(rep_left)}개 · 장비 {len({t[3] for t in tasks})}대 — Report 는 다시 읽지 않습니다")
     memo, done, total = _IniMemo(), _Counter(), len(tasks)
 
     def one(t):
@@ -968,7 +968,7 @@ def _fill_scan_sec_into(cfg: dict, cache: dict, devs: List[dict], fixed: float, 
         _save_cache(cfg, cache)
     if marked and n_done == 0 and not st["stopped"]:
         _save_cache(cfg, cache)                              # 되짚을 폴더가 없어 표시만 남긴 Report
-    _say(log, "스캔 비율 채우기: " + " · ".join(f"{k}={v}" for k, v in st.items()))
+    _say_unless_empty(log, total, "스캔 비율 채우기: " + " · ".join(f"{k}={v}" for k, v in st.items()))
     return st
 
 
@@ -1003,33 +1003,42 @@ def _fill_slot_into(cfg: dict, cache: dict, devs: List[dict], fixed: float, log,
             rep_left[id(e)] = len(mine)
         else:
             e["slot_checked"] = marked = True
-    _say(log, f"슬롯 번호 채우기: 대상 {len(tasks)}장 · Report {len(rep_left)}개 · 장비 {len({t[3] for t in tasks})}대 — Report 는 다시 읽지 않습니다")
+    _say_unless_empty(log, len(tasks), f"슬롯 번호 채우기: 대상 {len(tasks)}장 · Report {len(rep_left)}개 · 장비 {len({t[3] for t in tasks})}대 — Report 는 다시 읽지 않습니다")
     memo, done, total = _IniMemo(), _Counter(), len(tasks)
 
     def one(t):
         _check(should_stop)
         _e, r, w, name = t
         kind, got = memo.get(os.path.join(w, "WaferInfo.ini"))
-        out = None
+        out, why = None, "ini_unreadable"                 # 비어 있는 사유 — 로그에 적는다(10/30: '0장' 이 고장처럼 보였다)
         if kind == "ok":
             a = got.get("AutoCycleInfo", {})
             slot = str(a.get("ActiveSlot", "")).strip()
-            if slot.isdigit() and a.get("WaferStartTime", "") == r.get("wafer_start_time"):
-                out = str(int(slot))
+            if not slot.isdigit():
+                why = "no_active_slot"
+            elif a.get("WaferStartTime", "") != r.get("wafer_start_time"):
+                why = "time_mismatch"
+            else:
+                out, why = str(int(slot)), ""
         progress(done.bump(), total, i18n.KO.GAPS_PHASE_SLOT_FMT.format(device=name))
-        return out
+        return out, why
 
     st = {"targets": total, "filled": 0, "empty": 0, "no_device": no_dev, "stopped": 0}
     t1, n_done, since_save = time.perf_counter(), 0, 0
 
-    def apply(i, slot) -> None:
+    why_by: Dict[str, Dict[str, int]] = {}
+
+    def apply(i, res) -> None:
         nonlocal n_done, since_save
         e, r, _w, _n = tasks[i]
+        slot, why = res
         if slot is not None:
             r["slot_no"] = slot
             st["filled"] += 1
         else:
             st["empty"] += 1
+            by = why_by.setdefault(why, {})
+            by[_n] = by.get(_n, 0) + 1
         rep_left[id(e)] -= 1
         if rep_left[id(e)] <= 0:
             e["slot_checked"] = True
@@ -1049,7 +1058,13 @@ def _fill_slot_into(cfg: dict, cache: dict, devs: List[dict], fixed: float, log,
         record_eta(cache, "slot_fill", n_done, time.perf_counter() - t1, fixed)
     if since_save or (n_done and n_done >= total) or (marked and n_done == 0 and not st["stopped"]):
         _save_cache(cfg, cache)
-    _say(log, "슬롯 번호 채우기: " + " · ".join(f"{k}={v}" for k, v in st.items()))
+    _say_unless_empty(log, total, "슬롯 번호 채우기: " + " · ".join(f"{k}={v}" for k, v in st.items()))
+    for why, label in (("no_active_slot", "INI 에 ActiveSlot 없음"), ("time_mismatch", "INI 시각이 행과 달라 쓰지 않음(폴더가 다시 쓰임)"),
+                       ("ini_unreadable", "INI 를 읽지 못함")):
+        by = why_by.get(why)
+        if by:
+            top = sorted(by.items(), key=lambda kv: -kv[1])[:6]
+            _say(log, f"  빈 사유 — {label}: {sum(by.values())}장 · 장비 {len(by)}대({', '.join(f'{n} {c}' for n, c in top)}{' …' if len(by) > 6 else ''})")
     return st
 
 
@@ -2275,6 +2290,14 @@ def _say(log: Optional[LogFn], msg: str) -> None:
         log(msg)
 
 
+def _say_unless_empty(log: Optional[LogFn], n: int, msg: str) -> None:
+    """대상이 0인 단계의 줄은 화면 로그에 내지 않는다(app.log 에는 남김, 10/30 — 매번 같은 '대상 0' 줄 정리)."""
+    if n:
+        _say(log, msg)
+    else:
+        _LOG.info(msg)
+
+
 def _check(should_stop: Optional[Callable[[], bool]]) -> None:
     if should_stop and should_stop():
         raise CollectCancelled()
@@ -2552,6 +2575,7 @@ def _list_new_reports(devs, cache, cfg, backfill, log, progress, on_device, shou
         return out
 
     plan = _run(cfg, devs, one, should_stop, group=lambda d: nas_group(d["path"]))
+    tot_found = tot_pick = n_pick_dev = 0
     for d, dm, pick, _known in plan:              # 로그는 장비 순서대로 한 번에(스레드에서 섞이지 않게)
         if dm["error"]:
             _say(log, f"[{d['name']}] {dm['error']}")
@@ -2562,7 +2586,12 @@ def _list_new_reports(devs, cache, cfg, backfill, log, progress, on_device, shou
             extra = [x for x in extra if x]
             rec = f" ({' · '.join(extra)} 포함)" if extra else ""
             how = f"최근 {dm['pattern_days']}일 이름으로 거른 " if dm.get("listing") == "pattern" else ""
-            _say(log, f"[{d['name']}] {how}Report {dm['found']}개 중 읽을 파일 {len(pick)}개{rec} · 그대로 두는 캐시 {dm['kept']}개")
+            _LOG.info(f"[{d['name']}] {how}Report {dm['found']}개 중 읽을 파일 {len(pick)}개{rec} · 그대로 두는 캐시 {dm['kept']}개")   # 장비별은 app.log 에만(10/30)
+            tot_pick += len(pick)
+            n_pick_dev += 1
+        tot_found += int(dm.get("found") or 0)
+    if tot_pick:                                   # 화면 로그에는 한 줄로 묶어서
+        _say(log, f"읽을 Report {tot_pick}개(후보 {tot_found}개 중) · 장비 {n_pick_dev}대")
     return plan
 
 
@@ -3031,6 +3060,16 @@ def _collect(cfg: dict, full: bool, backfill: bool, *, recover: bool, refresh_wi
                   "total_ms": int((clock() - t0) * 1000)})
     _say(log, f"새로 읽은 Report {n_new}개 · 캐시 Report {len(reports)}개 · Wafer 행 {len(rows)} · 오류 {len(errors)}건"
               f" · 캐시 저장 {'함(' + dirty.summary() + ')' if stats['cache_saved'] else '생략'}")
+    if errors:                                                # 어느 장비 · 어느 파일 · 무슨 오류인지 — 숫자만으로는 원인을 알 수 없었다(10/30)
+        kinds: Dict[str, int] = {}
+        for e_ in errors:
+            k_ = str(e_.get("error") or "").split(":", 1)[0].strip() or "알 수 없음"
+            kinds[k_] = kinds.get(k_, 0) + 1
+        _say(log, "  오류 종류: " + " · ".join(f"{k} {v}건" for k, v in sorted(kinds.items(), key=lambda kv: -kv[1])))
+        for e_ in errors[:20]:
+            _say(log, f"  오류 [{e_.get('device')}] {os.path.basename(str(e_.get('path') or ''))} — {e_.get('error')} ({e_.get('tries')}번째 시도)")
+        if len(errors) > 20:
+            _say(log, f"  … 외 {len(errors) - 20}건(app.log 의 [수집 상세] 참고)")
     _say(log, "단계별 경과: 장비 확인 {devices_ms}ms · 목록 {list_ms}ms · 읽기 {read_ms}ms"
               "(Report {reports_read}개 · INI 요청 {ini_asked}건 → 실제 {ini_unique}건, 없음 {ini_missing}) · 캐시 {cache_ms}ms"
               " · NAS {nas_groups}대 × 동시 {read_workers}개 · 이름 패턴 나열 {list_pattern}대".format(**stats))

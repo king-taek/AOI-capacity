@@ -510,10 +510,10 @@ def _attach_dirs(devs: List[Dict[str, object]], cfg: dict, log: Optional[LogFn] 
             continue
         d.update(r)
         if d["report_dir"] != (cfg.get("report_dir") or "Report"):
-            _log(log, f"[{d['name']}] Report 폴더 이름이 '{d['report_dir']}' 입니다")
+            _LOG.info(f"[{d['name']}] Report 폴더 이름이 '{d['report_dir']}' 입니다")      # 장비마다 늘 같다 — 화면 로그엔 안 냄(10/30)
         backups = [x for x in (d.get("scan_dirs") or [])[1:] if not same_dir(x["name"], d["scan_dir"])]
         if backups:
-            _log(log, f"[{d['name']}] Scanresult 백업 폴더 {len(backups)}개도 조회합니다: "
+            _LOG.info(f"[{d['name']}] Scanresult 백업 폴더 {len(backups)}개도 조회합니다: "
                       + ", ".join(f"{b['name']}(~{b['cutoff']})" if b["cutoff"] else b["name"] for b in backups))
     return devs
 
@@ -663,11 +663,16 @@ def resolve_devices(cfg: dict, log: Optional[LogFn] = None, should_stop: Optiona
     `should_stop` 이 참이 되면 아직 시작하지 않은 확인 작업을 건너뛰고 돌아온다 — 부르는 쪽(`collect.collect`)이 이어서 취소를 확인한다."""
     _config.assert_valid(cfg)                                   # 범위·폴더 이름 설정이 잘못됐으면 파일을 만지기 전에 막는다(C13)
     if not scope.unrestricted(cfg):
-        _log(log, f"수집 범위: {scope.describe(cfg)} (다른 장비에는 접근하지 않습니다)")
+        _LOG.info(f"수집 범위: {scope.describe(cfg)} (다른 장비에는 접근하지 않습니다)")
     path = cfg.get("devices_csv") or ""
     if path and os.path.isfile(path):
         devs = _attach_dirs(devices_from_csv(cfg, log, should_stop), cfg, log, should_stop)
-        _log(log, f"devices.csv 기준 장비 {len(devs)}대: {', '.join(str(d['name']) for d in devs)}")
+        n_scope = len(scope.scope_list(cfg)) if not scope.unrestricted(cfg) else len(devs)
+        if len(devs) == n_scope:                                  # 늘 같은 이름 나열은 줄이고, 범위와 다를 때만 이름을 적는다
+            _log(log, f"장비 {len(devs)}대")
+            _LOG.info(f"장비: {', '.join(str(d['name']) for d in devs)}")
+        else:
+            _log(log, f"devices.csv 기준 장비 {len(devs)}대(수집 범위 {n_scope}대): {', '.join(str(d['name']) for d in devs)}")
         return devs
     _log(log, f"devices.csv 가 없어 nas_roots 를 자동 탐색합니다 ({path or '경로 미지정'})")
     devs = _attach_dirs(discover_devices(cfg, log, should_stop), cfg, log, should_stop)

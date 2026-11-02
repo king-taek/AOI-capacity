@@ -104,6 +104,8 @@ def test_fill_gaps_leaves_slot_empty_when_ini_was_rewritten(tmp_path, fake_nas):
         t = ini.read_text(encoding="utf-8")
         import re
         ini.write_text(re.sub(r"WaferStartTime=.*", "WaferStartTime=09/20/2026 01:00:00", t) + "\nActiveSlot=3\n", encoding="utf-8")
-    st = collect.fill_gaps(cfg)
+    lines = []
+    st = collect.fill_gaps(cfg, log=lines.append)
     assert st["slot"]["filled"] == 0 and st["slot"]["empty"] == st["slot"]["targets"] > 0
     assert collect.plan_run(cfg).slot_missing == 0
+    assert any("빈 사유 — " in l for l in lines)           # 0장이 왜 0장인지 로그에 남는다(10/30)
