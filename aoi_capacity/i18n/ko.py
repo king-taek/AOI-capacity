@@ -533,8 +533,10 @@ SET_PUBLISH_DIR = "LOT 추적 배포 폴더"
 SET_PUBLISH_PLACEHOLDER = "비우면 배포 안 함"
 SET_PUBLISH_HELP = ("팀 공유 폴더 경로를 적으면 수집이 끝날 때마다 LOT 추적만 담은 HTML 을 조용히 올립니다(실패해도 수집은 성공, 로그에만 남음). "
                     "폴더 안에 바로가기용 AOI_LOT.html · latest.js · data 폴더(최근 3개)가 생깁니다. 장비 NAS 아래 경로는 거부합니다.")
-PUBLISH_DIR_DEFAULT = "\\\\k5cifsn2\\k5tsvdata$\\1. Conder Scan\\0. 전산 X\\임현택\\LOT추적"   # 10/30 사용자 확정(새 공유 시험 뒤 다시 Conder Scan) — 팀 공유 폴더(장비 NAS 와 다른 공유)
-PUBLISH_FULL_DIR_DEFAULT = "\\\\k5cifsn2\\k5tsvdata$\\1. Conder Scan\\0. 전산 X\\임현택\\전체"   # 10/30 — 모든 탭을 담은 배포판(LOT 추적 폴더 옆)
+PUBLISH_DIR_DEFAULT = "\\\\k5cifsn2\\k5tsvdata$\\Eng'r\\HT Lim"   # 11/4 사용자 확정(임현택 폴더를 대신) — 팀 공유 폴더(장비 NAS 와 다른 공유)
+PUBLISH_FULL_DIR_DEFAULT = "\\\\k5cifsn2\\k5tsvdata$\\Eng'r\\HT Lim\\전체"   # 11/4 — 모든 탭을 담은 배포판(LOT 추적 폴더 안의 하위 폴더)
+PUBLISH_DIR_PAST2 = "\\\\k5cifsn2\\k5tsvdata$\\1. Conder Scan\\0. 전산 X\\임현택\\LOT추적"   # 10/30~11/3 기본값 — prefs v12 가 이 값 그대로인 설정만 HT Lim 으로 옮긴다
+PUBLISH_FULL_DIR_PAST2 = "\\\\k5cifsn2\\k5tsvdata$\\1. Conder Scan\\0. 전산 X\\임현택\\전체"
 PUBLISH_DIR_PAST = "\\\\10.142.80.167\\1.Engr\\0. 전산 X\\임현택 ENG'R\\LOT추적"   # 10/30 한나절 기본값(IP 공유) — prefs v11 이 이 값 그대로인 설정만 Conder Scan 으로 되돌린다
 PUBLISH_FULL_DIR_PAST = "\\\\10.142.80.167\\1.Engr\\0. 전산 X\\임현택 ENG'R\\전체"
 SET_PUBLISH_FULL_DIR = "전체 배포 폴더"
@@ -576,3 +578,6 @@ FAIL_LOGS_RUNNING = "모으는 중…"
 FAIL_LOGS_DONE_FMT = "끝났습니다 — 실패 항목 {n}개 · {path}"
 FAIL_LOGS_NONE_FMT = "끝났습니다 — 지난 {days}일 안에 찾은 실패가 없습니다 · {path}"
 FAIL_LOGS_FAIL_FMT = "실패 로그를 모으지 못했습니다: {error}"
+
+KLA_LOCK_HINT_FMT = "폴더 생성 {age} 전 — 스캔이 멈춰 파일이 잠겼거나 읽기 권한이 없는 것으로 보임(다음 수집에서 다시 읽음)"
+KLA_LOCK_HINT_NOAGE = "스캔이 멈춰 파일이 잠겼거나 읽기 권한이 없는 것으로 보임(다음 수집에서 다시 읽음)"

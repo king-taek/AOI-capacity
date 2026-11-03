@@ -178,3 +178,12 @@ def test_in_scope_device_that_could_not_be_reached_is_reported(tmp_path, kla_nas
     assert m["K1"]["status"] != collect.DEV_UNREACHABLE and not m["K1"].get("missed")
     html = collect.write_html(cfg, _rows, meta, [], 0.0)
     assert "수집 못 한 장비" in open(html, encoding="utf-8").read()
+
+
+def test_permission_error_hint_names_the_folder_age():
+    """11/4 — 권한 오류로 읽기 실패한 Wafer 는 로그에 폴더 나이와 추정 원인이 붙는다(다른 오류는 붙지 않는다)."""
+    now = dt.datetime(2026, 11, 4, 9, 0)
+    w = "2026-11-04-04-48_18"
+    hint = kla._lock_hint("PermissionError: [Errno 13] x", w, now)
+    assert "4시간" in hint and "다음 수집" in hint
+    assert kla._lock_hint("FileNotFoundError: x", w, now) == ""

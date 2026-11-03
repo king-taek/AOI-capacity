@@ -25,7 +25,7 @@ import threading
 import time
 from typing import Callable, Dict, List, Optional, Tuple
 
-from . import nas_guard, scope
+from . import i18n, nas_guard, scope
 
 DATE_DIR_RE = re.compile(r"^(\d{4})-(\d{2})-(\d{2})$")
 WAFER_DIR_RE = re.compile(r"^(\d{4})-(\d{2})-(\d{2})-(\d{2})-(\d{2})_(\d+)$")
@@ -176,6 +176,7 @@ def read_wafer(path: str) -> Optional[dict]:
 
 
 LOCK_RECENT_MIN = 60     # 이 안에 만들어진 Wafer 폴더의 PermissionError 는 스캔 중(쓰는 중)으로 본다
+LOCK_RETRY_SEC = 1.5     # 권한 오류(잠김)면 이만큼 기다렸다 한 번 더 읽는다
 LOCK_MAX_TRIES = 2       # 같은 Wafer 가 이만큼 연달아 잠겨 있으면 더는 스캔 중이 아니라 읽기 실패로 알린다
 
 
@@ -196,6 +197,20 @@ def _is_scanning_lock(err: str, wafer: str, now: dt.datetime, entry: dict, lot: 
         return False
     tries[key] = n
     return True
+
+
+def _lock_hint(err: str, wafer: str, now: dt.datetime) -> str:
+    """읽기 실패의 추정 원인 한 줄(11/4) — 권한 오류면 폴더 나이와 함께 '스캔이 멈췄거나 읽기 권한 없음'. 다음 수집에서 다시 읽는다."""
+    if not err.startswith("PermissionError"):
+        return ""
+    try:
+        t, _slot = wafer_time(wafer)
+    except Exception:  # noqa: BLE001
+        t = None
+    if t is None:
+        return i18n.KO.KLA_LOCK_HINT_NOAGE
+    hours = max(0.0, (now - t).total_seconds() / 3600)
+    return i18n.KO.KLA_LOCK_HINT_FMT.format(age=(f"{int(hours * 60)}분" if hours < 1 else f"{hours:.0f}시간"))
 
 
 # ── 수집(메인 스레드가 합친다) ───────────────────────────────────────────────
@@ -304,10 +319,17 @@ def collect_kla(cfg: dict, devs: List[dict], cache: dict, *, run: Callable, now:
     def p3(job):
         d, dd, lot, w = job
         t0 = time.perf_counter()
-        try:
-            return read_wafer(os.path.join(str(d["path"]), dd, lot, w)), "", time.perf_counter() - t0
-        except OSError as ex:
-            return None, f"{type(ex).__name__}: {ex}", time.perf_counter() - t0
+        path = os.path.join(str(d["path"]), dd, lot, w)
+        for attempt in (1, 2):
+            try:
+                return read_wafer(path), "", time.perf_counter() - t0
+            except PermissionError as ex:                       # 쓰는 중이거나 잠깐 잠긴 파일 — 바로 한 번 더(11/4), 그래도 안 되면 다음 수집에서 다시
+                if attempt == 1:
+                    time.sleep(LOCK_RETRY_SEC)
+                    continue
+                return None, f"{type(ex).__name__}: {ex}", time.perf_counter() - t0
+            except OSError as ex:
+                return None, f"{type(ex).__name__}: {ex}", time.perf_counter() - t0
     total = len(want)
     done, lock = [0], threading.Lock()
 
@@ -335,7 +357,8 @@ def collect_kla(cfg: dict, devs: List[dict], cache: dict, *, run: Callable, now:
             return
         if err:
             m["read_errors"] += 1
-            errors.append({"device": d["name"], "path": os.path.join(str(d["path"]), dd, lot, w), "tries": 1, "error": err})
+            errors.append({"device": d["name"], "path": os.path.join(str(d["path"]), dd, lot, w), "tries": 1, "error": err,
+                           "hint": _lock_hint(err, w, now)})
             return
         if rec is None:
             pending += 1                                       # 결과 파일이 아직 없다 — 다음 수집에서 다시 본다

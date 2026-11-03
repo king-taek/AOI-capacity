@@ -171,16 +171,17 @@ def test_publish_after_collect_is_silent_and_never_raises(tmp_path, sample):
 
 
 def test_shortcut_points_at_the_stub_with_an_encoded_file_url(tmp_path, sample):
+    KO_DIR = "\\\\k5cifsn2\\k5tsvdata$\\1. Conder Scan\\0. 전산 X\\임현택\\LOT추적"      # 한글 · 공백 · $ 가 섞인 UNC 한 예(기본값과 무관)
     cfg, rows, devs = _publish_cfg(tmp_path, sample)
-    url = publish.stub_url(config_mod.PUBLISH_DIR_DEFAULT)
+    url = publish.stub_url(KO_DIR)
     assert url == ("file://k5cifsn2/k5tsvdata$/1.%20Conder%20Scan/0.%20%EC%A0%84%EC%82%B0%20X/%EC%9E%84%ED%98%84%ED%83%9D/"
                    "LOT%EC%B6%94%EC%A0%81/AOI_LOT.html")
     assert publish.stub_url("Z:\\a b\\c\\") == "file:///Z:/a%20b/c/AOI_LOT.html"
     desk = tmp_path / "Desktop"
-    path = publish.write_shortcut(str(desk), config_mod.PUBLISH_DIR_DEFAULT, cfg)
+    path = publish.write_shortcut(str(desk), KO_DIR, cfg)
     # 바로가기(.url)는 ANSI 로 읽힌다 — 한글을 퍼센트 인코딩하면 셸이 UTF-8 바이트를 ANSI 로 풀어 경로가 깨졌다(10/27 실측). 한글은 그대로 CP949 로
     raw = "file://k5cifsn2/k5tsvdata$/1.%20Conder%20Scan/0.%20전산%20X/임현택/LOT추적/AOI_LOT.html"
-    assert publish.raw_stub_url(config_mod.PUBLISH_DIR_DEFAULT) == raw
+    assert publish.raw_stub_url(KO_DIR) == raw
     data = Path(path).read_bytes()
     if os.name != "nt":
         icon = publish.app_icon()                                                         # 10/30: 바탕화면 바로가기는 앱 아이콘(logo.ico)
@@ -192,7 +193,7 @@ def test_shortcut_points_at_the_stub_with_an_encoded_file_url(tmp_path, sample):
     publish.publish_lot(cfg, str(share), rows=rows[:100], dev_meta=devs, now=dt.datetime(2026, 10, 27, 8, 15))
     # 아이콘 경로만 ANSI 로 못 쓰면(이모지 등) 아이콘만 빼고 주소는 그대로 한글 — 퍼센트 인코딩 판으로 가지 않는다(PR #12 리뷰)
     if os.name != "nt":
-        assert publish.shortcut_bytes(config_mod.PUBLISH_DIR_DEFAULT, icon="C:\\앱\\😀\\logo.ico") == ("[InternetShortcut]\r\nURL=" + raw + "\r\n").encode("cp949")
+        assert publish.shortcut_bytes(KO_DIR, icon="C:\\앱\\😀\\logo.ico") == ("[InternetShortcut]\r\nURL=" + raw + "\r\n").encode("cp949")
     shared = (share / "AOI LOT.url").read_bytes()
     # 공유 폴더 안 바로가기: 팀원 PC 에는 앱이 없다 — 앱 아이콘을 폴더에 AOI.ico 로 함께 올리고 그 파일을 가리킨다(D103)
     ico = share / publish.ICON_NAME
@@ -238,7 +239,8 @@ def test_publish_same_minute_three_times_keeps_three_distinct_files_and_a_valid_
     assert os.path.basename(got[-1]["data"]) in ptr and os.path.isfile(got[-1]["data"])
 
 
-def test_publish_to_a_missing_share_fails_fast(tmp_path, sample):
+def test_publish_to_a_missing_share_fails_fast(tmp_path, sample, monkeypatch):
+    monkeypatch.setattr(publish, "REACH_RETRY_SEC", 0)
     cfg, rows, devs = _publish_cfg(tmp_path, sample)
     with pytest.raises(FileNotFoundError):
         publish.publish_lot(cfg, str(tmp_path / "no" / "share"), rows=rows[:10], dev_meta=devs)
@@ -322,7 +324,7 @@ def test_full_publish_refuses_a_folder_under_an_equipment_nas(tmp_path, sample):
 def test_full_publish_defaults_are_ninety_days_next_to_the_lot_folder():
     assert collect.DEFAULT_CONFIG["publish_full_days"] == 90
     assert collect.DEFAULT_CONFIG["publish_full_dir"] == config_mod.PUBLISH_FULL_DIR_DEFAULT
-    assert config_mod.PUBLISH_FULL_DIR_DEFAULT.rsplit("\\", 1)[0] == config_mod.PUBLISH_DIR_DEFAULT.rsplit("\\", 1)[0]
+    assert config_mod.PUBLISH_FULL_DIR_DEFAULT.rsplit("\\", 1)[0] == config_mod.PUBLISH_DIR_DEFAULT      # 11/4: 전체는 LOT 추적 폴더 안의 하위 폴더
     assert config_mod.PUBLISH_FULL_DIR_DEFAULT != config_mod.PUBLISH_DIR_DEFAULT
 
 
@@ -344,3 +346,25 @@ def test_lot_shortcut_is_named_aoi_lot_and_the_old_named_file_is_removed(tmp_pat
     other.mkdir()
     (other / "AOI_LOT_shortcut.url").write_bytes(b"[InternetShortcut]\r\nURL=file://x/AOI_LOT.html\r\n")
     assert publish._remove_legacy_shortcuts(str(other), publish.LOT, []) == 1
+
+
+def test_share_shortcut_falls_back_to_url_without_windows_and_lnk_replaces_it(tmp_path, sample, monkeypatch):
+    """11/4 — .url 은 복사한 PC 에서 네트워크 아이콘이 비어 보여 Windows 에서는 .lnk 를 쓴다. 만들 수 없으면(비 Windows) .url 그대로."""
+    cfg, rows, devs = _publish_cfg(tmp_path, sample)
+    share = tmp_path / "share"
+    publish.publish_lot(cfg, str(share), rows=rows[:10], dev_meta=devs)
+    assert (share / publish.LOT.shortcut).is_file() and not (share / publish.LOT.lnk).exists()
+    monkeypatch.setattr(publish, "make_lnk", lambda target, icon: b"LNK:" + (icon or "").encode("utf-16-le"))
+    publish.publish_lot(cfg, str(share), rows=rows[:10], dev_meta=devs)
+    assert (share / publish.LOT.lnk).is_file()
+    assert not (share / publish.LOT.shortcut).exists()           # 우리 .url 은 .lnk 가 생기면 지운다
+    first = (share / publish.LOT.lnk).read_bytes()
+    publish.publish_lot(cfg, str(share), rows=rows[:10], dev_meta=devs)
+    assert (share / publish.LOT.lnk).read_bytes() == first       # 아이콘 경로가 같으면 다시 만들지 않는다
+
+
+def test_lnk_current_checks_the_icon_path():
+    icon = "\\\\srv\\share\\AOI.ico"
+    assert publish._lnk_current(b"x" + icon.encode("utf-16-le"), icon)
+    assert not publish._lnk_current(b"x" + "other".encode("utf-16-le"), icon)
+    assert not publish._lnk_current(None, icon)

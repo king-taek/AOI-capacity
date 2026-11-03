@@ -21,6 +21,8 @@ import datetime as dt
 import html
 import os
 import re
+import subprocess
+import tempfile
 import time
 import urllib.parse
 from typing import Callable, Dict, List, NamedTuple, Optional
@@ -36,6 +38,7 @@ DATA_DIR = "data"
 KEEP_FILES = 3
 REPLACE_TRIES = 6
 REPLACE_WAIT_SEC = 1.0
+REACH_RETRY_SEC = 3.0                              # 배포 폴더에 닿지 못하면 이만큼 기다렸다 한 번 더(공유 연결이 잠깐 끊긴 경우, 11/4)
 
 
 class Kind(NamedTuple):
@@ -49,6 +52,11 @@ class Kind(NamedTuple):
     fallback: str
     icon_asset: str = "logo.ico"                     # 이 배포판 바로가기의 아이콘 — `ui/assets/` 아래 파일. 다른 그림으로 바꾸려면 이 파일만 바꾼다(LOT 추적은 logo_lot.ico)
     legacy_shortcuts: tuple = ()                     # 이름을 바꾸기 전 우리가 만든 바로가기 — 새 파일을 쓴 뒤 지운다(남으면 옛 아이콘 없는 파일과 둘이 보인다)
+
+    @property
+    def lnk(self) -> str:
+        """공유 폴더 안 바로가기 파일 이름(.lnk) — .url 은 복사한 PC 에서 네트워크 아이콘이 비어 보여(11/4 실측) Windows 에서는 .lnk 를 쓴다."""
+        return os.path.splitext(self.shortcut)[0] + ".lnk"
 
     @property
     def data_re(self):
@@ -143,6 +151,58 @@ def _share_icon(share_dir: str, roots: List[str], kind: Kind = LOT) -> Optional[
     return dst
 
 
+LNK_TIMEOUT_SEC = 30
+_LNK_SCRIPT = ("$s=(New-Object -ComObject WScript.Shell).CreateShortcut($env:AOI_LNK);"
+               "$s.TargetPath=$env:AOI_TGT;$s.IconLocation=$env:AOI_ICO+',0';$s.Save()")
+
+
+def make_lnk(target: str, icon: Optional[str]) -> Optional[bytes]:
+    """`target` 을 여는 일반 바로가기(.lnk) 바이트 — Windows 의 WScript.Shell 로 이 PC 의 임시 폴더에 만들어 읽는다(경로는 환경 변수로 넘겨 한글이 깨지지 않는다).
+    Windows 가 아니거나 만들지 못하면 None(호출한 쪽이 .url 로 되돌아간다)."""
+    if os.name != "nt":
+        return None
+    try:
+        with tempfile.TemporaryDirectory(prefix="aoi_lnk_") as td:
+            out = os.path.join(td, "s.lnk")
+            env = dict(os.environ, AOI_LNK=out, AOI_TGT=target, AOI_ICO=icon or "")
+            if not icon:
+                script = _LNK_SCRIPT.replace("$s.IconLocation=$env:AOI_ICO+',0';", "")
+            else:
+                script = _LNK_SCRIPT
+            subprocess.run(["powershell", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", script],
+                           env=env, timeout=LNK_TIMEOUT_SEC, capture_output=True,
+                           creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+            with open(out, "rb") as f:
+                return f.read() or None
+    except (OSError, subprocess.SubprocessError):
+        return None
+
+
+def lnk_target(share_dir: str, kind: Kind = LOT) -> str:
+    return os.path.join(str(share_dir).strip().rstrip("\\/"), kind.stub)
+
+
+def _lnk_current(data: Optional[bytes], icon: Optional[str]) -> bool:
+    """이미 있는 .lnk 가 지금 아이콘 경로(= 배포 폴더가 바뀌면 같이 바뀐다)를 담고 있는지 — 담고 있으면 다시 만들지 않는다."""
+    return bool(data) and (not icon or icon.encode("utf-16-le") in data)
+
+
+def _ensure_lnk(share_dir: str, kind: Kind, icon: Optional[str], roots: List[str]) -> bool:
+    """배포 폴더에 `kind.lnk` 가 있게 한다(없거나 아이콘 경로가 다를 때만 만든다). 있으면 True, 못 만들었으면 False."""
+    path = os.path.join(share_dir, kind.lnk)
+    try:
+        cur = open(path, "rb").read() if os.path.isfile(path) else None
+    except OSError:
+        cur = None
+    if _lnk_current(cur, icon):
+        return True
+    data = make_lnk(lnk_target(share_dir, kind), icon)
+    if not data:
+        return cur is not None
+    _write_text(path, data, roots, tries=2)
+    return os.path.isfile(path)
+
+
 def write_shortcut(dest_dir: str, share_dir: str, cfg: dict, name: str = "", kind: Kind = LOT) -> str:
     """`dest_dir` 에 배포 폴더의 안내 파일을 여는 인터넷 바로가기(.url)를 만든다 — 바탕화면 등 이 PC 의 폴더. 만든 경로."""
     roots = nas_guard.roots_for_cfg(cfg)
@@ -179,11 +239,11 @@ def _write_text(path: str, text, roots: List[str], *, tries: int = REPLACE_TRIES
                 pass
 
 
-def _remove_legacy_shortcuts(share_dir: str, kind: Kind, roots: List[str]) -> int:
+def _remove_legacy_shortcuts(share_dir: str, kind: Kind, roots: List[str], extra: tuple = ()) -> int:
     """이름을 바꾸기 전에 우리가 만든 바로가기를 지운다 — 새 바로가기가 있을 때만, 내용이 우리 바로가기(안내 파일 주소)일 때만. 지운 개수."""
     nas_guard.assert_local(share_dir, roots)
     gone = 0
-    for name in kind.legacy_shortcuts:
+    for name in tuple(kind.legacy_shortcuts) + tuple(extra):
         fp = os.path.join(share_dir, name)
         try:
             if os.path.isfile(fp) and kind.stub.encode() in open(fp, "rb").read():
@@ -246,8 +306,11 @@ def _publish(kind: Kind, cfg: dict, share_dir: str, *, rows: Optional[list] = No
     t0 = time.perf_counter()
     stamp = (now or dt.datetime.now()).strftime("%Y%m%d_%H%M")
     data_dir = os.path.join(share_dir, DATA_DIR)
-    if not (os.path.isdir(share_dir) or os.path.isdir(os.path.dirname(share_dir.rstrip('\\/')))):   # 무거운 HTML 을 만들기 전에 — 닿지 못하면 바로 실패(새 하위 폴더는 만들 수 있다)
-        raise FileNotFoundError(2, i18n.KO.PUBLISH_DIR_MISSING, share_dir)
+    reach = lambda: os.path.isdir(share_dir) or os.path.isdir(os.path.dirname(share_dir.rstrip('\\/')))
+    if not reach():                                     # 무거운 HTML 을 만들기 전에 — 닿지 못하면 한 번 더 보고 실패(새 하위 폴더는 만들 수 있다)
+        time.sleep(REACH_RETRY_SEC)
+        if not reach():
+            raise FileNotFoundError(2, i18n.KO.PUBLISH_DIR_MISSING, share_dir)
     name = f"{kind.prefix}_{stamp}.html"
     n = 0
     while os.path.exists(os.path.join(data_dir, name)):      # 같은 분에 또 올리면 덮어쓰지 않고 번호를 붙인다
@@ -273,16 +336,20 @@ def _publish(kind: Kind, cfg: dict, share_dir: str, *, rows: Optional[list] = No
         cur = None
     if cur != stub_text(kind):
         ok = _write_text(stub, stub_text(kind), roots) and ok
-    short = os.path.join(share_dir, kind.shortcut)
-    try:
-        cur_s = open(short, "rb").read() if os.path.isfile(short) else None
-    except OSError:
-        cur_s = None
-    want_s = shortcut_bytes(share_dir, kind, _share_icon(share_dir, roots, kind))       # 팀원도 같은 아이콘(D103) — 폴더에 올린 AOI.ico 를 가리킨다
-    if cur_s != want_s:
-        _write_text(short, want_s, roots, tries=2)           # 못 써도 배포는 성공 — 바로가기는 이미 있거나 다음에
-    if os.path.isfile(short):
-        _remove_legacy_shortcuts(share_dir, kind, roots)
+    icon_dst = _share_icon(share_dir, roots, kind)             # 팀원도 같은 아이콘(D103) — 폴더에 올린 AOI.ico 를 가리킨다
+    if _ensure_lnk(share_dir, kind, icon_dst, roots):          # 11/4: 일반 바로가기(.lnk) — 복사해 간 PC 에서도 아이콘이 나온다. 있으면 우리 .url 은 지운다
+        _remove_legacy_shortcuts(share_dir, kind, roots, extra=(kind.shortcut,))
+    else:
+        short = os.path.join(share_dir, kind.shortcut)
+        try:
+            cur_s = open(short, "rb").read() if os.path.isfile(short) else None
+        except OSError:
+            cur_s = None
+        want_s = shortcut_bytes(share_dir, kind, icon_dst)
+        if cur_s != want_s:
+            _write_text(short, want_s, roots, tries=2)       # 못 써도 배포는 성공 — 바로가기는 이미 있거나 다음에
+        if os.path.isfile(short):
+            _remove_legacy_shortcuts(share_dir, kind, roots)
     size = os.path.getsize(path)
     pruned = _prune(data_dir, KEEP_FILES, roots, protect={name, _pointed_name(share_dir, kind)}, kind=kind)
     res = {"dir": share_dir, "data": path, "bytes": size, "sec": round(time.perf_counter() - t0, 1),

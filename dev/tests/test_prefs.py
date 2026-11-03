@@ -97,3 +97,14 @@ def test_v11_moves_only_the_ip_share_default_publish_folders_back_to_conder_scan
     assert (mine.publish_dir, mine.publish_full_dir) == ("D:\\내 폴더", "")
     new = prefs.migrate(prefs.Prefs.from_dict({"prefs_version": 11, "publish_dir": K.PUBLISH_DIR_PAST}))
     assert new.publish_dir == K.PUBLISH_DIR_PAST                 # 이미 v11 인 설정은 다시 옮기지 않는다(사용자가 일부러 IP 공유로 돌린 경우)
+
+
+def test_v12_moves_only_the_old_default_publish_folders_to_ht_lim():
+    """v12(11/4) — 배포 폴더 기본값이 Eng'r\\HT Lim 이다. 옛 기본값(임현택) 그대로인 것만 옮기고 직접 고른 경로 · 빈 값은 보존한다."""
+    from aoi_capacity import i18n
+    K = i18n.KO
+    old = prefs.migrate(prefs.Prefs.from_dict({"prefs_version": 11, "publish_dir": K.PUBLISH_DIR_PAST2 + "\\", "publish_full_dir": K.PUBLISH_FULL_DIR_PAST2}))
+    assert (old.publish_dir, old.publish_full_dir) == (K.PUBLISH_DIR_DEFAULT, K.PUBLISH_FULL_DIR_DEFAULT)
+    assert K.PUBLISH_DIR_DEFAULT.endswith("HT Lim") and K.PUBLISH_FULL_DIR_DEFAULT.endswith("HT Lim\\전체")
+    mine = prefs.migrate(prefs.Prefs.from_dict({"prefs_version": 11, "publish_dir": "D:\\내 폴더", "publish_full_dir": ""}))
+    assert (mine.publish_dir, mine.publish_full_dir) == ("D:\\내 폴더", "")

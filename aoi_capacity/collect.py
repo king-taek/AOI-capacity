@@ -3067,7 +3067,7 @@ def _collect(cfg: dict, full: bool, backfill: bool, *, recover: bool, refresh_wi
             kinds[k_] = kinds.get(k_, 0) + 1
         _say(log, "  오류 종류: " + " · ".join(f"{k} {v}건" for k, v in sorted(kinds.items(), key=lambda kv: -kv[1])))
         for e_ in errors[:20]:
-            _say(log, f"  오류 [{e_.get('device')}] {os.path.basename(str(e_.get('path') or ''))} — {e_.get('error')} ({e_.get('tries')}번째 시도)")
+            _say(log, f"  오류 [{e_.get('device')}] {os.path.basename(str(e_.get('path') or ''))} — {e_.get('error')} ({e_.get('tries')}번째 시도){(' — ' + e_['hint']) if e_.get('hint') else ''}")
         if len(errors) > 20:
             _say(log, f"  … 외 {len(errors) - 20}건(app.log 의 [수집 상세] 참고)")
     _say(log, "단계별 경과: 장비 확인 {devices_ms}ms · 목록 {list_ms}ms · 읽기 {read_ms}ms"
