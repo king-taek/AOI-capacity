@@ -662,8 +662,8 @@ const BARS_IDLE={
   /* 셈: 숫자 블록이 값을 세듯 폭이 줄었다 늘었다(scaleX, 왼쪽 기준) + 트랙은 가만히 — 계산 중 */
   count:`#aoi-boot .tx.wait .num{transform-origin:0 50%;animation:txTk .35s cubic-bezier(.22,1,.36,1) both,txCount 1.9s cubic-bezier(.45,.05,.55,.95) infinite alternate}
 @keyframes txCount{from{transform:scaleX(.55)}to{transform:scaleX(1)}}`};
-/* 점등은 JS 타이머(.wait)가 아니라 CSS animation-delay 로 AOI 가 다 써진 직후(GLOW_AT)부터 돈다 — 메인 스레드가 막혀도 늦게 켜지지 않는다(11/4, 윗줄부터 멈췄다 시작하던 현상) */
-const GLOW_AT=2400;
+/* 점등은 JS 타이머(.wait)가 아니라 CSS animation-delay 로 AOI 가 다 써진 직후(마지막 구간 + GLOW_LEAD)부터 돈다 — 메인 스레드가 막혀도 늦게 켜지지 않는다(11/4, 윗줄부터 멈췄다 시작하던 현상) */
+const GLOW_LEAD=360;   /* 마지막 구간이 자라기 시작하고 이만큼 뒤(ease-out 이라 눈에는 거의 다 찬 때)부터 점등 — 쉬는 틈이 없게(11/4 현택 "작성되고 나서 딜레이") */
 function barsListScene(ov,env,idle){
   const T=textStage(ov,env,BARS_CSS+(BARS_IDLE[idle]||BARS_IDLE.sway)+`
 #aoi-boot .tx .nm{position:absolute;border-radius:2px;background:${TXT.INK3};opacity:0;animation:txTk .35s cubic-bezier(.22,1,.36,1) both}
@@ -674,6 +674,7 @@ function barsListScene(ov,env,idle){
   const cell=Math.min(T.fs/7,(env.W*.5)/17),nameW=cell*2.2,numW=cell*1.1,gap=cell*.5,x0=T.cx-(nameW+gap+numW+gap+cell*17.8)/2+nameW+gap+numW+gap;
   const G=barsGeom(T,{cell,x0}),rnd=mulberry(2027),trackW=G.W3+cell*.8;
   const nSeg=G.runs.length,idxOf=(r,i)=>G.runs.findIndex(b=>b.r===r)+i;   /* 점등 순서 = 읽는 순서 */
+  const glows=[];let lastD=0;
   for(let r=0;r<7;r++){const y=G.y0+r*cell,d=120+r*95,mid=y+cell/2;
     const nm=document.createElement("i");nm.className="nm";nm.style.cssText=`left:${x0-nameW-gap-numW-gap}px;top:${mid-cell*.1}px;width:${nameW*(.7+(r*3%4)*.08)}px;height:${cell*.2}px;animation-delay:${d}ms,${-r*350}ms`;T.root.appendChild(nm);
     const num=document.createElement("i");num.className="num";num.style.cssText=`left:${x0-numW-gap}px;top:${mid-cell*.13}px;width:${numW*.85}px;height:${cell*.26}px;animation-delay:${d+40}ms,${-r*350}ms`;
@@ -682,8 +683,9 @@ function barsListScene(ov,env,idle){
     const runs=G.runs.filter(b=>b.r===r),segs=runs.map((b,i)=>({p:(b.x-(x0-cell*.4))/trackW,w:b.w/trackW,c:barsColor(rnd),d:d+180+b.li*160+i*60}));
     const tk=barsMake(T.root,{x:x0-cell*.4,y:y,w:trackW,h:G.bh,r},segs,d+60,{tkExtra:`top:${mid-G.bh/2}px`});
     tk.querySelectorAll(".f").forEach((f,i)=>{const s=segs[i],ph=Math.round(-(s.p*1400));   /* 파도 · 흐름: 왼쪽 구간이 먼저(위상 = 가로 위치) */
-      f.style.animationDelay=`${s.d}ms,${ph}ms`;f.style.setProperty("--dx",(4+r%3)+"px");const g=f.firstChild;const gi=idxOf(r,i);g.style.animationDelay=idle==="glow"?`${GLOW_AT+gi*120}ms`:`${-gi*120}ms`;g.style.setProperty("--gp",(nSeg*120)+"ms");});
+      f.style.animationDelay=`${s.d}ms,${ph}ms`;f.style.setProperty("--dx",(4+r%3)+"px");const g=f.firstChild;const gi=idxOf(r,i);if(idle==="glow"){glows.push([g,gi]);lastD=Math.max(lastD,s.d);}else g.style.animationDelay=`${-gi*120}ms`;g.style.setProperty("--gp",(nSeg*120)+"ms");});
     if(r<6){const sp=document.createElement("i");sp.className="sep";sp.style.cssText=`left:${x0-nameW-gap-numW-gap}px;top:${y+cell-1}px;width:${nameW+gap+numW+gap+trackW}px;animation-delay:${d+80}ms`;T.root.appendChild(sp);}}
+  {const at=lastD+GLOW_LEAD;for(const [g,gi] of glows)g.style.animationDelay=`${at+gi*120}ms`;}
   if(idle==="sway"){const now=document.createElement("i");now.className="now";now.style.cssText=`left:${x0-cell*.4}px;top:${G.y0-cell*.3}px;height:${cell*7.6}px;--span:${trackW}px`;T.root.appendChild(now);}
   return barsCtl(T,3000);
 }
