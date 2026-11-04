@@ -533,8 +533,9 @@ SET_PUBLISH_DIR = "LOT 추적 배포 폴더"
 SET_PUBLISH_PLACEHOLDER = "비우면 배포 안 함"
 SET_PUBLISH_HELP = ("팀 공유 폴더 경로를 적으면 수집이 끝날 때마다 LOT 추적만 담은 HTML 을 조용히 올립니다(실패해도 수집은 성공, 로그에만 남음). "
                     "폴더 안에 바로가기용 AOI_LOT.html · latest.js · data 폴더(최근 3개)가 생깁니다. 장비 NAS 아래 경로는 거부합니다.")
-PUBLISH_DIR_DEFAULT = "\\\\k5cifsn2\\k5tsvdata$\\Eng'r\\HT Lim"   # 11/4 사용자 확정(임현택 폴더를 대신) — 팀 공유 폴더(장비 NAS 와 다른 공유)
+PUBLISH_DIR_DEFAULT = "\\\\k5cifsn2\\k5tsvdata$\\Eng'r\\HT Lim\\LOT 추적"   # 11/4 사용자 확정(HT Lim 아래 LOT 추적 · 전체를 따로) — 팀 공유 폴더(장비 NAS 와 다른 공유)
 PUBLISH_FULL_DIR_DEFAULT = "\\\\k5cifsn2\\k5tsvdata$\\Eng'r\\HT Lim\\전체"   # 11/4 — 모든 탭을 담은 배포판(LOT 추적 폴더 안의 하위 폴더)
+PUBLISH_DIR_PAST3 = "\\\\k5cifsn2\\k5tsvdata$\\Eng'r\\HT Lim"   # 11/4 오전 기본값(HT Lim 바로 아래) — prefs v13 이 이 값 그대로인 설정만 `LOT 추적` 하위 폴더로 옮긴다
 PUBLISH_DIR_PAST2 = "\\\\k5cifsn2\\k5tsvdata$\\1. Conder Scan\\0. 전산 X\\임현택\\LOT추적"   # 10/30~11/3 기본값 — prefs v12 가 이 값 그대로인 설정만 HT Lim 으로 옮긴다
 PUBLISH_FULL_DIR_PAST2 = "\\\\k5cifsn2\\k5tsvdata$\\1. Conder Scan\\0. 전산 X\\임현택\\전체"
 PUBLISH_DIR_PAST = "\\\\10.142.80.167\\1.Engr\\0. 전산 X\\임현택 ENG'R\\LOT추적"   # 10/30 한나절 기본값(IP 공유) — prefs v11 이 이 값 그대로인 설정만 Conder Scan 으로 되돌린다

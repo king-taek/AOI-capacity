@@ -324,7 +324,7 @@ def test_full_publish_refuses_a_folder_under_an_equipment_nas(tmp_path, sample):
 def test_full_publish_defaults_are_ninety_days_next_to_the_lot_folder():
     assert collect.DEFAULT_CONFIG["publish_full_days"] == 90
     assert collect.DEFAULT_CONFIG["publish_full_dir"] == config_mod.PUBLISH_FULL_DIR_DEFAULT
-    assert config_mod.PUBLISH_FULL_DIR_DEFAULT.rsplit("\\", 1)[0] == config_mod.PUBLISH_DIR_DEFAULT      # 11/4: 전체는 LOT 추적 폴더 안의 하위 폴더
+    assert config_mod.PUBLISH_FULL_DIR_DEFAULT.rsplit("\\", 1)[0] == config_mod.PUBLISH_DIR_DEFAULT.rsplit("\\", 1)[0]      # 11/4: HT Lim 아래 LOT 추적 · 전체가 나란히
     assert config_mod.PUBLISH_FULL_DIR_DEFAULT != config_mod.PUBLISH_DIR_DEFAULT
 
 

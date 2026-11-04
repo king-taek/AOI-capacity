@@ -105,6 +105,15 @@ def test_v12_moves_only_the_old_default_publish_folders_to_ht_lim():
     K = i18n.KO
     old = prefs.migrate(prefs.Prefs.from_dict({"prefs_version": 11, "publish_dir": K.PUBLISH_DIR_PAST2 + "\\", "publish_full_dir": K.PUBLISH_FULL_DIR_PAST2}))
     assert (old.publish_dir, old.publish_full_dir) == (K.PUBLISH_DIR_DEFAULT, K.PUBLISH_FULL_DIR_DEFAULT)
-    assert K.PUBLISH_DIR_DEFAULT.endswith("HT Lim") and K.PUBLISH_FULL_DIR_DEFAULT.endswith("HT Lim\\전체")
+    assert K.PUBLISH_DIR_DEFAULT.endswith("HT Lim\\LOT 추적") and K.PUBLISH_FULL_DIR_DEFAULT.endswith("HT Lim\\전체")
     mine = prefs.migrate(prefs.Prefs.from_dict({"prefs_version": 11, "publish_dir": "D:\\내 폴더", "publish_full_dir": ""}))
     assert (mine.publish_dir, mine.publish_full_dir) == ("D:\\내 폴더", "")
+
+
+def test_v13_moves_the_ht_lim_root_default_into_the_lot_folder():
+    from aoi_capacity import i18n
+    K = i18n.KO
+    p = prefs.migrate(prefs.Prefs.from_dict({"prefs_version": 12, "publish_dir": K.PUBLISH_DIR_PAST3, "publish_full_dir": K.PUBLISH_FULL_DIR_DEFAULT}))
+    assert p.publish_dir == K.PUBLISH_DIR_DEFAULT and p.publish_full_dir == K.PUBLISH_FULL_DIR_DEFAULT
+    mine = prefs.migrate(prefs.Prefs.from_dict({"prefs_version": 12, "publish_dir": "D:\\내 폴더"}))
+    assert mine.publish_dir == "D:\\내 폴더"

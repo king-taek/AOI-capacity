@@ -18,7 +18,7 @@ from .. import i18n, scope as _scope
 from . import config as _config
 from . import paths
 
-PREFS_VERSION = 12
+PREFS_VERSION = 13
 SCOPE_MIGRATED_AT = 8         # 수집 범위 기본값 이동이 마지막으로 일어난 버전(v8). 범위를 다시 늘릴 때만 올린다 — 그 밖의 v 올림은 고른 범위를 건드리지 않는다
 
 # 10/30: 설정 화면에서 뺀 옵션들의 고정값 — 옛 prefs.json 에 남은 값은 읽을 때 버려지고 이 값이 쓰인다
@@ -107,6 +107,7 @@ def migrate(p: Prefs) -> Prefs:
         CSV 는 항상 저장, 보관 기간은 기한 없음, 동시 읽기 4, 화면은 라이트, 주의 장비 기준은 기본값(가동률 40% 미만 · Error 3건 이상).
     v10(10/30): 배포 폴더 기본값을 새 공유(IP)로 옮겼다 — v11 에서 되돌렸다.
     v11(10/30, 사용자 확정): 새 공유(`\\\\10.142.80.167\\1.Engr\\…`) 시험 뒤 배포 폴더 기본값을 다시 Conder Scan(`k5cifsn2`)으로 — 한나절 기본값(IP) 그대로인 LOT 추적 · 전체 배포 폴더만 되돌리고, 직접 고른 경로·빈 값(배포 끔)은 그대로.
+    v13(11/4, 사용자 요청): LOT 추적 기본 폴더를 `HT Lim\\LOT 추적` 으로(전체는 `HT Lim\\전체` 그대로) — 방금 기본값(`HT Lim` 바로 아래) 그대로인 설정만 옮긴다.
     v12(11/4, 사용자 요청): 배포 폴더 기본값을 `\\\\k5cifsn2\\k5tsvdata$\\Eng'r\\HT Lim`(전체는 그 아래 `전체`)로 — 옛 기본값(임현택) 그대로인 설정만 옮긴다."""
     if p.prefs_version < SCOPE_MIGRATED_AT and list(p.scope_devices or []) in _scope.PAST_DEFAULTS:
         p.scope_devices = list(_scope.DEFAULT_SCOPE)
@@ -122,6 +123,8 @@ def migrate(p: Prefs) -> Prefs:
             p.publish_dir = _config.PUBLISH_DIR_DEFAULT
         if _norm_dir(p.publish_full_dir) == _norm_dir(i18n.KO.PUBLISH_FULL_DIR_PAST2):
             p.publish_full_dir = _config.PUBLISH_FULL_DIR_DEFAULT
+    if p.prefs_version < 13 and _norm_dir(p.publish_dir) == _norm_dir(i18n.KO.PUBLISH_DIR_PAST3):
+        p.publish_dir = _config.PUBLISH_DIR_DEFAULT
     if p.prefs_version < PREFS_VERSION:
         p.prefs_version = PREFS_VERSION
     return p
