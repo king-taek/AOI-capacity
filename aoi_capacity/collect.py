@@ -3404,7 +3404,7 @@ def write_html(cfg: dict, rows: List[dict], dev_meta: List[dict], errors: List[d
     if lot_only:
         rg = None
         meta["lot_only"] = True                    # 화면: 탭 줄에 LOT 추적만
-        prefix = prefix.replace('<html lang="ko" ', '<html lang="ko" data-boot="lot" ', 1)   # 시작 화면 표식(D104 웨이퍼 장면 — D105 부터 같은 글자 장면이라 안 읽지만 표식은 유지)
+        prefix = prefix.replace('<html lang="ko" ', '<html lang="ko" data-boot="lot" ', 1).replace("<title>AOI 가동 현황</title>", "<title>AOI LOT 추적</title>", 1)   # 11/4: 배포판 제목   # 시작 화면 표식(D104 웨이퍼 장면 — D105 부터 같은 글자 장면이라 안 읽지만 표식은 유지)
         # 팀 공유에 올라가는 파일 — 장비 NAS 경로 · 범위 목록 · 시간 · 브랜치는 이 화면이 쓰지 않으니 담지 않는다
         meta["devices"] = [{k: dm[k] for k in ("name", "key", "status", "read_errors") if k in dm} for dm in dev_meta]
         meta["scope"] = {}
