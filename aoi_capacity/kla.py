@@ -199,18 +199,37 @@ def _is_scanning_lock(err: str, wafer: str, now: dt.datetime, entry: dict, lot: 
     return True
 
 
-def _lock_hint(err: str, wafer: str, now: dt.datetime) -> str:
-    """읽기 실패의 추정 원인 한 줄(11/4) — 권한 오류면 폴더 나이와 함께 '스캔이 멈췄거나 읽기 권한 없음'. 다음 수집에서 다시 읽는다."""
+def _note_pending(acc: List[dt.datetime], wafer: str) -> None:
+    try:
+        t, _slot = wafer_time(wafer)
+    except Exception:  # noqa: BLE001
+        return
+    if t is not None:
+        acc.append(t)
+
+
+def _age_text(delta: dt.timedelta) -> str:
+    hours = max(0.0, delta.total_seconds() / 3600)
+    return f"{int(hours * 60)}분" if hours < 1 else f"{hours:.0f}시간" if hours < 48 else f"{hours / 24:.0f}일"
+
+
+def _oldest_age(times: List[dt.datetime], now: dt.datetime) -> str:
+    """결과 파일이 아직 없는 폴더 중 가장 오래된 것의 나이 — 며칠째면 스캔 중이 아니라 멈춘 폴더다(11/4 로그). 없으면 빈 글."""
+    return _age_text(now - min(times)) if times else ""
+
+
+def _lock_hint(err: str, wafer: str, now: dt.datetime, fails: int = 1) -> str:
+    """읽기 실패의 추정 원인 한 줄(11/4) — 권한 오류면 폴더 나이와 함께 '스캔이 멈췄거나 읽기 권한 없음'. 연달아 3번째부터는 고정 오류라는 말을 붙인다. 다음 수집에서 다시 읽는다."""
     if not err.startswith("PermissionError"):
         return ""
     try:
         t, _slot = wafer_time(wafer)
     except Exception:  # noqa: BLE001
         t = None
-    if t is None:
-        return i18n.KO.KLA_LOCK_HINT_NOAGE
-    hours = max(0.0, (now - t).total_seconds() / 3600)
-    return i18n.KO.KLA_LOCK_HINT_FMT.format(age=(f"{int(hours * 60)}분" if hours < 1 else f"{hours:.0f}시간"))
+    text = i18n.KO.KLA_LOCK_HINT_NOAGE if t is None else i18n.KO.KLA_LOCK_HINT_FMT.format(age=_age_text(now - t))
+    if fails >= 3:
+        text += i18n.KO.KLA_LOCK_HINT_REPEAT_FMT.format(n=fails)
+    return text
 
 
 # ── 수집(메인 스레드가 합친다) ───────────────────────────────────────────────
@@ -342,6 +361,7 @@ def collect_kla(cfg: dict, devs: List[dict], cache: dict, *, run: Callable, now:
         return out
     errors: List[dict] = []
     pending = 0
+    pending_ts: List[dt.datetime] = []
 
     def merge(_i, res) -> None:
         nonlocal pending, changed
@@ -353,20 +373,27 @@ def collect_kla(cfg: dict, devs: List[dict], cache: dict, *, run: Callable, now:
         if err and _is_scanning_lock(err, w, now, e, lot):
             changed = True                                     # 시도 횟수를 캐시에 남긴다
             pending += 1                                       # 방금 만들어진 Wafer 의 결과 파일이 쓰는 중이라 잠겼다 — 스캔 중, 다음 수집에서 다시
+            _note_pending(pending_ts, w)
             m["scanning"] = m.get("scanning", 0) + 1
             return
         if err:
             m["read_errors"] += 1
-            errors.append({"device": d["name"], "path": os.path.join(str(d["path"]), dd, lot, w), "tries": 1, "error": err,
-                           "hint": _lock_hint(err, w, now)})
+            fails = e.setdefault("fail_reads", {})              # 같은 Wafer 가 수집마다 연달아 실패한 횟수(11/4) — 며칠째 같은 파일이면 고정 오류
+            n_fail = int(fails.get(f"{lot}/{w}", 0)) + 1
+            fails[f"{lot}/{w}"] = n_fail
+            changed = True
+            errors.append({"device": d["name"], "path": os.path.join(str(d["path"]), dd, lot, w), "tries": n_fail, "error": err,
+                           "hint": _lock_hint(err, w, now, n_fail)})
             return
         if rec is None:
             pending += 1                                       # 결과 파일이 아직 없다 — 다음 수집에서 다시 본다
+            _note_pending(pending_ts, w)
             return
         t, slot = wafer_time(w)
         rec.update({"t": t.isoformat(timespec="minutes"), "dir_slot": slot, "dd": dd, "rd": int(time.time())})
         e["lots"].setdefault(lot, {})[w] = rec
         (e.get("locked") or {}).pop(f"{lot}/{w}", None)
+        (e.get("fail_reads") or {}).pop(f"{lot}/{w}", None)
         changed = True
         if on_change is not None:
             on_change()
@@ -395,7 +422,8 @@ def collect_kla(cfg: dict, devs: List[dict], cache: dict, *, run: Callable, now:
     stats = {"kla_devices": len(devs), "kla_wafers_read": len(want), "kla_pending": pending,
              "kla_ms": int((time.perf_counter() - t_all) * 1000)}
     if pending:
-        log(f"KLA 결과 파일이 아직 없는 Wafer 폴더 {pending}개(스캔 중이거나 중단) — 다음 수집에서 다시 봅니다")
+        oldest = _oldest_age(pending_ts, now)
+        log(f"KLA 결과 파일이 아직 없는 Wafer 폴더 {pending}개(스캔 중이거나 중단){(' · 가장 오래된 ' + oldest + ' 전') if oldest else ''} — 다음 수집에서 다시 봅니다")
     return [metas[str(d["key"])] for d in devs], errors, changed, stats
 
 

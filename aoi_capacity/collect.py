@@ -2135,12 +2135,15 @@ def _save_cache(cfg: dict, cache: dict, *, resume_file: bool = False, drop_resum
     cache.pop(_CORRUPT_KEY, None)
     tmp = _unique_tmp(path)
     preserved = ""
+    t_w = time.perf_counter()
     try:
         with open(tmp, "w", encoding="utf-8") as f:
             json.dump(cache, f, ensure_ascii=False)
             f.flush()
             os.fsync(f.fileno())
+        t_v = time.perf_counter()
         _validate_cache_file(tmp, cache)
+        t_e = time.perf_counter()
         if corrupt and os.path.isfile(path):
             preserved = f"{path}.bad-{time.strftime('%Y%m%d-%H%M%S')}-{time.time_ns() % 1000000:06d}"
             os.replace(path, preserved)                 # 손상 원본 보존(지우지 않는다)
@@ -2156,7 +2159,8 @@ def _save_cache(cfg: dict, cache: dict, *, resume_file: bool = False, drop_resum
                 os.remove(tmp)
             except OSError:
                 pass
-    return {"path": path, "preserved": preserved}
+    return {"path": path, "preserved": preserved, "write_ms": int((t_v - t_w) * 1000), "check_ms": int((t_e - t_v) * 1000),
+            "bytes": os.path.getsize(path)}
 
 
 #: 캐시 파일 요약의 메모 — (경로) → (mtime_ns, size, 요약). 계획 조회는 체크박스를 누를 때마다 불리는데
@@ -3036,6 +3040,8 @@ def _collect(cfg: dict, full: bool, backfill: bool, *, recover: bool, refresh_wi
     if dirty:
         saved = _save_cache(cfg, cache, drop_resume=rebuild)
         stats["cache_saved"] = True
+        stats["cache_write_ms"], stats["cache_check_ms"], stats["cache_bytes"] = saved.get("write_ms", 0), saved.get("check_ms", 0), saved.get("bytes", 0)
+        _say(log, f"캐시 저장 세부: 쓰기 {stats['cache_write_ms']}ms · 다시 읽어 검증 {stats['cache_check_ms']}ms · 파일 {stats['cache_bytes'] >> 20}MB")
         if saved.get("preserved"):
             stats["cache_preserved"] = saved["preserved"]
             _say(log, f"★ 손상된 캐시 원본을 보존했습니다: {saved['preserved']}")
@@ -3439,6 +3445,8 @@ def write_html(cfg: dict, rows: List[dict], dev_meta: List[dict], errors: List[d
     target = os.path.join(out_root, name)
     tmp = _unique_tmp(target)
     size = _utf8_len(prefix) + _utf8_len(data) + _utf8_len(suffix)
+    build_s = time.perf_counter() - t_html                    # 템플릿 읽기 · 기간 자르기 · 접기 · JSON 만들기(쓰기 전)
+    t_write = time.perf_counter()
     try:
         with open(tmp, "w", encoding="utf-8", errors="strict") as f:
             f.write(prefix)
@@ -3454,7 +3462,8 @@ def write_html(cfg: dict, rows: List[dict], dev_meta: List[dict], errors: List[d
             except OSError:
                 pass
     del data
-    _say(log, f"HTML 저장: {target} ({size // 1024} KB · 기간 {r_from or '-'} ~ {r_to or '-'} · 행 {len(rows)}/{len(all_rows)})")
+    _say(log, f"HTML 저장: {target} ({size // 1024} KB · 기간 {r_from or '-'} ~ {r_to or '-'} · 행 {len(rows)}/{len(all_rows)}"
+              f" · 만들기 {build_s:.1f}초 · 쓰기 {time.perf_counter() - t_write:.1f}초)")
     if cfg.get("write_csv") and not lot_only:
         csv_path = os.path.splitext(target)[0] + ".csv"
         try:

@@ -734,7 +734,8 @@ def test_save_cache_validates_what_it_wrote_and_uses_a_unique_tmp(tmp_path):
     cfg = {"cache_file": str(tmp_path / "c" / "cache.json"), "nas_roots": [], "output_dir": str(tmp_path)}
     cache = {"reports": {"/x/a.htm": {"rows": [], "mtime": 1}}, "last_mtime": {}, "failed": {}, "_status": "ok"}
     out = collect._save_cache(cfg, cache)
-    assert out == {"path": cfg["cache_file"], "preserved": ""}
+    assert (out["path"], out["preserved"]) == (cfg["cache_file"], "")
+    assert out["bytes"] > 0 and out["write_ms"] >= 0 and out["check_ms"] >= 0           # 11/4: 저장 세부 시간(로그용)
     assert json.loads((tmp_path / "c" / "cache.json").read_text(encoding="utf-8"))["parser_version"] == collect.PARSER_VERSION
     assert [p.name for p in (tmp_path / "c").iterdir()] == ["cache.json"]
     t1, t2 = collect._unique_tmp("/a/b.json"), collect._unique_tmp("/a/b.json")

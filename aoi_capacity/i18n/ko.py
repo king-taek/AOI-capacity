@@ -582,3 +582,4 @@ FAIL_LOGS_FAIL_FMT = "실패 로그를 모으지 못했습니다: {error}"
 
 KLA_LOCK_HINT_FMT = "폴더 생성 {age} 전 — 스캔이 멈춰 파일이 잠겼거나 읽기 권한이 없는 것으로 보임(다음 수집에서 다시 읽음)"
 KLA_LOCK_HINT_NOAGE = "스캔이 멈춰 파일이 잠겼거나 읽기 권한이 없는 것으로 보임(다음 수집에서 다시 읽음)"
+KLA_LOCK_HINT_REPEAT_FMT = " · 수집 {n}번 연달아 같은 파일 — 다시 읽어도 안 풀리는 고정 오류일 가능성(그 Wafer 한 장은 KLA 데이터에서 빠짐)"

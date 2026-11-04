@@ -187,3 +187,18 @@ def test_permission_error_hint_names_the_folder_age():
     hint = kla._lock_hint("PermissionError: [Errno 13] x", w, now)
     assert "4시간" in hint and "다음 수집" in hint
     assert kla._lock_hint("FileNotFoundError: x", w, now) == ""
+
+
+def test_repeated_permission_error_gets_a_fixed_error_note_and_age_helpers():
+    """11/4 — 같은 파일이 수집마다 연달아 3번 실패하면 고정 오류 문구가 붙고, 결과 파일 없는 폴더는 가장 오래된 나이를 적는다."""
+    now = dt.datetime(2026, 11, 4, 9, 0)
+    w = "2026-11-03-20-38_2"
+    assert "연달아" not in kla._lock_hint("PermissionError: x", w, now, 2)
+    assert "3번 연달아" in kla._lock_hint("PermissionError: x", w, now, 3)
+    acc = []
+    kla._note_pending(acc, "2026-11-04-08-30_1")
+    kla._note_pending(acc, w)
+    kla._note_pending(acc, "not-a-wafer")
+    assert kla._oldest_age(acc, now) == "12시간"
+    assert kla._oldest_age([], now) == ""
+    assert kla._age_text(dt.timedelta(days=3)) == "3일" and kla._age_text(dt.timedelta(minutes=20)) == "20분"
