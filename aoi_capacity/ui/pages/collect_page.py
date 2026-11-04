@@ -23,7 +23,7 @@ from PyQt6.QtWidgets import (QFileDialog, QFrame, QGridLayout, QHBoxLayout, QLab
 
 from ... import collect, i18n, nas_guard, publish
 from ...utils import paths, prefs, results
-from ...workers import failure_logs, icon_diag
+from ...workers import failure_logs
 from ..widgets.buttons import make_button
 from ..widgets.collapsible import Collapsible
 from ..widgets.inputs import NoWheelDateEdit as QDateEdit, NoWheelSpinBox as QSpinBox
@@ -545,18 +545,6 @@ class CollectPage(QWidget):
         dl.setContentsMargins(0, 0, 0, 0)
         dl.setSpacing(8)
 
-        # 바로가기 아이콘 진단(11/4 임시) — AOI LOT.lnk 아이콘이 비어 보이는 원인을 가른다. 원인이 정해지면 카드 · 워커 · icon_diag.py 를 지운다
-        icard, il = _tool(dev, K.ICON_DIAG_TITLE, K.ICON_DIAG_SHORT, K.ICON_DIAG_WHEN)
-        self._b_id_run = make_button(K.ICON_DIAG_RUN, "primary", icard)
-        self._b_id_open = make_button(K.ICON_DIAG_OPEN, "ghost", icard)
-        self._id_status = _label("", "muted", icard, wrap=True)
-        self._id_status.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
-        il.addLayout(_row(self._b_id_run, self._b_id_open))
-        il.addWidget(self._id_status)
-        dl.addWidget(icard)
-        self._id_worker: Optional[QThread] = None
-        self._id_result: Optional[dict] = None
-
         # LOT 추적 발행 시험(10/27) — 이 PC 에서만 만든다. 공유 폴더 쓰기는 없다(임시 카드 — 시험이 끝나면 지운다)
         pcard, pl = _tool(dev, K.LOT_PUB_TITLE, K.LOT_PUB_SHORT, K.LOT_PUB_WHEN)
         self._lp_out = QLineEdit(str(p.publish_dir or "") or str(paths.data_root() / collect.LOT_PUBLISH_DIR), pcard)
@@ -651,9 +639,6 @@ class CollectPage(QWidget):
         self._b_from.dateChanged.connect(lambda _d: self._mode == "backfill" and self.refresh_plan())
         self._out.editingFinished.connect(self._apply_out)
         self._b_fl_run.clicked.connect(self._on_fail_logs)
-        self._b_id_run.clicked.connect(self._on_icon_diag)
-        self._b_id_open.clicked.connect(lambda: QDesktopServices.openUrl(QUrl.fromLocalFile(
-            os.path.dirname((self._id_result or {}).get("zip") or "") or str(paths.data_root() / "icon_diag"))))
         self._b_lp_run.clicked.connect(self._on_lot_publish)
         self._b_lp_view.clicked.connect(lambda: self._lp_path and QDesktopServices.openUrl(QUrl.fromLocalFile(self._lp_path)))
         self._b_lp_short.clicked.connect(self._on_lot_shortcut)
@@ -1035,38 +1020,6 @@ class CollectPage(QWidget):
             text += "\n" + K.LOT_PUB_POINTER_LOCKED
         self._lp_status.setText(text)
         self.append_log(text)
-
-    # ── 바로가기 아이콘 진단(11/4 임시) ──
-    def _on_icon_diag(self) -> None:
-        if self._id_worker is not None:
-            return
-        if self._running:
-            self.error.emit(K.ICON_DIAG_TITLE, K.WAFER_LOGS_BUSY)
-            return
-        w = icon_diag.IconDiagWorker(prefs.to_collect_cfg(prefs.load()), self)
-        w.log.connect(self.append_log)
-        w.done.connect(self._on_icon_diag_done)
-        w.finished.connect(lambda w=w: self._worker_done("_id_worker", w))
-        self._id_worker = w
-        self._b_id_run.setEnabled(False)
-        self._b_run.setEnabled(False)
-        self._id_status.setText(K.ICON_DIAG_RUNNING)
-        w.start()
-
-    def _on_icon_diag_done(self, result, err: str) -> None:
-        self._b_id_run.setEnabled(True)
-        self._b_run.setEnabled(not self._running)
-        self._id_result = result
-        if not result:
-            self._id_status.setText(err)
-            self.append_log(err)          # 팝업 없이 카드 · 로그에만(UI 테스트가 모달에 걸리지 않게)
-            return
-        text = K.ICON_DIAG_DONE_FMT.format(path=result.get("zip", ""))
-        self._id_status.setText(text)
-        self.append_log(text)
-        for p in (result.get("report"), result.get("local_dir"), result.get("share_dir")):
-            if p:
-                QDesktopServices.openUrl(QUrl.fromLocalFile(p))
 
     # ── 실패 로그 수집(10/20) ──
     def _on_fail_logs(self) -> None:
