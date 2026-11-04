@@ -33,7 +33,7 @@ from .utils import paths
 STUB_NAME = "AOI_LOT.html"
 SHORTCUT_NAME = "AOI LOT.url"                      # 폴더 안에 두는 인터넷 바로가기 — 팀원은 이 파일을 더블클릭하거나 바탕화면으로 복사(10/30 사용자 요청 이름. 같은 이름의 옛 파일은 아이콘 캐시가 남을 수 있어 새 이름으로)
 LATEST_NAME = "latest.js"
-ICON_NAME = "AOI.ico"                              # 배포 폴더에 함께 올리는 앱 아이콘 — 폴더 안 바로가기의 IconFile(D103)
+ICON_NAME = "AOI.ico"                              # 예전에 배포 폴더에 올리던 앱 아이콘(D103) — 탐색기가 공유 경로의 바로가기 아이콘을 읽지 않아(11/4 진단) 더 올리지 않고, 남은 우리 파일은 지운다
 DATA_DIR = "data"
 KEEP_FILES = 3
 REPLACE_TRIES = 6
@@ -134,21 +134,18 @@ def app_icon(kind: Kind = LOT) -> Optional[str]:
     return None
 
 
-def _share_icon(share_dir: str, roots: List[str], kind: Kind = LOT) -> Optional[str]:
-    """배포 폴더에 앱 아이콘을 `ICON_NAME` 으로 올리고(없거나 다를 때만) 그 경로 — 팀원 PC 에는 앱이 없어 공유 폴더 안 바로가기가 이 파일을 가리킨다.
-    앱 아이콘이 없거나 못 쓰면 None(바로가기는 기본 아이콘, 배포는 그대로 성공)."""
+def _remove_old_icon(share_dir: str, roots: List[str], kind: Kind = LOT) -> bool:
+    """예전에 올린 `ICON_NAME` 을 지운다 — 앱 아이콘과 내용이 같은 우리 파일일 때만. 지웠으면 True(열려 있거나 다른 파일이면 그대로)."""
+    nas_guard.assert_local(share_dir, roots)
+    fp = os.path.join(share_dir, ICON_NAME)
     src = app_icon(kind)
-    if not src:
-        return None
-    dst = os.path.join(share_dir, ICON_NAME)
     try:
-        data = open(src, "rb").read()
-        cur = open(dst, "rb").read() if os.path.isfile(dst) else None
+        if src and os.path.isfile(fp) and open(fp, "rb").read() == open(src, "rb").read():
+            os.remove(fp)
+            return True
     except OSError:
-        return None
-    if cur != data and not _write_text(dst, data, roots, tries=2):
-        return dst if cur is not None else None
-    return dst
+        pass
+    return False
 
 
 LNK_TIMEOUT_SEC = 30
@@ -183,8 +180,10 @@ def lnk_target(share_dir: str, kind: Kind = LOT) -> str:
 
 
 def _lnk_current(data: Optional[bytes], icon: Optional[str]) -> bool:
-    """이미 있는 .lnk 가 지금 아이콘 경로(= 배포 폴더가 바뀌면 같이 바뀐다)를 담고 있는지 — 담고 있으면 다시 만들지 않는다."""
-    return bool(data) and (not icon or icon.encode("utf-16-le") in data)
+    """이미 있는 .lnk 가 지금 아이콘 설정과 맞는지 — 맞으면 다시 만들지 않는다. 아이콘 없음(11/4 브라우저 아이콘)이면 옛 `AOI.ico` 를 가리키는 .lnk 는 다시 만든다."""
+    if not data:
+        return False
+    return icon.encode("utf-16-le") in data if icon else ICON_NAME.encode("utf-16-le") not in data
 
 
 def _ensure_lnk(share_dir: str, kind: Kind, icon: Optional[str], roots: List[str]) -> bool:
@@ -336,8 +335,8 @@ def _publish(kind: Kind, cfg: dict, share_dir: str, *, rows: Optional[list] = No
         cur = None
     if cur != stub_text(kind):
         ok = _write_text(stub, stub_text(kind), roots) and ok
-    icon_dst = _share_icon(share_dir, roots, kind)             # 팀원도 같은 아이콘(D103) — 폴더에 올린 AOI.ico 를 가리킨다
-    if _ensure_lnk(share_dir, kind, icon_dst, roots):          # 11/4: 일반 바로가기(.lnk) — 복사해 간 PC 에서도 아이콘이 나온다. 있으면 우리 .url 은 지운다
+    icon_dst = None                                            # 11/4 진단: 탐색기가 공유 경로의 아이콘을 바로가기에 쓰지 않아 빈 모양 → 아이콘 지정 없음(브라우저 아이콘, 사용자 선택)
+    if _ensure_lnk(share_dir, kind, icon_dst, roots):          # 일반 바로가기(.lnk). 있으면 우리 .url 은 지운다
         _remove_legacy_shortcuts(share_dir, kind, roots, extra=(kind.shortcut,))
     else:
         short = os.path.join(share_dir, kind.shortcut)
@@ -350,6 +349,7 @@ def _publish(kind: Kind, cfg: dict, share_dir: str, *, rows: Optional[list] = No
             _write_text(short, want_s, roots, tries=2)       # 못 써도 배포는 성공 — 바로가기는 이미 있거나 다음에
         if os.path.isfile(short):
             _remove_legacy_shortcuts(share_dir, kind, roots)
+    _remove_old_icon(share_dir, roots, kind)
     size = os.path.getsize(path)
     pruned = _prune(data_dir, KEEP_FILES, roots, protect={name, _pointed_name(share_dir, kind)}, kind=kind)
     res = {"dir": share_dir, "data": path, "bytes": size, "sec": round(time.perf_counter() - t0, 1),
