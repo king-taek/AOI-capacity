@@ -326,6 +326,8 @@ class RunPlan:
     slot_from: str = ""
     slot_to: str = ""
     slot_have: int = 0
+    kla_missing: int = 0       # KLA Defect 이미지 개수(images)를 아직 모르는 장 수 · 이미 아는 장 수(11/4, 같은 카드의 한 줄)
+    kla_have: int = 0
     rdl_have: int = 0          # 판정이 끝난(또는 해 본) RDL Report 수
     etas: Optional[Dict[str, Tuple[Optional[int], bool]]] = None   # 모드 → (예상 초 | None, 대략 여부) — 지난 실측으로(10/11)
     resumable: str = ""        # 중간에 멈춘 같은 일이 있으면 "rebuild" · "refresh"(10/11) — 다시 누르면 이어서 한다
@@ -745,7 +747,7 @@ def _patch_rdl_modes(cfg, cache, devs, should_stop, log, progress, stats, dirty,
 # ----------------------------------------------------------------------------- 예상 시간(10/11) · 파라미터 빈 구간
 #: 이 PC 에서 아직 한 번도 안 돌린 작업의 대략값(초) — 실측이 쌓이면 쓰이지 않는다. 화면은 '대략' 이라고 적는다.
 ETA_DEFAULT_FIXED_SEC = 60.0          # 장비 확인 + 목록
-ETA_DEFAULT_PER_UNIT = {"read": 1.0, "rdl_patch": 0.3, "params_fill": 2.0, "sec_fill": 0.02, "slot_fill": 0.03}
+ETA_DEFAULT_PER_UNIT = {"read": 1.0, "rdl_patch": 0.3, "params_fill": 2.0, "sec_fill": 0.02, "slot_fill": 0.03, "kla_fill": 0.05}
 PARAMS_FILL_CHUNK = 500              # 파라미터 빈 구간 채우기는 이만큼 읽을 때마다 캐시를 저장한다
 ETA_KEEP = 5                          # 모드마다 최근 몇 번의 실측을 남길지
 
@@ -769,7 +771,7 @@ def estimate_sec(eta: dict, mode: str, units: int, kind: str = "read") -> Tuple[
     """예상 걸리는 시간 → (초, 대략 여부). 고정 시간 + 개수 × 개수당 시간(최근 실측의 중앙값).
     `kind` 가 read 인 모드(수집 계열)는 서로의 실측을 같이 쓴다 — Report 하나를 읽는 비용이 비슷하기 때문. 실측이 없으면 기본값이고 대략=True."""
     eta = eta if isinstance(eta, dict) else {}
-    pool = ([x for k, v in eta.items() if k not in ("rdl_patch", "params_fill", "sec_fill", "slot_fill") for x in v] if kind == "read" else list(eta.get(mode, [])))
+    pool = ([x for k, v in eta.items() if k not in ("rdl_patch", "params_fill", "sec_fill", "slot_fill", "kla_fill") for x in v] if kind == "read" else list(eta.get(mode, [])))
     pool = [h for h in pool if isinstance(h, list) and len(h) == 3 and h[0] > 0]
     own = [h for h in eta.get(mode, []) if isinstance(h, list) and len(h) == 3]
     per = _median([h[1] / h[0] for h in pool]) if pool else ETA_DEFAULT_PER_UNIT[kind]
@@ -1068,10 +1070,77 @@ def _fill_slot_into(cfg: dict, cache: dict, devs: List[dict], fixed: float, log,
     return st
 
 
+# ----------------------------------------------------------------------------- KLA Defect 이미지 개수 빈칸(11/4)
+def _kla_img_targets(cache: dict) -> List[Tuple[str, str, str, dict]]:
+    """`images`(Defect 이미지 개수) 키가 아직 없는 KLA 기록 — 11/4 전에 읽은 것. 해 본 것은 `images` 가 None 이어도 키가 있어 다시 열지 않는다."""
+    out = []
+    for k, e in (cache.get("kla") or {}).items():
+        for lot, ws in (e.get("lots") or {}).items():
+            for w, r in ws.items():
+                if "images" not in r and r.get("file"):
+                    out.append((k, lot, w, r))
+    return out
+
+
+def _fill_kla_images_into(cfg: dict, cache: dict, devs: List[dict], fixed: float, log, progress, should_stop) -> Dict[str, int]:
+    """'옛 기간 빈칸 채우기' 의 KLA Defect 이미지 개수 — 기록이 가리키는 **결과 파일 한 장씩만** 정확 경로로 다시 읽어 IMAGECOUNT 합을 넣는다.
+    날짜 폴더 · Lot 나열 없음, 범위 게이트를 지난 KLA 장비만. 못 읽으면(파일이 사라짐 등) 키를 넣지 않아 다음에 다시 시도한다."""
+    by_key = {str(d["key"]): d for d in devs if d.get("kind") == "kla"}
+    tasks = [(k, lot, w, r, by_key[k]) for k, lot, w, r in _kla_img_targets(cache) if k in by_key]
+    total = len(tasks)
+    _say_unless_empty(log, total, f"KLA Defect 이미지 개수 채우기: 대상 {total}장 — 결과 파일만 다시 읽습니다")
+
+    def one(t):
+        _check(should_stop)
+        _k, lot, w, r, d = t
+        path = os.path.join(str(d["path"]), str(r.get("dd") or ""), lot, w, str(r["file"]))
+        try:
+            rec = kla_mod.parse_result(nas_guard.read_bytes(path)[:kla_mod.MAX_READ].decode("utf-8", errors="replace"))
+        except OSError as ex:
+            return None, f"{type(ex).__name__}"
+        return rec, ""
+
+    st = {"targets": total, "filled": 0, "no_column": 0, "unreadable": 0, "stopped": 0}
+    done, n_done, since_save, t1 = _Counter(), 0, 0, time.perf_counter()
+
+    def apply(i, res) -> None:
+        nonlocal n_done, since_save
+        _k, _lot, _w, r, _d = tasks[i]
+        rec, why = res
+        if rec is None:
+            st["unreadable"] += 1
+        else:
+            r["images"] = rec.get("images")                 # IMAGECOUNT 열이 없으면 None — 키는 남겨 다시 열지 않는다(화면은 레코드 수)
+            st["filled" if rec.get("images") is not None else "no_column"] += 1
+        n_done += 1
+        since_save += 1
+
+    def checkpoint() -> None:
+        nonlocal since_save
+        if since_save >= SEC_FILL_CHUNK:
+            since_save = 0
+            _save_cache(cfg, cache)
+
+    def wrapped(t):
+        out = one(t)
+        progress(done.bump(), total, i18n.KO.GAPS_PHASE_KLA_FMT.format(device=t[4]["name"]))
+        return out
+    try:
+        _run(cfg, tasks, wrapped, should_stop, group=lambda t: nas_group(str(t[4]["path"])), on_result=apply, tick=checkpoint)
+    except CollectCancelled:
+        st["stopped"] = 1
+    if total and n_done >= total:
+        record_eta(cache, "kla_fill", n_done, time.perf_counter() - t1, fixed)
+    if since_save or (n_done and n_done >= total):
+        _save_cache(cfg, cache)
+    _say_unless_empty(log, total, "KLA Defect 이미지 개수 채우기: " + " · ".join(f"{k}={v}" for k, v in st.items()))
+    return st
+
+
 def fill_gaps(cfg: dict, log: Optional[LogFn] = None, progress: Optional[ProgressFn] = None,
               should_stop: Optional[Callable[[], bool]] = None) -> Dict[str, object]:
     """'옛 기간 빈칸 채우기'(10/24) — 수집기가 나중에 모으기 시작한 값이 옛 Report 에 비어 있는 곳을 한 번에 채운다:
-    ① RDL 멀티/단일 판정(`_patch_rdl_modes`) ② 슬롯 번호(`_fill_slot_into`, 10/25) ③ 스캔 비율(`_fill_scan_sec_into`) ④ 파라미터(`_fill_params_into`).
+    ① RDL 멀티/단일 판정(`_patch_rdl_modes`) ② 슬롯 번호(`_fill_slot_into`, 10/25) ③ KLA Defect 이미지 개수(`_fill_kla_images_into`, 11/4) ④ 스캔 비율(`_fill_scan_sec_into`) ⑤ 파라미터(`_fill_params_into`).
     모두 캐시 행이 가리키는 Wafer 폴더 **안**만 정확 경로로 읽는다(규칙 4 · Report 나열 · 읽기 없음 · 범위 밖 장비 0). 중지하면 그때까지 읽은 것을 저장하고
     다시 누르면 남은 것부터 한다. 결과 HTML 은 부르는 쪽이 `html_from_cache` 로 만든다."""
     progress = progress or (lambda d, t, p: None)
@@ -1090,6 +1159,10 @@ def fill_gaps(cfg: dict, log: Optional[LogFn] = None, progress: Optional[Progres
         return out
     out["slot"] = _fill_slot_into(cfg, cache, devs, fixed, log, progress, should_stop)
     if out["slot"].get("stopped"):
+        out["stopped"] = 1
+        return out
+    out["kla"] = _fill_kla_images_into(cfg, cache, devs, fixed, log, progress, should_stop)
+    if out["kla"].get("stopped"):
         out["stopped"] = 1
         return out
     out["sec"] = _fill_scan_sec_into(cfg, cache, devs, fixed, log, progress, should_stop)
@@ -2172,7 +2245,7 @@ def _cache_summary(path: str) -> dict:
     """계획 조회에 필요한 것만 — Report 수 · 장비 커서 수 · 누락 복구 대상 수 · Report 수정시각 목록(refresh 창 계산용).
     행은 재분류하지 않는다(수집 워커가 한다)."""
     empty = {"n_reports": 0, "known_devices": 0, "n_recover": 0, "n_rdl": 0, "rdl_devices": 0, "mtimes": [], "resume_sig": "", "eta": {},
-             "n_slot": 0, "slot_have": 0, "slot_from": "", "slot_to": "", "n_sec": 0, "sec_reports": 0, "sec_devices": 0, "sec_from": "", "sec_to": "", "sec_have": 0, "rdl_have": 0,
+             "n_slot": 0, "n_kla": 0, "kla_have": 0, "slot_have": 0, "slot_from": "", "slot_to": "", "n_sec": 0, "sec_reports": 0, "sec_devices": 0, "sec_from": "", "sec_to": "", "sec_have": 0, "rdl_have": 0,
              "n_params": 0, "n_params_have": 0, "params_devices": 0, "params_from": "", "params_to": "", "span_from": "", "span_to": ""}
     if not path or not os.path.isfile(path):
         return empty
@@ -2195,6 +2268,8 @@ def _cache_summary(path: str) -> dict:
     alld = sorted(x for x in (_first_day(e) for e in cache.get("reports", {}).values() if not e.get("superseded_by")) if x)
     summary = {"n_reports": len(cache.get("reports", {})), "eta": cache.get("eta") if isinstance(cache.get("eta"), dict) else {},
                "n_slot": sum(1 for _k, e in ltargets for r in e.get("rows") or () if _needs_slot(r)),
+               "n_kla": len(_kla_img_targets(cache)),
+               "kla_have": sum(1 for e in (cache.get("kla") or {}).values() for ws in (e.get("lots") or {}).values() for r in ws.values() if "images" in r),
                "slot_have": sum(1 for e in live for r in e.get("rows") or () if r.get("ini_match") == "EXACT" and not r.get("kind") and str(r.get("slot_no") or "").strip()),
                "slot_from": ldays[0] if ldays else "", "slot_to": ldays[-1] if ldays else "",
                "n_sec": sum(1 for _k, e in stargets for r in e.get("rows") or () if _needs_sec(r)), "sec_reports": len(stargets),
@@ -2244,6 +2319,7 @@ def _plan_etas(s: dict, n_reports: int, reread: int, n_recover: int, n_rdl: int,
     out["params"] = estimate_sec(eta, "params_fill", n_params, kind="params_fill")
     out["sec"] = estimate_sec(eta, "sec_fill", int(s.get("n_sec", 0)), kind="sec_fill")
     out["slot"] = estimate_sec(eta, "slot_fill", int(s.get("n_slot", 0)), kind="slot_fill")
+    out["kla"] = estimate_sec(eta, "kla_fill", int(s.get("n_kla", 0)), kind="kla_fill")
     return out
 
 
@@ -2283,7 +2359,7 @@ def plan_run(cfg: dict, full: bool = False, backfill: bool = False, recover: boo
                    params_from=s["params_from"], params_to=s["params_to"], span_from=s["span_from"], span_to=s["span_to"],
                    sec_missing=s.get("n_sec", 0), sec_reports=s.get("sec_reports", 0), sec_devices=s.get("sec_devices", 0),
                    sec_from=s.get("sec_from", ""), sec_to=s.get("sec_to", ""), sec_have=s.get("sec_have", 0),
-                   slot_missing=s.get("n_slot", 0), slot_from=s.get("slot_from", ""), slot_to=s.get("slot_to", ""), slot_have=s.get("slot_have", 0), rdl_have=s.get("rdl_have", 0),
+                   slot_missing=s.get("n_slot", 0), slot_from=s.get("slot_from", ""), slot_to=s.get("slot_to", ""), slot_have=s.get("slot_have", 0), kla_missing=s.get("n_kla", 0), kla_have=s.get("kla_have", 0), rdl_have=s.get("rdl_have", 0),
                    etas=_plan_etas(s, n, reread, s["n_recover"], s.get("n_rdl", 0), s["n_params"]))
 
 

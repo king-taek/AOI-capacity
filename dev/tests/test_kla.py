@@ -202,3 +202,38 @@ def test_repeated_permission_error_gets_a_fixed_error_note_and_age_helpers():
     assert kla._oldest_age(acc, now) == "12시간"
     assert kla._oldest_age([], now) == ""
     assert kla._age_text(dt.timedelta(days=3)) == "3일" and kla._age_text(dt.timedelta(minutes=20)) == "20분"
+
+
+SPEC_RESULT = ('FileVersion 1 2;\nResultTimestamp 10-04-2026 22:30:00;\nLotID "L@1";\nSetupID "S" 08-20-2026 16:37:00;\nStepID "ST";\nWaferID "W01";\nSlot 1;\n'
+               'DefectRecordSpec 5 DEFECTID XREL YREL IMAGECOUNT\n  IMAGELIST ;\nDefectList\n 1 1.0 2.0 2 a.jpg b.jpg\n 2 1.0 2.0 0\n 3 1.0 2.0 1 c.jpg;\n'
+               'SummarySpec 5\n  TESTNO NDEFECT DEFDENSITY NDIE NDEFDIE ;\nSummaryList\n  3 3 0.1 30 2 ;\nEndOfFile;\n')
+
+
+def test_parse_result_sums_image_count_column_and_none_without_it():
+    r = kla.parse_result(SPEC_RESULT)
+    assert r["defects"] == 3 and r["images"] == 3                      # 2 + 0 + 1 — 결함 수와 다른 값
+    assert kla.parse_result(klarf("L@1", "W01", 1, T0, 3))["images"] is None
+
+
+def test_fill_gaps_fills_kla_image_count_from_result_file_only(tmp_path, kla_nas):
+    import json
+    nas, csv_path = kla_nas
+    cfg = make_cfg(tmp_path, csv_path)
+    collect.collect(cfg)
+    cache = json.load(open(cfg["cache_file"], encoding="utf-8"))
+    recs = [r for e in cache["kla"].values() for ws in e["lots"].values() for r in ws.values()]
+    for r in recs:
+        r.pop("images", None)                                           # 11/4 전에 읽은 옛 기록
+    json.dump(cache, open(cfg["cache_file"], "w", encoding="utf-8"))
+    for f in (nas / "Z").rglob("*"):                                   # 결과 파일을 IMAGECOUNT 열이 있는 것으로 바꾼다
+        if f.is_file() and f.read_bytes().startswith(b"FileVersion"):
+            f.write_text(SPEC_RESULT, encoding="utf-8")
+    plan = collect.plan_run(cfg)
+    assert plan.kla_missing == len(recs) > 0 and plan.kla_have == 0 and plan.etas["kla"][0] is not None
+    st = collect.fill_gaps(cfg)
+    assert st["kla"]["filled"] == len(recs) and st["kla"]["unreadable"] == 0
+    after = collect.plan_run(cfg)
+    assert after.kla_missing == 0 and after.kla_have == len(recs)
+    assert collect.fill_gaps(cfg)["kla"]["targets"] == 0
+    rows, _m, _e = collect.collect(cfg)
+    assert {r["faults"] for r in rows if r["device"] == "K1"} == {"3"}

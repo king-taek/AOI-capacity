@@ -7,7 +7,7 @@ KLA 는 BatchReport · WaferInfo.ini 가 없다. 드라이브 맨 위가 날짜 
     → Lot 안에서 **Wafer 폴더 이름으로 한 번만** 센다(D71). 날짜 아닌 폴더(`DY` · `MOON` · `old` …, 사람·엔지니어링 사본)는 세지 않는다(D71).
   · Wafer 폴더 시각 = 그 장의 **시작**(첫 장 = ResultTimestamp 와 0~1분). FileTimestamp 는 두 자리 연도면 검토 뒤 다시 쓴 시각이라 쓰지 않는다.
   · ResultTimestamp = 그 Lot 실행의 시작 — 같은 Lot 을 다시 돌리면 값이 달라지므로 **실행(run) 단위**로 묶는 열쇠로 쓴다.
-  · 결함 수 = DefectList 레코드 수(= SummaryList NDEFECT, D68). Error 는 수집하지 않는다(D68) — 모든 장이 PASS.
+  · 결함 수 = DefectList 레코드 수(= SummaryList NDEFECT, D68). 화면의 Defect(`faults`)는 11/4 부터 **Defect 이미지 개수** — DefectRecordSpec 의 IMAGECOUNT 열 합(`images`), 열이 없으면 레코드 수. Error 는 수집하지 않는다(D68) — 모든 장이 PASS.
 행 만들기(`rows_from_store`): 실행마다 Wafer 를 시각순으로 놓고 **장 시작 ~ 다음 장 시작**을 그 장의 스캔 구간으로 쓴다.
 간격이 그 실행의 장당 중앙 간격의 3배를 넘으면(장비가 멈춰 있던 것) 그 장은 중앙 간격만큼만, 마지막 장도 중앙 간격만큼 —
 '첫 장 ~ 마지막 장 시각'(사용자 제안)에 마지막 장의 스캔 시간을 더한 것이다. 배치 시작 = 첫 장 시작, 배치 끝 = 마지막 장 끝.
@@ -71,6 +71,7 @@ def parse_result(text: str) -> dict:
     head: Dict[str, str] = {}
     defects, in_list, want_spec, want_sum = 0, False, False, False
     spec, summary = "", []
+    rspec, want_rspec, images, img_idx = "", False, 0, -1
     for raw in text.splitlines():
         s = raw.strip()
         if not s:
@@ -78,10 +79,19 @@ def parse_result(text: str) -> dict:
         if in_list:
             if re.match(r"^-?\d+\s", s):
                 defects += 1
+                if img_idx >= 0:
+                    try:
+                        images += int(s.rstrip(";").split()[img_idx])
+                    except (ValueError, IndexError):
+                        pass
                 if s.endswith(";"):
                     in_list = False
                 continue
             in_list = False
+        if want_rspec:
+            rspec += " " + s
+            want_rspec = not s.endswith(";")
+            continue
         if want_spec:
             spec += " " + s
             want_spec = not s.endswith(";")
@@ -99,6 +109,10 @@ def parse_result(text: str) -> dict:
         k, rest = m.group(1), m.group(2).strip()
         if k == "DefectList":
             in_list = not rest.startswith(";")
+            rc = [c.upper() for c in re.sub(r"^\d+\s*", "", rspec).replace(";", "").split()]
+            img_idx = rc.index("IMAGECOUNT") if "IMAGECOUNT" in rc else -1
+        elif k == "DefectRecordSpec":
+            rspec, want_rspec = rest, not rest.endswith(";")
         elif k == "SummarySpec":
             spec, want_spec = rest, not rest.endswith(";")
         elif k == "SummaryList":
@@ -119,7 +133,7 @@ def parse_result(text: str) -> dict:
     rts = parse_ts(head.get("ResultTimestamp", ""))
     return {"lot": q("LotID"), "setup": q("SetupID"), "step": q("StepID"), "device_id": q("DeviceID"), "wafer": q("WaferID"),
             "slot": head.get("Slot", "").strip(), "rts": rts.isoformat(timespec="seconds") if rts else "",
-            "defects": defects, "ndefect": col_sum("NDEFECT"), "ndie": col_sum("NDIE"), "eof": "EndOfFile" in head}
+            "defects": defects, "images": images if img_idx >= 0 else None, "ndefect": col_sum("NDEFECT"), "ndie": col_sum("NDIE"), "eof": "EndOfFile" in head}
 
 
 def _slot_no(rec: dict) -> str:
@@ -468,7 +482,7 @@ def rows_from_store(store: dict, cfg: dict, scan_type: Callable[[str], str]) -> 
                 rows.append({"device": name, "kind": "", "job": str(r.get("setup") or ""), "setup": str(r.get("step") or ""),
                              "lot": lot_id, "wafer_id": str(r.get("wafer") or ""), "status": "Pass", "norm_status": "PASS",
                              "cause": "", "outcome": "PASS", "scan_type": scan_type(lot_id), "recipe": str(r.get("step") or ""),
-                             "faults": str(r.get("defects", "")), "scanned_dice": "" if r.get("ndie") is None else str(r.get("ndie")),
+                             "faults": str(r.get("defects", "") if r.get("images") is None else r.get("images")), "scanned_dice": "" if r.get("ndie") is None else str(r.get("ndie")),
                              "slot_no": _slot_no(r), "yield": "", "wafer_start_time": _fmt(t), "wafer_end_time": _fmt(end) if end else "",
                              "batch_start": _fmt(bs), "batch_end": _fmt(be), "report": report, "ini_match": "EXACT",
                              "time_basis": "STRICT_IN_BATCH", "slots": "", "data_issue": "", "issue_codes": ""})
