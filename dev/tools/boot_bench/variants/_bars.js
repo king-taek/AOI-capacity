@@ -41,11 +41,14 @@ const BARS_IDLE={
 @keyframes txDrift{from{transform:translateX(0) scaleX(1)}to{transform:translateX(var(--dx,6px)) scaleX(1)}}`,
   /* 점등(D105 대기 동작, 현택 11/1): 구간이 읽는 순서로 차례로 밝아졌다 돌아온다 — 한 번에 4~5칸이 꼬리처럼 이어져 잘 보인다.
      회청색 겹(.g)의 opacity 만 움직인다(합성 스레드, 요소당 레이어 하나, JS 0) — 밑의 밝은 트랙 색이 비쳐 '불이 켜진' 것처럼 보인다 */
-  glow:`#aoi-boot .tx.wait .tk>.f>.g{animation:txGlow var(--gp,5.4s) cubic-bezier(.45,.05,.55,.95) infinite}
+  /* 점등(D105 대기 동작, 현택 11/1; 11/4 부터 클래스 없이 CSS 지연으로 시작): */
+  glow:`#aoi-boot .tx:not(.ld) .tk>.f>.g{will-change:opacity;animation:txGlow var(--gp,5.4s) cubic-bezier(.45,.05,.55,.95) infinite}#aoi-boot .tx.ld .tk>.f>.g{animation:none}
 @keyframes txGlow{0%,14%,100%{opacity:1}5%{opacity:.08}}`,
   /* 셈: 숫자 블록이 값을 세듯 폭이 줄었다 늘었다(scaleX, 왼쪽 기준) + 트랙은 가만히 — 계산 중 */
   count:`#aoi-boot .tx.wait .num{transform-origin:0 50%;animation:txTk .35s cubic-bezier(.22,1,.36,1) both,txCount 1.9s cubic-bezier(.45,.05,.55,.95) infinite alternate}
 @keyframes txCount{from{transform:scaleX(.55)}to{transform:scaleX(1)}}`};
+/* 점등은 JS 타이머(.wait)가 아니라 CSS animation-delay 로 AOI 가 다 써진 직후(GLOW_AT)부터 돈다 — 메인 스레드가 막혀도 늦게 켜지지 않는다(11/4, 윗줄부터 멈췄다 시작하던 현상) */
+const GLOW_AT=2400;
 function barsListScene(ov,env,idle){
   const T=textStage(ov,env,BARS_CSS+(BARS_IDLE[idle]||BARS_IDLE.sway)+`
 #aoi-boot .tx .nm{position:absolute;border-radius:2px;background:${TXT.INK3};opacity:0;animation:txTk .35s cubic-bezier(.22,1,.36,1) both}
@@ -64,7 +67,7 @@ function barsListScene(ov,env,idle){
     const runs=G.runs.filter(b=>b.r===r),segs=runs.map((b,i)=>({p:(b.x-(x0-cell*.4))/trackW,w:b.w/trackW,c:barsColor(rnd),d:d+180+b.li*160+i*60}));
     const tk=barsMake(T.root,{x:x0-cell*.4,y:y,w:trackW,h:G.bh,r},segs,d+60,{tkExtra:`top:${mid-G.bh/2}px`});
     tk.querySelectorAll(".f").forEach((f,i)=>{const s=segs[i],ph=Math.round(-(s.p*1400));   /* 파도 · 흐름: 왼쪽 구간이 먼저(위상 = 가로 위치) */
-      f.style.animationDelay=`${s.d}ms,${ph}ms`;f.style.setProperty("--dx",(4+r%3)+"px");const g=f.firstChild;const gi=idxOf(r,i);g.style.animationDelay=`${-gi*120}ms`;g.style.setProperty("--gp",(nSeg*120)+"ms");});
+      f.style.animationDelay=`${s.d}ms,${ph}ms`;f.style.setProperty("--dx",(4+r%3)+"px");const g=f.firstChild;const gi=idxOf(r,i);g.style.animationDelay=idle==="glow"?`${GLOW_AT+gi*120}ms`:`${-gi*120}ms`;g.style.setProperty("--gp",(nSeg*120)+"ms");});
     if(r<6){const sp=document.createElement("i");sp.className="sep";sp.style.cssText=`left:${x0-nameW-gap-numW-gap}px;top:${y+cell-1}px;width:${nameW+gap+numW+gap+trackW}px;animation-delay:${d+80}ms`;T.root.appendChild(sp);}}
   if(idle==="sway"){const now=document.createElement("i");now.className="now";now.style.cssText=`left:${x0-cell*.4}px;top:${G.y0-cell*.3}px;height:${cell*7.6}px;--span:${trackW}px`;T.root.appendChild(now);}
   return barsCtl(T,3000);
