@@ -1437,6 +1437,8 @@ def rows_for_report(dev_name: str, rep: dict, scan_root: str, memo: Optional[_In
     b_start, b_end = parse_dt(s.get("Batch Start", "")), parse_dt(s.get("Batch End", ""))
     rfields = {"wafers_scanned": s.get("Wafers Scanned", ""), "avg_scan_time": s.get("Avg. Scan Time", ""), "cr_every": "", "af_every": ""}
     want_settings = is_recipe_tab_job(rep.get("job", ""))
+    rdl = is_rdl_job(rep.get("job", ""))
+    single_report = False                              # PC-01: RDL 이 아닌 Job 은 첫 EXACT 장에 RecipesInfo.ini 가 없으면 같은 Report 의 나머지 장도 단일(D78 한 Report = 한 방식) — 열지 않는다
     for w in rep["wafers"]:
         causes = norm_causes(w["status"])
         r = {"device": dev_name, "kind": "", "job": rep.get("job", ""), "setup": rep.get("setup", ""),
@@ -1504,10 +1506,14 @@ def rows_for_report(dev_name: str, rep: dict, scan_root: str, memo: Optional[_In
                         r["slot_no"] = str(int(a["ActiveSlot"]))      # 카세트 슬롯 번호 — STALE 이면 다른 시도의 값일 수 있어 쓰지 않는다
                     if r["ini_match"] == "EXACT":
                         # 10/11(D86 Q4): 실제 촬영 초 — 모든 Job 의 EXACT 장. ScanLog.ini 하나 + (멀티면) 두 번째 레시피의 ExtendedScanMetaData 하나, 정확 경로만.
+                        # PC-01: RecipesInfo.ini(멀티 스캔에만 있다)는 RDL 이면 늘(멀티/단일 판정), 아니면 ScanLog 가 있어 촬영 초를 잴 수 있는 장만 —
+                        # 그리고 같은 Report 의 첫 장에 없었으면 나머지 장은 열지 않는다(대부분인 단일 스캔 장의 '없음' 왕복을 덜어 준다).
                         wdir = os.path.join(found_in, rel_found)
-                        rk, names = memo.recipes(os.path.join(wdir, "RecipesInfo.ini"))
-                        names = names if rk == "ok" else None
                         lk, lv = memo.sub("scanlog", read_scan_log, os.path.join(wdir, "ScanLog.ini"))
+                        if rdl or (lk == "ok" and not single_report):
+                            rk, names = memo.recipes(os.path.join(wdir, "RecipesInfo.ini"))
+                            names = names if rk == "ok" else None
+                            single_report = single_report or (rk == "missing" and not rdl)
                         second = None
                         if lk == "ok" and names and len(names) > 1:
                             ek, ev = memo.sub("extmeta", read_ext_meta, os.path.join(wdir, f"ExtendedScanMetaData_{names[1]}.json"))
@@ -1515,7 +1521,7 @@ def rows_for_report(dev_name: str, rep: dict, scan_root: str, memo: Optional[_In
                         sec_ = scan_seconds(st, en, lv if lk == "ok" else None, second)
                         if sec_ is not None:
                             r["scan_sec"] = str(sec_)
-                    if r["ini_match"] == "EXACT" and is_rdl_job(rep.get("job", "")):
+                    if r["ini_match"] == "EXACT" and rdl:
                         # 10/5: RecipesInfo.ini 는 RDL Job 만 본다(사용자 — 멀티/단일을 바꿔 돌리는 건 RDL 뿐, 다른 Job 은 파일 열기를 늘리지 않는다).
                         # 10/5: 멀티 스캔(x20+x5)은 Report 표의 Recipe 칸에 `x20` 만 찍힌다(실물 GVB·GVC·LGA·LHP 확인).
                         # 실제로 돈 레시피는 Wafer 폴더에 있다 — 멀티면 RecipesInfo.ini(이름 전부), 단일이면 WaferInfo.ini [Recipe] Name.
