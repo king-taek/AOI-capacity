@@ -1269,3 +1269,65 @@ def test_rapid_day_flips_never_leave_old_numbers_in_the_home_rows(page):
     assert bad == [], bad
     assert pg.evaluate("[...document.querySelectorAll('[data-bar]')].every(e => !e.style.clipPath)")   # 연달아 눌러도 sweep 이 남지 않는다(ANIM-10)
     assert errors == []
+
+
+def _open_quiet(page_factory, html: Path, init: str = ""):
+    ctx = page_factory.new_context(viewport={"width": 1280, "height": 800}, accept_downloads=True)
+    pg = ctx.new_page()
+    errors, requests = [], []
+    pg.on("pageerror", lambda e: errors.append("pageerror: " + str(e)))
+    pg.on("console", lambda m: errors.append("console: " + m.text) if m.type == "error" else None)
+    pg.on("request", lambda r: requests.append(r.url) if not r.url.startswith(("file:", "blob:")) else None)
+    if init:
+        pg.add_init_script(init)
+    pg.goto(html.as_uri())
+    return ctx, pg, errors, requests
+
+
+def test_compressed_publish_data_opens_and_save_copy_stays_compressed(page_factory, tmp_path):
+    """LOTD-04 · PP-06(11/25): 배포판의 gzip+base64 데이터(collect._gzip64)를 브라우저 내장 DecompressionStream 으로 풀어 같은 화면이 뜨고,
+    사본 저장은 받은 형식(압축)으로 다시 접어 사본도 다시 열린다. 바깥 요청 0건 · 콘솔 오류 0."""
+    emb = _embedded()
+    tpl = TEMPLATE.read_text(encoding="utf-8")
+    out = tmp_path / "gz.html"
+    out.write_text(tpl.replace("__DATA__", collect._gzip64(collect._payload({k: v for k, v in emb.items() if k != "meta"}, emb["meta"])), 1), encoding="utf-8")
+    assert sample_rows.embedded(out.read_text(encoding="utf-8")) == json.loads(json.dumps(emb))
+    ctx, pg, errors, requests = _open_quiet(page_factory, out)
+    pg.wait_for_selector('main[data-key="view:home"]')
+    assert pg.evaluate("rows.length") == len(emb["rows"]) and pg.evaluate("embEnc") == "gz"
+    with pg.expect_download() as dl:
+        pg.evaluate("saveHtml()")
+    saved = Path(dl.value.path()).read_text(encoding="utf-8")
+    body = saved[saved.index('id="embedded">') + len('id="embedded">'):]
+    assert body.startswith("H4sI")                                                    # 사본도 압축본
+    rows0, _ = sample_rows.unfold(emb)
+    rows1, meta1 = sample_rows.unfold(sample_rows.embedded(saved))
+    assert rows1 == rows0 and meta1["mode"] == "saved"
+    copy = tmp_path / "gz_copy.html"
+    copy.write_text(saved, encoding="utf-8")
+    pg2 = ctx.new_page()
+    pg2.on("pageerror", lambda e: errors.append("pageerror2: " + str(e)))
+    pg2.goto(copy.as_uri())
+    pg2.wait_for_selector('main[data-key="view:home"]')
+    assert pg2.evaluate("rows.length") == len(emb["rows"])
+    assert errors == [] and requests == []
+    ctx.close()
+
+
+@pytest.mark.parametrize("case", ["broken", "no_stream"])
+def test_compressed_data_that_cannot_be_opened_shows_the_error_panel(page_factory, tmp_path, case):
+    """압축본을 풀 수 없으면(깨진 데이터 · DecompressionStream 없는 브라우저) '불러오는 중' 에 멈추지 않고 오류 패널에 이유 한 줄."""
+    emb = _embedded()
+    gz = collect._gzip64(json.dumps(emb, ensure_ascii=False))
+    if case == "broken":
+        gz = gz[:200] + "!!!!" + gz[204:]
+    out = tmp_path / "gz_bad.html"
+    out.write_text(TEMPLATE.read_text(encoding="utf-8").replace("__DATA__", gz, 1), encoding="utf-8")
+    ctx, pg, _errors, requests = _open_quiet(page_factory, out, "delete window.DecompressionStream;" if case == "no_stream" else "")
+    pg.wait_for_selector("#app h2:has-text('결과 파일을 읽지 못했습니다')", timeout=15000)
+    msg = pg.locator("#app p.muted").first.inner_text()
+    assert "압축된 데이터를 풀 수 없습니다" in msg
+    if case == "no_stream":
+        assert "Chrome" in msg
+    assert requests == []
+    ctx.close()

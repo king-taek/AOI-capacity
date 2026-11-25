@@ -885,15 +885,30 @@ let _bootQuiet=!!BOOT;
 const bootPhase=i=>{try{if(BOOT)BOOT.phase(i);}catch(e){}};
 /* ANIM-04(11/25): 단계마다 글자 · 진행선을 바꾼 뒤 한 프레임 그리고 다음 계산을 시작한다(rAF → setTimeout = 그 프레임이 칠해진 뒤) — 긴 계산 내내 '여는 중' 에 멈춰 보이지 않게 */
 const afterPaint=f=>{if(BOOT&&typeof requestAnimationFrame==="function")requestAnimationFrame(()=>setTimeout(f,0));else setTimeout(f,0);};
+/* LOTD-04 · PP-06(11/25): 공유 폴더 배포판은 데이터를 gzip+base64 로 접어 담는다(106 → 16MB, collect.write_html(compress=True)).
+   gzip 머리(1f 8b 08)의 base64 'H4sI' 로 시작하면 브라우저 내장 DecompressionStream 으로 편다(바깥 요청 없음) — 로컬 결과 HTML 은 그대로 JSON. */
+let embEnc="";
+const EMB_GZ=/^\s*H4sI/;
+async function gunzip64(s){   /* async — atob 의 오류도 거절로 받아 오류 패널에 */
+  if(typeof DecompressionStream!=="function")throw(new Error("이 브라우저는 압축을 풀 수 없습니다(DecompressionStream 없음) — Chrome · Edge 최신판으로 여세요"));
+  const bin=atob(s.trim()),n=bin.length,u=new Uint8Array(n);for(let i=0;i<n;i++)u[i]=bin.charCodeAt(i);
+  return new Response(new Blob([u]).stream().pipeThrough(new DecompressionStream("gzip"))).text();}
+async function gzip64(s){
+  const u=new Uint8Array(await new Response(new Blob([s]).stream().pipeThrough(new CompressionStream("gzip"))).arrayBuffer());
+  let b="";for(let i=0;i<u.length;i+=0x8000)b+=String.fromCharCode.apply(null,u.subarray(i,i+0x8000));return btoa(b);}
 function loadDemo(){
   const fail=e=>{log("로더 오류: "+(e&&e.message||e));errorPanel(String(e&&e.message||e));};
-  const run=()=>{bootPhase(1);afterPaint(()=>{let emb;try{const el=$("#embedded");emb=JSON.parse(el.textContent);el.textContent="";}catch(e){errorPanel("embedded JSON 을 해석할 수 없습니다: "+(e&&e.message||e));return;}   /* PH-08: 해석한 원문(25~72MB)은 문서에서 비운다 — 사본 저장은 사본의 #embedded 를 새로 채운다 */
+  const go=emb=>{
     bootPhase(2);afterPaint(()=>{
     try{rows=emb.cols?unfold(emb):(emb.rows||[]);meta=emb.meta||{generated:"",mode:"saved"};if(meta.lot_only)state.view="lot";else if(Array.isArray(meta.only_tabs)&&meta.only_tabs.length)state.view=meta.only_tabs[0];}   /* 공유 발행 파일(10/27): LOT 추적 탭만 */
     catch(e){fail(e);return;}
     emb=null;bootPhase(3);
     afterPaint(()=>{try{init();}catch(e){fail(e);return;}
-      let w=false;try{if(BOOT){BOOT.done($("#app"));BOOT.warm(navWarm);w=true;}}catch(e){}_bootQuiet=false;if(!w)navWarm(false);});});});};   /* ANIM-05: 미리 계산은 덮개 뒤 남는 시간에(없으면 걷힌 뒤) */
+      let w=false;try{if(BOOT){BOOT.done($("#app"));BOOT.warm(navWarm);w=true;}}catch(e){}_bootQuiet=false;if(!w)navWarm(false);});});};   /* ANIM-05: 미리 계산은 덮개 뒤 남는 시간에(없으면 걷힌 뒤) */
+  const run=()=>{bootPhase(1);afterPaint(()=>{let txt;try{const el=$("#embedded");txt=el.textContent;el.textContent="";}catch(e){errorPanel("embedded JSON 을 해석할 수 없습니다: "+(e&&e.message||e));return;}   /* PH-08: 원문(25~72MB)은 문서에서 비운다 — 사본 저장은 사본의 #embedded 를 새로 채운다 */
+    const parse=s=>{let emb;try{emb=JSON.parse(s);}catch(e){errorPanel("embedded JSON 을 해석할 수 없습니다: "+(e&&e.message||e));return;}go(emb);};
+    if(EMB_GZ.test(txt)){embEnc="gz";gunzip64(txt).then(parse,e=>errorPanel("압축된 데이터를 풀 수 없습니다: "+(e&&e.message||e)));txt=null;return;}   /* LOTD-04: 배포판은 압축본 */
+    embEnc="";const s=txt;txt=null;parse(s);});};
   if(typeof requestAnimationFrame==="function")requestAnimationFrame(()=>setTimeout(run,0));else run();}
 
 /* ---------- ③ 모델 ----------
@@ -1541,10 +1556,12 @@ function saveHtml(extra,namePart){if(extra&&extra.type)extra=null;   /* 클릭 �
   const pool=[],idx=new Map(),F=new Set(pooled);const put=v=>{v=v==null?"":String(v);let i=idx.get(v);if(i==null){i=pool.length;pool.push(v);idx.set(v,i);}return i;};
   const emb={cols,pooled,pool,rows:rows.map(r=>cols.map(c=>F.has(c)?put(r[c]):(r[c]??""))),meta:{...meta,...(RG.groups.length||RG_EMB?{recipe_groups:RG}:{}),mode:meta.mode==="demo"?"demo":"saved",...(extra||{}),saved_iso:new Date().toISOString().slice(0,19)}};
   const clone=document.documentElement.cloneNode(true);{const ov=clone.querySelector("#aoi-boot");if(ov)ov.remove();}   /* 시작 화면 덮개가 아직 있을 때 저장해도 사본에는 남기지 않는다(사본의 boot 스크립트가 새로 띄운다) */
-  clone.querySelector("#embedded").textContent=JSON.stringify(emb).replace(/</g,"\\u003c");   /* JS-05: '<' 를 통째로 — 주석 여는 글자 뒤 스크립트 태그(이중 이스케이프)도 막는다(collect._payload 와 같다) */
+  const json=JSON.stringify(emb).replace(/</g,"\\u003c");   /* JS-05: '<' 를 통째로 — 주석 여는 글자 뒤 스크립트 태그(이중 이스케이프)도 막는다(collect._payload 와 같다) */
   clone.querySelector("#app").innerHTML='<main><p class="muted" style="padding:40px 0">불러오는 중…</p></main>';clone.querySelector("#toast").classList.remove("on");
-  const blob=new Blob(["<!doctype html>\n"+clone.outerHTML],{type:"text/html;charset=utf-8"});const url=URL.createObjectURL(blob);
-  const a=document.createElement("a");a.href=url;a.download="AOI_capacity_"+(namePart||"")+stamp()+".html";document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),4000);toast("사본을 저장했습니다");}
+  const fin=text=>{clone.querySelector("#embedded").textContent=text;
+    const blob=new Blob(["<!doctype html>\n"+clone.outerHTML],{type:"text/html;charset=utf-8"});const url=URL.createObjectURL(blob);
+    const a=document.createElement("a");a.href=url;a.download="AOI_capacity_"+(namePart||"")+stamp()+".html";document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),4000);toast("사본을 저장했습니다");};
+  if(embEnc==="gz"&&typeof CompressionStream==="function")gzip64(json).then(fin,()=>fin(json));else fin(json);}   /* LOTD-04: 압축본으로 받았으면 사본도 압축(못 하면 그냥 JSON — 어느 쪽이든 로더가 읽는다) */
 
 /* ── 팝업 스택 ── */
 function pushTop(k){return state.stack.filter(x=>x!==k).concat([k]);}
