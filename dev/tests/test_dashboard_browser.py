@@ -624,8 +624,8 @@ def test_recipe_tab_shows_per_device_stats_and_compares_two_periods(page):
     assert pg.locator(".scanhero .jtog").count() == 2 and pg.locator(".scanhero .jtog[aria-pressed='true']").count() == 2   # 이 레시피로 보는 Job — 통계에 넣을지 고르는 단추
     assert [x.split("\n")[0] for x in pg.locator(".dbrow:not(.head):not(.axis)").all_inner_texts()] == ["AOI-1"]
     assert pg.locator(".dbrow .dd").count() == 2                        # 같은 장비에 멀티 · 단일 두 점
-    row = pg.locator(".dbrow[data-row='dev:AOI-1']").inner_text().replace("\n", " ")
-    assert "6·3wafer" in row and "1·1Lot" in row                       # 몇 wafer · 몇 Lot(멀티·단일 순)
+    dc = [" ".join(x.split()) for x in pg.locator(".dbrow[data-row='dev:AOI-1'] .dc").all_inner_texts()]
+    assert dc == ["6 3", "1 1"] and pg.locator(".dbrow[data-row='dev:AOI-1'] .dc .sw").count() == 4   # 몇 wafer · 몇 Lot — 숫자 앞 방식 색 점(11/25 RDL-13)
     assert pg.locator(".how .how-item").count() == 0 and pg.locator('[data-fk="how:all"]').get_attribute("aria-expanded") == "false"   # 어떻게 셌나는 기본 접힘
     pg.locator('[data-fk="how:all"]').click()
     pg.wait_for_timeout(250)
@@ -635,14 +635,16 @@ def test_recipe_tab_shows_per_device_stats_and_compares_two_periods(page):
     # 장당 | LOT당: 같은 레시피를 Lot(Report) 단위로 — fixture 의 Lot 은 20장 미만이라 값이 없다
     pg.locator(".scanhero .seg button", has_text="LOT당").click()
     pg.wait_for_timeout(300)
-    assert "분/Lot" in pg.locator(".scanhero .mtile").first.inner_text() and "장비별 LOT당 시간" in pg.locator('[data-key="rcp:mdev"]').inner_text()
-    assert "하루당" in pg.locator(".scanhero .mtile.verdict").inner_text() and "시간당" not in pg.locator(".scanhero .mtile.verdict").inner_text()   # LOT당은 하루당 Lot
+    t_lot = pg.locator(".scanhero .mtile").first.inner_text()
+    assert "LOT당 시간" in t_lot and "제외 1" in t_lot and "장비별 LOT당 시간" in pg.locator('[data-key="rcp:mdev"]').inner_text()   # 값이 없으면 단위 없이 '—', 제외 사유 태그(11/25 RDL-09 · 14)
+    assert "LOT 표본 없음" in pg.locator('[data-key="rcp:mdev"]').inner_text()                                     # '값 없음' 대신 이유(RDL-10)
+    assert "두 방식 모두 LOT 표본이 없어 비교할 수 없습니다" in pg.locator(".scanhero .mtile.verdict").inner_text()   # 11/25 RDL-09: 값 없는 비교 네 줄 대신 한 줄(하루당 줄은 test_recipe_verdict… 가 본다)
     pg.locator(".scanhero .seg button", has_text="Wafer당").click()
     # Job 단추로 멀티 Job 을 빼면 단일만 남는다
     pg.locator(".scanhero .jtog", has_text="RDL2-Multi").click()
     pg.wait_for_timeout(300)
     t2 = pg.locator(".scanhero .mtile").all_inner_texts()
-    assert "표본 0 / 0 wafer" in t2[0] and "표본 3 / 3 wafer" in t2[1] and pg.locator(".scanhero .jtog.off").count() == 1
+    assert "이 기간 멀티 기록 없음" in t2[0] and "표본 3 / 3 wafer" in t2[1] and pg.locator(".scanhero .jtog.off").count() == 1   # 빈 방식은 한 줄(11/25 RDL-09)
     pg.locator('[data-fk="rcp:more"]').click()
     pg.wait_for_timeout(200)
     cards = pg.locator("main section.cards > div").all_inner_texts()
@@ -1131,7 +1133,11 @@ def test_param_tab_unpacks_a_job_on_demand_and_marks_differing_cells(page_factor
     assert pg.locator(".ptab td.dif").all_inner_texts() == ["9"]                       # Threshold — AOI-7 만 다름
     body = pg.locator('main[data-key="view:param"]').inner_text()
     assert "Lot" in body and "Wafer" in body and "um" in body                          # CR/AF 는 글자, 단위 칸
-    assert pg.locator('section.pgrp:has-text("광학") .ptab').count() == 0              # 장비 고유 그룹은 접힌 채
+    assert pg.locator('tbody.pgb:has-text("광학") tr:not(.pgr)').count() == 0       # 장비 고유 그룹은 접힌 채(11/25: 그룹마다 표 → 한 표 + 그룹 머리 줄)
+    assert pg.locator("table.ptab").count() == 1                                       # 한 표라 장비 열이 그룹마다 같은 자리
+    xs = pg.evaluate("[...document.querySelectorAll('table.ptab tbody')].filter(b => b.rows.length > 2).map(b => [...b.rows].find(r => r.cells.length > 3).cells[3].getBoundingClientRect().x)")
+    assert len(set(round(x) for x in xs)) == 1
+    assert "조회 기간과 무관" in body and pg.locator(".rangebar.dim").count() == 1      # 이 탭은 파일 끝날 기준 최신 — 조회 기간 줄은 회색
     assert not errors and not requests
     ctx.close()
 
