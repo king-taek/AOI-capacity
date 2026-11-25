@@ -2852,9 +2852,8 @@ def _run(cfg: dict, tasks, fn, should_stop, group: Optional[Callable[[object], s
 
     pool = ThreadPoolExecutor(max_workers=sum(k for _, k in lanes), thread_name_prefix="aoi-read")
     futs = [pool.submit(lane, q) for q, k in lanes for _ in range(k)]
-    taken = 0
     try:
-        while taken < len(tasks):                          # 결과를 다 받았으면 바로 끝낸다(PC-07 — 빈 큐 0.25초를 기다리지 않는다)
+        while True:
             try:
                 item = out.get(timeout=0.25)
             except queue.Empty:
@@ -2866,7 +2865,6 @@ def _run(cfg: dict, tasks, fn, should_stop, group: Optional[Callable[[object], s
                     break
                 continue
             take(item)
-            taken += 1
             if tick is not None:
                 tick()
             if should_stop and should_stop():
