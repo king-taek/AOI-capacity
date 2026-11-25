@@ -74,7 +74,11 @@ def test_boot_screen_runs_before_the_data_and_moves_on_the_compositor_only():
     assert "BAR_G" in boot and '"#####"' in boot and "@keyframes txFill" in boot and "scaleX" in boot      # 5×7 비트맵 막대가 글자를 쓴다
     assert "@keyframes txGlow" in boot and ".tx.wait" in boot and 'barsListScene(ov,env,"glow")' in boot        # 4초 넘게 기다릴 땐 점등(현택 11/1 — '지금' 선 · 흔들림은 sway 에만)
     assert "prefers-reduced-motion" in boot and "animation:none!important" in boot
-    assert "BOOT.done(" in HTML and "BOOT.later(navWarm)" in HTML and "BOOT.abort()" in HTML
+    assert "BOOT.done(" in HTML and "BOOT.warm(navWarm)" in HTML and "BOOT.abort()" in HTML   # 11/25 ANIM-05: 미리 계산은 덮개 뒤 남는 시간에(없으면 걷힌 뒤)
+    # 11/25: 일찍 끝나면 색 앉히기를 미룸(ANIM-03) · 단계를 받는 즉시 글자(ANIM-04) · 잘린 파일 안내(JS-02)
+    assert "colorLeadMs:900" in boot
+    assert 'window.addEventListener("load",armStall' in boot and "결과 파일을 끝까지 읽지 못했습니다" in boot
+    assert "const afterPaint=" in HTML and "bootPhase(1);afterPaint(" in HTML
     assert "const G=()=>(!_bootQuiet&&" in HTML
     assert 'class="loader"' not in HTML and ".loader{" not in HTML    # 옛 Lottie 로더는 지웠다
 
@@ -148,7 +152,8 @@ def test_removed_features_stay_removed():
     """옛 장비-일 추정(D15) · PyQt GUI 모드 · 옛 업데이트 상수 · '수집 예정' 자리표시(D08) · 열람 시각 문구(D11)는 돌아오지 않는다."""
     for gone in ("isEst(", "estBar(", "showRepeat", "mEst", "ABORT.test(",
                  "data-gui", 'Q.get("gui")', "btnRunTop", "UPDATE_BASE=",
-                 "수집 예정", "열람 시각 기준", "현재까지", "00:00 ~ 현재"):
+                 "수집 예정", "열람 시각 기준", "현재까지", "00:00 ~ 현재",
+                 "살펴볼", "PROPS", "applySettings", "attentionUtil", "S.alert("):   # 11/25: '살펴볼 장비' 개념을 없앴다(사용자)
         assert gone not in HTML, gone
 
 

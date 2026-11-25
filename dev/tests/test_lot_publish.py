@@ -1,6 +1,6 @@
 """LOT 추적 발행 시험(10/27) — LOT 추적 탭만 담은 HTML 한 장을 이 PC 의 시험 폴더에 만든다(NAS 는 읽지 않고, 공유 폴더에는 쓰지 않는다).
 
-- `write_html(lot_only=True)`: `meta.lot_only` · 기간 전부 · 파라미터 · 레시피 묶음 · CSV 없음 · 안 쓰는 열은 값만 비운다(열 이름은 그대로).
+- `write_html(lot_only=True)`: `meta.lot_only` · 기간 전부 · 파라미터 · 레시피 묶음 · CSV 없음 · 안 쓰는 열은 담지 않는다(11/25 — 예전엔 값만 비웠다).
 - `out_dir` 은 NAS 아래면 거부한다. 화면(template)은 `meta.lot_only` 일 때 탭 줄에 LOT 추적만 둔다."""
 from __future__ import annotations
 
@@ -45,17 +45,29 @@ def test_lot_only_file_has_all_days_blank_columns_and_no_csv(tmp_path, sample):
     m = emb["meta"]
     assert m["lot_only"] is True
     assert '<html lang="ko" data-boot="lot" ' in Path(path).read_text(encoding="utf-8")[:200]   # 시작 화면 표식(D104 웨이퍼 장면 때 둔 것 — D105 부터는 같은 글자 장면이라 쓰지 않지만 표식은 그대로)
-    assert "<title>AOI LOT 추적</title>" in Path(path).read_text(encoding="utf-8")[:2000]      # 11/4: 배포판 제목
+    assert "<title>스캔을 어디에 했니?</title>" in Path(path).read_text(encoding="utf-8")[:2000]      # 11/4: 배포판 제목
     assert "params" not in m and "recipe_groups" not in m, [k for k in ("params", "recipe_groups") if k in m]
     assert (m["range"]["from"], m["range"]["to"]) == (m["data_from"], m["data_to"])      # html_days=7 이어도 가진 데이터 전부
-    back, _ = sample_rows.unfold(emb)
+    assert emb["cols"] == list(collect.LOT_ONLY_COLS) and set(emb["pooled"]) <= set(emb["cols"])   # 11/25: 안 쓰는 열은 담지 않는다(값만 비우던 것 — 90일 −32%)
+    pool, pooled = emb["pool"], set(emb["pooled"])
+    back = [{c: (pool[v] if c in pooled else v) for c, v in zip(emb["cols"], a)} for a in emb["rows"]]
     keep_rows = [r for r in rows if not r.get("kind")]
     assert len(back) == len(keep_rows) < len(rows)                                    # 합성 행(kind)은 담지 않는다
     for c in collect.LOT_ONLY_BLANK_COLS:
-        assert c in emb["cols"] and all(r.get(c) == "" for r in back)
+        assert c not in emb["cols"]
     assert set(collect.LOT_ONLY_BLANK_COLS) | set(collect.LOT_ONLY_KEEP_COLS) == set(collect.OUT_COLS)
     for c in ("wafer_id", "lot", "job", "device", "slot_no", "status", "recipe", "faults", "report", "batch_start", "wafer_start_time"):
         assert [r.get(c) or "" for r in back] == [r.get(c) or "" for r in keep_rows], c                   # LOT 추적이 쓰는 열은 그대로
+
+
+def test_lot_only_file_can_be_limited_to_recent_days(tmp_path, sample):
+    """11/25(LOTD-05): cfg `publish_lot_days` 를 주면 LOT 추적 배포판도 최근 N일(+ 그 기간 Wafer 의 앞선 시도 맥락) — 기본 0 은 지금처럼 전부."""
+    rows, meta = sample
+    assert collect.DEFAULT_CONFIG["publish_lot_days"] == 0
+    path = collect.write_html(_cfg(tmp_path / "main", publish_lot_days=7), rows, meta["devices"], [], 0.0, lot_only=True,
+                              out_dir=str(tmp_path / "pub"), out_name="lot.html")
+    m = sample_rows.embedded(Path(path).read_text(encoding="utf-8"))["meta"]
+    assert m["lot_only"] is True and m["range"]["from"] > m["data_from"] and m["range"]["to"] == m["data_to"]
 
 
 def test_out_dir_under_a_nas_root_is_refused(tmp_path, sample):
@@ -73,10 +85,10 @@ def test_out_dir_under_a_nas_root_is_refused(tmp_path, sample):
 def test_template_keeps_only_the_lot_tab_when_lot_only():
     t = TEMPLATE.read_text(encoding="utf-8")
     assert 'if(meta.lot_only)state.view="lot"' in t
-    assert 'lotOnly?[["lot","LOT 추적"]]' in t
+    assert 'lotOnly?[["lot","스캔을 어디에 했니?"]]' in t
     assert "!lotOnly" in t                                       # 사본 저장 · 레시피 묶음 · 날짜 줄 · 설정 단추를 감춘다
     for piece in ('lotOnly?"":`<section class="cards sm lotcards"', '${lotOnly?"":slots}',
-                  '${lotOnly?"":\'<span class="r">배치 시간</span><span>구분</span><span></span>\'}'):
+                  '${lotOnly?"":\'<span class="r">배치 시간</span><span class="tg">구분</span><span></span>\'}'):
         assert piece in t, piece                                 # 카드 · 배치 시간 · 구분 · Slot 지도 없음
     assert "SLOT_WARN" not in t and 'const mx=lotOnly' not in t  # 10/29: Slot 세로 목록 · 경고 없앰, Wafer × 검사는 원본과 같다
 
@@ -354,7 +366,7 @@ def test_share_shortcut_falls_back_to_url_without_windows_and_lnk_replaces_it(tm
     share = tmp_path / "share"
     publish.publish_lot(cfg, str(share), rows=rows[:10], dev_meta=devs)
     assert (share / publish.LOT.shortcut).is_file() and not (share / publish.LOT.lnk).exists()
-    monkeypatch.setattr(publish, "make_lnk", lambda target, icon: b"LNK:" + (icon or "").encode("utf-16-le"))
+    monkeypatch.setattr(publish, "make_lnk", lambda target, icon: b"LNK:" + target.encode("utf-16-le") + (icon or "").encode("utf-16-le"))
     publish.publish_lot(cfg, str(share), rows=rows[:10], dev_meta=devs)
     assert (share / publish.LOT.lnk).is_file()
     assert not (share / publish.LOT.shortcut).exists()           # 우리 .url 은 .lnk 가 생기면 지운다
@@ -373,6 +385,18 @@ def test_lnk_current_checks_the_icon_path():
     assert publish._lnk_current(b"x" + "AOI_LOT.html".encode("utf-16-le"), None)
 
 
+def test_lnk_current_checks_the_target_path():
+    """11/25(LOT-18): 배포 폴더 표기를 바꾸거나 폴더를 옮기면 옛 경로 바로가기는 다시 만든다 — 같은 경로면(대소문자 · UNC 가 서버\\공유 와 나머지로 나뉘어 적혀도) 그대로."""
+    tgt = "\\\\srv\\share\\LOT추적\\AOI_LOT.html"
+    assert publish._lnk_current(b"x" + tgt.encode("utf-16-le"), None, tgt)
+    assert publish._lnk_current(b"x" + tgt.upper().encode("utf-16-le"), None, tgt)
+    split = b"x" + "\\\\SRV\\SHARE".encode("cp949") + b"\0" + "LOT추적\\AOI_LOT.html".encode("cp949") + b"\0"
+    assert publish._lnk_current(split, None, tgt)                                   # LinkInfo: 서버\\공유 + 나머지 경로(ANSI)
+    assert not publish._lnk_current(b"x" + "Z:\\LOT추적\\AOI_LOT.html".replace("Z:", "\\\\old\\x").encode("utf-16-le"), None, tgt)
+    assert not publish._lnk_current(b"x" + tgt.encode("utf-16-le"), None, "\\\\srv\\other\\AOI_LOT.html")
+    assert publish._lnk_current(b"x" + "\\\\srv\\share\\LOT추적\\AOI_LOT.html".encode("utf-16-le"), None, "Z:\\LOT추적\\AOI_LOT.html")   # 연결 드라이브: 드라이브 뒤 경로
+
+
 def test_publish_removes_our_old_share_icon_only(tmp_path, sample):
     cfg, rows, devs = _publish_cfg(tmp_path, sample)
     share = tmp_path / "share"
@@ -383,3 +407,107 @@ def test_publish_removes_our_old_share_icon_only(tmp_path, sample):
     (share / publish.ICON_NAME).write_bytes(b"someone else's icon")
     publish.publish_lot(cfg, str(share), rows=rows[:50], dev_meta=devs, now=dt.datetime(2026, 11, 4, 9, 5))
     assert (share / publish.ICON_NAME).read_bytes() == b"someone else's icon"
+
+
+def test_data_file_replace_retries_a_brief_lock_and_stale_tmp_goes_first(tmp_path, sample, monkeypatch):
+    """PP-11: 백신 · 동기화가 데이터 파일을 잠깐 잡아도 몇 번 기다려 올리고, 쓰다 끊긴 1시간 넘은 .tmp 는 배포 첫머리에 지운다
+    (예전엔 배포가 끝까지 가야만 정리돼 실패가 이어지면 쌓였다) — 나중에 배포가 실패해도 정리는 이미 됐다."""
+    cfg, rows, devs = _publish_cfg(tmp_path, sample)
+    share = tmp_path / "share"
+    (share / "data").mkdir(parents=True)
+    old_tmp, new_tmp = share / "data" / "lot_x.html.1-2-3.tmp", share / "data" / "lot_y.html.4-5-6.tmp"
+    old_tmp.write_bytes(b"x" * 10)
+    new_tmp.write_bytes(b"y")
+    os.utime(old_tmp, (0, 0))
+    real, hits = os.replace, []
+
+    def flaky(src, dst):
+        if str(dst).endswith(".html") and os.sep + "data" + os.sep in str(dst) and len(hits) < 2:
+            hits.append(dst)
+            raise PermissionError(13, "잠깐 잡힘")
+        return real(src, dst)
+    monkeypatch.setattr(publish.os, "replace", flaky)
+    monkeypatch.setattr(collect, "REPLACE_WAIT_SEC", 0)
+    got = publish.publish_lot(cfg, str(share), rows=rows[:300], dev_meta=devs, now=dt.datetime(2026, 10, 27, 8, 15))
+    assert len(hits) == 2 and Path(got["data"]).is_file()
+    assert not old_tmp.exists() and new_tmp.exists()                              # 1시간 안 된 것은 남긴다(다른 실행이 쓰는 중일 수 있다)
+    monkeypatch.setattr(publish.collect, "write_html", lambda *a, **k: (_ for _ in ()).throw(OSError("끊김")))
+    os.utime(new_tmp, (0, 0))
+    with pytest.raises(OSError):
+        publish.publish_lot(cfg, str(share), rows=rows[:300], dev_meta=devs, now=dt.datetime(2026, 10, 27, 8, 16))
+    assert not new_tmp.exists()
+
+
+def test_local_html_does_not_retry_a_lock(tmp_path, sample, monkeypatch):
+    """수집 창의 결과 HTML(out_dir 없음)은 예전처럼 한 번만 — 사용자가 연 브라우저 탭 때문에 6초를 기다리지 않는다."""
+    rows, meta = sample
+    calls = []
+
+    def locked(src, dst):
+        calls.append(dst)
+        raise PermissionError(13, "열려 있음")
+    monkeypatch.setattr(collect.os, "replace", locked)
+    with pytest.raises(PermissionError):
+        collect.write_html(_cfg(tmp_path / "o", write_csv=False), rows[:200], meta["devices"], [], 0.0)
+    assert len(calls) == 1 and not list((tmp_path / "o").glob("*.tmp"))
+
+
+# ── 11/25: 배포 단계 알림 · 멈춤 · 같은 서버 건너뜀 · 이유 종류(PP-01 · PP-03 · CORE-06 · CORE-10) ──
+def test_publish_error_kind_names_the_reason():
+    class _Win(OSError):
+        def __init__(self, code):
+            super().__init__("x")
+            self.winerror = code
+    assert publish.error_kind(FileNotFoundError("x")) == publish.WHY_UNREACHABLE
+    assert publish.error_kind(_Win(53)) == publish.WHY_UNREACHABLE
+    assert publish.error_kind(PermissionError("x")) == publish.WHY_DENIED
+    assert publish.error_kind(_Win(32)) == publish.WHY_LOCKED
+    assert publish.error_kind(ValueError("x")) == publish.WHY_CONFIG
+    assert publish.error_kind(NasWriteRefused("x")) == publish.WHY_CONFIG
+    assert publish.error_kind(RuntimeError("x")) == publish.WHY_OTHER
+
+
+def _fake_runs(monkeypatch, fail_lot=None):
+    calls: list = []
+    monkeypatch.setattr(publish, "_enabled", lambda d: bool(d))
+
+    def run_one(kind, cfg, share_dir, rows, dev_meta, params_store, log, status, prefix, prep=None):
+        calls.append(kind)
+        if kind is publish.LOT and fail_lot is not None:
+            status.update({"error": "x", "dir": share_dir, "why": publish.error_kind(fail_lot)})
+            return None
+        status.update({prefix + "dir": share_dir, prefix + "ok": True})
+        return {"pointer_ok": True}
+    monkeypatch.setattr(publish, "_run_one", run_one)
+    return calls
+
+
+def test_publish_after_collect_reports_each_step_and_stops_before_the_next(monkeypatch):
+    calls = _fake_runs(monkeypatch)
+    cfg = {"publish_dir": r"\\srvA\share\lot", "publish_full_dir": r"\\srvA\share\all"}
+    seen: list = []
+    publish.publish_after_collect(cfg, [], [], status={}, progress=lambda d, t, m: seen.append((d, t, m)))
+    assert calls == [publish.LOT, publish.FULL]
+    assert [m for _d, _t, m in seen] == [i18n.KO.COLLECT_PHASE_PUBLISH_FMT.format(i=1, n=2, what=i18n.KO.PUBLISH_WHAT_LOT),
+                                         i18n.KO.COLLECT_PHASE_PUBLISH_FMT.format(i=2, n=2, what=i18n.KO.PUBLISH_WHAT_FULL)]
+    assert all(d == 0 and t == 0 for d, t, _m in seen)                       # 총량 모름(busy)
+    calls.clear()
+    asked = iter([False, True])                                                # LOT 은 시작, 그 뒤 멈춤 → 전체는 시작 안 함
+    st: dict = {}
+    publish.publish_after_collect(cfg, [], [], status=st, should_stop=lambda: next(asked))
+    assert calls == [publish.LOT] and "full_ok" not in st and "full_error" not in st
+
+
+def test_full_publish_is_skipped_when_the_same_server_was_unreachable(monkeypatch):
+    calls = _fake_runs(monkeypatch, fail_lot=FileNotFoundError("x"))
+    st: dict = {}
+    publish.publish_after_collect({"publish_dir": r"\\srvA\share\lot", "publish_full_dir": r"\\SRVA\other\all"}, [], [], status=st)
+    assert calls == [publish.LOT]
+    assert st["why"] == publish.WHY_UNREACHABLE and st["full_why"] == publish.WHY_UNREACHABLE
+    assert st["full_error"] == i18n.KO.PUBLISH_SKIPPED_SAME_HOST
+    calls = _fake_runs(monkeypatch, fail_lot=FileNotFoundError("x"))           # 다른 서버면 전체는 따로 해 본다
+    publish.publish_after_collect({"publish_dir": r"\\srvA\share\lot", "publish_full_dir": r"\\srvB\share\all"}, [], [], status={})
+    assert calls == [publish.LOT, publish.FULL]
+    calls = _fake_runs(monkeypatch, fail_lot=PermissionError("x"))             # 권한 문제는 서버가 닿은 것 — 건너뛰지 않는다
+    publish.publish_after_collect({"publish_dir": r"\\srvA\share\lot", "publish_full_dir": r"\\srvA\other\all"}, [], [], status={})
+    assert calls == [publish.LOT, publish.FULL]

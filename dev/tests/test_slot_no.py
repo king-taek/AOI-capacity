@@ -44,10 +44,10 @@ def test_lot_tab_shows_slot_map_below_the_inspection_order():
     (k,) = _lot_keys(_lot_screen(rows))
     out = _lot_screen(rows, k)
     sec = out.split("Slot No · Wafer ID")[1]
-    assert out.index("검사 순서") < out.index("Slot No · Wafer ID") < out.index("Wafer × 검사")
-    assert "검사 #1 기준" in sec                                                # 슬롯을 아는 Wafer 가 가장 많은 검사
+    assert out.index("스캔 순서") < out.index("Slot No · Wafer ID") < out.index("Slot map &amp; 스캔 기록")
+    assert "스캔 1 기준" in sec                                                 # 슬롯을 아는 Wafer 가 가장 많은 스캔(11/25 LOT-09: 스캔 번호에는 '#' 를 쓰지 않는다 — '#' 는 슬롯)
     assert '<b class="num">#1</b><span class="mono">SLOTW00002X</span>' in sec and '<b class="num">#3</b><span class="mono">SLOTW00000X</span>' in sec
-    mx = out.split("Wafer × 검사")[1]
+    mx = out.split("Slot map &amp; 스캔 기록")[1]
     assert mx.index("SLOTW00002X") < mx.index("SLOTW00001X") < mx.index("SLOTW00000X")   # 격자 줄은 슬롯 순서
     assert '<span class="sn">#1</span>SLOTW00002X' in mx
 
@@ -58,9 +58,10 @@ def test_publish_lot_tab_shows_the_wafer_grid_like_the_full_screen():
     (k,) = _lot_keys(_lot_screen(rows))
     (out,) = screen(rows, meta("AOI-1", "AOI-2") | {"lot_only": True}, [["lotHtml"]], state={"view": "lot", "lotPick": {"k": "lot", "v": k}})
     assert "Slot No · Wafer ID" not in out and "lotslots" not in out and "정확하지 않을 수 있습니다" not in out
-    mx = out.split("Wafer × 검사")[1]
+    mx = out.split("Slot map &amp; 스캔 기록")[1]
     assert mx.index("SLOTW00002X") < mx.index("SLOTW00001X") < mx.index("SLOTW00000X")   # 줄 이름 앞 #슬롯 · 슬롯 순서는 원본과 같다
     assert '<span class="sn">#1</span>SLOTW00002X' in mx
+    assert "#슬롯 = 스캔 1(AOI-1 · 09/18) 기준" in out                                # 11/25(LOTA-08): 배포판도 어느 스캔의 슬롯인지 적는다
 
 
 def test_lot_tab_without_slots_says_how_to_fill_them():
@@ -74,10 +75,11 @@ def test_fill_gaps_fills_slot_no_from_wafer_ini_only_when_folder_not_rewritten(t
     """10/25 '옛 기간 빈칸 채우기' 의 슬롯 번호 줄 — 빈 slot_no 를 Wafer 폴더의 WaferInfo.ini 한 장만 읽어 채운다.
     INI 의 WaferStartTime 이 행과 다르면(나중 검사가 덮어씀) 쓰지 않고, 해 본 Report 는 다시 열지 않는다."""
     import json
-    from conftest import make_cfg
+    from conftest import as_old_cache, make_cfg
     nas, csv_path = fake_nas
     cfg = make_cfg(tmp_path, csv_path, collect_params=False)
     collect.collect(cfg)
+    as_old_cache(cfg)
     inis = [p for p in nas.rglob("WaferInfo.ini")]
     assert inis
     for ini in inis:
@@ -87,7 +89,7 @@ def test_fill_gaps_fills_slot_no_from_wafer_ini_only_when_folder_not_rewritten(t
     assert plan.slot_missing > 0 and plan.slot_have == 0 and plan.etas["slot"][0] is not None
     st = collect.fill_gaps(cfg)
     assert st["slot"]["filled"] == plan.slot_missing and st["slot"]["empty"] == 0
-    rows = [r for e in json.load(open(cfg["cache_file"], encoding="utf-8"))["reports"].values() for r in e["rows"] if r.get("ini_match") == "EXACT" and not r.get("kind")]
+    rows = [r for e in collect.read_cache_file(cfg["cache_file"])["reports"].values() for r in e["rows"] if r.get("ini_match") == "EXACT" and not r.get("kind")]
     assert rows and all(r["slot_no"] == "7" for r in rows)
     after = collect.plan_run(cfg)
     assert after.slot_missing == 0 and after.slot_have == len(rows)
@@ -96,10 +98,11 @@ def test_fill_gaps_fills_slot_no_from_wafer_ini_only_when_folder_not_rewritten(t
 
 def test_fill_gaps_leaves_slot_empty_when_ini_was_rewritten(tmp_path, fake_nas):
     import json
-    from conftest import make_cfg
+    from conftest import as_old_cache, make_cfg
     nas, csv_path = fake_nas
     cfg = make_cfg(tmp_path, csv_path, collect_params=False)
     collect.collect(cfg)
+    as_old_cache(cfg)
     for ini in nas.rglob("WaferInfo.ini"):
         t = ini.read_text(encoding="utf-8")
         import re

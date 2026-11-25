@@ -85,7 +85,7 @@ def test_collect_flow_writes_html_and_updates_status(window, styled_qapp):
     assert "수집 완료" in window.collect_page._status.text()
     # 범위 안인데 접근하지 못한 장비는 수집 카드 안 알림에 이름이 나온다 — '확인' 을 눌러야 닫히는 팝업은 없다(10/24)
     page = window.collect_page
-    assert not warned and page._outcome.isVisible() and "접근 못 함" in page._oc_body.text() and page._oc_dev.isVisible()
+    assert not warned and page._outcome.isVisible() and "접근 못 한 장비" in page._oc_body.text() and page._oc_dev.isVisible()
     page._oc_dev.click()
     assert window.nav.current() == "devices"
     window.nav.set_current("collect")
@@ -208,8 +208,10 @@ def test_mode_cards_pick_one_situation_and_map_to_worker_options(window, styled_
     _pump(styled_qapp, 0.2)
     assert page.mode() == "normal" and page.options() == (False, False, False)
     assert page._cards["normal"].title() == i18n.KO.MODE_FIRST_TITLE            # 아직 캐시가 없다
-    assert not page._cards["rebuild"].available()
-    page._pick("rebuild")
+    assert not page._cards["backfill"].available()
+    assert page._trouble.note() == i18n.KO.COLLECT_TROUBLE_LOCKED                # 11/25: 왜 못 누르는지 머리에 바로 보인다
+    assert "rebuild" not in page._cards                                         # 11/25: '전체 다시 만들기' 카드는 없앴다(CLI --rebuild-all 만)
+    page._pick("backfill")
     assert page.mode() == "normal"                                              # 잠긴 카드는 고를 수 없다
     window._start_collect(False, False)
     t0 = time.time()
@@ -217,8 +219,9 @@ def test_mode_cards_pick_one_situation_and_map_to_worker_options(window, styled_
         _pump(styled_qapp)
     page.wait_for_plan()
     _pump(styled_qapp, 0.3)
-    assert page._cards["rebuild"].available() and page._cards["normal"].title() == i18n.KO.MODE_NORMAL_TITLE
-    for key, args in (("backfill", (False, True, False)), ("recover", (False, False, True)), ("rebuild", (True, False, False))):
+    assert page._cards["backfill"].available() and page._cards["normal"].title() == i18n.KO.MODE_NORMAL_TITLE
+    assert page._trouble.note() == ""
+    for key, args in (("backfill", (False, True, False)), ("recover", (False, False, True))):
         page._pick(key)
         assert page.options() == args and page._cards[key].property("selected") == "true"
         assert sum(c.property("selected") == "true" for c in page._cards.values()) == 1
@@ -228,7 +231,7 @@ def test_mode_cards_pick_one_situation_and_map_to_worker_options(window, styled_
     assert prefs.load().refresh_window_days == 5 and page.options() == (False, False, False)
     page._pick("normal")
     assert prefs.load().refresh_window_days == 0
-    # 10/5 '기간 다시 읽기' — 전체 다시 만들기 밑, 날짜 두 칸(거꾸로 골라도 바로잡음), 고른 동안만 refresh_range
+    # 10/5 '기간 다시 읽기' — 날짜 두 칸(거꾸로 골라도 바로잡음), 고른 동안만 refresh_range
     from PyQt6.QtCore import QDate
     assert page.refresh_range() is None and not page._cards["range"].isHidden()
     page._r_from.setDate(QDate(2026, 9, 20))
@@ -272,6 +275,10 @@ def test_gap_card_shows_missing_counts_and_fills_them(window, styled_qapp):
     t0 = time.time()
     while window.is_collecting() and time.time() - t0 < 20:
         _pump(styled_qapp)
+    from conftest import as_old_cache
+    from aoi_capacity.utils import prefs
+    as_old_cache(prefs.to_collect_cfg(prefs.load()))   # 새로 읽은 Report 는 '해 봄' 표시가 붙어 빈칸이 아니다(11/25) — 옛 캐시처럼
+    page.refresh_plan()
     page.wait_for_plan()
     _pump(styled_qapp, 0.3)
     assert not page._gaps.isHidden() and page._b_gaps.isEnabled()
@@ -355,3 +362,101 @@ def test_periodic_update_check_only_shows_a_badge_and_badge_asks(window, styled_
     window._update_worker = w2
     window._on_update_checked(window._update_token, False, ("update", info))
     assert len(asked) == 3
+
+
+def test_number_and_date_boxes_have_no_arrows_and_change_only_by_typing(window, styled_qapp):
+    """11/25 QT-10(현택): ▲▼ 없음 · 휠/방향키로 안 바뀜 · 날짜는 칸을 누르면 달력."""
+    from PyQt6.QtCore import QDate, QPoint, Qt
+    from PyQt6.QtGui import QKeyEvent
+    from PyQt6.QtWidgets import QAbstractSpinBox
+    from PyQt6.QtTest import QTest
+    from aoi_capacity.ui.widgets.inputs import NoWheelDateEdit, NoWheelSpinBox
+
+    page = window.collect_page
+    spins = page.findChildren(NoWheelSpinBox)
+    dates = page.findChildren(NoWheelDateEdit)
+    assert spins and dates
+    for b in spins + dates:
+        assert b.buttonSymbols() == QAbstractSpinBox.ButtonSymbols.NoButtons
+    s = spins[0]
+    s.setRange(0, 100)
+    s.setValue(5)
+    s.stepBy(3)
+    s.keyPressEvent(QKeyEvent(QKeyEvent.Type.KeyPress, Qt.Key.Key_Up, Qt.KeyboardModifier.NoModifier))
+    assert s.value() == 5
+    d = dates[0]
+    d.setDate(QDate(2026, 11, 20))
+    d.stepBy(1)
+    assert d.date() == QDate(2026, 11, 20)
+    d.show()
+    QTest.mouseClick(d, Qt.MouseButton.LeftButton, pos=QPoint(5, 5))
+    _pump(styled_qapp)
+    assert d.calendar_open()
+    d._popup._pick(QDate(2026, 11, 18))
+    assert d.date() == QDate(2026, 11, 18) and not d.calendar_open()
+
+
+def test_loading_overlay_shows_device_errors_and_two_line_progress(window, styled_qapp):
+    """11/25 QT-05 · QT-07: 접근 못 한 장비는 빨간 한 줄, 'Report 읽는 중 · 장비\\n파일' 은 단계 줄과 파일 줄로 나뉜다, 범례에 건너뜀."""
+    from aoi_capacity import i18n
+    from aoi_capacity.ui.widgets import loading_overlay
+
+    assert any("skipped" in states for states, _k in loading_overlay.LEGEND)
+    ov = window.overlay
+    ov.show_overlay("t")
+    ov.set_progress(1, 9, i18n.KO.COLLECT_PHASE_PARSE_FMT.format(device="AOI-3", name="x_BatchReport.htm"))
+    assert ov._phase.text().endswith("AOI-3") and ov._detail.text() == "x_BatchReport.htm"
+    ov.set_device_error("AOI-7")
+    ov.set_device_error("AOI-8")
+    assert not ov._err.isHidden() and "AOI-7" in ov._err.text() and "AOI-8" in ov._err.toolTip()
+    ov.hide_overlay()
+    ov.show_overlay("t")
+    assert ov._err.isHidden()
+    ov.hide_overlay()
+
+
+def test_device_check_does_not_mark_the_list_unsaved(window, styled_qapp):
+    """11/25 QT-02: 연결 확인 결과(상태 칸)는 편집이 아니다 — 저장 단추가 켜지지 않는다."""
+    page = window.devices_page
+    assert not page.is_dirty()
+    page.check_connections()
+    end = time.time() + 10
+    while not page._b_check.isEnabled() and time.time() < end:
+        _pump(styled_qapp, 0.05)
+    assert page._b_check.isEnabled() and not page._summary.isHidden()
+    assert not page.is_dirty() and not page._b_save.isEnabled()
+
+
+def test_closing_during_manual_publish_asks_and_waits_for_it(window, styled_qapp, monkeypatch, tmp_path):
+    """11/25 리뷰: 설정 '지금 올리기' 로 도는 배포(_pub_worker)도 창을 닫을 때 묻고, '예' 면 올리기가 끝난 뒤 닫는다 —
+    예전엔 수집 끝 배포만 물어 shutdown 이 15초 뒤 돌고 있는 스레드를 페이지와 함께 지웠다."""
+    import threading
+
+    from aoi_capacity import publish
+    from aoi_capacity.ui import main_window
+    from aoi_capacity.utils import prefs
+
+    gate = threading.Event()
+
+    def slow_publish(cfg, out_dir, log=None):
+        gate.wait(10)
+        return {"bytes": 1, "sec": 0.0, "pointer_ok": True}
+
+    monkeypatch.setattr(publish, "publish_lot", slow_publish)
+    prefs.patch(publish_dir=str(tmp_path / "share"))
+    asked = []
+    monkeypatch.setattr(main_window.sheets, "ask", lambda _w, title, text, *a, **k: asked.append(text) or main_window.SB.Yes)
+    page = window.collect_page
+    page.publish_now("lot")
+    _pump(styled_qapp)
+    assert page.publishing() is not None
+    window.close()
+    _pump(styled_qapp)
+    assert asked == [main_window.i18n.KO.LOADING_CLOSE_BUSY_BODY_MANUAL]
+    assert window.isVisible()                                          # 올리는 중 — 아직 닫히지 않는다
+    gate.set()
+    end = time.time() + 5
+    while window.isVisible() and time.time() < end:
+        _pump(styled_qapp)
+    assert not window.isVisible()
+    assert page.publishing() is None

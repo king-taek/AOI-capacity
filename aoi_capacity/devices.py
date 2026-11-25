@@ -429,15 +429,19 @@ def path_aliases(path: str, cfg: Optional[dict] = None) -> List[str]:
     return uniq
 
 
-def _probe_auto(root: str, cfg: dict, hint: str = "") -> Tuple[List[Dict[str, object]], List[str]]:
-    """`_discover_under` 의 읽기 부분 — (찾은 장비들, 로그 문장들). 스레드에서 돌 수 있게 로그를 부르지 않고 돌려준다."""
+def _probe_auto(root: str, cfg: dict, hint: str = "", name: str = "") -> Tuple[List[Dict[str, object]], List[str]]:
+    """`_discover_under` 의 읽기 부분 — (찾은 장비들, 로그 문장들). 스레드에서 돌 수 있게 로그를 부르지 않고 돌려준다.
+
+    ★ root 자체를 장비로 받는 길도 범위 게이트를 지난다(CORE-01): 제한 중이면 root 의 폴더 이름이나 행 이름(`name`)이
+    허용 목록에 있을 때만 root 의 Report 폴더를 확인한다. 아니면 root 를 장비로 보지 않고 허용 이름만 `root/<이름>` 으로 확인한다."""
     if not os.path.isdir(root):
         return [], []
-    if _has_report(root, cfg):
-        folder = os.path.basename(root.rstrip("\\/")) or root
+    restricted = not scope.unrestricted(cfg)
+    folder = os.path.basename(root.rstrip("\\/")) or root
+    if (not restricted or scope.is_allowed(cfg, folder, name)) and _has_report(root, cfg):
         return [_entry(folder, root, hint)], []
     out: List[Dict[str, object]] = []
-    if not scope.unrestricted(cfg):
+    if restricted:
         for name in scope.scope_list(cfg):
             path = os.path.join(root, name)
             if os.path.isdir(path) and _has_report(path, cfg):
@@ -547,7 +551,7 @@ def devices_from_rows(rows: List[Dict[str, object]], cfg: dict, log: Optional[Lo
     def probe(t):
         kind, path, hint, _label, _row = t
         if kind == "auto":
-            return _probe_auto(path, cfg, hint)
+            return _probe_auto(path, cfg, hint, str(_row.get("name") or ""))
         if kind == "explicit":
             return _has_report(path, cfg), []
         if kind == "kla":
@@ -697,7 +701,7 @@ def check_rows(rows: List[Dict[str, object]], cfg: dict) -> List[Dict[str, objec
         if not auto and scope.is_kla(row.get("name") or sub):
             return "ok" if _is_kla_root(os.path.join(root, sub) if sub else root) else "no_report"
         if auto:
-            n = len(_probe_auto(root, cfg)[0])
+            n = len(_probe_auto(root, cfg, name=str(row.get("name") or ""))[0])
             return f"auto:{n}" if n else "no_report"
         path = os.path.join(root, sub) if sub else root
         return "ok" if _has_report(path, cfg) else "no_report"

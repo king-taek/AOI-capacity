@@ -97,7 +97,7 @@ def test_import_zips_resolves_references_and_skips_out_of_scope(tmp_path, fake_n
     folder = _zip(tmp_path)
     st = collect.import_param_zips(cfg, str(folder))
     assert st["added"] == 1
-    cache = json.loads(open(cfg["cache_file"], encoding="utf-8").read())
+    cache = collect.read_cache_file(cfg["cache_file"])
     [s] = cache["params"]["snaps"].values()
     assert s["dev"] == "AOI-9" and s["job"] and set(s["f"]) == {"Recipe.ini", "RTP.txt"}
     assert collect.import_param_zips(cfg, str(folder))["added"] == 0        # 두 번 넣지 않는다
@@ -146,8 +146,24 @@ def test_fill_params_reads_only_wafer_folders_of_reports_without_snapshots(tmp_p
     assert after.params_missing == 0 and after.params_have >= 1
     opened.clear()
     assert collect.fill_params(cfg)["targets"] == 0 and not [p for p in opened if str(nas) in p]
-    cache = json.loads(open(cfg["cache_file"], encoding="utf-8").read())
+    cache = collect.read_cache_file(cfg["cache_file"])
     assert cache["eta"]["params_fill"][0][0] == st["targets"]
+
+
+def test_fill_params_skips_a_wafer_folder_rewritten_by_a_later_scan(tmp_path, fake_nas):
+    """CORE-05: 슬롯 · RDL · 스캔 비율 채우기처럼 WaferInfo.ini 의 시각이 행과 다르면(같은 Lot 이름으로 다시 검사해 폴더가 덮어써짐)
+    지금 폴더의 레시피를 옛 Report 의 스냅숏으로 넣지 않는다 — 빈 스냅숏(다시 열지 않음) + 사유 수."""
+    nas, csv_path = fake_nas
+    (_wafer_dir(nas) / "Recipe.ini").write_text(RECIPE, encoding="utf-8")
+    cfg = make_cfg(tmp_path, csv_path)
+    collect.collect(dict(cfg, collect_params=False))
+    ini = _wafer_dir(nas) / "WaferInfo.ini"
+    ini.write_text(ini.read_text(encoding="utf-8").replace("WaferStartTime=13-Sep-26 05:31:04 PM", "WaferStartTime=20-Sep-26 08:00:00 AM"),
+                   encoding="utf-8")
+    st = collect.fill_params(cfg)
+    assert st["time_mismatch"] >= 1 and st["targets"] == st["added"] + st["empty"]
+    cache = json.loads(open(cfg["cache_file"], encoding="utf-8").read())
+    assert not any(s["dev"] == "AOI-9" and s["f"] for s in cache["params"]["snaps"].values())
 
 
 def test_estimate_sec_uses_recent_measurements_else_rough_default():
@@ -166,9 +182,10 @@ def test_estimate_sec_uses_recent_measurements_else_rough_default():
 
 
 def test_fill_params_stop_keeps_what_was_read_and_resumes(tmp_path, fake_nas, monkeypatch):
-    """멈추면 그때까지 읽은 덩어리는 저장되고, 다시 누르면 남은 Report 부터 이어서 한다."""
+    """멈추면 그때까지 읽은 것은 저장되고, 다시 누르면 남은 Report 부터 이어서 한다.
+    CORE-11: 덩어리가 아니라 끝난 것부터 바로 반영한다(다른 빈칸 채우기와 같은 틀) — 동시 읽기면 작은 표본은 멈추기 전에 다 끝나므로 한 줄로 읽는다."""
     nas, csv_path = fake_nas
-    cfg = make_cfg(tmp_path, csv_path)
+    cfg = make_cfg(tmp_path, csv_path, read_workers=1)
     collect.collect(dict(cfg, collect_params=False))
     total = collect.plan_run(cfg).params_missing
     assert total >= 2
@@ -210,3 +227,16 @@ def test_jobs_differing_only_in_separators_or_case_merge_but_copy_does_not():
     byname = {J["j"]: J for J in m["jobs"]}
     assert set(byname) == {"TB500_RDL4-Multi", "TB500_RDL4 - Multi COPY"}   # 표시 이름 = 가장 최근 스캔의 원문
     assert byname["TB500_RDL4-Multi"]["n"] == 3
+
+
+def test_small_runs_do_not_inflate_the_per_report_estimate():
+    """PC-04: Report 2개짜리 평소 수집(개당 1초처럼 보임)이 쌓여도 큰 실행의 예상이 부풀지 않는다 — 개수로 가중 · 20개 미만은 뺀다."""
+    cache: dict = {}
+    for n, w in ((360, 32.2), (36, 4.8), (138, 11.1), (2, 1.9), (2, 2.0), (2, 1.9)):
+        collect.record_eta(cache, "incremental", n, w, 10.0)
+    sec, rough = collect.estimate_sec(cache["eta"], "rebuild", 402)
+    per = (4.8 + 11.1) / (36 + 138)                                         # 최근 5개(360개짜리는 밀려남) 중 20개 이상인 둘만
+    assert not rough and sec == int(round(10.0 + 402 * per)) and sec < 60     # 예전(중앙값)은 402 × 0.95 ≈ 380초
+    small = {}
+    collect.record_eta(small, "incremental", 3, 3.0, 1.0)
+    assert collect.estimate_sec(small["eta"], "refresh", 10) == (11, False)   # 작은 기록뿐이면 그것으로

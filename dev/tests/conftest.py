@@ -178,3 +178,14 @@ def make_cfg(tmp_path, csv_path, **over):
                 "scope_devices": ["*"], "publish_full_dir": ""})        # 전체 배포는 자기 시험에서만 켠다
     cfg.update(over)
     return cfg
+
+
+def as_old_cache(cfg) -> None:
+    """수집기 업데이트 전에 읽은 캐시를 흉내 — 새로 읽은 Report 에 붙는 '이미 해 봄' 표시(`collect.FRESH_CHECKED`, 11/25)를 지운다.
+    빈칸 채우기 시험은 '나중에 생긴 값' 을 채우는 것이라, 수집 뒤 가짜 NAS 에 파일을 더하고 이 표시를 지운 다음 채운다."""
+    from aoi_capacity import collect
+    cache = collect.read_cache_file(cfg["cache_file"])           # 파일 안 행은 접혀 있다(CORE-07)
+    for e in cache["reports"].values():
+        for f in collect.FRESH_CHECKED:
+            e.pop(f, None)
+    collect._save_cache(cfg, cache)

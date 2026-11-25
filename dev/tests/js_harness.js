@@ -7,7 +7,7 @@
      { embedded:{cols,pooled,pool,rows,meta}, rules? }      → 접힌 payload 를 로더(unfold)로 편 뒤 같은 결과
      { globals:["JOB_ALIAS","MODEL_VERSION",…] }            → template 의 전역 상수 값들
      { screen:{rows, meta, state?:{…}, calls:[[함수이름, 인자…], …]} }
-         → init() 이 하는 준비(devStatus · applySettings · buildModel · state.dayI)를 한 뒤 전역 함수를 차례로 불러 반환값을 돌려준다
+         → init() 이 하는 준비(devStatus · buildModel · state.dayI)를 한 뒤 전역 함수를 차례로 불러 반환값을 돌려준다
            (homeHtml · reportHtml · errPopupHtml 같은 순수 문자열 렌더 함수, reportUrl · collectChip · causeText · lotKey 같은 도우미).
    DOM 은 아무것도 하지 않는 대역(stub)이다 — 화면이 실제로 그려지고 눌리는지는 Chromium(test_dashboard_browser.py)으로 따로 본다. 네트워크·파일 쓰기 없음. */
 "use strict";
@@ -28,7 +28,7 @@ else if(input.globals){ctx.__g=input.globals;emit(vm.runInContext(`(function(){c
 else if(input.screen){ctx.__sc=input.screen;
   emit(vm.runInContext(`(function(){const I=__sc;rows=I.rows||[];meta=I.meta||{};
     for(const d of (meta.devices||[]))if(d.status)devStatus[d.name]={status:d.status,error:d.error||"",readErrors:d.read_errors||0};
-    applySettings(meta);D=buildModel(rows,meta);state.dayI=D.day?D.days.indexOf(D.day):-1;Object.assign(state,I.state||{});
+    D=buildModel(rows,meta);state.dayI=D.day?D.days.indexOf(D.day):-1;Object.assign(state,I.state||{});
     return (I.calls||[]).map(([fn,...args])=>{const f=eval(fn);const v=typeof f==="function"?f.apply(null,args):f;return v===undefined?null:v;});})()`,ctx));}
 else{ctx.__in=input;
   emit(vm.runInContext(`(function(){const I=__in;let rs=I.rows||[];let mt=I.meta||{};

@@ -27,6 +27,7 @@ MAX_WORKERS = 32
 PUBLISH_DIR_DEFAULT = i18n.KO.PUBLISH_DIR_DEFAULT          # 한글 경로라 문구 파일(i18n/ko.py)에 둔다
 PUBLISH_FULL_DIR_DEFAULT = i18n.KO.PUBLISH_FULL_DIR_DEFAULT  # 10/30: 모든 탭을 담은 전체 배포 폴더(LOT 추적 폴더 옆)
 PUBLISH_FULL_DAYS_DEFAULT = 90                              # 10/30 사용자 확정 — 최근 90일(0 = 가진 데이터 전부)
+PUBLISH_LOT_DAYS_DEFAULT = 0                                # 11/25: LOT 추적 배포판 기간 한도(0 = 지금처럼 가진 데이터 전부, 180 같은 값을 주면 최근 N일)
 
 #: 키 → (종류, 기본값, 하한, 상한). 하한·상한은 int 만 쓴다.
 RULES: Dict[str, Tuple[str, Any, Optional[int], Optional[int]]] = {
@@ -35,8 +36,7 @@ RULES: Dict[str, Tuple[str, Any, Optional[int], Optional[int]]] = {
     "read_workers": (INT, 8, 1, MAX_WORKERS),
     "refresh_window_days": (INT, 0, 0, MAX_DAYS),
     "full_list_every_hours": (INT, 168, 0, 8760), # Report 폴더 전체 나열 주기(시간, 0 = 매번, 기본 7일)
-    "attention_util": (INT, 40, 0, 100),          # D14: 살펴볼 장비 — 가동률 미만(%)
-    "attention_err": (INT, 3, 0, 999),            # D14: 살펴볼 장비 — Error 건수 이상
+    "gap_fill_sec": (INT, 60, 0, 3600),           # 11/25: 수집 끝에 옛 빈칸을 최근 것부터 채우는 최대 초(0 = 끔)
     "html_days": (INT, 30, 0, 36500),             # 수집 뒤 만드는 결과 HTML 에 담을 최근 일수(0 = 가진 데이터 전부, 10/5)
     "write_csv": (BOOL, False, None, None),
     "rebuild_all": (BOOL, False, None, None),
@@ -50,8 +50,11 @@ RULES: Dict[str, Tuple[str, Any, Optional[int], Optional[int]]] = {
     "publish_dir": (PATH, PUBLISH_DIR_DEFAULT, None, None),         # 10/27: LOT 추적 배포 폴더(팀 공유) — 비우면 배포 안 함. 수집이 끝나면 조용히 올린다
     "publish_full_dir": (PATH, PUBLISH_FULL_DIR_DEFAULT, None, None),  # 10/30: 전체 배포 폴더(모든 탭) — 비우면 배포 안 함. LOT 추적 배포 뒤에 이어서 올린다
     "publish_full_days": (INT, PUBLISH_FULL_DAYS_DEFAULT, 0, 36500),   # 10/30: 전체 배포에 담을 최근 일수(0 = 가진 데이터 전부)
+    "publish_lot_days": (INT, PUBLISH_LOT_DAYS_DEFAULT, 0, 36500),     # 11/25: LOT 추적 배포에 담을 최근 일수(0 = 가진 데이터 전부, 기본)
     "recipe_groups_file": (PATH, "", None, None),  # D67: 결과 HTML 에 담을 레시피 묶음 파일(비우면 데이터 폴더·다운로드에서 가장 최근 것)
 }
+#: 없앤 설정 키 — 옛 config.json · prefs 에 남아 있어도 오류 없이 버린다(11/25: '살펴볼 장비' 개념을 화면에서 없앴다, 옛 D14 문턱)
+RETIRED_KEYS = frozenset({"attention_util", "attention_err"})
 _TRUE = {"true", "1", "yes", "y", "on"}
 _FALSE = {"false", "0", "no", "n", "off"}
 _INT_RE = re.compile(r"^[+-]?\d+$")
@@ -156,7 +159,7 @@ def normalize_config(cfg: Mapping[str, Any]) -> Tuple[Dict[str, Any], List[Probl
     """cfg 사본과 문제 목록을 돌려준다. **있는 키만** 검사한다(없는 키는 부르는 쪽 기본값 그대로) — 부분 cfg 도 받는다.
 
     성능·기간 값은 고쳐서 넣고(경고), 범위·경로 값은 그대로 두고 fatal 로 표시한다(부르는 쪽이 `ConfigError` 로 막는다)."""
-    out: Dict[str, Any] = dict(cfg)
+    out: Dict[str, Any] = {k: v for k, v in cfg.items() if k not in RETIRED_KEYS}
     problems: List[Problem] = []
     for key, (kind, default, lo, hi) in RULES.items():
         if key not in out:
@@ -243,10 +246,3 @@ def assert_valid(cfg: Mapping[str, Any]) -> None:
     bad = fatal(problems)
     if bad:
         raise ConfigError(bad)
-
-
-def dashboard_settings(cfg: Mapping[str, Any]) -> Dict[str, int]:
-    """결과 HTML 의 `meta.dashboard_settings`(D14) — 화면의 PROPS 이름 그대로. 잘못된 값은 기본값."""
-    out, _ = normalize_config({"attention_util": cfg.get("attention_util", RULES["attention_util"][1]),
-                               "attention_err": cfg.get("attention_err", RULES["attention_err"][1])})
-    return {"attentionUtil": int(out["attention_util"]), "attentionErr": int(out["attention_err"])}

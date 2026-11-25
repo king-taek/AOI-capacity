@@ -53,7 +53,7 @@ import time
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from html.parser import HTMLParser
-from typing import Callable, Dict, List, Optional, Tuple
+from typing import Callable, Dict, List, Optional, Sequence, Tuple
 
 from . import devices as devices_mod
 from . import i18n, nas_guard, scope
@@ -78,6 +78,10 @@ MAX_READ_THREADS = 64
 #: 폴더 전체(장비당 최대 5,849개)를 매번 받아 오던 목록 단계가 9/18 30일치 실측 5.5분이었다. 이름 규칙 밖 파일(`EXPORT.htm` 같은)과
 #: 나중에 다시 쓰인 옛 Report 를 놓치지 않도록 **전체 나열은 처음·backfill·rebuild·recover·refresh 와 장비마다 `full_list_every_hours`(기본 7일)에 한 번** 한다.
 FULL_LIST_EVERY_HOURS = 7 * 24   # 기본 7일(10/5 사용자 확정) — cfg `full_list_every_hours`(0 = 매번 전체 나열). 10/5 실측: 전체 나열이 평소 수집 100~199초의 거의 전부, 패턴 나열은 13~28초
+#: 평소 수집이 끝날 때 남은 빈칸(슬롯 번호 · 스캔 비율 · RDL 판정 · 파라미터 · KLA 이미지 개수)을 **최근 것부터** 이 초만큼만 채운다(cfg `gap_fill_sec`, 0 = 끔).
+#: 근거: 현장 INI 처리량 약 116개/초(9/29 실측, NAS 4대 × 동시 8) → 60초면 Wafer 파일 약 7,000개(슬롯만이면 약 7,000장, 스캔 비율까지면 약 2,500장).
+#: 패턴 나열 평소 수집(13~28초, 10/5 실측)이 많아야 1분 남짓 길어지고, 캐시 저장은 수집 끝의 한 번 그대로다(현장 저장 1번 33초 — 따로 저장하지 않는다).
+GAP_FILL_SEC = 60
 PATTERN_MAX_DAYS = 14          # 커서가 이보다 오래됐으면(며칠 수집을 쉬었으면) 패턴 여러 개보다 전체 나열이 낫다
 _MONTHS = ("Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec")
 #: 패턴 나열 함수(폴더, 패턴) → 항목 목록. Windows 에서만 있다 — 다른 OS(개발·CI)는 None 이라 예전처럼 전체 나열만 한다(테스트는 가짜로 바꿔 끼운다).
@@ -100,22 +104,23 @@ DEFAULT_CONFIG: Dict[str, object] = {
     "cache_file": "",
     "scope_devices": list(scope.DEFAULT_SCOPE),   # ★ 수집 허용 장비. ["*"] 면 제한 없음
     "read_workers": READ_WORKERS,                 # NAS 를 동시에 몇 개씩 읽을지(1 = 한 줄로)
+    "gap_fill_sec": GAP_FILL_SEC,                    # 11/25: 수집 끝에 옛 빈칸(슬롯 · 스캔 비율 · RDL 판정 · 파라미터 · KLA 이미지)을 최근 것부터 채우는 최대 초(0 = 끔)
     "full_list_every_hours": FULL_LIST_EVERY_HOURS,   # 전체 나열 주기(시간, 0 = 매번). 사이에는 이름의 날짜 패턴으로만 나열 — 이름 규칙 밖 파일·나중에 다시 쓰인 옛 Report 는 다음 전체 나열 때 잡힌다
     "refresh_window_days": 0,                     # D60: 최근 N일 안의 Report 는 캐시에 있어도 다시 읽는다(0 = 끔). 창 밖 이력은 보존
     "rebuild_all": False,                         # D60: 보관 기간 전부를 새 후보 캐시에 모아 검증 뒤 교체(옛 --full 의 별칭)
     # C03: 사용자가 **명시적으로 승인한** 같은 장비의 다른 경로 표기 묶음 — `{경로: [다른 표기, …]}` 또는 `[[표기, 표기, …], …]`.
     # 드라이브 문자의 UNC 동치는 OS 가 알려 주므로(devices.UNC_RESOLVER) 보통 비워 둔다. 폴더 이름·표시명만으로는 절대 합치지 않는다.
     devices_mod.PATH_ALIASES_CFG: {},
-    "attention_util": 40,                         # D14: 살펴볼 장비 = 가동률 이 값(%) 미만 — 결과 HTML 의 meta.dashboard_settings 로 나간다
-    "attention_err": 3,                           # D14: 또는 Error 건수 이 값 이상
     "html_days": 30,                              # 수집 뒤 결과 HTML 에 담을 최근 일수(0 = 가진 데이터 전부, 기본 1달 — 10/5 사용자). 분할은 없다(9/23 분할 롤백)
     "collect_params": True,                       # D89: Report 마다 INI 를 찾은 첫 Wafer 폴더의 레시피 파라미터 파일을 읽어 둔다(파라미터 탭). 끄면 읽지 않는다
     "publish_full_dir": config_mod.PUBLISH_FULL_DIR_DEFAULT,                  # 10/30: 모든 탭을 담은 전체 배포 폴더(LOT 추적 폴더 옆, 비우면 배포 안 함)
     "publish_full_days": config_mod.PUBLISH_FULL_DAYS_DEFAULT,                # 10/30: 전체 배포에 담을 최근 일수(기본 90, 0 = 가진 데이터 전부)
+    "publish_lot_days": config_mod.PUBLISH_LOT_DAYS_DEFAULT,                  # 11/25: LOT 추적 배포에 담을 최근 일수(기본 0 = 가진 데이터 전부 — 파일이 한 달에 약 20MB 씩 커지면 180 같은 한도)
     "publish_dir": config_mod.PUBLISH_DIR_DEFAULT,                            # 10/27: LOT 추적 배포 폴더(팀 공유 — 장비 NAS 아래는 거부). 비우면 배포 안 함, 있으면 수집이 끝날 때마다 조용히 올린다
     "recipe_groups_file": "",                     # D67: 결과 HTML 에 담을 레시피 묶음(화면에서 내보낸 JSON). 비우면 데이터 폴더·다운로드에서 가장 최근 것
 }
 MAX_READ_RETRY = 3   # 읽기에 실패한 Report 를 몇 번까지 다시 시도하고 커서를 붙잡아 둘지
+RETRY_FAILED_ONCE = True   # 11/25: 읽기에 실패한 Report 는 수집 끝에 한 번 더 읽는다(일시 오류가 다음 수집까지 남지 않게)
 INI_KEYS = {
     "Recipe": ["Name"],
     "AutoCycleInfo": ["Machine", "Operator", "WaferStartTime", "WaferEndTime", "BatchStartTime", "OCRID",
@@ -126,7 +131,7 @@ INI_KEYS = {
 #: 바꾸면 올린다. 캐시는 Report 의 수정시각만 보고 재파싱을 건너뛰므로, 이 번호가 다르면 캐시를 읽을 때
 #: `norm_status`·`scan_type` 을 원문(status·lot)에서 **NAS 접근 없이** 다시 계산한다(`_rederive_rows`).
 #: INI 경로가 바뀌는 수정(빈 job 되찾기 등)은 Report 를 다시 읽어야 하므로 '누락 복구'(`recover`)가 따로 있다.
-PARSER_VERSION = 5
+PARSER_VERSION = 6
 #: 누락 복구가 다시 읽는 대상 — INI 를 못 찾았거나 읽다 실패한 행이 있는 Report 만.
 #: STALE(다른 시도가 덮어쓴 INI)은 다시 읽어도 되돌아오지 않고, NO_WAFER_ID(자리표시)·BATCH_FAILED 는 경로 자체가 없다.
 #: MOVED_ONLY(폴더에 `MoveResultFlag` 만 있고 INI 가 없음 = 이동만 되고 아직 스캔 안 함, 실물 AOI-4 `XBL WBG\24`)는 뒤에 스캔되면 INI 가 생긴다.
@@ -176,10 +181,11 @@ POOLED_COLS = tuple(c for c in OUT_COLS if c not in ("wafer_start_time", "wafer_
 LOT_PUBLISH_NAME = "AOI_LOT_tracking.html"
 LOT_PUBLISH_DIR = "publish_test"
 PUBLISH_FULL_HIDDEN_TABS = ("recipe",)           # 전체 배포판이 탭 줄에서 숨겨 두는 탭(화면 `meta.hidden_tabs`)
-#: LOT 추적만 담는 파일(`write_html(lot_only=True)`)이 값을 남기는 열 — 나머지 열은 값만 비운다(열 이름은 그대로, 풀의 빈 문자열 하나로 접힌다).
+#: LOT 추적만 담는 파일(`write_html(lot_only=True)`)이 담는 열 — 나머지 열은 담지 않는다(11/25: 예전엔 값만 비우고 열은 남겨 90일치 행 JSON 의 약 1/3 이 빈 칸이었다 — 화면은 열 이름으로 읽어 없는 열은 빈 값).
 #: LOT 추적 화면(`lotIndex` · `lotFamily` · `lotHtml`)이 읽는 열이다(가드 `test_lot_publish.py` 가 템플릿 소스에서 확인).
 LOT_ONLY_KEEP_COLS = ("device", "kind", "job", "lot", "wafer_id", "status", "recipe", "slot_no", "wafer_start_time", "batch_start", "report", "faults")
 LOT_ONLY_BLANK_COLS = tuple(c for c in OUT_COLS if c not in LOT_ONLY_KEEP_COLS)
+LOT_ONLY_COLS = tuple(c for c in OUT_COLS if c in LOT_ONLY_KEEP_COLS)            # 배포판에 담는 순서(OUT_COLS 순)
 REPORT_RE = re.compile(r"^(.+?)_(\d{4})_(.+)_(\d{1,2}-[A-Za-z]{3}-\d{2})_\((\d{2}\.\d{2}\.\d{2})\)_BatchReport\.html?$", re.I)
 #: 장비마다 다르다 — AOI-8·25 는 `13-Sep-26 01:03:29 PM`, AOI-1 은 `9/16/2026 1:54:03 PM`,
 #: INI 의 BatchStartTime 은 `09/10/2026 18:50:08`(24시간제).
@@ -287,6 +293,15 @@ class CollectCancelled(Exception):
 
 class RebuildRejected(Exception):
     """전체 재구축(`rebuild_all`)의 후보 캐시가 검증에 걸렸다. **원 캐시는 바뀌지 않았다.**"""
+
+
+class CacheUnreadable(RuntimeError):
+    """캐시 파일을 **열 수 없다**(OS 오류 — 백신 · 백업 · 같은 PC 의 다른 수집이 잡고 있음, CORE-02). 손상과 다르다:
+    빈 캐시로 시작하면 backfill 창 밖 이력이 화면에서 사라지고 원본이 `.bad-…` 로 밀려나므로 **수집을 멈추고** 원본은 그대로 둔다."""
+
+
+#: 캐시를 열다 OS 오류가 나면 이만큼 기다렸다가 한 번 더 열어 본다(CORE-02 — 잠깐 잡고 있는 백신 · 백업).
+CACHE_READ_RETRY_SEC = 2.0
 
 
 #: 캐시 파일을 읽은 결과 — `stats["cache_status"]` 로 나간다. "corrupt" 면 원본을 `.bad-<시각>` 으로 보존한다(`_save_cache`).
@@ -667,12 +682,27 @@ def read_recipe_settings(path) -> dict:
     return out
 
 
+def rdl_mode_from(names, outcome) -> str:
+    """RDL 장의 멀티/단일(D74) — Wafer 폴더 `RecipesInfo.ini` 의 레시피 이름(`names`, 없으면 None)과 그 장의 결과(`outcome`)로.
+    레시피가 둘 이상이면 MULTI. 파일이 없거나 하나면 SINGLE 인데, **PASS 로 끝난 장만** 그렇게 본다(11/25): 멀티 스캔이 첫 레시피에서 멈춘 장
+    (`Scan 2D - Max Fault Exceeded.` · 중단)은 RecipesInfo.ini 를 남기지 않아 단일로 잘못 찍혔다 — 실데이터 7/1~11/25 RDL EXACT 중 PASS 가 아닌
+    SINGLE 장 75장이 PASS 가 전부 MULTI 인 Report 안에 있었다(PASS 장은 그런 섞임 0). 근거가 없으니 빈 값으로 두고 화면이 같은 Report 로 채운다(D78)."""
+    if names and len(names) > 1:
+        return "MULTI"
+    return "SINGLE" if outcome == "PASS" else ""
+
+
+def _rdl_unjudged(r: dict) -> bool:
+    """멀티/단일 판정이 빠진 RDL 장 — INI 를 찾은(EXACT) PASS 장만(PASS 가 아닌 장은 판정 근거가 없어 화면이 Report 로 채운다, `rdl_mode_from`)."""
+    return (r.get("ini_match") == "EXACT" and not r.get("scan_mode") and r.get("outcome", "PASS") == "PASS"
+            and is_rdl_job(r.get("job")))
+
+
 def _needs_rdl_patch(entry: dict) -> bool:
-    """'RDL 영역 INI 패치' 대상 — RDL Job 인데 INI 를 찾은(EXACT) 행에 멀티/단일 판정이 없는 Report(업데이트 전에 읽은 것). 밀려난 옛 판은 아니다."""
+    """'RDL 영역 INI 패치' 대상 — RDL Job 인데 INI 를 찾은(EXACT) PASS 행에 멀티/단일 판정이 없는 Report(업데이트 전에 읽은 것). 밀려난 옛 판은 아니다."""
     if entry.get("superseded_by") or entry.get("rdl_checked"):
         return False                                  # 이미 패치를 해 봤는데 INI 가 바뀌어 판정 못 한 Report 는 다시 대상이 아니다(다시 읽으면 플래그가 사라진다)
-    return any(r.get("ini_match") == "EXACT" and not r.get("scan_mode") and is_rdl_job(r.get("job"))
-               for r in entry.get("rows") or ())
+    return any(_rdl_unjudged(r) for r in entry.get("rows") or ())
 
 
 def _rdl_wafer_dir(r: dict, scan_root: str, backups) -> Optional[str]:
@@ -706,7 +736,7 @@ def _patch_rdl_modes(cfg, cache, devs, should_stop, log, progress, stats, dirty,
         scan_root = os.path.join(d["path"], str(d.get("scan_dir") or cfg["scan_dir"]))
         backups = _backup_roots(d, scan_root)
         for r in e.get("rows") or ():
-            if r.get("ini_match") == "EXACT" and not r.get("scan_mode") and is_rdl_job(r.get("job")):
+            if _rdl_unjudged(r):
                 w = _rdl_wafer_dir(r, scan_root, backups)
                 if w:
                     tasks.append((e, r, w, d["name"]))
@@ -722,9 +752,9 @@ def _patch_rdl_modes(cfg, cache, devs, should_stop, log, progress, stats, dirty,
         if kind == "ok" and (got.get("AutoCycleInfo", {}).get("WaferStartTime", "") == r.get("wafer_start_time")):
             rk, names = memo.recipes(os.path.join(w, "RecipesInfo.ini"))
             if rk == "ok" and names:
-                out = ("|".join(names), "MULTI" if len(names) > 1 else "SINGLE")
+                out = ("|".join(names), rdl_mode_from(names, r.get("outcome", "PASS")))
             elif rk == "missing":
-                out = (got.get("Recipe", {}).get("Name", "") or r.get("recipe", ""), "SINGLE")
+                out = (got.get("Recipe", {}).get("Name", "") or r.get("recipe", ""), rdl_mode_from(None, r.get("outcome", "PASS")))
         progress(done.bump(), total, i18n.KO.COLLECT_PHASE_RDL_FMT.format(device=name))
         return out
     n_ok = 0
@@ -750,6 +780,7 @@ ETA_DEFAULT_FIXED_SEC = 60.0          # 장비 확인 + 목록
 ETA_DEFAULT_PER_UNIT = {"read": 1.0, "rdl_patch": 0.3, "params_fill": 2.0, "sec_fill": 0.02, "slot_fill": 0.03, "kla_fill": 0.05}
 PARAMS_FILL_CHUNK = 500              # 파라미터 빈 구간 채우기는 이만큼 읽을 때마다 캐시를 저장한다
 ETA_KEEP = 5                          # 모드마다 최근 몇 번의 실측을 남길지
+ETA_MIN_UNITS = 20                    # 개수당 시간은 이만큼 이상 처리한 실측으로만 잰다(PC-04: Report 2개짜리 평소 수집이 '개당 1초' 로 부풀렸다) — 그런 기록이 없을 때만 작은 것도 쓴다
 
 
 def record_eta(cache: dict, mode: str, units: int, work_sec: float, fixed_sec: float) -> None:
@@ -768,13 +799,14 @@ def _median(xs) -> float:
 
 
 def estimate_sec(eta: dict, mode: str, units: int, kind: str = "read") -> Tuple[int, bool]:
-    """예상 걸리는 시간 → (초, 대략 여부). 고정 시간 + 개수 × 개수당 시간(최근 실측의 중앙값).
+    """예상 걸리는 시간 → (초, 대략 여부). 고정 시간 + 개수 × 개수당 시간(최근 실측의 일한 초 합 ÷ 개수 합 — 개수로 가중, PC-04).
     `kind` 가 read 인 모드(수집 계열)는 서로의 실측을 같이 쓴다 — Report 하나를 읽는 비용이 비슷하기 때문. 실측이 없으면 기본값이고 대략=True."""
     eta = eta if isinstance(eta, dict) else {}
     pool = ([x for k, v in eta.items() if k not in ("rdl_patch", "params_fill", "sec_fill", "slot_fill", "kla_fill") for x in v] if kind == "read" else list(eta.get(mode, [])))
     pool = [h for h in pool if isinstance(h, list) and len(h) == 3 and h[0] > 0]
     own = [h for h in eta.get(mode, []) if isinstance(h, list) and len(h) == 3]
-    per = _median([h[1] / h[0] for h in pool]) if pool else ETA_DEFAULT_PER_UNIT[kind]
+    big = [h for h in pool if h[0] >= ETA_MIN_UNITS] or pool
+    per = sum(h[1] for h in big) / sum(h[0] for h in big) if big else ETA_DEFAULT_PER_UNIT[kind]
     fixed = _median([h[2] for h in (own or pool)]) if (own or pool) else (0.0 if kind != "read" else ETA_DEFAULT_FIXED_SEC)
     return int(round(fixed + max(0, units) * per)), not pool
 
@@ -825,7 +857,42 @@ def _cam_by_key(devs: List[dict]) -> Dict[str, dict]:
     return {str(d["key"]): d for d in devs if d.get("kind") != "kla"}
 
 
-def _fill_params_into(cfg: dict, cache: dict, devs: List[dict], fixed: float, log, progress, should_stop) -> Dict[str, int]:
+class _FillSaver:
+    """빈칸 채우기의 캐시 저장 규칙(PC-05) — 평소 수집의 중간 저장과 같다: 바뀐 것이 있고 마지막 저장 뒤 `CHECKPOINT_MIN_SEC`(60초)
+    또는 마지막 저장에 걸린 시간의 10배가 지났을 때만 중간에 저장한다(현장 캐시 저장 1번 33초 — 2,000장마다 저장하면 읽기보다 저장이 길었다).
+    `defer`(fill_gaps 가 다섯 단계를 이어 돌 때)면 단계가 끝나도 저장하지 않고 fill_gaps 가 마지막에 한 번 — 멈추거나 오류면 바로 저장한다."""
+
+    def __init__(self, cfg: dict, cache: dict, defer: bool = False):
+        self.cfg, self.cache, self.defer = cfg, cache, defer
+        self.pending = False
+        self.at = time.monotonic()
+        self.every = CHECKPOINT_MIN_SEC
+
+    def mark(self) -> None:
+        self.pending = True
+
+    def save(self) -> None:
+        t = time.monotonic()
+        _save_cache(self.cfg, self.cache)
+        took = time.monotonic() - t
+        self.pending = False
+        self.at = time.monotonic()
+        self.every = max(CHECKPOINT_MIN_SEC, took * 10)
+
+    def maybe(self) -> None:
+        """읽는 도중(메인 스레드) — 간격이 지났을 때만."""
+        if self.pending and time.monotonic() - self.at >= self.every:
+            self.save()
+
+    def end(self, stopped: bool = False) -> None:
+        """단계 끝 — 미루는 중이 아니거나 멈췄으면 바로 저장."""
+        if self.pending and (stopped or not self.defer):
+            self.save()
+
+
+def _fill_params_into(cfg: dict, cache: dict, devs: List[dict], fixed: float, log, progress, should_stop,
+                      saver: Optional[_FillSaver] = None) -> Dict[str, int]:
+    saver = saver or _FillSaver(cfg, cache)
     store = cache.setdefault("params", params_mod.empty_store())
     by_key = _cam_by_key(devs)
     tasks, no_dev = [], 0
@@ -845,47 +912,53 @@ def _fill_params_into(cfg: dict, cache: dict, devs: List[dict], fixed: float, lo
     days = sorted(x for x in (_first_day(t[1]) for t in tasks) if x)
     _say_unless_empty(log, len(tasks), f"파라미터 빈 구간 채우기: 대상 Report {len(tasks)}개 · 장비 {len({t[4] for t in tasks})}대"
               + (f" · {days[0]} ~ {days[-1]}" if days else "") + " — Report 는 다시 읽지 않습니다")
-    done, total = _Counter(), len(tasks)
+    memo, done, total = _IniMemo(), _Counter(), len(tasks)
 
     def one(t):
         _check(should_stop)
-        _key, _e, _r, w, name = t
-        try:
-            files = params_mod.snapshot(params_mod.read_wafer_files(w))
-            err = ""
-        except OSError as ex:
-            files, err = {}, f"{type(ex).__name__}: {ex}"
+        _key, _e, r, w, name = t
+        # CORE-05: 슬롯 · RDL · 스캔 비율 채우기처럼 폴더가 그 뒤 다시 쓰였는지(WaferStartTime) 먼저 본다 — 다른 검사의 레시피를 옛 Report 에 붙이지 않는다
+        kind, got = memo.get(os.path.join(w, "WaferInfo.ini"))
+        if kind == "ok" and got.get("AutoCycleInfo", {}).get("WaferStartTime", "") != r.get("wafer_start_time"):
+            files, err = {}, "time_mismatch"
+        else:
+            try:
+                files = params_mod.snapshot(params_mod.read_wafer_files(w))
+                err = ""
+            except OSError as ex:
+                files, err = {}, f"{type(ex).__name__}: {ex}"
         progress(done.bump(), total, i18n.KO.PARAMS_FILL_PHASE_FMT.format(device=name))
         return files, err
 
-    st = {"targets": total, "added": 0, "empty": 0, "no_device": no_dev, "stopped": 0}
-    t1, n_done, dirty = time.perf_counter(), 0, _Dirty()
-    for lo in range(0, total, PARAMS_FILL_CHUNK):                  # 덩어리마다 저장 — 멈추거나 끊겨도 읽은 만큼은 남는다
-        chunk = tasks[lo:lo + PARAMS_FILL_CHUNK]
-        try:
-            results = _run(cfg, chunk, one, should_stop, group=lambda t: nas_group(t[3]))
-        except CollectCancelled:
-            st["stopped"] = 1
-            break
-        for (key, e, r, _w, name), (files, err) in zip(chunk, results):
-            bst = parse_dt(r.get("batch_start", ""))
-            if params_mod.put(store, key, dev=name, job=r.get("job", ""), setup=r.get("setup", ""),
-                              t=bst.strftime("%Y-%m-%d %H:%M") if bst else "", report=str(r.get("report") or ""), files=files):
-                dirty.add(DIRTY_PARAMS)
-            st["added" if files else "empty"] += 1
-        n_done += len(chunk)
-        if n_done >= total:
-            record_eta(cache, "params_fill", n_done, time.perf_counter() - t1, fixed)
-            dirty.add(DIRTY_PARAMS)
-        if dirty:
-            _save_cache(cfg, cache)
-            dirty = _Dirty()
+    st = {"targets": total, "added": 0, "empty": 0, "time_mismatch": 0, "no_device": no_dev, "stopped": 0}
+    t1, n_done = time.perf_counter(), 0
+
+    def apply(i, res) -> None:                       # 메인 스레드가 끝나는 대로(CORE-11) — 도중에 멈춰도 끝낸 것은 남는다(덩어리째 버리지 않는다)
+        nonlocal n_done
+        key, _e, r, _w, name = tasks[i]
+        files, err = res
+        bst = parse_dt(r.get("batch_start", ""))
+        if params_mod.put(store, key, dev=name, job=r.get("job", ""), setup=r.get("setup", ""),
+                          t=bst.strftime("%Y-%m-%d %H:%M") if bst else "", report=str(r.get("report") or ""), files=files):
+            saver.mark()
+        st["added" if files else "empty"] += 1
+        if err == "time_mismatch":
+            st["time_mismatch"] += 1
+        n_done += 1
+
+    try:
+        _run(cfg, tasks, one, should_stop, group=lambda t: nas_group(t[3]), on_result=apply, tick=saver.maybe)   # 저장은 평소 수집과 같은 간격(PC-05)
+    except CollectCancelled:
+        st["stopped"] = 1
+    if total and n_done >= total:
+        record_eta(cache, "params_fill", n_done, time.perf_counter() - t1, fixed)
+        saver.mark()
+    saver.end(bool(st["stopped"]))
     _say_unless_empty(log, int(st.get("targets", 0)), "파라미터 빈 구간 채우기: " + " · ".join(f"{k}={v}" for k, v in st.items()))
     return st
 
 
 # ----------------------------------------------------------------------------- 스캔 비율 빈칸(10/24)
-SEC_FILL_CHUNK = 2000                # 스캔 비율 채우기는 이만큼(장) 읽을 때마다 캐시를 저장한다
 
 
 def _needs_sec(r: dict) -> bool:
@@ -898,7 +971,8 @@ def _sec_targets(cache: dict) -> List[Tuple[str, dict]]:
             if not e.get("superseded_by") and not e.get("sec_checked") and any(_needs_sec(r) for r in e.get("rows") or ())]
 
 
-def _fill_scan_sec_into(cfg: dict, cache: dict, devs: List[dict], fixed: float, log, progress, should_stop) -> Dict[str, int]:
+def _fill_scan_sec_into(cfg: dict, cache: dict, devs: List[dict], fixed: float, log, progress, should_stop,
+                        saver: Optional[_FillSaver] = None) -> Dict[str, int]:
     """'옛 기간 빈칸 채우기' 의 스캔 비율 — 값이 빈 장마다 처음 INI 를 찾은 Wafer 폴더(행의 코드로 되짚음)에서 ScanLog.ini · RecipesInfo.ini
     (멀티면 둘째 레시피 ExtendedScanMetaData 하나)만 정확 경로로 연다. Report 나열 · 읽기 없음, 범위 밖 장비 · KLA 접근 0.
     ScanLog 의 시작이 그 장의 INI 시각 안에 있을 때만 값을 쓴다(`scan_seconds`) — 나중 검사로 폴더가 다시 쓰였으면 빈 채로 둔다(지어내지 않는다).
@@ -939,10 +1013,13 @@ def _fill_scan_sec_into(cfg: dict, cache: dict, devs: List[dict], fixed: float, 
         return out
 
     st = {"targets": total, "filled": 0, "empty": 0, "no_device": no_dev, "stopped": 0}
-    t1, n_done, since_save = time.perf_counter(), 0, 0
+    t1, n_done = time.perf_counter(), 0
+    saver = saver or _FillSaver(cfg, cache)
+    if marked:
+        saver.mark()                                         # 되짚을 폴더가 없어 표시만 남긴 Report
 
     def apply(i, sec) -> None:                       # 메인 스레드가 끝나는 대로 — 도중에 멈춰도 끝낸 장은 남는다(덩어리째 버리지 않는다)
-        nonlocal n_done, since_save
+        nonlocal n_done
         e, r, _w, _n = tasks[i]
         if sec is not None:
             r["scan_sec"] = str(sec)
@@ -953,23 +1030,14 @@ def _fill_scan_sec_into(cfg: dict, cache: dict, devs: List[dict], fixed: float, 
         if rep_left[id(e)] <= 0:
             e["sec_checked"] = True
         n_done += 1
-        since_save += 1
-
-    def checkpoint() -> None:
-        nonlocal since_save
-        if since_save >= SEC_FILL_CHUNK:
-            since_save = 0
-            _save_cache(cfg, cache)
+        saver.mark()
     try:
-        _run(cfg, tasks, one, should_stop, group=lambda t: nas_group(t[2]), on_result=apply, tick=checkpoint)
+        _run(cfg, tasks, one, should_stop, group=lambda t: nas_group(t[2]), on_result=apply, tick=saver.maybe)
     except CollectCancelled:
         st["stopped"] = 1
     if total and n_done >= total:
         record_eta(cache, "sec_fill", n_done, time.perf_counter() - t1, fixed)
-    if since_save or (n_done and n_done >= total):
-        _save_cache(cfg, cache)
-    if marked and n_done == 0 and not st["stopped"]:
-        _save_cache(cfg, cache)                              # 되짚을 폴더가 없어 표시만 남긴 Report
+    saver.end(bool(st["stopped"]))
     _say_unless_empty(log, total, "스캔 비율 채우기: " + " · ".join(f"{k}={v}" for k, v in st.items()))
     return st
 
@@ -985,7 +1053,8 @@ def _slot_targets(cache: dict) -> List[Tuple[str, dict]]:
             if not e.get("superseded_by") and not e.get("slot_checked") and any(_needs_slot(r) for r in e.get("rows") or ())]
 
 
-def _fill_slot_into(cfg: dict, cache: dict, devs: List[dict], fixed: float, log, progress, should_stop) -> Dict[str, int]:
+def _fill_slot_into(cfg: dict, cache: dict, devs: List[dict], fixed: float, log, progress, should_stop,
+                    saver: Optional[_FillSaver] = None) -> Dict[str, int]:
     """'옛 기간 빈칸 채우기' 의 슬롯 번호 — 값이 빈 장마다 처음 INI 를 찾은 Wafer 폴더(행의 코드로 되짚음)의 `WaferInfo.ini` 한 장만 정확 경로로 읽어
     `[AutoCycleInfo] ActiveSlot` 을 쓴다. 그 INI 의 WaferStartTime 이 행의 시각과 다르면(폴더가 그 뒤 다시 쓰였다) 쓰지 않는다 — 다른 검사의 슬롯을 붙이지 않는다.
     Report 나열 · 읽기 없음, 범위 밖 장비 · KLA 접근 0. 해 본 Report 에는 `slot_checked` 를 남겨 다시 열지 않는다."""
@@ -1026,12 +1095,15 @@ def _fill_slot_into(cfg: dict, cache: dict, devs: List[dict], fixed: float, log,
         return out, why
 
     st = {"targets": total, "filled": 0, "empty": 0, "no_device": no_dev, "stopped": 0}
-    t1, n_done, since_save = time.perf_counter(), 0, 0
+    t1, n_done = time.perf_counter(), 0
+    saver = saver or _FillSaver(cfg, cache)
+    if marked:
+        saver.mark()
 
     why_by: Dict[str, Dict[str, int]] = {}
 
     def apply(i, res) -> None:
-        nonlocal n_done, since_save
+        nonlocal n_done
         e, r, _w, _n = tasks[i]
         slot, why = res
         if slot is not None:
@@ -1045,21 +1117,14 @@ def _fill_slot_into(cfg: dict, cache: dict, devs: List[dict], fixed: float, log,
         if rep_left[id(e)] <= 0:
             e["slot_checked"] = True
         n_done += 1
-        since_save += 1
-
-    def checkpoint() -> None:
-        nonlocal since_save
-        if since_save >= SEC_FILL_CHUNK:
-            since_save = 0
-            _save_cache(cfg, cache)
+        saver.mark()
     try:
-        _run(cfg, tasks, one, should_stop, group=lambda t: nas_group(t[2]), on_result=apply, tick=checkpoint)
+        _run(cfg, tasks, one, should_stop, group=lambda t: nas_group(t[2]), on_result=apply, tick=saver.maybe)
     except CollectCancelled:
         st["stopped"] = 1
     if total and n_done >= total:
         record_eta(cache, "slot_fill", n_done, time.perf_counter() - t1, fixed)
-    if since_save or (n_done and n_done >= total) or (marked and n_done == 0 and not st["stopped"]):
-        _save_cache(cfg, cache)
+    saver.end(bool(st["stopped"]))
     _say_unless_empty(log, total, "슬롯 번호 채우기: " + " · ".join(f"{k}={v}" for k, v in st.items()))
     for why, label in (("no_active_slot", "INI 에 ActiveSlot 없음"), ("time_mismatch", "INI 시각이 행과 달라 쓰지 않음(폴더가 다시 쓰임)"),
                        ("ini_unreadable", "INI 를 읽지 못함")):
@@ -1082,7 +1147,8 @@ def _kla_img_targets(cache: dict) -> List[Tuple[str, str, str, dict]]:
     return out
 
 
-def _fill_kla_images_into(cfg: dict, cache: dict, devs: List[dict], fixed: float, log, progress, should_stop) -> Dict[str, int]:
+def _fill_kla_images_into(cfg: dict, cache: dict, devs: List[dict], fixed: float, log, progress, should_stop,
+                          saver: Optional[_FillSaver] = None) -> Dict[str, int]:
     """'옛 기간 빈칸 채우기' 의 KLA Defect 이미지 개수 — 기록이 가리키는 **결과 파일 한 장씩만** 정확 경로로 다시 읽어 IMAGECOUNT 합을 넣는다.
     날짜 폴더 · Lot 나열 없음, 범위 게이트를 지난 KLA 장비만. 못 읽으면(파일이 사라짐 등) 키를 넣지 않아 다음에 다시 시도한다."""
     by_key = {str(d["key"]): d for d in devs if d.get("kind") == "kla"}
@@ -1101,10 +1167,11 @@ def _fill_kla_images_into(cfg: dict, cache: dict, devs: List[dict], fixed: float
         return rec, ""
 
     st = {"targets": total, "filled": 0, "no_column": 0, "unreadable": 0, "stopped": 0}
-    done, n_done, since_save, t1 = _Counter(), 0, 0, time.perf_counter()
+    done, n_done, t1 = _Counter(), 0, time.perf_counter()
+    saver = saver or _FillSaver(cfg, cache)
 
     def apply(i, res) -> None:
-        nonlocal n_done, since_save
+        nonlocal n_done
         _k, _lot, _w, r, _d = tasks[i]
         rec, why = res
         if rec is None:
@@ -1113,26 +1180,19 @@ def _fill_kla_images_into(cfg: dict, cache: dict, devs: List[dict], fixed: float
             r["images"] = rec.get("images")                 # IMAGECOUNT 열이 없으면 None — 키는 남겨 다시 열지 않는다(화면은 레코드 수)
             st["filled" if rec.get("images") is not None else "no_column"] += 1
         n_done += 1
-        since_save += 1
-
-    def checkpoint() -> None:
-        nonlocal since_save
-        if since_save >= SEC_FILL_CHUNK:
-            since_save = 0
-            _save_cache(cfg, cache)
+        saver.mark()
 
     def wrapped(t):
         out = one(t)
         progress(done.bump(), total, i18n.KO.GAPS_PHASE_KLA_FMT.format(device=t[4]["name"]))
         return out
     try:
-        _run(cfg, tasks, wrapped, should_stop, group=lambda t: nas_group(str(t[4]["path"])), on_result=apply, tick=checkpoint)
+        _run(cfg, tasks, wrapped, should_stop, group=lambda t: nas_group(str(t[4]["path"])), on_result=apply, tick=saver.maybe)
     except CollectCancelled:
         st["stopped"] = 1
     if total and n_done >= total:
         record_eta(cache, "kla_fill", n_done, time.perf_counter() - t1, fixed)
-    if since_save or (n_done and n_done >= total):
-        _save_cache(cfg, cache)
+    saver.end(bool(st["stopped"]))
     _say_unless_empty(log, total, "KLA Defect 이미지 개수 채우기: " + " · ".join(f"{k}={v}" for k, v in st.items()))
     return st
 
@@ -1148,33 +1208,211 @@ def fill_gaps(cfg: dict, log: Optional[LogFn] = None, progress: Optional[Progres
     out: Dict[str, object] = {"stopped": 0}
     stats: Dict[str, int] = {}
     dirty = _Dirty()
+    saver = _FillSaver(cfg, cache, defer=True)         # PC-05: 다섯 단계를 마친 뒤 한 번 저장(중간은 평소 수집과 같은 간격, 멈추거나 오류면 바로)
     try:
-        _patch_rdl_modes(cfg, cache, devs, should_stop, log, progress, stats, dirty)
-    except CollectCancelled:
-        out["stopped"] = 1
-    if dirty:
-        _save_cache(cfg, cache)
-    out["rdl"] = {"targets": int(stats.get("rdl_rows", 0)), "filled": int(stats.get("rdl_patched", 0))}
-    if out["stopped"]:
-        return out
-    out["slot"] = _fill_slot_into(cfg, cache, devs, fixed, log, progress, should_stop)
-    if out["slot"].get("stopped"):
-        out["stopped"] = 1
-        return out
-    out["kla"] = _fill_kla_images_into(cfg, cache, devs, fixed, log, progress, should_stop)
-    if out["kla"].get("stopped"):
-        out["stopped"] = 1
-        return out
-    out["sec"] = _fill_scan_sec_into(cfg, cache, devs, fixed, log, progress, should_stop)
-    if out["sec"].get("stopped"):
-        out["stopped"] = 1
-        return out
-    if bool(cfg.get("collect_params", True)):
-        out["params"] = _fill_params_into(cfg, cache, devs, fixed, log, progress, should_stop)
-        out["stopped"] = int(out["params"].get("stopped", 0))
+        try:
+            _patch_rdl_modes(cfg, cache, devs, should_stop, log, progress, stats, dirty, tick=lambda: (saver.mark() if dirty else None, saver.maybe()))
+        except CollectCancelled:
+            out["stopped"] = 1
+        if dirty:
+            saver.mark()
+        out["rdl"] = {"targets": int(stats.get("rdl_rows", 0)), "filled": int(stats.get("rdl_patched", 0))}
+        steps = [("slot", _fill_slot_into), ("kla", _fill_kla_images_into), ("sec", _fill_scan_sec_into)]
+        if bool(cfg.get("collect_params", True)):
+            steps.append(("params", _fill_params_into))
+        for name, fn in ([] if out["stopped"] else steps):
+            out[name] = fn(cfg, cache, devs, fixed, log, progress, should_stop, saver)
+            if out[name].get("stopped"):
+                out["stopped"] = 1
+                break
+    finally:
+        saver.end(stopped=True)                        # 남은 것을 저장 — 끝까지 갔든 멈췄든 오류든
     return out
 
 
+
+
+# ----------------------------------------------------------------------------- 평소 수집 끝의 빈칸 채우기(11/25)
+#: 새로 읽은 Report 는 이 값들을 이미 읽어 보았다 — 빈칸 채우기가 다시 열지 않게 표시한다(못 채운 것은 Wafer 폴더에 정말 없는 값: 옛 장비의 ActiveSlot 등).
+FRESH_CHECKED = ("slot_checked", "sec_checked", "rdl_checked")
+
+
+def _row_time(r: dict) -> float:
+    t = parse_dt(r.get("wafer_start_time") or r.get("batch_start"))
+    return t.timestamp() if t else 0.0
+
+
+def fill_gaps_budget_into(cfg: dict, cache: dict, devs: List[dict], budget_sec: float, log, progress, should_stop,
+                          dirty: Optional["_Dirty"] = None) -> Dict[str, int]:
+    """'옛 기간 빈칸 채우기' 를 **평소 수집 끝에 조금씩**(11/25 현택: "평소 수집 때 왜 자동으로 안 되나") — 메모리의 캐시에 바로 넣고 저장은 부르는 쪽(수집 끝의 한 번).
+    읽는 곳은 `fill_gaps` 와 같다: 캐시 행이 가리키는 Wafer 폴더 **안**의 정확 경로(WaferInfo · ScanLog · RecipesInfo · 둘째 레시피 메타 · 파라미터 파일)와
+    KLA 기록이 가리키는 결과 파일 한 장(규칙 4 — Report 나열 · 읽기 · 재귀 없음). 범위 게이트를 지난 장비(`devs`)만, 같은 시각 확인(폴더가 그 뒤 다시 쓰였으면 쓰지 않음).
+    순서는 **최근 Wafer 부터**(화면에서 자주 보는 기간이 먼저 찬다), 시간이 다 되면 그 자리에서 멈추고 다음 수집이 이어 간다(해 본 Report 만 `*_checked`).
+    사용자가 중지하면 `CollectCancelled` 를 그대로 던진다(수집의 중지와 같다 — 넣은 값은 수집의 중지 저장이 담는다).
+    스레드는 읽기만, 행 고치기는 메인 스레드가 끝나는 대로. → 통계 {targets, done, slot, sec, rdl, params, kla, left, timed_out}."""
+    st = {"targets": 0, "done": 0, "slot": 0, "sec": 0, "rdl": 0, "params": 0, "kla": 0, "left": 0, "timed_out": 0}
+    budget = float(budget_sec or 0)
+    if budget <= 0:
+        return st
+    dirty = dirty if dirty is not None else _Dirty()
+    cam = _cam_by_key(devs)
+    kla_by = {str(d["key"]): d for d in devs if d.get("kind") == "kla"}
+    want_params = bool(cfg.get("collect_params", True))
+    have_params = (cache.get("params") or {}).get("snaps") or {}
+    tasks: list = []                     # (시각, 종류, …) — 종류 w: Wafer 폴더 하나(필요한 값 묶음) · p: 파라미터(Report 마다) · k: KLA 결과 파일
+    left: Dict[Tuple[int, str], int] = {}  # (Report, 표시) → 아직 안 끝난 장 수 — 0 이 되면 그 Report 에 표시
+    for key, e in (cache.get("reports") or {}).items():
+        if e.get("superseded_by"):
+            continue
+        rows = [r for r in e.get("rows") or () if r.get("ini_match") == "EXACT" and not r.get("kind")]
+        need_slot = not e.get("slot_checked") and any(_needs_slot(r) for r in rows)
+        need_sec = not e.get("sec_checked") and any(_needs_sec(r) for r in rows)
+        need_rdl = _needs_rdl_patch(e)
+        need_p = want_params and key not in have_params and bool(rows)
+        if not (need_slot or need_sec or need_rdl or need_p):
+            continue
+        d = cam.get(key.split("|", 1)[0])
+        if d is None:
+            continue                                     # 이번 장비 목록 · 수집 범위 밖 — 손대지 않는다
+        scan_root = os.path.join(d["path"], str(d.get("scan_dir") or cfg["scan_dir"]))
+        backups = _backup_roots(d, scan_root)
+        counts = {"slot_checked": 0, "sec_checked": 0, "rdl_checked": 0}
+        p_done = False
+        for r in rows:
+            w = _rdl_wafer_dir(r, scan_root, backups)
+            if not w:
+                continue
+            needs = tuple(k for k, on in (("slot", need_slot and _needs_slot(r)), ("sec", need_sec and _needs_sec(r)),
+                                          ("rdl", need_rdl and _rdl_unjudged(r))) if on)
+            if needs:
+                tasks.append((_row_time(r), "w", e, r, w, needs, d["name"]))
+                for n in needs:
+                    counts[n + "_checked"] += 1
+            if need_p and not p_done:
+                tasks.append((_row_time(r), "p", e, r, w, key, d["name"]))
+                p_done = True
+        for flag, on in (("slot_checked", need_slot), ("sec_checked", need_sec), ("rdl_checked", need_rdl)):
+            if on and not counts[flag]:
+                e[flag] = True                           # 되짚을 폴더가 없다 — 다음에도 마찬가지(fill_gaps 와 같다)
+                dirty.add(DIRTY_UPDATED)
+            elif counts[flag]:
+                left[(id(e), flag)] = counts[flag]
+    for k, lot, w, r in _kla_img_targets(cache):
+        d = kla_by.get(k)
+        if d is not None:
+            try:
+                tk = dt.datetime.fromisoformat(str(r.get("t") or "")).timestamp()
+            except ValueError:
+                tk = 0.0
+            tasks.append((tk, "k", k, lot, w, r, d))
+    if not tasks:
+        return st
+    tasks.sort(key=lambda t: -t[0])                    # 최근 것부터(같은 NAS 안에서는 이 순서로 꺼낸다 — `_run`)
+    st["targets"] = len(tasks)
+    deadline = time.monotonic() + budget
+    _say(log, f"빈칸 채우기(최대 {int(budget)}초): 남은 일 {len(tasks):,}개 — 최근 것부터 채웁니다")
+    memo, done = _IniMemo(), _Counter()
+    phase = i18n.KO.GAPS_AUTO_PHASE_FMT.format(sec=int(budget))
+
+    def path_of(t) -> str:
+        return str(t[6]["path"]) if t[1] == "k" else t[4]
+
+    def one(t):
+        _check(should_stop)
+        kind = t[1]
+        out: dict = {}
+        if kind == "w":
+            _tt, _k, _e, r, w, needs, _n = t
+            if "slot" in needs or "rdl" in needs:
+                ok, got = memo.get(os.path.join(w, "WaferInfo.ini"))
+                same = ok == "ok" and got.get("AutoCycleInfo", {}).get("WaferStartTime", "") == r.get("wafer_start_time")
+                if "slot" in needs and same:
+                    slot = str(got.get("AutoCycleInfo", {}).get("ActiveSlot", "")).strip()
+                    if slot.isdigit():
+                        out["slot"] = str(int(slot))
+                if "rdl" in needs and same:
+                    rk, names = memo.recipes(os.path.join(w, "RecipesInfo.ini"))
+                    if rk == "ok" and names:
+                        out["rdl"] = ("|".join(names), rdl_mode_from(names, r.get("outcome", "PASS")))
+                    elif rk == "missing":
+                        out["rdl"] = (got.get("Recipe", {}).get("Name", "") or r.get("recipe", ""), rdl_mode_from(None, r.get("outcome", "PASS")))
+            if "sec" in needs:
+                lk, lv = memo.sub("scanlog", read_scan_log, os.path.join(w, "ScanLog.ini"))
+                if lk == "ok":
+                    rk, names = memo.recipes(os.path.join(w, "RecipesInfo.ini"))
+                    second = None
+                    if rk == "ok" and names and len(names) > 1:
+                        ek, ev = memo.sub("extmeta", read_ext_meta, os.path.join(w, f"ExtendedScanMetaData_{names[1]}.json"))
+                        second = ev if ek == "ok" else None
+                    out["sec"] = scan_seconds(parse_dt(r.get("wafer_start_time")), parse_dt(r.get("wafer_end_time")), lv, second)
+        elif kind == "p":
+            _tt, _k, _e, r, w, _key, _n = t
+            ok, got = memo.get(os.path.join(w, "WaferInfo.ini"))
+            if ok == "ok" and got.get("AutoCycleInfo", {}).get("WaferStartTime", "") == r.get("wafer_start_time"):
+                try:
+                    out["files"] = params_mod.snapshot(params_mod.read_wafer_files(w))
+                except OSError:
+                    out["files"] = {}
+            else:
+                out["files"] = {}                        # 폴더가 그 뒤 다시 쓰였다(또는 없다) — 빈 스냅숏으로 남겨 다시 열지 않는다(CORE-05 와 같은 규칙)
+        else:
+            _tt, _k, _kk, lot, w, r, d = t
+            try:
+                out["rec"] = kla_mod.parse_result(nas_guard.read_bytes(os.path.join(str(d["path"]), str(r.get("dd") or ""), lot, w, str(r["file"])))
+                                                  [:kla_mod.MAX_READ].decode("utf-8", errors="replace"))
+            except OSError:
+                out["rec"] = None                        # 못 읽으면 키를 넣지 않아 다음에 다시
+        progress(done.bump(), len(tasks), phase)
+        return out
+
+    def apply(i, out) -> None:
+        t = tasks[i]
+        kind = t[1]
+        st["done"] += 1
+        if kind == "w":
+            _tt, _k, e, r, _w, needs, _n = t
+            if out.get("slot"):
+                r["slot_no"] = out["slot"]
+                st["slot"] += 1
+            if out.get("sec") is not None:
+                r["scan_sec"] = str(out["sec"])
+                st["sec"] += 1
+            if out.get("rdl"):
+                r["recipe"], r["scan_mode"] = out["rdl"]
+                st["rdl"] += 1
+            for n in needs:
+                k2 = (id(e), n + "_checked")
+                left[k2] -= 1
+                if left[k2] <= 0:
+                    e[n + "_checked"] = True
+            dirty.add(DIRTY_UPDATED)
+        elif kind == "p":
+            _tt, _k, _e, r, _w, key, name = t
+            bst = parse_dt(r.get("batch_start", ""))
+            if params_mod.put(cache.setdefault("params", params_mod.empty_store()), key, dev=name, job=r.get("job", ""), setup=r.get("setup", ""),
+                              t=bst.strftime("%Y-%m-%d %H:%M") if bst else "", report=str(r.get("report") or ""), files=out.get("files") or {}):
+                dirty.add(DIRTY_PARAMS)
+            st["params"] += 1 if out.get("files") else 0
+        else:
+            rec, r = out.get("rec"), t[5]
+            if rec is not None:
+                r["images"] = rec.get("images")
+                st["kla"] += 1 if rec.get("images") is not None else 0
+                dirty.add(DIRTY_KLA)
+
+    def stop_now() -> bool:
+        return bool(should_stop and should_stop()) or time.monotonic() >= deadline
+    try:
+        _run(cfg, tasks, one, stop_now, group=lambda t: nas_group(path_of(t)), on_result=apply)
+    except CollectCancelled:
+        if should_stop and should_stop():
+            raise                                        # 사용자가 멈췄다 — 수집의 중지와 같이(넣은 값은 수집의 중지 저장이 담는다)
+        st["timed_out"] = 1
+    st["left"] = st["targets"] - st["done"]
+    _say(log, f"빈칸 채우기: {st['done']:,}/{st['targets']:,}개 — 슬롯 번호 {st['slot']:,}장 · 스캔 비율 {st['sec']:,}장 · RDL 판정 {st['rdl']:,}장"
+              f" · 파라미터 {st['params']:,}개 · KLA 이미지 개수 {st['kla']:,}장"
+              + (f" · 시간이 다 되어 {st['left']:,}개는 다음 수집에서 이어서" if st["left"] else ""))
+    return st
 
 
 def read_recipes_info(path) -> List[str]:
@@ -1375,8 +1613,11 @@ def _is_placeholder(w: dict) -> bool:
     ★ Lot 이 비면 `os.path.join` 에서 그 칸이 통째로 사라져 **Setup 폴더의 엉뚱한 INI** 를 가리킨다.
       (실물: AOI-18 은 Report 1,397개 중 절반 이상이 파일명 규칙 밖이라 Lot 을 못 읽는 경우가 있다.)"""
     lot, wid = str(w.get("lot") or ""), str(w.get("wafer_id") or "")
-    return bool(re.match(r"^loadport", lot, re.I) or re.match(r"^slot\s*\d+", wid, re.I)
-                or not wid.strip() or not lot.strip())
+    return bool(_LOADPORT_RE.match(lot) or _SLOT_RE.match(wid) or not wid.strip() or not lot.strip())
+
+
+_LOADPORT_RE = re.compile(r"^loadport", re.I)
+_SLOT_RE = re.compile(r"^slot\s*\d+", re.I)
 
 
 ScanRoots = List[Tuple[str, Optional[dt.date]]]   # (백업 폴더 경로, 경계 날짜 또는 None) — 우선순위 순
@@ -1416,6 +1657,8 @@ def rows_for_report(dev_name: str, rep: dict, scan_root: str, memo: Optional[_In
     b_start, b_end = parse_dt(s.get("Batch Start", "")), parse_dt(s.get("Batch End", ""))
     rfields = {"wafers_scanned": s.get("Wafers Scanned", ""), "avg_scan_time": s.get("Avg. Scan Time", ""), "cr_every": "", "af_every": ""}
     want_settings = is_recipe_tab_job(rep.get("job", ""))
+    rdl = is_rdl_job(rep.get("job", ""))
+    single_report = False                              # PC-01: RDL 이 아닌 Job 은 첫 EXACT 장에 RecipesInfo.ini 가 없으면 같은 Report 의 나머지 장도 단일(D78 한 Report = 한 방식) — 열지 않는다
     for w in rep["wafers"]:
         causes = norm_causes(w["status"])
         r = {"device": dev_name, "kind": "", "job": rep.get("job", ""), "setup": rep.get("setup", ""),
@@ -1483,10 +1726,14 @@ def rows_for_report(dev_name: str, rep: dict, scan_root: str, memo: Optional[_In
                         r["slot_no"] = str(int(a["ActiveSlot"]))      # 카세트 슬롯 번호 — STALE 이면 다른 시도의 값일 수 있어 쓰지 않는다
                     if r["ini_match"] == "EXACT":
                         # 10/11(D86 Q4): 실제 촬영 초 — 모든 Job 의 EXACT 장. ScanLog.ini 하나 + (멀티면) 두 번째 레시피의 ExtendedScanMetaData 하나, 정확 경로만.
+                        # PC-01: RecipesInfo.ini(멀티 스캔에만 있다)는 RDL 이면 늘(멀티/단일 판정), 아니면 ScanLog 가 있어 촬영 초를 잴 수 있는 장만 —
+                        # 그리고 같은 Report 의 첫 장에 없었으면 나머지 장은 열지 않는다(대부분인 단일 스캔 장의 '없음' 왕복을 덜어 준다).
                         wdir = os.path.join(found_in, rel_found)
-                        rk, names = memo.recipes(os.path.join(wdir, "RecipesInfo.ini"))
-                        names = names if rk == "ok" else None
                         lk, lv = memo.sub("scanlog", read_scan_log, os.path.join(wdir, "ScanLog.ini"))
+                        if rdl or (lk == "ok" and not single_report):
+                            rk, names = memo.recipes(os.path.join(wdir, "RecipesInfo.ini"))
+                            names = names if rk == "ok" else None
+                            single_report = single_report or (rk == "missing" and not rdl)
                         second = None
                         if lk == "ok" and names and len(names) > 1:
                             ek, ev = memo.sub("extmeta", read_ext_meta, os.path.join(wdir, f"ExtendedScanMetaData_{names[1]}.json"))
@@ -1494,7 +1741,7 @@ def rows_for_report(dev_name: str, rep: dict, scan_root: str, memo: Optional[_In
                         sec_ = scan_seconds(st, en, lv if lk == "ok" else None, second)
                         if sec_ is not None:
                             r["scan_sec"] = str(sec_)
-                    if r["ini_match"] == "EXACT" and is_rdl_job(rep.get("job", "")):
+                    if r["ini_match"] == "EXACT" and rdl:
                         # 10/5: RecipesInfo.ini 는 RDL Job 만 본다(사용자 — 멀티/단일을 바꿔 돌리는 건 RDL 뿐, 다른 Job 은 파일 열기를 늘리지 않는다).
                         # 10/5: 멀티 스캔(x20+x5)은 Report 표의 Recipe 칸에 `x20` 만 찍힌다(실물 GVB·GVC·LGA·LHP 확인).
                         # 실제로 돈 레시피는 Wafer 폴더에 있다 — 멀티면 RecipesInfo.ini(이름 전부), 단일이면 WaferInfo.ini [Recipe] Name.
@@ -1503,11 +1750,9 @@ def rows_for_report(dev_name: str, rep: dict, scan_root: str, memo: Optional[_In
                         # 멀티면 WaferInfo 의 [Recipe] Name 은 스캔 진행 창에 떠 있던 이름일 뿐이다(사용자 10/5) — 쓰지 않는다.
                         if names:
                             r["recipe"] = "|".join(names)
-                            r["scan_mode"] = "MULTI" if len(names) > 1 else "SINGLE"
-                        else:
-                            if one:
-                                r["recipe"] = one
-                            r["scan_mode"] = "SINGLE"
+                        elif one:
+                            r["recipe"] = one
+                        r["scan_mode"] = rdl_mode_from(names, r["outcome"])
                     if r["ini_match"] == "EXACT" and params_out is not None and "files" not in params_out:
                         # D89: Report(= Lot 한 번)마다 INI 를 찾은 첫 Wafer 폴더의 레시피 파라미터 — 그 폴더 안만(맨 위 + 하위 폴더 한 단계).
                         try:
@@ -1742,8 +1987,7 @@ def _load_resume(cfg: dict, sig: str) -> Optional[dict]:
     """멈춘 '전체 다시 만들기' 의 후보 캐시(`<캐시>.rebuild`)를 읽는다 — 같은 일(표식 · 파서 · 형식)일 때만, 아니면 None."""
     path = str(cfg["cache_file"]) + RESUME_SUFFIX
     try:
-        with open(path, encoding="utf-8") as f:
-            data = json.load(f)
+        data = read_cache_file(path)
     except (OSError, ValueError):
         return None
     rs = data.get("resume") if isinstance(data, dict) else None
@@ -1780,7 +2024,7 @@ def _load_cache(cfg: dict, full: bool = False, log: Optional[LogFn] = None, rede
         dirty.add(DIRTY_CREATED)
         return cache
     try:
-        loaded = json.loads(nas_guard.read_text(path, errors="strict"))
+        loaded = read_cache_file(path)
         if not isinstance(loaded, dict) or not isinstance(loaded.get("reports", {}), dict):
             raise ValueError("캐시 JSON 의 최상위가 객체가 아닙니다")
         cache.update(loaded)
@@ -1790,7 +2034,10 @@ def _load_cache(cfg: dict, full: bool = False, log: Optional[LogFn] = None, rede
                 dirty.add(DIRTY_FORMAT)
         cache.pop(_CORRUPT_KEY, None)
         cache["_status"] = CACHE_OK
-    except (UnicodeDecodeError, ValueError, OSError) as e:      # json.JSONDecodeError 는 ValueError
+    except OSError as e:                                         # 열 수 없음은 손상이 아니다(CORE-02) — 멈추고 원본은 그대로
+        _LOG.warning("캐시 파일을 열 수 없음(수집 중단, 원본 그대로): %s — %s: %s", path, type(e).__name__, e)
+        raise CacheUnreadable(i18n.KO.CACHE_UNREADABLE_FMT.format(path=path, error=f"{type(e).__name__}: {e}")) from e
+    except (UnicodeDecodeError, ValueError) as e:      # json.JSONDecodeError 는 ValueError
         cache = _empty_cache()
         cache["_status"] = CACHE_CORRUPT
         cache[_CORRUPT_KEY] = {"path": path, "error": f"{type(e).__name__}: {e}"}
@@ -1803,6 +2050,18 @@ def _load_cache(cfg: dict, full: bool = False, log: Optional[LogFn] = None, rede
         if n:
             _say(log, f"분류 규칙이 바뀌어 캐시 행 {n}개의 상태·검사 종류를 다시 계산했습니다(NAS 는 읽지 않음)")
     return cache
+
+
+def _read_cache_text(path: str) -> str:
+    """캐시 본문(strict UTF-8). OS 오류면 `CACHE_READ_RETRY_SEC` 뒤 한 번 더 — 그래도 안 되면 OSError 를 그대로 올린다.
+    디코딩 오류(UnicodeDecodeError = ValueError)는 다시 열지 않는다(손상은 기다려도 그대로다)."""
+    try:
+        return nas_guard.read_text(path, errors="strict")
+    except UnicodeDecodeError:
+        raise
+    except OSError:
+        time.sleep(CACHE_READ_RETRY_SEC)
+        return nas_guard.read_text(path, errors="strict")
 
 
 def _rederive_rows(cache: dict) -> int:
@@ -1822,6 +2081,10 @@ def _rederive_rows(cache: dict) -> int:
                                             parse_dt(r.get("batch_start")), parse_dt(r.get("batch_end")))}
             if any(r.get(k) != v for k, v in new.items()):
                 r.update(new)
+                changed += 1
+            if (r.get("scan_mode") == "SINGLE" and new["outcome"] != "PASS" and "|" not in str(r.get("recipe") or "")
+                    and is_rdl_job(r.get("job"))):
+                r["scan_mode"] = ""                      # 11/25(`rdl_mode_from`): PASS 가 아닌 RDL 장의 '단일' 은 근거가 아니었다 — 화면이 Report 로 채운다
                 changed += 1
             r.setdefault("slots", "")
             for c in QUALITY_COLS:
@@ -2166,6 +2429,86 @@ def _rows_from_cache(cache: dict, index: _DeviceIndex, cfg: dict, stats: Optiona
     return rows, hidden
 
 
+ROWS_FOLD_KEY = "rows_fold"      # CORE-07: 캐시 파일 안 행을 결과 HTML 처럼 접어 둔 표(열 이름 한 번 + 같은 값은 풀 번호)
+_ABSENT = -1                      # 접은 행에서 그 열이 없던 칸(옛 행은 열이 모자랄 수 있다 — 빈 값과 구별해 그대로 되살린다)
+
+
+def _fold_rows(reports: Dict[str, dict]) -> Tuple[Dict[str, dict], dict]:
+    """캐시의 Report 들 → (행을 번호 목록으로 바꾼 사본, 접은 표 {"v", "cols", "pool"}). 원본은 건드리지 않는다.
+    열은 `OUT_COLS` 순서 + 그 밖의 열(옛 행)을 처음 본 순서로, 값은 같은 것끼리 풀 번호 하나 — 문자열이 아닌 값도 그대로 풀에 둔다."""
+    cols: List[str] = list(OUT_COLS)
+    cidx = {c: i for i, c in enumerate(cols)}
+    pool: list = []
+    pidx: Dict[object, int] = {}
+    out: Dict[str, dict] = {}
+    for k, e in reports.items():
+        rows = e.get("rows")
+        if not isinstance(rows, list) or not rows:
+            out[k] = e
+            continue
+        folded = []
+        for r in rows:
+            row = [_ABSENT] * len(cols)
+            for c, v in r.items():
+                ci = cidx.get(c)
+                if ci is None:
+                    ci = cidx[c] = len(cols)
+                    cols.append(c)
+                    row.append(_ABSENT)
+                key = v if type(v) is str else ("\0", json.dumps(v, ensure_ascii=False, sort_keys=True))
+                i = pidx.get(key)
+                if i is None:
+                    i = pidx[key] = len(pool)
+                    pool.append(v)
+                row[ci] = i
+            folded.append(row)
+        out[k] = dict(e, rows=folded)
+    return out, {"v": 1, "cols": cols, "pool": pool}
+
+
+def _unfold_rows(cache: dict) -> None:
+    """`_fold_rows` 를 되돌린다(제자리) — 접은 표가 없거나 행이 이미 dict(옛 형식 · 섞임)여도 된다. 표가 맞지 않으면 ValueError(= 손상).
+    PH-06: 옛 형식 행의 같은 글자는 한 객체로 합친다 — 접은 형식은 풀이 이미 그렇다(90일 캐시 메모리 910 → 476MB)."""
+    fold = cache.pop(ROWS_FOLD_KEY, None)
+    cols: list = []
+    pool: list = []
+    if fold is not None:
+        if not isinstance(fold, dict) or not isinstance(fold.get("cols"), list) or not isinstance(fold.get("pool"), list):
+            raise ValueError("캐시 JSON 의 접은 행 표가 깨졌습니다")
+        cols, pool = fold["cols"], fold["pool"]
+    n_cols = len(cols)
+    get = pool.__getitem__
+    memo: Dict[str, str] = {}
+    for e in (cache.get("reports") or {}).values():
+        rows = e.get("rows") if isinstance(e, dict) else None
+        if not isinstance(rows, list):
+            continue
+        for j, r in enumerate(rows):
+            if isinstance(r, dict):
+                for c, v in r.items():
+                    if type(v) is str:
+                        r[c] = memo.setdefault(v, v)
+                continue
+            if not isinstance(r, list) or len(r) > n_cols:
+                raise ValueError("캐시 JSON 의 접은 행 모양이 표와 다릅니다")
+            if _ABSENT in r:
+                rows[j] = {c: get(i) for c, i in zip(cols, r) if i != _ABSENT}
+            else:
+                rows[j] = dict(zip(cols, map(get, r)))      # 번호가 풀 밖이면 IndexError → read_cache_file 이 손상으로 바꾼다
+
+
+def read_cache_file(path: str) -> dict:
+    """캐시 파일을 strict UTF-8 로 읽어 행까지 편 dict(옛 형식 · 접은 형식 모두) — 규칙 재분류 · 보정은 하지 않는다(`_load_cache` 가 한다).
+    점검 도구 · 테스트도 이것으로 읽는다(파일 안 행은 접혀 있다, CORE-07). 깨졌으면 ValueError · UnicodeDecodeError · OSError."""
+    loaded = json.loads(_read_cache_text(path))          # OS 오류면 한 번 더(CORE-02)
+    if isinstance(loaded, dict):
+        try:
+            _unfold_rows(loaded)
+        except (IndexError, TypeError) as ex:
+            raise ValueError(f"캐시 JSON 의 접은 행이 표와 맞지 않습니다({type(ex).__name__})") from ex
+    return loaded
+
+
 def _unique_tmp(path: str) -> str:
     """실행별 고유 임시 이름 — 동시에 도는 GUI/CLI 가 서로의 임시 파일을 밟거나 지우지 않게."""
     return f"{path}.{os.getpid()}-{threading.get_ident()}-{time.time_ns()}.tmp"
@@ -2176,6 +2519,19 @@ def _validate_cache_file(tmp: str, cache: dict) -> None:
     check = json.loads(nas_guard.read_text(tmp, errors="strict"))
     if not isinstance(check, dict):
         raise ValueError("캐시 JSON 최상위가 객체가 아닙니다")
+    fold = check.get(ROWS_FOLD_KEY)
+    if not isinstance(fold, dict) or not isinstance(fold.get("cols"), list) or not isinstance(fold.get("pool"), list):
+        raise ValueError("캐시 JSON 의 접은 행 표가 없습니다")
+    n_cols, n_pool = len(fold["cols"]), len(fold["pool"])
+    n_rows = 0
+    for e in (check.get("reports") or {}).values():          # 행 수 · 모양 · 풀 번호 범위 — 펴지 않고 본다
+        for r in (e.get("rows") or ()) if isinstance(e, dict) else ():
+            if not isinstance(r, list) or len(r) > n_cols or (r and (max(r) >= n_pool or min(r) < _ABSENT)):
+                raise ValueError("캐시 JSON 의 접은 행이 표와 맞지 않습니다")
+            n_rows += 1
+    want = sum(len(e.get("rows") or ()) for e in cache["reports"].values() if isinstance(e, dict))
+    if n_rows != want:
+        raise ValueError(f"캐시 JSON 의 행 수가 다릅니다({n_rows} ≠ {want})")
     for k in ("reports", "last_mtime", "failed", "devices"):
         if not isinstance(check.get(k), dict):
             raise ValueError(f"캐시 JSON 에 '{k}' 객체가 없습니다")
@@ -2210,8 +2566,12 @@ def _save_cache(cfg: dict, cache: dict, *, resume_file: bool = False, drop_resum
     preserved = ""
     t_w = time.perf_counter()
     try:
+        reports, fold = _fold_rows(cache["reports"])          # CORE-07: 행은 접어서(열 이름 한 번 + 같은 값은 풀 번호) — 파일 · 저장 시간 · 읽은 뒤 메모리가 준다
+        text = json.dumps(dict(cache, reports=reports, **{ROWS_FOLD_KEY: fold}), ensure_ascii=False)   # 접으면 작아 한 번에(json.dump 로 흘려 쓰면 5배 느리다)
+        del reports, fold
         with open(tmp, "w", encoding="utf-8") as f:
-            json.dump(cache, f, ensure_ascii=False)
+            f.write(text)
+            del text
             f.flush()
             os.fsync(f.fileno())
         t_v = time.perf_counter()
@@ -2561,7 +2921,7 @@ def _list_new_reports(devs, cache, cfg, backfill, log, progress, on_device, shou
 
     ★ 나열 방식(9/23): 커서가 있는 장비의 **증분 수집**이면 폴더 전체 대신 이름의 날짜 패턴(`report_name_patterns`)으로
     NAS 가 거른 파일만 받는다(`PATTERN_LISTER`, Windows). 고르는 규칙은 위와 똑같다 — 받은 목록이 전체의 부분집합일 뿐이다.
-    처음 보는 장비 · backfill · rebuild · recover · refresh · 마지막 전체 나열이 `full_list_every_hours` 보다 오래됨 · 패턴이 너무 많음
+    처음 보는 장비 · backfill · rebuild · recover · 마지막 전체 나열이 `full_list_every_hours` 보다 오래됨 · 패턴이 너무 많음(refresh · 기간이 14일 넘게 거슬러 감)
     · 패턴 나열 실패는 전부 예전처럼 **전체 나열**. `dm["listing"]` 에 어느 쪽이었는지("full" · "pattern") 남긴다."""
     reports, last, failed = cache["reports"], cache["last_mtime"], cache.get("failed") or {}
     full_listed = cache.get("full_listed") if isinstance(cache.get("full_listed"), dict) else {}
@@ -2599,7 +2959,9 @@ def _list_new_reports(devs, cache, cfg, backfill, log, progress, on_device, shou
                 since = min(since, pending_since[dk] - 1)  # 재시도할 Report 까지는 훑는다
             files = None
             lister = PATTERN_LISTER
-            incremental = not (backfill or recover or refresh_since is not None or dk not in last)
+            # PC-06: '최근 며칠 · 기간 다시 읽기' 도 평소 수집과 같은 조건이면 이름 날짜 패턴으로(기간 첫날 하루 전 ~ 내일, PATTERN_MAX_DAYS 안만).
+            # 고르는 규칙(수정시각)은 그대로 — 이름 날짜 밖에 다시 쓰인 옛 Report 는 7일마다의 전체 나열이 잡는다(평소 수집과 같다)
+            incremental = not (backfill or recover or dk not in last)
             if lister is not None and incremental and now - float(full_listed.get(dk) or 0) < full_every:
                 pats = report_name_patterns(since, now)
                 if pats:
@@ -2644,6 +3006,7 @@ def _list_new_reports(devs, cache, cfg, backfill, log, progress, on_device, shou
                 else:
                     pick.append((e, key))
             dm["found"], dm["reports"] = len(files), len(pick)
+            dm["future"] = sum(1 for e in files if e.stat().st_mtime > now + CLOCK_SKEW_SEC)   # 시계가 틀린 설비(CORE-04) — 로그 한 줄
             dm["list_dev_ms"] = int((time.perf_counter() - t_list) * 1000)   # 숨긴 수집 로그(10/5) — 장비마다 나열에 걸린 시간
             out = (d, dm, pick, known)
         except OSError as ex:
@@ -2657,6 +3020,8 @@ def _list_new_reports(devs, cache, cfg, backfill, log, progress, on_device, shou
     plan = _run(cfg, devs, one, should_stop, group=lambda d: nas_group(d["path"]))
     tot_found = tot_pick = n_pick_dev = 0
     for d, dm, pick, _known in plan:              # 로그는 장비 순서대로 한 번에(스레드에서 섞이지 않게)
+        if dm.get("future"):
+            _say(log, f"[{d['name']}] 수정시각이 미래인 Report {dm['future']}개 — 설비 · NAS 시계를 확인하세요(커서는 지금 시각까지만 옮깁니다)")
         if dm["error"]:
             _say(log, f"[{d['name']}] {dm['error']}")
         elif pick:
@@ -2692,15 +3057,19 @@ def _decode_report(raw: bytes) -> str:
     return raw.decode("utf-8", errors="replace").replace("\r\n", "\n").replace("\r", "\n")
 
 
-def _advance_cursor(last: dict, did: str, ok_mtimes, blocked_mtimes) -> bool:
+def _advance_cursor(last: dict, did: str, ok_mtimes, blocked_mtimes, now: Optional[float] = None) -> bool:
     """커서는 **성공적으로 캐시에 들어간 파일까지만** 전진한다. 값이 실제로 바뀌었을 때만 True(저장 이유, C04).
 
     읽기에 실패해 아직 재시도가 남은 파일이 있으면 그 파일보다 앞에서 멈춘다 →
-    다음 증분 수집에서 그 Report 를 다시 만난다(영구 누락 방지)."""
+    다음 증분 수집에서 그 Report 를 다시 만난다(영구 누락 방지).
+    ★ 커서는 **지금 시각 + `CLOCK_SKEW_SEC`** 을 넘지 않는다(CORE-04) — 설비·NAS 시계가 틀려 수정시각이 미래인 Report 하나로
+    커서가 미래로 뛰면 그 뒤 생긴 정상 Report 를 전부 '커서보다 이전' 으로 건너뛴다. 이미 미래에 가 있는 옛 커서도 지금으로 되돌린다
+    (나열만 조금 더 할 뿐 — 이미 캐시에 있는 Report 는 수정시각이 같아 다시 읽지 않는다)."""
+    cap = (time.time() if now is None else float(now)) + CLOCK_SKEW_SEC
     cur = float(last.get(did, 0))
     limit = min(blocked_mtimes) if blocked_mtimes else None
     usable = [m for m in ok_mtimes if limit is None or m < limit]
-    new = max(cur, max(usable)) if usable else cur
+    new = min(max(cur, max(usable)) if usable else cur, cap)
     if did in last and float(last[did]) == new:
         return False
     if new or did in last:
@@ -2865,7 +3234,7 @@ def _collect(cfg: dict, full: bool, backfill: bool, *, recover: bool, refresh_wi
     t1 = clock()
     window_days = (float(cfg["retention_days"]) or float(UNLIMITED_DAYS)) if rebuild else None   # 0 = 기한 없음 → 전부
     if rebuild:
-        _say(log, f"전체 재구축: 보관 기간 {cfg['retention_days']}일 안의 Report 를 전부 새 후보 캐시에 모읍니다"
+        _say(log, f"전체 다시 만들기: 보관 기간 {cfg['retention_days']}일 안의 Report 를 전부 새 후보 캐시에 모읍니다"
                   f"(검증을 통과할 때만 기존 캐시 {len(old_cache['reports'])}개 항목을 바꿉니다)")
     elif backfill:
         _say(log, f"초기 수집: 최근 {cfg['backfill_days']}일 안의 Report 를 전부 읽습니다")
@@ -2925,7 +3294,7 @@ def _collect(cfg: dict, full: bool, backfill: bool, *, recover: bool, refresh_wi
     want_params = bool(cfg.get("collect_params", True)) and not rdl_patch
     have_params = frozenset(pstore.get("snaps", {}))
 
-    def read_one(job):
+    def read_raw(job):
         d, _dm, e, _key, scan_root, backups = job
         _check(should_stop)
         t_job = clock()
@@ -2942,6 +3311,11 @@ def _collect(cfg: dict, full: bool, backfill: bool, *, recover: bool, refresh_wi
             raise
         except Exception as ex:  # noqa: BLE001
             out = (job, mtime, None, f"{type(ex).__name__}: {ex}", clock() - t_job, sha, None)
+        return out
+
+    def read_one(job):
+        d, e = job[0], job[2]
+        out = read_raw(job)
         progress(done.bump(), total, i18n.KO.COLLECT_PHASE_PARSE_FMT.format(device=d["name"], name=e.name))
         with left_lock:                       # 여러 스레드가 같이 줄이므로 잠그고 센다
             dk = str(d["key"])
@@ -2983,7 +3357,8 @@ def _collect(cfg: dict, full: bool, backfill: bool, *, recover: bool, refresh_wi
                 ins_reports.append((idx, key))
             reports[key] = {"mtime": mtime, "device": d["name"], "device_id": did, "device_key": dk,
                             "rel": _rel_key(e.name), "path": e.path, "sha256": sha, "revision": revision,
-                            "rows": rows_of, "seen": time.time(), "parser_version": PARSER_VERSION}
+                            "rows": rows_of, "seen": time.time(), "parser_version": PARSER_VERSION,
+                            **{f: True for f in FRESH_CHECKED}}           # 11/25: 이번에 읽으며 슬롯 · 스캔 비율 · RDL 판정을 이미 해 봤다 — 빈칸 채우기가 다시 열지 않게
             if failed.pop(key, None) is not None:
                 dirty.add(DIRTY_FAILED)
             by_dev[dk]["ok"].append(mtime)
@@ -3029,7 +3404,38 @@ def _collect(cfg: dict, full: bool, backfill: bool, *, recover: bool, refresh_wi
 
     ctx["flush"] = flush_read
     ctx["advance"] = advance_finished
-    _run(cfg, jobs, read_one, should_stop, group=lambda j: nas_group(j[0]["path"]), on_result=merge, tick=checkpoint)
+    # 11/25(사용자: "수집 마무리하고나서 한번만 더 재시도"): 읽다 실패한 Report 는 바로 합치지 않고 모아 두었다가 첫 패스가 끝난 뒤
+    # 한 번 더 읽는다 — 잠깐 끊긴 SMB 같은 일시 오류가 다음 수집까지 '일부 실패' 로 남지 않게. 두 번째도 실패하면 그 결과(오류)를 합친다.
+    # 모아 둔 동안 그 장비는 합칠 것이 남아 있어(pending_m) 커서가 이 파일을 지나가지 않는다 — 도중에 멈추면 다음 수집에서 다시 읽는다.
+    held: List[Tuple[int, tuple]] = []
+
+    def merge_first(idx, res) -> None:
+        if res[3] is not None and RETRY_FAILED_ONCE:
+            held.append((idx, res))
+            return
+        merge(idx, res)
+
+    _run(cfg, jobs, read_one, should_stop, group=lambda j: nas_group(j[0]["path"]), on_result=merge_first, tick=checkpoint)
+    if held:
+        held.sort(key=lambda x: x[0])
+        _say(log, f"읽지 못한 Report {len(held)}개를 한 번 더 읽습니다")
+        again = _Counter()
+
+        def read_again(item):
+            job = item[1][0]
+            out = read_raw(job)
+            progress(again.bump(), len(held), i18n.KO.COLLECT_PHASE_RETRY_FMT.format(device=job[0]["name"], name=job[2].name))
+            return out
+
+        fixed = [0]
+
+        def merge_again(i, res) -> None:
+            fixed[0] += res[3] is None
+            merge(held[i][0], res)
+
+        _run(cfg, held, read_again, should_stop, group=lambda h: nas_group(h[1][0][0]["path"]), on_result=merge_again, tick=checkpoint)
+        stats["retry_reports"], stats["retry_fixed"] = len(held), fixed[0]
+        _say(log, f"한 번 더 읽기: {len(held)}개 중 {fixed[0]}개를 읽었습니다")
     # 끝나는 대로 합쳤으므로 dict 순서를 입력 순서로 되돌린다 — 읽는 스레드 수와 상관없이 결과가 같다(예전 규칙)
     for _i, k in sorted(ins_reports):
         reports[k] = reports.pop(k)
@@ -3078,7 +3484,7 @@ def _collect(cfg: dict, full: bool, backfill: bool, *, recover: bool, refresh_wi
                                  "recovered": 0, "refreshed": 0, "retried": 0, "kept": 0, "listing": "skipped"})
     t3 = clock()
 
-    progress(total, total, i18n.KO.COLLECT_PHASE_RETENTION)
+    progress(0, 0, i18n.KO.COLLECT_PHASE_RETENTION)             # 총량 없는 단계 — 100% 로 멈춘 듯 보이지 않게(11/25 PC-12)
     # 0 = 기한 없이 보관(10/5) — 아무것도 지우지 않는다
     cutoff = (dt.datetime.now() - dt.timedelta(days=float(cfg["retention_days"]))) if cfg["retention_days"] else dt.datetime.min
 
@@ -3097,8 +3503,8 @@ def _collect(cfg: dict, full: bool, backfill: bool, *, recover: bool, refresh_wi
         carried = _carry_over(old_cache, cache, index, plan, cutoff)
         reasons = _validate_rebuild(old_cache, cache, plan, n_new + resumed_n)   # 이어하기: 앞서 읽어 둔 후보도 읽은 것으로 센다
         if reasons:
-            raise RebuildRejected("전체 재구축 후보를 버리고 기존 캐시를 그대로 둡니다 — " + " / ".join(reasons))
-        _say(log, f"전체 재구축: 새로 읽은 Report {n_new}개 · 이전 이력 이관 {carried['reports']}개"
+            raise RebuildRejected("전체 다시 만들기 후보를 버리고 기존 캐시를 그대로 둡니다 — " + " / ".join(reasons))
+        _say(log, f"전체 다시 만들기: 새로 읽은 Report {n_new}개 · 이전 이력 이관 {carried['reports']}개"
                   f"(미접근 장비 {carried['unreachable']}대 · 목록 밖 {carried['foreign']}개) · 읽기 실패 {len(errors)}건(이전 행 유지)")
     # 장비의 경로·Report 폴더를 캐시에 남긴다 — 'HTML 만 다시 만들기'(NAS 없이)가 Report 열기 경로를 그대로 쓰게. 바뀔 때만 저장 이유가 된다
     devinfo = [{k: dm.get(k, "") for k in ("name", "key", "note", "report_dir")} for dm in dev_meta if not dm.get("error")]
@@ -3106,14 +3512,20 @@ def _collect(cfg: dict, full: bool, backfill: bool, *, recover: bool, refresh_wi
         cache["last_devices"] = devinfo
         dirty.add(DIRTY_DEVICE_INFO)
     _units = int(stats.get("rdl_rows", 0)) if rdl_patch else n_new
-    _fixed = (stats.get("devices_ms", 0) + stats.get("list_ms", 0)) / 1000.0
+    _total = clock() - t0
+    _work = _total - (stats.get("devices_ms", 0) + stats.get("list_ms", 0)) / 1000.0
+    if not rdl_patch and stats.get("read_ms"):   # PC-04: 개수당 시간은 Report 읽기 단계만 — KLA · 보관 정리 · 저장 준비는 고정 몫으로(전체 = 일한 초 + 고정 초는 그대로)
+        _work = min(_work, stats["read_ms"] / 1000.0)
     if dirty and _units > 0 and not resume_after and not resumed_n:   # 예상 시간의 근거(10/11) — 이미 저장할 이유가 있는 실행에만, 이어하기로 끝낸 실행(일부만 읽음)은 빼고 남긴다
         record_eta(cache, "rebuild" if rebuild else "rdl_patch" if rdl_patch else "range" if rng else "refresh" if refresh_days > 0 else "recover" if recover
-                   else "backfill" if backfill else "incremental", _units, clock() - t0 - _fixed, _fixed)
+                   else "backfill" if backfill else "incremental", _units, _work, _total - _work)
+    if not rebuild and not rdl_patch:                          # 11/25: 남은 옛 빈칸을 최근 것부터 정해진 초만큼 — 저장은 아래의 한 번
+        stats["gaps"] = fill_gaps_budget_into(cfg, cache, devs, float(cfg.get("gap_fill_sec", GAP_FILL_SEC) or 0), log, progress, should_stop, dirty)
     if cache.pop("resume", None) is not None:                    # 끝까지 갔다 — 이어하기 표시는 거둔다
         dirty.add(DIRTY_RESUME)
     stats["cache_dirty"] = dict(sorted(dirty.reasons.items()))
     if dirty:
+        progress(0, 0, i18n.KO.COLLECT_PHASE_SAVE)              # 현장 30초 넘게 걸리는 단계 — 단계 글자로 알린다(11/25 PC-12)
         saved = _save_cache(cfg, cache, drop_resume=rebuild)
         stats["cache_saved"] = True
         stats["cache_write_ms"], stats["cache_check_ms"], stats["cache_bytes"] = saved.get("write_ms", 0), saved.get("check_ms", 0), saved.get("bytes", 0)
@@ -3126,6 +3538,7 @@ def _collect(cfg: dict, full: bool, backfill: bool, *, recover: bool, refresh_wi
         _say(log, "캐시에 바뀐 것이 없어 저장을 생략합니다")
     if (cache.get("params") or {}).get("snaps"):
         stats["params_store"] = cache["params"]                 # D89: write_html(timing=stats) 이 파라미터 탭 묶음을 만든다(메타 timing 에는 넣지 않는다)
+    progress(0, 0, i18n.KO.COLLECT_PHASE_ROWS)
     rows, hidden = _rows_from_cache(cache, index, cfg, stats)
     dev_meta.extend(_missed_meta(cfg, devs, seen_log))
     _mark_device_status(dev_meta, rows)
@@ -3329,27 +3742,33 @@ def _version_info() -> dict:
         return {}
 
 
-def _embed_rows(rows: List[dict]) -> dict:
+def _embed_rows(rows: List[dict], cols: Sequence[str] = OUT_COLS) -> dict:
     """HTML 에 박을 형태로 접는다 — `POOLED_COLS` 는 문자열 풀의 번호로 바꾼다.
 
     장비 30대 × 보관 90일이면 행이 십수만 개다. 장비명·Job·Setup·Report 이름·상태 문구는 행마다
     같은 값이 되풀이되므로 그대로 두면 HTML 이 수십 MB 가 된다. 풀로 접으면 그 반복이 사라진다.
-    (CSV 는 사람이 읽는 파일이라 접지 않는다 — `_write_csv` 는 원래 문자열을 그대로 쓴다.)"""
+    (CSV 는 사람이 읽는 파일이라 접지 않는다 — `_write_csv` 는 원래 문자열을 그대로 쓴다.)
+    `cols` 를 주면 그 열만 담는다(LOT 추적 배포판 — 행을 복사하지 않고 접을 때 고른다)."""
     pool: List[str] = []
     index: Dict[str, int] = {}
-
-    def put(v) -> int:
-        v = "" if v is None else str(v)
-        i = index.get(v)
-        if i is None:
-            i = index[v] = len(pool)
-            pool.append(v)
-        return i
-
-    pooled = [c in POOLED_COLS for c in OUT_COLS]
-    out = [[put(r.get(c, "")) if pooled[i] else str(r.get(c, "") or "")
-            for i, c in enumerate(OUT_COLS)] for r in rows]
-    return {"cols": list(OUT_COLS), "pooled": [c for c in OUT_COLS if c in POOLED_COLS],
+    spec = [(c, c in POOLED_COLS) for c in cols]
+    out = []
+    for r in rows:
+        g = r.get
+        row = []
+        for c, pooled in spec:
+            v = g(c, "")
+            if pooled:
+                v = "" if v is None else (v if type(v) is str else str(v))
+                i = index.get(v)
+                if i is None:
+                    i = index[v] = len(pool)
+                    pool.append(v)
+                row.append(i)
+            else:
+                row.append(str(v or ""))
+        out.append(row)
+    return {"cols": list(cols), "pooled": [c for c in cols if c in POOLED_COLS],
             "pool": pool, "rows": out}
 
 
@@ -3359,13 +3778,21 @@ MB = 1024 * 1024
 
 
 def _payload(emb: dict, meta: dict) -> str:
-    """접힌 행 + meta → HTML 에 박을 JSON 문자열. `</` → `<\\/` 는 JSON 으로는 같은 문자열이면서 HTML 파서가 `</script>` 로 읽지 못하게 한다."""
-    emb["meta"] = meta
-    return json.dumps(emb, ensure_ascii=False, separators=(",", ":")).replace("</", "<\\/")
+    """접힌 행 + meta → HTML 에 박을 JSON 문자열. `<` → `\\u003c` 는 JSON 으로는 같은 문자열이면서 HTML 파서가 `</script>` 도,
+    `<!--<script` 의 '이중 이스케이프' 상태(데이터 뒤 화면 스크립트까지 삼켜 파일이 열리지 않는다 — JS-05)도 보지 못하게 한다."""
+    return _payload_join(_emb_json(emb), meta)
 
 
-def _utf8_len(text: str) -> int:
-    return len(text.encode("utf-8"))
+def _emb_json(emb: dict) -> str:
+    """접힌 행(meta 없이)의 JSON — 수집 끝 HTML 여러 장이 같은 행이면 한 번만 만든다(`HtmlPrep`)."""
+    return json.dumps(emb, ensure_ascii=False, separators=(",", ":")).replace("<", "\\u003c")
+
+
+def _payload_join(emb_json: str, meta: dict) -> str:
+    """`json.dumps({**emb, "meta": meta})` 와 바이트까지 같다 — 키 순서(cols · pooled · pool · rows · meta)와 구분자가 같고,
+    `<` 이스케이프(JS-05)는 글자 하나 단위라 두 조각으로 나눠도 같다."""
+    m = json.dumps(meta, ensure_ascii=False, separators=(",", ":")).replace("<", "\\u003c")
+    return f'{emb_json[:-1]},"meta":{m}}}' if len(emb_json) > 2 else f'{{"meta":{m}}}'
 
 
 def _wafer_key(r: dict) -> str:
@@ -3374,7 +3801,10 @@ def _wafer_key(r: dict) -> str:
     합성 행 · LoadPort/Slot 자리표시는 자재가 아니다(전부 한 열쇠로 묶여 버린다)."""
     if r.get("kind") or _is_placeholder(r):
         return ""
-    return re.sub(r"[^A-Z0-9]", "", str(r.get("wafer_id") or "").upper())
+    return _NON_ALNUM_RE.sub("", str(r.get("wafer_id") or "").upper())
+
+
+_NON_ALNUM_RE = re.compile(r"[^A-Z0-9]")
 
 
 def _row_day(r: dict, memo: Dict[str, str]) -> str:
@@ -3385,7 +3815,8 @@ def _row_day(r: dict, memo: Dict[str, str]) -> str:
     return memo[raw]
 
 
-def rows_for_range(rows: List[dict], day_from: str = "", day_to: str = "") -> Tuple[List[dict], str, str]:
+def rows_for_range(rows: List[dict], day_from: str = "", day_to: str = "", *,
+                   days: Optional[List[str]] = None) -> Tuple[List[dict], str, str]:
     """결과 HTML 을 기간으로 만들 때(10/5) 넣을 행 → (행, 실제 첫날, 실제 끝날). 빈 값은 '처음부터' · '끝까지'.
 
     날짜는 행의 배치 시작일(없으면 Wafer 시작일) — 한 Report 의 행은 함께 들어간다. 기간 안 행에 더해 **맥락**을 넣는다:
@@ -3393,32 +3824,72 @@ def rows_for_range(rows: List[dict], day_from: str = "", day_to: str = "") -> Tu
     (Rescan 은 같은 자재의 앞선 시도가 PASS 였는지로 정한다 — D63, 기간 제한 없음). 화면은 `meta.range.from~to` 밖의 날을
     그리지 않으므로 맥락 행은 계산에만 쓰인다 → 각 날의 장비-일 값이 전부 담은 파일과 같다(가드 `test_html_range.py`).
     원래 행 순서를 지킨다 — 화면 모델의 동점 처리가 입력 순서를 따른다(9/23 실측). 날짜를 모르는 행은 끝을 정하지 않았을 때만 넣는다."""
+    picked, lo, hi = _range_pick(rows, day_from, day_to, days)
+    return (list(rows) if picked is None else [rows[i] for i in picked]), lo, hi
+
+
+def _row_days(rows: List[dict]) -> List[str]:
+    """행마다 날짜(`_row_day`) — 한 번만 계산해 기간 자르기 · 가진 날짜가 같이 쓴다(PH-03)."""
     memo: Dict[str, str] = {}
-    days = sorted({d for d in (_row_day(r, memo) for r in rows) if d})
-    if not days:
-        return list(rows), "", ""
-    lo = max(day_from or days[0], days[0])
-    hi = min(day_to or days[-1], days[-1])
+    return [_row_day(r, memo) for r in rows]
+
+
+def _range_pick(rows: List[dict], day_from: str, day_to: str,
+                days: Optional[List[str]] = None) -> Tuple[Optional[List[int]], str, str]:
+    """`rows_for_range` 의 본체 → (고른 행 번호(원래 순서) — None 이면 전부, 첫날, 끝날). `days` = `_row_days(rows)`(없으면 여기서)."""
+    rd = _row_days(rows) if days is None else days
+    known = sorted({d for d in rd if d})
+    if not known:
+        return None, "", ""
+    lo = max(day_from or known[0], known[0])
+    hi = min(day_to or known[-1], known[-1])
     if not day_from and not day_to:
-        return list(rows), days[0], days[-1]
+        return None, known[0], known[-1]
     if lo > hi:
         return [], lo, hi
     d0 = (dt.date.fromisoformat(lo) - dt.timedelta(days=1)).isoformat()
     d1 = (dt.date.fromisoformat(hi) + dt.timedelta(days=1)).isoformat()
-    pick = [r for r in rows if d0 <= _row_day(r, memo) <= d1 or (not _row_day(r, memo) and not day_to)]
-    have = {id(r) for r in pick}
-    reps = {(r.get("device"), r.get("report")) for r in pick}
-    keys = {k for k in (_wafer_key(r) for r in pick) if k}
-    for r in rows:
-        if id(r) in have:
-            continue
-        d = _row_day(r, memo)
-        if (r.get("device"), r.get("report")) in reps or (d and d < d0 and _wafer_key(r) in keys):
-            pick.append(r)
-            have.add(id(r))
-    order = {id(r): k for k, r in enumerate(rows)}
-    pick.sort(key=lambda r: order[id(r)])
-    return pick, lo, hi
+    open_end = not day_to
+    inn = [(d0 <= d <= d1) if d else open_end for d in rd]
+    if all(inn):
+        return None, lo, hi                         # 기간이 데이터 전부를 덮는다 — 맥락 찾기 없이 그대로(순서 같음)
+    reps = set()
+    keys = set()
+    for r, i in zip(rows, inn):
+        if i:
+            reps.add((r.get("device"), r.get("report")))
+            k = _wafer_key(r)
+            if k:
+                keys.add(k)
+    picked = []
+    for n, (r, d, i) in enumerate(zip(rows, rd, inn)):
+        if i or (r.get("device"), r.get("report")) in reps or (d and d < d0 and _wafer_key(r) in keys):
+            picked.append(n)
+    return picked, lo, hi
+
+
+class HtmlPrep:
+    """수집이 끝난 뒤 같은 행으로 HTML 을 여러 장(수집 HTML · LOT 배포 · 전체 배포) 만들 때 한 번만 하는 준비(PH-01 · PP-07):
+    템플릿 읽기 · 행마다 날짜 · 가진 날짜 · 같은 행 묶음의 접기와 JSON · 파라미터 Job 묶음(PH-02). **결과 바이트는 준비 없이 만든 것과 같다**
+    (가드 `test_html_prep.py`). 같은 `rows` 리스트(같은 객체)에만 쓴다 — 다른 리스트로 부르면 `write_html` 이 무시한다."""
+
+    def __init__(self, rows: List[dict]):
+        self.rows = rows
+        self.days = _row_days(rows)
+        self.known = sorted({d for d in self.days if d})
+        self.tpl: Optional[str] = None
+        self.emb: Dict[tuple, str] = {}             # (lot_only, 고른 행) → 접힌 행 JSON(meta 없이)
+        self.params: Dict[tuple, dict] = {}         # params.build_meta 의 Job 묶음 기억
+
+    def template(self) -> str:
+        if self.tpl is None:
+            from .utils import paths
+            self.tpl = nas_guard.read_text(paths.template_path())
+        return self.tpl
+
+
+REPLACE_TRIES = 6          # 공유 폴더(out_dir)에 쓸 때 교체를 몇 번 시도할지 — 백신 · 동기화 프로그램이 잠깐 잡은 파일(publish._write_text 와 같은 수)
+REPLACE_WAIT_SEC = 1.0
 
 
 def range_name(output_name: str, day_from: str, day_to: str) -> str:
@@ -3427,21 +3898,23 @@ def range_name(output_name: str, day_from: str, day_to: str) -> str:
     return f"{stem}_{day_from}~{day_to}{ext or '.html'}"
 
 
-def params_for_range(store: dict, r_from: str = "", r_to: str = "") -> dict:
+def params_for_range(store: dict, r_from: str = "", r_to: str = "", *, memo: Optional[dict] = None) -> dict:
     """파라미터 탭 묶음(D89) — 기간 끝날까지의 스냅숏으로(그날 기준 '가장 최근' 값), Job 은 기간 안에 한 번이라도 돈 것만(HTML 크기)."""
     snaps = {k: s for k, s in store.get("snaps", {}).items() if not r_to or (s.get("t") or "")[:10] <= r_to}
     if r_from:
         live = {s.get("job") for s in snaps.values() if (s.get("t") or "")[:10] >= r_from}
         snaps = {k: s for k, s in snaps.items() if s.get("job") in live}
-    return params_mod.build_meta({"blobs": store.get("blobs", {}), "snaps": snaps}, sort_key=devices_mod.sort_key)
+    return params_mod.build_meta({"blobs": store.get("blobs", {}), "snaps": snaps}, sort_key=devices_mod.sort_key, job_memo=memo)
 
 
 def write_html(cfg: dict, rows: List[dict], dev_meta: List[dict], errors: List[dict], started: float, *,
                mode: str = "auto", log: Optional[LogFn] = None, progress: Optional[ProgressFn] = None,
                timing: Optional[dict] = None, warnings: Optional[List[dict]] = None,
                day_from: str = "", day_to: str = "", params_store: Optional[dict] = None,
-               lot_only: bool = False, out_dir: str = "", out_name: str = "") -> str:
+               lot_only: bool = False, out_dir: str = "", out_name: str = "", prep: Optional["HtmlPrep"] = None) -> str:
     """template.html 에 데이터를 넣어 출력 폴더에 HTML 한 장을 쓴다(분할 없음).
+
+    `prep`(`HtmlPrep(rows)`, 같은 `rows` 객체로 만든 것)을 주면 수집 끝에 여러 장을 만들 때 같은 준비를 되풀이하지 않는다 — 결과 바이트는 같다.
 
     `lot_only`(10/27, 공유 발행 시험): LOT 추적 탭만 보이는 한 장 — 기간을 안 주면 가진 데이터 전부, 파라미터 · 레시피 묶음 · LOT 추적이 안 쓰는 열은 담지 않고
     CSV 도 쓰지 않는다. `out_dir`·`out_name` 을 주면 그 로컬 폴더·이름으로 쓴다(NAS 아래면 거부).
@@ -3457,15 +3930,15 @@ def write_html(cfg: dict, rows: List[dict], dev_meta: List[dict], errors: List[d
     nas_guard.check_cfg(cfg)  # ★ NAS 아래에는 절대 쓰지 않는다
     if progress:
         progress(0, 0, i18n.KO.COLLECT_PHASE_WRITE)
-    from .utils import paths
 
     t_html = time.perf_counter()
-    tpl = nas_guard.read_text(paths.template_path())
+    if prep is None or prep.rows is not rows:
+        prep = HtmlPrep(rows)
+    tpl = prep.template()
     if tpl.count("__DATA__") != 1:                 # C07: 자리는 정확히 한 곳 — 치환한 큰 사본을 만들지 않고 앞·데이터·뒤를 차례로 쓴다
         raise RuntimeError(f"template.html 에 __DATA__ 자리가 {tpl.count('__DATA__')}곳입니다(정확히 1곳이어야 합니다)")
     cut = tpl.index("__DATA__")
     prefix, suffix = tpl[:cut], tpl[cut + len("__DATA__"):]
-    del tpl
     ver = _version_info()
     now = dt.datetime.now()
     meta = {"generated": now.strftime("%Y-%m-%d %H:%M"), "generated_iso": now.isoformat(timespec="seconds"),
@@ -3474,13 +3947,12 @@ def write_html(cfg: dict, rows: List[dict], dev_meta: List[dict], errors: List[d
             "elapsed": int((time.time() - started) * 1000), "retention_days": cfg["retention_days"],
             "timing": {k: v for k, v in timing.items() if k not in ("log", "params_store")} if timing else {},   # 상세 로그는 app.log 에(HTML 에 넣지 않는다)
             "sha": ver.get("sha", ""), "branch": ver.get("branch", ""), "repo": ver.get("repo", ""),
-            "version": (str(ver.get("sha", ""))[:7]) if ver.get("sha") else "",
-            "dashboard_settings": config_mod.dashboard_settings(cfg)}      # D14: 살펴볼 장비 문턱(attentionUtil · attentionErr)
+            "version": (str(ver.get("sha", ""))[:7]) if ver.get("sha") else ""}   # 11/25: '살펴볼 장비' 개념을 없애 dashboard_settings 도 넣지 않는다
     rg, _rg_path = recipes_mod.load(cfg, log)
     if lot_only:
         rg = None
         meta["lot_only"] = True                    # 화면: 탭 줄에 LOT 추적만
-        prefix = prefix.replace('<html lang="ko" ', '<html lang="ko" data-boot="lot" ', 1).replace("<title>AOI 가동 현황</title>", "<title>AOI LOT 추적</title>", 1)   # 11/4: 배포판 제목   # 시작 화면 표식(D104 웨이퍼 장면 — D105 부터 같은 글자 장면이라 안 읽지만 표식은 유지)
+        prefix = prefix.replace('<html lang="ko" ', '<html lang="ko" data-boot="lot" ', 1).replace("<title>AOI 가동 현황</title>", "<title>스캔을 어디에 했니?</title>", 1)   # 11/4: 배포판 제목   # 시작 화면 표식(D104 웨이퍼 장면 — D105 부터 같은 글자 장면이라 안 읽지만 표식은 유지)
         # 팀 공유에 올라가는 파일 — 장비 NAS 경로 · 범위 목록 · 시간 · 브랜치는 이 화면이 쓰지 않으니 담지 않는다
         meta["devices"] = [{k: dm[k] for k in ("name", "key", "status", "read_errors") if k in dm} for dm in dev_meta]
         meta["scope"] = {}
@@ -3492,27 +3964,32 @@ def write_html(cfg: dict, rows: List[dict], dev_meta: List[dict], errors: List[d
         meta["recipe_groups"] = rg                 # D67: 화면의 레시피 묶음 — 통계·표시에만, Rescan 판정에는 쓰지 않는다
     # 기간(10/5): 고른 기간이 있으면 그 기간, 없으면 cfg html_days(최근 N일, 0 = 전부). 분할은 없다 — 9/23 분할은 사용자 요청으로 롤백
     all_rows = rows
-    memo: Dict[str, str] = {}
-    known_days = sorted({d for d in (_row_day(r, memo) for r in all_rows) if d})
+    known_days = prep.known
     explicit = bool(day_from or day_to)
-    if not explicit and not lot_only and int(cfg.get("html_days") or 0) > 0:
-        anchor = dt.date.fromisoformat(known_days[-1]) if known_days else now.date()   # 가진 데이터의 끝날부터 거꾸로
-        day_from = (anchor - dt.timedelta(days=int(cfg["html_days"]) - 1)).isoformat()
-    rows, r_from, r_to = rows_for_range(all_rows, day_from or "", day_to or "")
+    keep_days = int(cfg.get("publish_lot_days") or 0) if lot_only else int(cfg.get("html_days") or 0)   # LOT 추적 배포판은 따로(11/25, 기본 0 = 전부)
+    if not explicit and keep_days > 0:
+        # 가진 데이터의 끝날부터 거꾸로 — 단, 수집한 날보다 늦지 않게(JS-01: 시계가 틀린 미래 날짜 행 하나가 기간을 통째로 미래로 밀었다)
+        anchor = min(dt.date.fromisoformat(known_days[-1]), now.date()) if known_days else now.date()
+        day_from = (anchor - dt.timedelta(days=keep_days - 1)).isoformat()
+    picked, r_from, r_to = _range_pick(all_rows, day_from or "", day_to or "", prep.days)
+    rows = all_rows if picked is None else [all_rows[i] for i in picked]
     if r_from:
         meta["range"] = {"from": r_from, "to": r_to, "explicit": explicit}
     if known_days:
         meta["data_from"], meta["data_to"] = known_days[0], known_days[-1]   # 가진 데이터 전체의 첫날 — 첫날은 수집 창이 도중에 시작해 '부분'
     pst = params_store if params_store is not None else (timing or {}).get("params_store")
     if pst and pst.get("snaps") and not lot_only:
-        meta["params"] = params_for_range(pst, r_from, r_to)
+        meta["params"] = params_for_range(pst, r_from, r_to, memo=prep.params)
     if lot_only:
-        rows = [{**r, **{c: "" for c in LOT_ONLY_BLANK_COLS}} for r in rows if not r.get("kind")]   # 합성 행(kind)은 LOT 추적이 건너뛴다
-    emb = _embed_rows(rows)
+        rows = [r for r in rows if not r.get("kind")]   # 합성 행(kind)은 LOT 추적이 건너뛴다 — 행 dict 는 복사하지 않고 쓰는 열만 접는다(LOT_ONLY_COLS)
+    ekey = (lot_only, None if picked is None else tuple(picked))
+    emb_json = prep.emb.get(ekey)
+    if emb_json is None:                           # 접힌 dict 는 곧 문자열이 된다 — 큰 참조를 들지 않는다(C07)
+        emb_json = prep.emb[ekey] = _emb_json(_embed_rows(rows, LOT_ONLY_COLS if lot_only else OUT_COLS))
     if meta["timing"]:
         meta["timing"]["html_ms"] = int((time.perf_counter() - t_html) * 1000)   # 템플릿 읽기 + 접기까지(쓰기 전)
-    data = _payload(emb, meta)
-    del emb                                        # 접힌 dict 는 문자열이 됐다 — 큰 참조를 놓는다(C07)
+    data = _payload_join(emb_json, meta)
+    del emb_json
     out_root = out_dir or cfg["output_dir"]
     if out_dir:
         nas_guard.assert_local(out_dir, nas_guard.roots_for_cfg(cfg))     # ★ 따로 준 폴더도 NAS 아래면 거부
@@ -3520,7 +3997,6 @@ def write_html(cfg: dict, rows: List[dict], dev_meta: List[dict], errors: List[d
     name = out_name or (range_name(cfg["output_name"], r_from, r_to) if explicit and r_from else cfg["output_name"])
     target = os.path.join(out_root, name)
     tmp = _unique_tmp(target)
-    size = _utf8_len(prefix) + _utf8_len(data) + _utf8_len(suffix)
     build_s = time.perf_counter() - t_html                    # 템플릿 읽기 · 기간 자르기 · 접기 · JSON 만들기(쓰기 전)
     t_write = time.perf_counter()
     try:
@@ -3530,7 +4006,16 @@ def write_html(cfg: dict, rows: List[dict], dev_meta: List[dict], errors: List[d
             f.write(suffix)
             f.flush()
             os.fsync(f.fileno())
-        os.replace(tmp, target)
+        size = os.path.getsize(tmp)                 # 72MB 문자열을 크기 재려고 한 번 더 인코딩하지 않는다(PH-01)
+        tries = REPLACE_TRIES if out_dir else 1      # PP-11: 공유 폴더(out_dir)는 백신 · 동기화가 잠깐 잡아도 몇 번 기다려 다시
+        for i in range(tries):
+            try:
+                os.replace(tmp, target)
+                break
+            except PermissionError:
+                if i + 1 >= tries:
+                    raise
+                time.sleep(REPLACE_WAIT_SEC)
     finally:
         if os.path.isfile(tmp):                     # 자기가 만든 임시 파일만 지운다(원본에는 손대지 않는다)
             try:
@@ -3572,6 +4057,21 @@ def cached_days(cfg: dict) -> Tuple[str, str, int]:
     return (min(days), max(days), n) if days else ("", "", n)
 
 
+def _check_range(rows: List[dict], day_from: str, day_to: str) -> None:
+    """'HTML 만 다시 만들기' 의 기간 확인(CORE-09) — 시작이 끝보다 늦거나 고른 기간에 행이 하나도 없으면 ValueError(사람 문장).
+    예전엔 행 0개 HTML 을 `…_2026-09-13~2025-01-31.html` 처럼 거꾸로 된 이름으로 만들어 수집이 망가진 것처럼 보였다. 기간을 안 주면 보지 않는다."""
+    if not (day_from or day_to):
+        return
+    if day_from and day_to and day_from > day_to:
+        raise ValueError(i18n.KO.HTML_RANGE_REVERSED_FMT.format(day_from=day_from, day_to=day_to))
+    memo: Dict[str, str] = {}
+    days = sorted({d for d in (_row_day(r, memo) for r in rows) if d})
+    if days and any((not day_from or d >= day_from) and (not day_to or d <= day_to) for d in days):
+        return
+    raise ValueError(i18n.KO.HTML_RANGE_EMPTY_FMT.format(day_from=day_from or "…", day_to=day_to or "…",
+                                                          first=days[0] if days else "—", last=days[-1] if days else "—"))
+
+
 def html_from_cache(cfg: dict, day_from: str = "", day_to: str = "", *, log: Optional[LogFn] = None,
                     progress: Optional[ProgressFn] = None, warnings: Optional[List[dict]] = None,
                     lot_only: bool = False, out_dir: str = "", out_name: str = "") -> str:
@@ -3588,6 +4088,7 @@ def html_from_cache(cfg: dict, day_from: str = "", day_to: str = "", *, log: Opt
     if not cache["reports"]:
         raise RuntimeError(i18n.KO.HTML_ONLY_NO_CACHE)
     rows, hidden = _rows_from_cache(cache, _DeviceIndex([]), cfg)
+    _check_range(rows, day_from, day_to)                   # 가진 데이터 밖 · 거꾸로 된 기간은 빈 파일 대신 오류(CORE-09)
     dev_meta = [dict(d) for d in (cache.get("last_devices") or [])]
     names = {str(d.get("name")) for d in dev_meta}
     for n in sorted({str(r.get("device")) for r in rows} - names):

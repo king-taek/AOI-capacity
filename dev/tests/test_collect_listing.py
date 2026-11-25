@@ -100,7 +100,7 @@ def _add(nas, name, mtime):
 
 
 def _cache(cfg):
-    return json.loads(open(cfg["cache_file"], encoding="utf-8").read())
+    return collect.read_cache_file(cfg["cache_file"])
 
 
 def _reports(cfg):
@@ -166,16 +166,45 @@ def test_pattern_listing_failure_falls_back_to_the_full_listing(tmp_path, fake_n
     assert st["list_pattern"] == 0 and name in _reports(cfg)
 
 
-def test_backfill_and_refresh_always_list_everything(tmp_path, fake_nas, monkeypatch):
+def test_backfill_and_recover_always_list_everything(tmp_path, fake_nas, monkeypatch):
     nas, csv_path = fake_nas
     calls: list = []
     monkeypatch.setattr(collect, "PATTERN_LISTER", _fake_lister(calls))
     cfg = make_cfg(tmp_path, csv_path)
     collect.collect(cfg)
     collect.collect(cfg, backfill=True)
-    collect.collect(cfg, refresh_window_days=3)
     collect.collect(cfg, recover=True)
+    collect.collect(cfg, refresh_window_days=30)                            # 14일 넘게 거슬러 가는 다시 읽기도 전체 나열
     assert calls == []
+
+
+def test_short_refresh_and_range_list_by_name_pattern_and_reread_the_same_files(tmp_path, fake_nas, monkeypatch):
+    """PC-06: '최근 며칠 · 기간 다시 읽기' 도 평소 수집과 같은 조건이면 이름 날짜 패턴으로 — 다시 읽는 파일은 전체 나열과 같다
+    (이름 날짜 = 배치 종료일 = 파일이 생긴 날, 현장 12,663개 중 12,662개)."""
+    nas, csv_path = fake_nas
+    old = time.time() - 20 * 86400
+    for f in nas.rglob("*.htm"):                                            # 자료의 옛 Report — 이름 날짜도 옛날
+        os.utime(f, (old, old))
+    today = dt.date.today()
+    for k in (0, 1):
+        day = today - dt.timedelta(days=k)
+        _add(nas, _name_for(day, f"10.00.0{k}"), time.time() - k * 86400 - 60)
+    cfg = make_cfg(tmp_path, csv_path)
+    monkeypatch.setattr(collect, "PATTERN_LISTER", _fake_lister([]))
+    collect.collect(cfg, backfill=True)                                     # 첫 수집(전체 나열) — 커서 · 전체 나열 시각
+    want: dict = {}
+    monkeypatch.setattr(collect, "PATTERN_LISTER", None)
+    collect.collect(cfg, refresh_window_days=3, stats=want)                 # 기준: 전체 나열로 다시 읽은 수
+    assert want["reports_read"] == 2
+    calls: list = []
+    monkeypatch.setattr(collect, "PATTERN_LISTER", _fake_lister(calls))
+    st: dict = {}
+    collect.collect(cfg, refresh_window_days=3, stats=st)
+    assert st["list_pattern"] >= 1 and calls and len(set(calls)) <= 6         # 3일 + 앞뒤 하루씩
+    assert st["reports_read"] == want["reports_read"]
+    st = {}
+    collect.collect(cfg, refresh_range=((today - dt.timedelta(days=2)).isoformat(), today.isoformat()), stats=st)
+    assert st["list_pattern"] >= 1 and st["reports_read"] == want["reports_read"]
 
 
 # ── 전체 나열 주기(10/5, cfg full_list_every_hours — 기본 7일) ──────────────

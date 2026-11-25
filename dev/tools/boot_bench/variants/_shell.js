@@ -45,27 +45,45 @@ function bootShell(o){
       if(red){if(old)old.remove();return;}
       if(old){old.style.position="absolute";old.style.left="0";old.animate([{transform:"translateY(0)",opacity:1},{transform:`translateY(-${cfs*.45}px)`,opacity:0}],{duration:240,easing:"cubic-bezier(.33,1,.68,1)",fill:"forwards"}).onfinish=()=>old.remove();}
       s.animate([{transform:`translateY(${cfs*.45}px)`,opacity:0},{transform:"translateY(0)",opacity:1}],{duration:240,easing:"cubic-bezier(.33,1,.68,1)"});};
-    const setFill=p=>{fill.style.transform=`scaleX(${Math.max(0,Math.min(1,p))})`;};
+    let fillP=0;const setFill=p=>{p=Math.max(fillP,Math.max(0,Math.min(1,p)));if(p===fillP&&p)return;fillP=p;fill.style.transform=`scaleX(${p})`;};   /* 진행선은 뒤로 가지 않는다 */
     requestAnimationFrame(()=>{cap.style.opacity="1";setLabel(0);setFill(.04);});
     /* 계획 단계(4초 계획 곡선) — 실제 단계보다 앞서지 않는다 */
     let real=0;const planT=[0,120+PW[0]*3200,120+(TH[1]+PW[1])*3200,120+(TH[2]+PW[2])*3200,120+(TH[3]+PW[3])*3200];
-    const tick=()=>{if(gone)return;const t=performance.now();let i=0;while(i<4&&t>=planT[i+1])i++;setLabel(Math.min(i,real));if(!loadedAt)setFill(Math.min(.9,.04+t/MIN*.6));
+    const tick=()=>{if(gone)return;const t=performance.now();let i=0;while(i<4&&t>=planT[i+1])i++;setLabel(Math.max(li,Math.min(i,real)));if(!loadedAt)setFill(Math.min(.9,.04+t/MIN*.6));
       if(!loadedAt||t<MIN+1000)setTimeout(tick,200);};setTimeout(tick,200);
     const env={W,H,red,bg,kind:document.documentElement.getAttribute("data-boot")||"",epoch:performance.timeOrigin||Date.now()-performance.now(),MIN,LABELS,TH,PW};
-    let gone=false,loadedAt=0,fallback=0,revealed=false;const after=[];let scene=null;
+    let gone=false,loadedAt=0,fallback=0,revealed=false,heard=false;const after=[];let scene=null;
     const finish=()=>{if(gone)return;gone=true;clearTimeout(fallback);try{scene&&scene.kill&&scene.kill();}catch(e){}if(ov.parentNode)ov.parentNode.removeChild(ov);window.AOI_BOOT=null;
       for(const f of after.splice(0))setTimeout(()=>{try{f();}catch(e){}},0);};
     const reveal=()=>{if(revealed||gone)return;revealed=true;cap.style.opacity="0";try{scene&&scene.reveal&&scene.reveal();}catch(e){}ov.style.opacity="0";setTimeout(finish,fade+80);};
+    /* 잘린 파일 감시(JS-02, 11/25): 브라우저가 파일을 끝까지 읽은(load) 뒤 STALL 안에 화면 스크립트가 한 번도 소식(phase · done · abort)을 주지 않으면
+       — 복사가 끊겨 데이터 뒤의 화면 스크립트가 없거나 실행되지 못한 파일 — 덮개를 걷고 안내를 그린다. 다 읽은 뒤부터 재므로 느린 공유 폴더에서 잘못 울리지 않고,
+       창이 가려져 있으면(그동안 화면 스크립트의 프레임이 돌지 않는다) 보일 때 다시 잰다 */
+    const STALL=o.stallMs||10000;let stallT=0;
+    const stalled=()=>{if(heard||gone)return;if(document.hidden){document.addEventListener("visibilitychange",()=>{clearTimeout(stallT);stallT=setTimeout(stalled,STALL);},{once:true});return;}
+      finish();const app=document.getElementById("app");if(!app)return;
+      app.innerHTML='<main><div class="panel" style="padding:28px 24px"><h2>결과 파일을 끝까지 읽지 못했습니다</h2><p class="muted" style="margin-top:6px">파일이 다 복사되지 않았거나 중간에 잘렸습니다. 공유 폴더에서 열었다면 복사가 끝났는지 확인하세요.</p><p class="muted" style="margin-top:6px">수집 창에서 \'결과 파일만 다시 만들기\' 로 새로 만든 뒤 다시 여세요. 이 파일의 데이터는 바뀌지 않았습니다.</p></div></main>';};
+    const armStall=()=>{clearTimeout(stallT);stallT=setTimeout(stalled,STALL);};
+    if(document.readyState==="complete")armStall();else window.addEventListener("load",armStall,{once:true});
     const api={reveal,env,ov};
     scene=o.make(ov,env,api)||{};
     window.AOI_BOOT={
-      phase(i){if(gone)return;real=Math.max(real,i);try{scene.post&&scene.post({type:"phase",i,p:TH[i]||0,pn:(TH[i]||0)+(PW[i]||0)});}catch(e){}},
-      done(){if(gone||loadedAt)return;loadedAt=performance.now();real=4;setFill(1);try{scene.post&&scene.post({type:"loaded"});}catch(e){}
-        const left=Math.max(0,MIN-performance.now());
-        if(!o.sceneReveals)setTimeout(reveal,Math.max(left,o.settleMs||400));
-        fallback=setTimeout(reveal,left+2500);},
+      /* 단계가 바뀌면 글자 · 진행선을 바로(ANIM-04, 11/25 — 타이머 tick 은 긴 계산에 막혀 '여는 중' 에 멈춰 보였다). 부르는 쪽은 한 프레임 그린 뒤 다음 계산을 시작한다 */
+      phase(i){heard=true;if(gone)return;real=Math.max(real,i);setLabel(Math.max(li,Math.min(4,real)));setFill(TH[Math.min(4,real)]||0);try{scene.post&&scene.post({type:"phase",i,p:TH[i]||0,pn:(TH[i]||0)+(PW[i]||0)});}catch(e){}},
+      /* 로딩 끝(ANIM-03, 11/25): 4초 전에 끝나면 제 색으로 바꾸기를 걷히기 colorLead 전까지 미룬다 — 그동안 점등이 이어져 '다 그리고 멈춘' 1~2초가 없다.
+         색이 앉고 settle 뒤 걷힌다(D105 순서). 4초를 넘긴 로딩은 바로 색 → settle 뒤 걷힘(예전과 같다) */
+      done(){heard=true;if(gone||loadedAt)return;loadedAt=performance.now();real=4;setLabel(Math.max(li,4));setFill(1);
+        const settle=o.settleMs||400,lead=o.colorLeadMs||900,colorIn=Math.max(0,MIN-lead-performance.now());
+        const color=()=>{if(gone)return;try{scene.post&&scene.post({type:"loaded"});}catch(e){}
+          if(!o.sceneReveals)setTimeout(reveal,Math.max(MIN-performance.now(),settle));};
+        if(colorIn>0)setTimeout(color,colorIn);else color();
+        fallback=setTimeout(reveal,Math.max(0,MIN-performance.now())+2500);},
       later(f){if(gone)setTimeout(f,0);else after.push(f);},
-      abort(){finish();}};
+      /* 미리 계산(ANIM-05, 11/25): 로딩이 4초 규칙보다 일찍 끝나 덮개 뒤에서 기다리는 시간이 넉넉하면 지금(덮개 그림은 합성 스레드라 끊기지 않는다), 아니면 걷힌 뒤.
+         f(true) = 덮개 뒤, f(false) = 걷힌 뒤 */
+      warm(f){const run=u=>{try{f(u);}catch(e){}};if(gone){setTimeout(()=>run(false),0);return;}
+        if(loadedAt&&MIN-performance.now()>=(o.warmMinMs||1000))setTimeout(()=>run(true),0);else after.push(()=>run(false));},
+      abort(){heard=true;finish();}};
     document.addEventListener("visibilitychange",()=>{try{scene.post&&scene.post({type:document.hidden?"pause":"resume"});}catch(e){}});
   }catch(e){try{const x=document.getElementById("aoi-boot");if(x&&x.parentNode)x.parentNode.removeChild(x);}catch(_){}window.AOI_BOOT=null;try{console.warn("시작 화면을 띄우지 못했습니다(화면은 그대로 열립니다):",e);}catch(_){}}
 }

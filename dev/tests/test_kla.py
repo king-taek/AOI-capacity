@@ -113,6 +113,41 @@ def test_collect_reads_kla_once_per_wafer_folder_and_builds_rows(tmp_path, kla_n
            sorted(json.dumps(r, sort_keys=True) for r in emb_rows if r["device"] == "K1")
 
 
+def test_each_kla_device_keeps_its_own_seen_to_and_quiet_run_saves_nothing(tmp_path, kla_nas):
+    """CORE-03 · PC-11: '어디까지 봤나(seen_to)' 가 앞 반복문에 남은 키로 마지막 장비에만 · 남의 날짜로 저장돼
+    나머지 장비는 매번 처음처럼 전부 나열했고, 새 것 없는 수집도 캐시를 다시 썼다."""
+    import shutil
+    nas, csv_path = kla_nas
+    make_kla(nas / "W")
+    shutil.rmtree(nas / "W" / "2026-10-05")                                  # K2 는 10/4 까지만
+    with open(csv_path, "a", encoding="utf-8") as f:
+        f.write(f"K2,{nas / 'W'},,Y,KLA\n")
+    cfg = make_cfg(tmp_path, csv_path)
+    collect.collect(cfg)
+    cache = json.loads(Path(cfg["cache_file"]).read_text(encoding="utf-8"))
+    assert {k: e["seen_to"] for k, e in cache["kla"].items()} == {"dev:K1": "2026-10-05", "dev:K2": "2026-10-04"}
+    stats: dict = {}
+    _rows, meta, _ = collect.collect(cfg, stats=stats)
+    assert {d["name"]: d["listing"] for d in meta if d.get("kind") == "kla"} == {"K1": "recent", "K2": "recent"}
+    assert "kla" not in stats["cache_dirty"] and not stats["cache_saved"], stats["cache_dirty"]
+
+
+def test_single_wafer_run_borrows_the_wafer_time_of_the_same_job():
+    """CORE-15: 장이 하나뿐인 실행은 간격이 없어 끝 시각이 비고 가동률에 0분으로 들어갔다 — 같은 장비 · 같은 Job 의
+    가까운 실행 중앙 장 시간을 쓴다. 같은 Job 실행이 없으면 예전처럼 빈 칸(지어내지 않는다)."""
+    def rec(t, setup, rts):
+        return {"t": t, "setup": setup, "step": "S", "rts": rts, "wafer": "W", "lot": ""}
+    store = {"dev:K1": {"name": "K1", "lots": {
+        "L1@1": {f"w{i}": rec(f"2026-11-20T09:{10 * i:02d}", "JOB-A", "r1") for i in range(3)},     # 10분 간격
+        "L2@1": {"w0": rec("2026-11-20T11:00", "JOB-A", "r2")},                                       # 1장 — JOB-A 에서 빌림
+        "L3@1": {"w0": rec("2026-11-20T12:00", "JOB-B", "r3")}}}}                                     # 1장 — 같은 Job 없음
+    rows = {r["lot"]: r for r in kla.rows_from_store(store, {"scope_devices": ["*"]}, lambda lot: "")}
+    p = collect.parse_dt
+    assert (p(rows["L2@1"]["wafer_end_time"]) - p(rows["L2@1"]["wafer_start_time"])).seconds == 600
+    assert p(rows["L2@1"]["batch_end"]) == dt.datetime(2026, 11, 20, 11, 10)
+    assert rows["L3@1"]["wafer_end_time"] == "" and rows["L3@1"]["batch_start"] == rows["L3@1"]["batch_end"]
+
+
 def test_kla_outside_scope_is_never_touched(tmp_path, kla_nas, monkeypatch):
     _nas, csv_path = kla_nas
     cfg = make_cfg(tmp_path, csv_path, scope_devices=["AOI-9"])
@@ -220,7 +255,7 @@ def test_fill_gaps_fills_kla_image_count_from_result_file_only(tmp_path, kla_nas
     nas, csv_path = kla_nas
     cfg = make_cfg(tmp_path, csv_path)
     collect.collect(cfg)
-    cache = json.load(open(cfg["cache_file"], encoding="utf-8"))
+    cache = collect.read_cache_file(cfg["cache_file"])
     recs = [r for e in cache["kla"].values() for ws in e["lots"].values() for r in ws.values()]
     for r in recs:
         r.pop("images", None)                                           # 11/4 전에 읽은 옛 기록

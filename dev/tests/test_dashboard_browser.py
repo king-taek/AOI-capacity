@@ -2,7 +2,7 @@
 
 문자열 검사(`test_template_contract.py`)와 Node 하네스(`test_dashboard_js.py`)는 화면이 **그려지는지**를 보지 못한다.
 여기서는 작은 fixture 행을 template 에 박아 파일로 열고(바깥 요청 0건 — file:// 만), 실제로 눌러 본다:
-가동률(장비 순서) → 장비 팝업(포커스 · inert · Tab 트랩 · ESC 복귀, D05) → Error 보기 → 유형 팝업 → 추이 → TB500 · Kendall(D59) → 사본 저장(내려받은 파일의 열·풀 구조).
+가동률(장비 순서) → 장비 팝업(포커스 · inert · Tab 트랩 · ESC 복귀, D05) → Error 단추 → 유형 팝업 → 추이 → TB500 · Kendall(D59) → 사본 저장(내려받은 파일의 열·풀 구조).
 데이터는 수집기의 `collect._embed_rows` 로 접어 넣는다 — 제품이 만드는 HTML 과 같은 계약이다.
 콘솔 오류·페이지 오류가 하나라도 있으면 실패.
 
@@ -315,7 +315,7 @@ def test_error_tab_period_popup_filters_and_no_total_link(page):
     pg.locator('main .row2[data-row="dev:AOI-1"] .rowbtn').click()
     pg.wait_for_selector('.dlg[data-dlg="err"]')
     txt = pg.locator('.dlg[data-dlg="err"]').inner_text()
-    assert "· 2일" in txt and "하루씩 보기" in txt and "날짜별" in txt and "09/17" in txt      # 9/17 + 9/18 두 날
+    assert "· 2일" in txt and "하루씩 보기" in txt and "날짜별" not in txt and "09/17" in txt      # 9/17 + 9/18 두 날 — 여러 날이면 위 날짜별 막대 없이 아래 막대 하나(ERR-13)
     assert "SCAN_ERROR" in txt and "ALIGN_ERROR" in txt                                      # 두 날의 Error 가 함께
     pg.locator('.dlg[data-dlg="err"] button', has_text="하루씩 보기").click()
     pg.wait_for_selector('.dlg[data-dlg="err"] h3', state="attached")
@@ -362,7 +362,7 @@ def test_popups_stack_behind_each_other_and_escape_closes_the_top(page):
     pg, errors, _ = page
     pg.locator('button.rowbtn[data-fk="dev:AOI-1"]').click()
     pg.wait_for_selector('.dlg[data-dlg="dev"]')
-    pg.locator('.dlg[data-dlg="dev"] button', has_text="Error 보기").click()
+    pg.locator('.dlg[data-dlg="dev"] button[data-fk="dev:err"]').click()
     pg.wait_for_selector('.dlg[data-dlg="err"]')
     st = pg.evaluate("[...document.querySelectorAll('.ov:not([data-leaving])')].map(o => o.dataset.key + ':' + (o.classList.contains('behind') ? 'behind' : 'top') + ':' + o.inert)")
     assert st == ["ov:dev:behind:true", "ov:err:top:false"]
@@ -397,7 +397,8 @@ def test_report_tab_picks_a_job_and_opens_all_batches_of_a_device(page):
 
 
 def test_brand_mark_has_no_tile_and_replays_every_10_seconds(page_factory, tmp_path):
-    """브랜드 표식(10/30 현택): 배경 타일 없음 · 10초마다 저절로 다시 그린다(가짜 시계로 20초를 돌려 두 번), 창이 가려지면 건너뛴다."""
+    """브랜드 표식(10/30 현택): 배경 타일 없음 · 10초마다 저절로 다시 그린다(가짜 시계로 20초를 돌려 두 번), 창이 가려지면 건너뛴다.
+    11/25(ANIM-06 · 07): 첫 그리기는 시작 화면이 걷힌 뒤(그 전엔 완성 그림), 다시 그리기는 .again(빈 고리 없이), 팝업이 열려 있으면 그 회차는 건너뛴다."""
     html = _build_html(tmp_path)
     ctx = page_factory.new_context(viewport={"width": 1280, "height": 800})
     pg = ctx.new_page()
@@ -408,11 +409,22 @@ def test_brand_mark_has_no_tile_and_replays_every_10_seconds(page_factory, tmp_p
     pg.clock.run_for(1000)
     pg.wait_for_selector('main[data-key^="view:"]')
     assert pg.locator('.brand .mk svg rect').count() == 0                                # 배경 타일 없음
+    assert pg.locator('.brand .mk.play').count() == 0                                    # 덮개 뒤에서는 그리지 않는다(완성 그림)
+    pg.clock.run_for(6000)
+    pg.wait_for_selector("#aoi-boot", state="detached")
+    assert pg.locator('.brand .mk.play:not(.again)').count() == 1                        # 걷힌 뒤 첫 그리기
     pg.evaluate("""window.__replays = 0; new MutationObserver(ms => { for (const m of ms) if (!/\\bplay\\b/.test(m.oldValue || '')) window.__replays++; })
                    .observe(document.querySelector('.brand .mk'), {attributes: true, attributeOldValue: true, attributeFilter: ['class']})""")
     pg.clock.run_for(20500)
     assert pg.evaluate("window.__replays") == 2                                          # 10초 · 20초
-    assert pg.locator('.brand .mk.play').count() == 1                                    # 다시 그린 뒤 play 가 붙어 있다
+    assert pg.locator('.brand .mk.play.again').count() == 1                              # 다시 그리기는 .again
+    pg.locator('button.rowbtn[data-fk="dev:AOI-1"]').click()
+    pg.wait_for_selector('.dlg[data-dlg="dev"]')
+    pg.clock.run_for(10000)
+    assert pg.evaluate("window.__replays") == 2                                          # 팝업이 열려 있으면 건너뛴다
+    pg.keyboard.press("Escape")
+    pg.clock.run_for(1000)
+    pg.wait_for_selector('.dlg[data-dlg="dev"]', state="detached")
     pg.evaluate("Object.defineProperty(document, 'hidden', {configurable: true, get: () => true})")
     pg.clock.run_for(10000)
     assert pg.evaluate("window.__replays") == 2                                          # 가려진 창에서는 다시 그리지 않는다
@@ -423,7 +435,7 @@ def test_brand_mark_has_no_tile_and_replays_every_10_seconds(page_factory, tmp_p
 def test_motion_hooks_lottie_countup_sweep_and_recede(page):
     """움직임의 자리: 브랜드 표식(인라인 SVG · CSS, 10/30) · 'Error 없음' 의 Lottie 체크 · GSAP 카운트업(끝 값이 정확) · 막대 sweep(끝나면 clip-path 남지 않음) · 팝업 뒤 무대 물러남."""
     pg, errors, _ = page
-    assert pg.locator('.brand .mk.play svg circle.bm-a').count() == 2                     # 브랜드 표식(겹 링, 10/30)은 인라인 SVG — 고리 둘이 그려진다
+    assert pg.locator('.brand .mk svg circle.bm-a').count() == 2                          # 브랜드 표식(겹 링, 10/30)은 인라인 SVG — 고리 둘(그리기는 덮개가 걷힌 뒤, 11/25)
     pg.locator('button[data-fk="day:prev"]').click()                                     # 날짜를 바꾸면 카드 숫자가 이전 값에서 새 값으로
     pg.wait_for_function("document.querySelector('[data-fk=\"day:date\"]').value === '2026-09-17'")   # 10/6 C8: 하루 날짜는 입력 칸
     pg.wait_for_timeout(900)
@@ -435,7 +447,7 @@ def test_motion_hooks_lottie_countup_sweep_and_recede(page):
     pg.locator('button.rowbtn[data-fk="dev:AOI-2"]').click()                              # AOI-2 는 Error 가 없다
     pg.wait_for_selector('.dlg[data-dlg="dev"]')
     assert pg.evaluate("document.querySelector('#app>.stage').classList.contains('behind')")   # 팝업이 열리면 무대가 물러난다
-    pg.locator('.dlg[data-dlg="dev"] button', has_text="Error 보기").click()
+    pg.locator('.dlg[data-dlg="dev"] button[data-fk="dev:err"]').click()
     pg.wait_for_selector('.dlg[data-dlg="err"] .lt-empty .lt svg')                       # Lottie 체크
     pg.keyboard.press("Escape")
     pg.keyboard.press("Escape")
@@ -449,7 +461,7 @@ def test_popup_deck_click_behind_brings_it_to_front_and_stackbar_lists_them(page
     pg, errors, _ = page
     pg.locator('button.rowbtn[data-fk="dev:AOI-1"]').click()
     pg.wait_for_selector('.dlg[data-dlg="dev"]')
-    pg.locator('.dlg[data-dlg="dev"] button', has_text="Error 보기").click()
+    pg.locator('.dlg[data-dlg="dev"] button[data-fk="dev:err"]').click()
     pg.wait_for_selector('.dlg[data-dlg="err"]')
     pg.wait_for_timeout(500)
     # 뒤 카드(dev)는 앞 카드보다 왼쪽에 있다
@@ -485,7 +497,7 @@ def test_stackbar_stays_top_left_while_the_popup_scrolls_and_lot_panel_fades_in_
     pg.set_viewport_size({"width": 1280, "height": 420})
     pg.locator('button.rowbtn[data-fk="dev:AOI-1"]').click()
     pg.wait_for_selector('.dlg[data-dlg="dev"]')
-    pg.locator('.dlg[data-dlg="dev"] button', has_text="Error 보기").click()
+    pg.locator('.dlg[data-dlg="dev"] button[data-fk="dev:err"]').click()
     pg.wait_for_selector('.stackbar .sb')
     assert pg.evaluate("document.querySelector('.stackbar').parentElement.id") == "app"
     top0 = pg.evaluate("document.querySelector('.stackbar').getBoundingClientRect().top")
@@ -635,14 +647,16 @@ def test_recipe_tab_shows_per_device_stats_and_compares_two_periods(page):
     # 장당 | LOT당: 같은 레시피를 Lot(Report) 단위로 — fixture 의 Lot 은 20장 미만이라 값이 없다
     pg.locator(".scanhero .seg button", has_text="LOT당").click()
     pg.wait_for_timeout(300)
-    assert "분/Lot" in pg.locator(".scanhero .mtile").first.inner_text() and "장비별 LOT당 시간" in pg.locator('[data-key="rcp:mdev"]').inner_text()
-    assert "하루당" in pg.locator(".scanhero .mtile.verdict").inner_text() and "시간당" not in pg.locator(".scanhero .mtile.verdict").inner_text()   # LOT당은 하루당 Lot
+    t_lot = pg.locator(".scanhero .mtile").first.inner_text()
+    assert "LOT당 시간" in t_lot and "제외 1" in t_lot and "장비별 LOT당 시간" in pg.locator('[data-key="rcp:mdev"]').inner_text()   # 값이 없으면 단위 없이 '—', 제외 사유 태그(11/25 RDL-09 · 14)
+    assert "LOT 표본 없음" in pg.locator('[data-key="rcp:mdev"]').inner_text()                                     # '값 없음' 대신 이유(RDL-10)
+    assert "두 방식 모두 LOT 표본이 없어 비교할 수 없습니다" in pg.locator(".scanhero .mtile.verdict").inner_text()   # 11/25 RDL-09: 값 없는 비교 네 줄 대신 한 줄(하루당 줄은 test_recipe_verdict… 가 본다)
     pg.locator(".scanhero .seg button", has_text="Wafer당").click()
     # Job 단추로 멀티 Job 을 빼면 단일만 남는다
     pg.locator(".scanhero .jtog", has_text="RDL2-Multi").click()
     pg.wait_for_timeout(300)
     t2 = pg.locator(".scanhero .mtile").all_inner_texts()
-    assert "표본 0 / 0 wafer" in t2[0] and "표본 3 / 3 wafer" in t2[1] and pg.locator(".scanhero .jtog.off").count() == 1
+    assert "이 기간 멀티 기록 없음" in t2[0] and "표본 3 / 3 wafer" in t2[1] and pg.locator(".scanhero .jtog.off").count() == 1   # 빈 방식은 한 줄(11/25 RDL-09)
     pg.locator('[data-fk="rcp:more"]').click()
     pg.wait_for_timeout(200)
     cards = pg.locator("main section.cards > div").all_inner_texts()
@@ -822,10 +836,19 @@ def test_date_controls_keep_day_inside_the_visible_period(page):
     pg.get_by_role("button", name="전체", exact=True).first.click()
     pg.wait_for_timeout(300)
     assert day() == "2026-09-18" and pg.locator(".daynote").count() == 0             # 안에 있으면 그대로 · 알림 없음
-    pg.locator('[data-fk="day:date"]').fill("2026-09-01")                            # 데이터 없는 날은 고르지 않는다
+    pg.locator('[data-fk="day:date"]').fill("2026-09-01")                            # 데이터 없는 날 → 되돌리지 않고 가장 가까운 데이터 날짜로(11/25 UTIL-02)
     pg.locator('[data-fk="day:date"]').dispatch_event("change")
     pg.wait_for_timeout(250)
-    assert day() == "2026-09-18"
+    assert day() == "2026-09-17"
+    pg.locator('button[data-fk="day:last"]').click()
+    pg.wait_for_timeout(200)
+    pg.locator('[data-fk="day:date"]').click()                                       # 키보드로 치는 동안은 적용하지 않고 Enter 에서 한 번(Chrome 은 숫자마다 change)
+    pg.keyboard.press("1")
+    pg.wait_for_timeout(150)
+    assert pg.evaluate("D.days[state.dayI]") == "2026-09-18"
+    pg.keyboard.press("Enter")
+    pg.wait_for_timeout(250)
+    assert day() == "2026-09-17"                                                     # 어느 칸에 '1' 을 쳐도(월 01 · 일 01 · 년 0001) 가장 가까운 데이터 날짜는 09/17
     pg.locator('button[data-fk="nav:recipe"]').click()
     pg.wait_for_selector('main[data-key="view:recipe"]')
     assert pg.locator(".daynav").count() == 0 and pg.locator(".date-controls .date-control-row").count() == 1     # 10/6: 하루가 기준이 아닌 탭은 하루 날짜 줄이 없다
@@ -940,7 +963,7 @@ def rdl2_page(page_factory, tmp_path):
 
 def test_rdl_tab_lot_stat_outlier_x5_rule_and_wording(rdl_page):
     pg, errors = rdl_page
-    assert [t.strip() for t in pg.locator("nav button").all_inner_texts()] == ["가동률", "Error", "Overkill", "TB500 · Kendall", "RDL 단일스캔", "LOT 추적"]
+    assert [t.strip() for t in pg.locator("nav button").all_inner_texts()] == ["가동률", "Error", "Overkill", "TB500 · Kendall", "RDL 단일스캔", "스캔을 어디에 했니?"]
     pg.locator('button[data-fk="nav:recipe"]').click()
     pg.wait_for_selector('main[data-key="view:recipe"]')
     pg.wait_for_timeout(400)
@@ -951,7 +974,7 @@ def test_rdl_tab_lot_stat_outlier_x5_rule_and_wording(rdl_page):
     tiles = pg.locator(".scanhero .mtile").all_inner_texts()
     single = [t for t in tiles if t.startswith("단일")][0]
     assert "(x20)" in single
-    assert "LOT당 409.1분" in single.replace("\n", " ")                                    # 22장 → 360분 × 25 ÷ 22(20~24장은 25장 기준으로 환산) · Error/19장 Report 는 제외
+    assert "LOT당 6시간 49분" in single.replace("\n", " ")                                    # 22장 → 360분 × 25 ÷ 22(20~24장은 25장 기준으로 환산) · Error/19장 Report 는 제외 · 409.1분을 n시간 m분으로(RDL-12)
     assert "이상치 1개 제외" in single and "표본 60 / 61 wafer" in single                         # 한 줄로 짧게
     tip = pg.locator(".scanhero .otag").first.get_attribute("title")                          # 어떤 값이 왜 빠졌는지는 마우스를 올리면
     assert "150.0분" in tip and "3σ" in tip
@@ -1131,7 +1154,11 @@ def test_param_tab_unpacks_a_job_on_demand_and_marks_differing_cells(page_factor
     assert pg.locator(".ptab td.dif").all_inner_texts() == ["9"]                       # Threshold — AOI-7 만 다름
     body = pg.locator('main[data-key="view:param"]').inner_text()
     assert "Lot" in body and "Wafer" in body and "um" in body                          # CR/AF 는 글자, 단위 칸
-    assert pg.locator('section.pgrp:has-text("광학") .ptab').count() == 0              # 장비 고유 그룹은 접힌 채
+    assert pg.locator('tbody.pgb:has-text("광학") tr:not(.pgr)').count() == 0       # 장비 고유 그룹은 접힌 채(11/25: 그룹마다 표 → 한 표 + 그룹 머리 줄)
+    assert pg.locator("table.ptab").count() == 1                                       # 한 표라 장비 열이 그룹마다 같은 자리
+    xs = pg.evaluate("[...document.querySelectorAll('table.ptab tbody')].filter(b => b.rows.length > 2).map(b => [...b.rows].find(r => r.cells.length > 3).cells[3].getBoundingClientRect().x)")
+    assert len(set(round(x) for x in xs)) == 1
+    assert "조회 기간과 무관" in body and pg.locator(".rangebar.dim").count() == 1      # 이 탭은 파일 끝날 기준 최신 — 조회 기간 줄은 회색
     assert not errors and not requests
     ctx.close()
 
@@ -1214,3 +1241,31 @@ def test_overkill_tab_lists_devices_and_lot_row_opens_lot_tracking_with_colored_
         assert errors == [] and requests == []
     finally:
         ctx.close()
+
+
+def test_rapid_day_flips_never_leave_old_numbers_in_the_home_rows(page):
+    """11/25 UTIL-01: 하루 날짜 ‹ › 를 0.1초 간격으로 누르면 숫자(data-txn) ↔ '—'(data-tx) 로 바뀐 칸에서 옛 트윈이 옛 숫자를 다시 써 넣었다.
+    누른 뒤 모든 줄의 가동률 · Error 글자가 모델 값과 같아야 한다."""
+    pg, errors, _ = page
+    # 결정적 재현: 47 → 80 트윈이 도는 사이 같은 칸이 '—' 로 바뀌면 트윈을 끊어야 한다(고치기 전엔 0.5초 뒤 '80%' 가 다시 써졌다)
+    left = pg.evaluate("""(async () => {const box = document.createElement('div'); document.body.appendChild(box);
+      box.innerHTML = '<span data-txn="47" data-txf="pct">47%</span>'; const el = box.firstChild;
+      txAnim(box); el.setAttribute('data-txn', '80'); el.textContent = '80%'; txAnim(box);
+      el.removeAttribute('data-txn'); el.removeAttribute('data-txf'); el.setAttribute('data-tx', ''); el.textContent = '—'; txAnim(box);
+      await new Promise(r => setTimeout(r, 500)); const t = el.textContent; box.remove(); return t;})()""")
+    assert left == "—"
+    for k in ("prev", "next", "prev", "next", "prev"):
+        btn = pg.locator(f'button[data-fk="day:{k}"]')
+        if btn.is_enabled():
+            btn.click()
+        pg.wait_for_timeout(90)
+    pg.wait_for_timeout(1500)
+    bad = pg.evaluate("""(() => {const day = S.dayStr(), out = [];
+      for (const r of document.querySelectorAll('.homelist .rowbtn')) {const n = r.dataset.row.slice(4), t = S.at(day, n), u = S.util(t);
+        const sp = r.querySelectorAll(':scope>span.num'), ut = sp[0].textContent.trim(), et = sp[1].textContent.trim();
+        const eu = u === null ? '—' : Math.round(u) + '%', ee = t && t.e ? t.e + '건' : '—';
+        if (ut !== eu || et !== ee) out.push([n, ut, eu, et, ee]);}
+      return out;})()""")
+    assert bad == [], bad
+    assert pg.evaluate("[...document.querySelectorAll('[data-bar]')].every(e => !e.style.clipPath)")   # 연달아 눌러도 sweep 이 남지 않는다(ANIM-10)
+    assert errors == []

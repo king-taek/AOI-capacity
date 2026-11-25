@@ -4,7 +4,10 @@
 - 취소는 `stop()`(threading.Event). 코어가 바로 `CollectCancelled` 로 빠져나오며 읽은 것까지 캐시에 저장하고(10/11, 이어하기), HTML 은 만들지 않는다.
 - 테스트는 스레드를 띄우지 않고 `run()` 을 직접 부른다(dev/tests/test_collector_worker.py).
 - 수집 상태와 산출물 상태는 다르다(C06): HTML 을 썼는데 CSV 만 못 썼으면 `done` 으로 끝내되 `CollectResult.state` 가
-  `completed_with_warnings` 이고 `warnings` 에 사유가 있다. 사용자 문구는 `warning_lines`(ko.py) 로 만든다.
+  `completed_with_warnings` 이고 `warnings` 에 사유가 있다. 사용자 문구는 `warning_lines`(ko.py, 로그용) · `outcome_items`(수집 카드 알림) 로 만든다.
+- 11/25: 결과 HTML 뒤의 배포는 `progress` 로 '공유 폴더에 올리는 중 1/2' 를 알리고, 중지를 누르면 아직 시작 안 한 배포는 건너뛴다(`phase` 가
+  "publish" 인 동안 창을 닫으면 MainWindow 가 기다릴지 묻는다). 실패하면 `failure`(종류 · 단계 · 원문)를 채운 뒤 `failed` 를 보낸다 —
+  화면은 종류로 쉬운 문장과 다음 행동을 고르고 원문은 '자세히' 와 로그에만 둔다(CORE-10 · QT-15).
 """
 from __future__ import annotations
 
@@ -15,9 +18,32 @@ from typing import List
 
 from PyQt6.QtCore import QObject, QThread, pyqtSignal
 
-from .. import collect, i18n, publish
+from .. import collect, i18n, nas_guard, publish
+from ..utils.config import ConfigError
 
 STATE_COMPLETED, STATE_COMPLETED_WITH_WARNINGS = "completed", "completed_with_warnings"
+#: 실패 종류 — html: 캐시까지 저장했고 결과 HTML 만 못 씀 · config: 설정 · nas: 장비 NAS 아래에 쓰려 함 · rebuild: 재구축 검증 실패 · io: 파일/네트워크 · other
+FAIL_KINDS = ("html", "config", "nas", "rebuild", "io", "other")
+
+
+def failure_kind(exc: BaseException, stage: str) -> str:
+    if isinstance(exc, ConfigError):
+        return "config"
+    if isinstance(exc, nas_guard.NasWriteRefused):
+        return "nas"
+    if stage == "html":
+        return "html"
+    if isinstance(exc, collect.RebuildRejected):
+        return "rebuild"
+    if isinstance(exc, OSError):
+        return "io"
+    return "other"
+
+
+def _publish_why(why: str) -> str:
+    K = i18n.KO
+    return {publish.WHY_UNREACHABLE: K.PUBLISH_WHY_UNREACHABLE, publish.WHY_DENIED: K.PUBLISH_WHY_DENIED,
+            publish.WHY_LOCKED: K.PUBLISH_WHY_LOCKED}.get(why, "")
 
 
 @dataclass
@@ -59,6 +85,46 @@ class CollectResult:
         return out
 
     @property
+    def outcome_items(self) -> List[dict]:
+        """수집 카드 알림 항목(11/25 QT-16 · PP-04) — 문제마다 {head, desc, action, tip}. action ∈ devices · log · republish · "".
+        배포 실패는 이유 종류로 짧은 문장을 고르고(원문은 로그에만), 두 배포가 같은 이유면 한 항목으로 묶는다."""
+        K = i18n.KO
+        items: List[dict] = []
+        pub = {}
+        for w in self.warnings:
+            kind = w.get("kind")
+            if kind == collect.WARN_CSV:
+                items.append({"head": K.OUTCOME_CSV_HEAD, "desc": K.OUTCOME_CSV_DESC, "action": "", "tip": f"{w.get('path', '')}\n{w.get('error', '')}"})
+            elif kind == "cache":
+                items.append({"head": K.OUTCOME_CACHE_HEAD, "desc": K.OUTCOME_CACHE_DESC_FMT.format(path=w.get("path", "")), "action": "", "tip": ""})
+            elif kind in ("publish", "publish_full"):
+                pub.setdefault(("fail", w.get("why") or ""), []).append(w)
+            elif kind in ("publish_locked", "publish_full_locked"):
+                pub.setdefault(("locked", ""), []).append(w)
+            else:
+                items.append({"head": str(w.get("error") or w), "desc": "", "action": "log", "tip": ""})
+        what = lambda ws: K.OUTCOME_WHAT_JOIN.join(K.PUBLISH_WHAT_FULL if w["kind"].startswith("publish_full") else K.PUBLISH_WHAT_LOT for w in ws)
+        for (state, why), ws in pub.items():
+            tip = "\n".join(str(w.get("path", "")) for w in ws)
+            if state == "locked":
+                items.append({"head": K.OUTCOME_PUBLISH_LOCKED_HEAD_FMT.format(what=what(ws)), "desc": K.OUTCOME_PUBLISH_LOCKED_DESC, "action": "", "tip": tip})
+            else:
+                desc = _publish_why(why) or (str(ws[0].get("error", "")) if why == publish.WHY_CONFIG else K.PUBLISH_WHY_OTHER)
+                items.append({"head": K.OUTCOME_PUBLISH_HEAD_FMT.format(what=what(ws)), "desc": desc,
+                              "action": "" if why == publish.WHY_CONFIG else "republish", "tip": tip,
+                              "kinds": ["full" if w["kind"].startswith("publish_full") else "lot" for w in ws]})
+        unreachable, partial = self.unreachable_devices, self.partial_devices
+        if unreachable:
+            items.append({"head": K.OUTCOME_UNREACHABLE_HEAD_FMT.format(n=len(unreachable), names=", ".join(unreachable)),
+                          "desc": K.COLLECT_DONE_UNREACHABLE_HINT, "action": "devices", "tip": ""})
+        if partial:
+            items.append({"head": K.OUTCOME_PARTIAL_HEAD_FMT.format(n=len(partial), names=", ".join(partial)),
+                          "desc": K.OUTCOME_PARTIAL_DESC_FMT.format(reports=len(self.errors)), "action": "log", "tip": ""})
+        elif self.errors and not items:
+            items.append({"head": K.COLLECT_DONE_SEE_LOG, "desc": "", "action": "log", "tip": ""})
+        return items
+
+    @property
     def bad_devices(self) -> List[dict]:
         """접근하지 못한 장비(목록 조회 실패)."""
         return [d for d in self.dev_meta if d.get("error")]
@@ -97,6 +163,8 @@ class CollectorWorker(QThread):
         self.refresh_range = refresh_range               # ("YYYY-MM-DD", "YYYY-MM-DD") — 수집 창 '기간 다시 읽기'(10/5)
         self.signals = CollectorSignals()
         self._stop = threading.Event()
+        self.phase = "collect"                           # collect → html → publish → done (창을 닫을 때 MainWindow 가 본다)
+        self.failure: dict = {}                          # 실패했으면 {kind, stage, detail}
 
     def stop(self) -> None:
         self._stop.set()
@@ -109,6 +177,7 @@ class CollectorWorker(QThread):
         started = time.time()
         stats: dict = {}
         warnings: List[dict] = []
+        stage = "collect"
         try:
             rows, dev_meta, errors = collect.collect(
                 self.cfg, self.full, self.backfill, recover=self.recover,
@@ -121,17 +190,23 @@ class CollectorWorker(QThread):
             )
             if self._stop.is_set():
                 raise collect.CollectCancelled()
-            path = collect.write_html(self.cfg, rows, dev_meta, errors, started, mode="gui", timing=stats, warnings=warnings,
+            stage = self.phase = "html"
+            prep = collect.HtmlPrep(rows)                  # 수집 HTML · 배포판이 같은 준비를 한 번만(PH-01)
+            path = collect.write_html(self.cfg, rows, dev_meta, errors, started, mode="gui", timing=stats, warnings=warnings, prep=prep,
                                       log=lambda m: self.signals.log.emit(tok, str(m)),
                                       progress=lambda d, t, p: self.signals.progress.emit(tok, int(d), int(t), str(p)))
             pub: dict = {}
-            publish.publish_after_collect(self.cfg, rows, dev_meta, log=lambda m: self.signals.log.emit(tok, str(m)), status=pub, params_store=stats.get("params_store"))   # 10/27: 조용히 — 실패해도 수집은 성공
+            stage = self.phase = "publish"
+            publish.publish_after_collect(self.cfg, rows, dev_meta, log=lambda m: self.signals.log.emit(tok, str(m)), status=pub, params_store=stats.get("params_store"),
+                                          progress=lambda d, t, p: self.signals.progress.emit(tok, int(d), int(t), str(p)),
+                                          should_stop=self._stop.is_set, prep=prep)   # 10/27: 조용히 — 실패해도 수집은 성공. 11/25: 단계를 알리고 중지면 남은 배포는 건너뜀
+            self.phase = "done"
             if pub.get("error"):                       # 10/30: 조용히 실패해도 수집이 끝났을 때 알림 카드에는 보인다
-                warnings.append({"kind": "publish", "path": pub.get("dir", ""), "error": pub["error"]})
+                warnings.append({"kind": "publish", "path": pub.get("dir", ""), "error": pub["error"], "why": pub.get("why", "")})
             elif pub.get("locked"):
                 warnings.append({"kind": "publish_locked", "path": pub.get("dir", "")})
             if pub.get("full_error"):                  # 10/30: 전체 배포도 같은 방식 — 실패해도 수집은 성공, 알림 카드에만
-                warnings.append({"kind": "publish_full", "path": pub.get("full_dir", ""), "error": pub["full_error"]})
+                warnings.append({"kind": "publish_full", "path": pub.get("full_dir", ""), "error": pub["full_error"], "why": pub.get("full_why", "")})
             elif pub.get("full_locked"):
                 warnings.append({"kind": "publish_full_locked", "path": pub.get("full_dir", "")})
         except collect.CollectCancelled:
@@ -141,7 +216,9 @@ class CollectorWorker(QThread):
             self.signals.cancelled.emit(tok)
             return
         except Exception as exc:  # noqa: BLE001
-            self.signals.failed.emit(tok, f"{type(exc).__name__}: {exc}")
+            detail = f"{type(exc).__name__}: {exc}"
+            self.failure = {"kind": failure_kind(exc, stage), "stage": stage, "detail": detail}
+            self.signals.failed.emit(tok, detail)
             return
         cache_status = str(stats.get("cache_status") or collect.CACHE_OK)
         if cache_status == collect.CACHE_CORRUPT:

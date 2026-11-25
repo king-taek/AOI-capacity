@@ -1,7 +1,7 @@
 """사용자 설정(prefs.json) — 이 PC 에만 저장.
 
 - 한 개의 flat dataclass + `extra` 탈출구. `from_dict` 는 모르는 키를 버리므로 파일 버전이 앞뒤로 어긋나도 깨지지 않는다.
-- `load()` 는 절대 예외를 내지 않는다(없거나 깨지면 기본값). 저장은 tmp → replace 로 원자적.
+- `load()` 는 절대 예외를 내지 않는다(없거나 깨지면 기본값 — 깨진 원본은 `prefs.json.bad-<시각>` 으로 남긴다). 저장은 tmp → replace 로 원자적.
 - `patch(**fields)` 가 호출부의 유일한 갱신 API.
 - `migrate()` 는 순수 함수: 기본값을 바꿀 때 "옛 기본값 그대로인 값" 만 새 기본값으로 옮긴다(사용자가 고른 값은 보존).
 """
@@ -44,6 +44,7 @@ class Prefs:
     publish_dir: str = _config.PUBLISH_DIR_DEFAULT             # LOT 추적 배포 폴더(팀 공유 — 10/27). 비우면 배포 안 함, 있으면 수집이 끝날 때마다 조용히 올린다
     publish_full_dir: str = _config.PUBLISH_FULL_DIR_DEFAULT   # 전체 배포 폴더(모든 탭 — 10/30). 비우면 배포 안 함
     publish_full_days: int = _config.PUBLISH_FULL_DAYS_DEFAULT  # 전체 배포에 담을 최근 일수(0 = 가진 데이터 전부, 기본 90)
+    publish_lot_days: int = _config.PUBLISH_LOT_DAYS_DEFAULT    # LOT 추적 배포에 담을 최근 일수(0 = 가진 데이터 전부, 기본 — 11/25)
     refresh_window_days: int = 0      # D60: 최근 N일 안의 Report 는 캐시에 있어도 다시 읽기(0 = 끔). 수집 페이지 체크박스가 켜고 끈다
     prefs_version: int = PREFS_VERSION
     extra: Dict[str, Any] = field(default_factory=dict)
@@ -131,23 +132,47 @@ def migrate(p: Prefs) -> Prefs:
 
 
 _cached: Optional[tuple] = None  # (path, mtime_ns, size, Prefs)
+_load_warning: str = ""           # 깨진 prefs.json 을 옮겨 두고 기본값으로 시작했을 때 — 수집 창이 한 번 띄운다(`take_load_warning`)
+
+
+def _preserve_broken(path) -> str:
+    """읽지 못한 prefs.json 을 `prefs.json.bad-<시각>` 으로 옮긴다(CORE-13) — 다음 `patch()` 가 기본값으로 덮어써 결과 폴더 · 배포 폴더 ·
+    일수가 사라지지 않게. 옮기지 못하면 빈 글(그래도 기본값으로 시작한다)."""
+    import time
+    bad = f"{path}.bad-{time.strftime('%Y%m%d-%H%M%S')}"
+    try:
+        os.replace(path, bad)
+        return bad
+    except OSError:
+        return ""
 
 
 def load() -> Prefs:
-    global _cached
+    global _cached, _load_warning
     path = paths.prefs_file()
     try:
         st = os.stat(path)
         key = (str(path), st.st_mtime_ns, st.st_size)
         if _cached and _cached[:3] == key:
             return copy.deepcopy(_cached[3])
-        with open(path, "r", encoding="utf-8") as f:
+        with open(path, "r", encoding="utf-8-sig") as f:      # 메모장이 붙인 BOM 도 읽는다(CORE-13)
             data = json.load(f)
         p = migrate(Prefs.from_dict(data if isinstance(data, dict) else {}))
         _cached = key + (copy.deepcopy(p),)
         return p
-    except Exception:  # noqa: BLE001 - 없거나 깨진 파일은 기본값
+    except ValueError:                # JSON 깨짐 · 잘린 파일 · 인코딩(UnicodeDecodeError 도 ValueError) — 원본을 남기고 기본값
+        bad = _preserve_broken(path)
+        _load_warning = i18n.KO.PREFS_BROKEN_FMT.format(path=bad or str(path))
         return Prefs()
+    except Exception:  # noqa: BLE001 - 없는 파일 · 잠깐 못 여는 파일은 기본값(원본은 그대로)
+        return Prefs()
+
+
+def take_load_warning() -> str:
+    """깨진 설정 파일을 옮기고 기본값으로 시작했다는 문장 — 한 번만 돌려주고 비운다(수집 창 상단에 한 번)."""
+    global _load_warning
+    w, _load_warning = _load_warning, ""
+    return w
 
 
 def save(p: Prefs) -> None:
@@ -195,6 +220,7 @@ def to_collect_cfg(p: Prefs) -> Dict[str, Any]:
         "publish_dir": str(p.publish_dir or "").strip(),
         "publish_full_dir": str(p.publish_full_dir or "").strip(),
         "publish_full_days": p.publish_full_days,
+        "publish_lot_days": p.publish_lot_days,
     })
     # ★ CLI(config.json)와 같은 규칙으로 정규화한다 — 성능·기간 값은 고치고, 범위·경로 문제는 그대로 두어 수집 진입점이 막는다(C13)
     cfg, _problems = _config.normalize_config(cfg)

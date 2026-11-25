@@ -42,7 +42,7 @@ def load_config(path: str, problems: Optional[List[config_mod.Problem]] = None) 
     경고(고친 값)와 치명(범위·경로 — 실행을 막아야 함)을 담아 준다. 여기서는 막지 않는다 — `main` 이 문구를 찍고 종료 코드를 정한다."""
     cfg = copy.deepcopy(collect.DEFAULT_CONFIG)
     if os.path.isfile(path):
-        with open(path, "r", encoding="utf-8") as f:
+        with open(path, "r", encoding="utf-8-sig") as f:          # 메모장이 붙인 BOM 도 읽는다
             user = json.load(f)
         for k, v in (user.items() if isinstance(user, dict) else ()):
             if not k.startswith("_"):
@@ -92,9 +92,9 @@ def _progress_printer():
             pct = int(done * 100 / total)
             if pct != last["pct"] and pct % 10 == 0:
                 last["pct"] = pct
-                _print(f"{pct:3d}%  {phase}")
+                _print(f"{pct:3d}%  {phase}".replace("\n", " · "))
         elif phase:
-            _print(phase)
+            _print(phase.replace("\n", " · "))
     return cb
 
 
@@ -109,7 +109,7 @@ def main(argv=None) -> int:
     logging.getLogger("aoi.cli").info("cli start version=%s args=%s", collect.version_text() or "unknown", " ".join(argv or sys.argv[1:]))
     K = i18n.KO
     ap = argparse.ArgumentParser(description=K.CLI_DESC)
-    ap.add_argument("--config", default=os.path.join(os.getcwd(), "config.json"))
+    ap.add_argument("--config", default=None)          # 안 주면 지금 폴더의 config.json(없으면 GUI 설정), 주면 꼭 있어야 한다(CORE-12)
     ap.add_argument("--refresh-window", type=int, default=None, metavar="N", help=K.CLI_HELP_REFRESH_WINDOW)
     ap.add_argument("--rebuild-all", action="store_true", help=K.CLI_HELP_REBUILD_ALL)
     ap.add_argument("--full", action="store_true", help=K.CLI_HELP_FULL)
@@ -149,7 +149,18 @@ def main(argv=None) -> int:
 
     started = time.time()
     problems: List[config_mod.Problem] = []
-    cfg = load_config(args.config, problems)
+    cfg_path = args.config or os.path.join(os.getcwd(), "config.json")
+    if args.config and not os.path.isfile(cfg_path):      # 직접 준 경로의 오타 — GUI 설정으로 조용히 돌지 않는다(CORE-12)
+        _print(K.CLI_CONFIG_NOT_FOUND_FMT.format(path=cfg_path))
+        return EXIT_FAILED
+    try:
+        cfg = load_config(cfg_path, problems)
+    except json.JSONDecodeError as ex:                    # 쉼표 하나 — traceback 대신 어디가 틀렸는지
+        _print(K.CLI_CONFIG_BAD_JSON_FMT.format(path=cfg_path, line=ex.lineno, col=ex.colno, error=ex.msg))
+        return EXIT_FAILED
+    except (OSError, UnicodeDecodeError) as ex:
+        _print(K.CLI_CONFIG_UNREADABLE_FMT.format(path=cfg_path, error=f"{type(ex).__name__}: {ex}"))
+        return EXIT_FAILED
     for pr in problems:
         if not pr.fatal:
             _print(i18n.KO.CLI_CFG_WARNING_FMT.format(message=pr.message()))
@@ -169,8 +180,12 @@ def main(argv=None) -> int:
         return EXIT_PARTIAL if warnings_h else EXIT_OK
     rebuild = bool(args.rebuild_all or args.full) or None            # None 이면 cfg 의 rebuild_all 을 따른다
     refresh = args.refresh_window                                      # None 이면 cfg 의 refresh_window_days 를 따른다
-    plan = collect.plan_run(cfg, backfill=args.backfill, recover=args.recover,
-                            refresh_window_days=refresh, rebuild_all=rebuild)
+    try:
+        plan = collect.plan_run(cfg, backfill=args.backfill, recover=args.recover,
+                                refresh_window_days=refresh, rebuild_all=rebuild)
+    except collect.CacheUnreadable as ex:                              # 캐시가 잠겨 있다 — 빈 캐시로 시작하지 않는다(CORE-02)
+        _print(str(ex))
+        return EXIT_FAILED
     _print(K.CLI_PLAN_FMT.format(mode=plan.mode, total=plan.total_reports, reread=plan.reread_reports,
                                  keep=plan.keep_reports, recover=plan.recover_reports))
     stats: dict = {}
@@ -181,12 +196,16 @@ def main(argv=None) -> int:
     except collect.RebuildRejected as ex:
         _print(K.CLI_REBUILD_REJECTED_FMT.format(error=ex))
         return EXIT_FAILED
+    except collect.CacheUnreadable as ex:
+        _print(str(ex))
+        return EXIT_FAILED
     except (collect.CollectCancelled, KeyboardInterrupt):      # Ctrl+C — 읽은 것은 collect 가 저장했다(10/11)
         _print(K.CLI_CANCELLED)
         return EXIT_CANCELLED
     warnings: list = []
-    collect.write_html(cfg, rows, dev_meta, errors, started, mode="auto", log=_print, timing=stats, warnings=warnings)
-    publish.publish_after_collect(cfg, rows, dev_meta, log=_print, params_store=stats.get("params_store"))       # 10/27: 배포 폴더가 있으면 조용히(실패해도 수집은 성공)
+    prep = collect.HtmlPrep(rows)                              # 수집 HTML · 배포판이 같은 준비를 한 번만(PH-01)
+    collect.write_html(cfg, rows, dev_meta, errors, started, mode="auto", log=_print, timing=stats, warnings=warnings, prep=prep)
+    publish.publish_after_collect(cfg, rows, dev_meta, log=_print, params_store=stats.get("params_store"), prep=prep)       # 10/27: 배포 폴더가 있으면 조용히(실패해도 수집은 성공)
     if stats.get("cache_status") == collect.CACHE_CORRUPT:
         _print(K.CLI_CACHE_CORRUPT_FMT.format(path=stats.get("cache_preserved", "")))
     bad = [d for d in dev_meta if d.get("error")]

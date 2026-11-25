@@ -304,12 +304,11 @@ def test_default_profile_is_product_with_the_four_rules_on_and_constants_match()
 
     D = run([w("AOI-1", "W1", "08:00", "08:10")])
     assert D["rules"] == {"profile": "product", "waitToObsEnd": True, "denomToday": True, "abortIsError": True, "estimateFromBatch": True}
-    g = globals_("RULES", "MODEL_VERSION", "JOB_ALIAS", "CAUSE_CODES", "PROPS")
+    g = globals_("RULES", "MODEL_VERSION", "JOB_ALIAS", "CAUSE_CODES")
     assert g["RULES"] == D["rules"] and D["modelVersion"] == g["MODEL_VERSION"] == template_facts.model_version()
     assert g["CAUSE_CODES"] == [c for c, _ in collect._CAUSE_RULES]
     design_alias = template_facts.job_alias((ROOT / "docs" / "design" / "dashboard-redesign" / "scripts" / "job_alias.js").read_text(encoding="utf-8"))
     assert g["JOB_ALIAS"] == template_facts.job_alias() == design_alias and len(g["JOB_ALIAS"]) == 21
-    assert g["PROPS"] == {"attentionUtil": 40, "attentionErr": 3}
 
 
 def test_home_lists_devices_in_device_order_with_collect_chips_and_the_no_record_count():
@@ -415,16 +414,13 @@ def test_lot_key_separates_two_reports_of_the_same_lot_on_the_same_day():
     assert k1 == k3 and k1 != k2
 
 
-def test_dashboard_settings_override_the_attention_thresholds():
-    """D14: meta.dashboard_settings 의 같은 이름 숫자만 PROPS 를 바꾼다 — 음수·문자열은 무시."""
+def test_attention_concept_is_gone_and_old_dashboard_settings_are_ignored():
+    """11/25(사용자): '살펴볼 장비' 개념을 없앴다 — 카드 · 점 · 빨간 숫자 문턱 없음. 옛 HTML 의 meta.dashboard_settings 가 있어도 무시."""
     rows = [w("AOI-1", "W1", "08:00", "08:10")]
     mt = meta("AOI-1")
     mt["dashboard_settings"] = {"attentionUtil": 60, "attentionErr": 1}
     (home,) = screen(rows, mt, [["homeHtml"]])
-    assert "가동률 60% 미만 또는 Error 1건 이상" in home
-    mt["dashboard_settings"] = {"attentionUtil": -5, "attentionErr": "x"}
-    (home2,) = screen(rows, mt, [["homeHtml"]])
-    assert "가동률 40% 미만 또는 Error 3건 이상" in home2
+    assert "살펴볼" not in home and 'class="dot' not in home and "평균 가동률" in home
 
 
 def test_unfold_rejects_out_of_range_pool_index_and_duplicate_columns():
@@ -551,7 +547,21 @@ def test_recipe_verdict_labels_both_comparison_scopes():
     assert re.search(r'같은 장비 <span class="muted">1대</span></span></div><div class="vv num win">10\.0<small>분/wafer</small></div><div class="vv num">12\.0<small>분/wafer</small></div><div class="vn"><span[^>]*>멀티 2\.0분/wafer 빠름', html)
     assert "낮을수록 좋음" not in html                                                   # 10/7: 설명 문구는 지웠다
     only_multi, = screen(rows[:3], meta("AOI-1"), [["rcpHtml"]])
-    assert "단일 값이 없어 비교할 수 없습니다" in only_multi and "비교할 값이 없습니다" in only_multi
+    # 11/25 RDL-09: 한 방식 기록이 아예 없으면 표 네 줄 대신 한 줄, 빈 타일도 '—분/wafer · 표본 0 / 0' 대신 한 줄
+    assert "단일 기록이 없어 비교할 수 없습니다 — 멀티 값만 있습니다" in only_multi and 'class="vtab"' not in only_multi
+    assert "이 기간 단일 기록 없음" in only_multi and "—<small>" not in only_multi
+
+
+def test_recipe_device_rows_show_unjudged_values_and_select_only_a_picked_device():
+    """11/25 RDL-10: 판정 못 한 wafer 만 있는 장비는 '값 없음' 이 아니라 옅은 회색 점(판정 못 함 값 — 멀티 · 단일에는 섞지 않음).
+    팝업을 연 장비는 선택 표시."""
+    rows = [_rdl("AOI-1", f"M{i}", f"08:{i*10:02d}", f"08:{i*10+10:02d}", "A", "MULTI") for i in range(3)]
+    rows += [_rdl("AOI-3", f"U{i}", f"10:{i*12:02d}", f"10:{i*12+12:02d}", "B", "") for i in range(3)]
+    html, = screen(rows, meta("AOI-1", "AOI-3"), [["rcpHtml"]])
+    row3 = next(x for x in html.split('class="dbrow') if 'data-row="dev:AOI-3"' in x)
+    assert 'class="dlab U num"' in row3 and "판정 못 함만" in row3 and "값 없음" not in row3
+    picked, = screen(rows, meta("AOI-1", "AOI-3"), [["rcpHtml"]], state={"rcpDevSel": "AOI-3"})
+    assert 'class="dbrow on" data-key="slot:1" data-row="dev:AOI-3"' in picked
 
 
 def test_recipe_wording_distinguishes_ini_and_report_time():
@@ -591,14 +601,29 @@ def _lot_rows(n, rep="R1.htm", bs="08:00", be="10:00", dev="AOI-1"):
 
 def test_report_lot_time_is_scaled_to_25_wafers_only_for_20_to_24():
     """10/6 사용자: Report 1LOT당 = Batch Start→End. 20~24장이면 ×25÷장수(25장 기준), 25장 이상은 그대로, 19장 이하는 뺀다.
-    (120분짜리 Report 로) 26장 → 120.0 · 24장 → 125.0 · 20장 → 150.0 · 19장 → 계산 안 함."""
-    for n, want in ((26, "120.0"), (24, "125.0"), (20, "150.0")):
+    (120분짜리 Report 로) 26장 → 120.0 · 24장 → 125.0 · 20장 → 150.0 · 19장 → 계산 안 함.
+    11/25 RDL-12: LOT당 시간은 'n시간 m분'(TB500 · Kendall 탭과 같은 읽는 법) — 소수 분은 큰 숫자의 title 에."""
+    for n, want, big, raw in ((26, "2시간", "2<small>시간</small>", "120.0"), (24, "2시간 5분", "2<small>시간</small> 5<small>분</small>", "125.0"),
+                              (20, "2시간 30분", "2<small>시간</small> 30<small>분</small>", "150.0")):
         html, = screen(_lot_rows(n), meta("AOI-1"), [["rcpHtml"]])
-        assert f"LOT당 {want}분" in html, (n, want)
+        assert f"LOT당 {want} · Defect" in html, (n, want)
         lot, = screen(_lot_rows(n), meta("AOI-1"), [["rcpHtml"]], state={"rcpUnit": "lot"})     # LOT당 보기: 같은 값이 큰 숫자
-        assert f'<p class="v num">{want}<small>분/Lot</small></p>' in lot and '표본 <b class="num">1</b> / 1 Lot' in lot
+        assert f'<p class="v num" title="{raw}분">{big}<small>/Lot</small></p>' in lot and '표본 <b class="num">1</b> / 1 Lot' in lot
     html, = screen(_lot_rows(19), meta("AOI-1"), [["rcpHtml"]], state={"rcpHowAll": True})
-    assert "LOT당 —분" in html and "PASS 20장 미만 Lot 1개" in html
+    assert "LOT당 — · Defect" in html and "PASS 20장 미만 Lot 1개" in html
+    lot, = screen(_lot_rows(19), meta("AOI-1"), [["rcpHtml"]], state={"rcpUnit": "lot"})     # RDL-14: LOT 표본이 왜 적은지 타일에서 바로
+    assert '제외 1 ⓘ' in lot and "PASS 20장 미만 1" in lot and "LOT 표본 없음 — PASS 20장 미만 1" in lot
+
+
+def test_recipe_lot_unit_verdict_shows_per_day_throughput_and_hour_labels():
+    """10/24 하루당 처리량 · 11/25 RDL-12: LOT당 비교는 'n시간 m분' 과 하루당 Lot, 축은 시간 단위 눈금."""
+    rows = _lot_rows(26) + [dict(r, scan_mode="MULTI", wafer_id="M" + r["wafer_id"]) for r in _lot_rows(26, rep="R2.htm", bs="10:00", be="13:00")]
+    for r in rows[26:]:
+        r["batch_start"], r["batch_end"] = ts(DAY, "10:00"), ts(DAY, "13:00")
+    html, = screen(rows, meta("AOI-1"), [["rcpHtml"]], state={"rcpUnit": "lot"})
+    v = html[html.index('class="mtile verdict"'):]
+    assert "3시간" in v and "2시간" in v and "Lot/일" in v and "단일 1시간 빠름" in v
+    assert re.search(r'class="sax"><em[^>]*>0</em><em[^>]*>1시간</em>', html)
 
 
 def test_report_lot_time_skips_reports_with_an_error_but_keeps_abort_only_ones():
@@ -608,7 +633,7 @@ def test_report_lot_time_skips_reports_with_an_error_but_keeps_abort_only_ones()
     assert "Error 가 있는 Lot 1개" in html and "LOT당 120" not in html
     ab = _lot_rows(22, rep="A.htm") + [w("AOI-1", "A1", None, None, status="Aborted.", job="TB500_RDL4 - Multi", report="A.htm", bs="08:00", be="10:00")]
     html, = screen(ab, meta("AOI-1"), [["rcpHtml"]], state={"rcpHowAll": True})
-    assert "LOT당 136.4분" in html and "Error 가 있는 Lot" not in html            # 22장 · 120분 → 25장 기준 136.4(Aborted 만 있는 Report 는 포함)
+    assert "LOT당 2시간 16분" in html and "Error 가 있는 Lot" not in html            # 22장 · 120분 → 25장 기준 136.4분(Aborted 만 있는 Report 는 포함)
 
 
 def test_outliers_beyond_3_sigma_are_dropped_once_and_listed_but_not_for_tiny_samples():
@@ -741,10 +766,10 @@ def test_lot_tab_groups_by_wafer_id_not_by_name_and_follows_devices():
     assert len(ks) == 2                                                    # 이름이 둘이어도 Lot 은 하나 + ZZZ-1
     lot = next(k for k in ks if "LPT-PIDS5" in lst.split(f'lp:lot:{k}"')[1].split("</button>")[0])
     out = _lot_screen(rows, lot)
-    assert out.count('class="lotatt"') == 2 and "ZZZ-1" not in out.split("검사 순서")[1]
+    assert out.count('class="lotatt"') == 2 and "ZZZ-1" not in out.split("스캔 순서")[1]
     assert "TYPO-RDL3" in out and "ALIGN_ERROR" in out and 'class="gap"' not in out and "+23일" not in out   # 10/25: 시작 밑 '+간격' 은 없앴다
     assert out.count('<b class="same">') == 0 and 'class="lotbox"' in out and "max-height" not in out.split('class="lotbox"')[1][:40]
-    assert 'class="ix num">1<' in out and 'class="ix num">2<' in out                       # 검사 # = 격자 열 번호
+    assert 'class="ix num">1<' in out and 'class="ix num">2<' in out                       # 스캔 번호 = 격자 열 번호
     assert "확인 필요" not in out and "lotconf" not in out
     (q,) = screen(rows, meta("AOI-1", "AOI-2"), [["lotHtml"]], state={"view": "lot", "lotQ": "ewb6"})
     assert "Wafer 38135F75EWB6" in q
@@ -764,7 +789,34 @@ def test_lot_tab_never_merges_past_25_wafers_and_shows_cross_rows():
     assert len(ks) == 2
     big = next(k for k in ks if "25 wafer" in _lot_screen(rows).split(f'lp:lot:{k}"')[1].split("</button>")[0])
     out = _lot_screen(rows, big)
-    assert "겹침" in out and "다른 LOT 이름" in out and 'class="lotatt xo"' in out   # 10/24: '.x'(닫기 단추 32px) 와 겹쳐 줄이 납작해지던 것 — 이름을 xo 로
+    assert "다른 LOT 과 겹침 1번" in out and ">다른 LOT</span>" in out and 'class="lotatt xo"' in out   # 10/24: '.x'(닫기 단추 32px) 와 겹쳐 줄이 납작해지던 것 — 이름을 xo 로
+    assert "다른 LOT 이름" not in out and "스캔 순서 <span" in out and "다른 LOT 1번(흐림)" in out           # 11/25(LOT-03 · LOTE-07 · LOTA-13): 한 낱말 줄기 · 표 제목 숫자
+
+
+def test_lot_tab_wafer_search_counts_before_cut_and_wafer_mode_shows_results():
+    """11/25 점검(LOTA-04 · LOTA-05 · LOTA-06 · LOTA-07 · LOTC-08): Wafer 검색은 자르기 전 개수를 적고 3글자 미만이면 찾지 않는다.
+    Wafer 한 장을 고르면 PASS 칸 대신 결과 글자 · 슬롯, 그 Wafer 가 든 LOT 전체로 가는 단추. 재스캔 칸 툴팁은 앞 PASS 스캔을 말하고, 상한 초과 칸은 'Max'."""
+    ids = [f"QWE{i:06d}X" for i in range(14)]
+    rows = [w("AOI-1", i, "00:10", "00:20", lot="QQ-1", report="a.htm") | {"recipe": "x20", "slot_no": str(n + 1)} for n, i in enumerate(ids)] + \
+           [w("AOI-2", i, "02:10", "02:20", lot="QQ-1", report="b.htm") | {"recipe": "x20"} for i in ids[:2]] + \
+           [w("AOI-2", ids[2], "02:10", "02:20", lot="QQ-1", report="b.htm", status="Scan 2D - Max Fault Exceeded.")]
+    lst = _lot_screen(rows, lotQ="qwe0")
+    assert "Wafer 14개 중 12개 표시" in lst and lst.count("Wafer QWE") == 12
+    assert "Wafer QWE" not in _lot_screen(rows, lotQ="qw")                       # 3글자 미만은 Wafer 를 찾지 않는다
+    assert "와 맞는 LOT · Wafer 가 없습니다" in _lot_screen(rows, lotQ="zzzqq")
+    (k,) = _lot_keys(_lot_screen(rows))
+    (out,) = screen(rows, meta("AOI-1", "AOI-2"), [["lotHtml"]], state={"view": "lot", "lotPick": {"k": "wid", "v": ids[0]}})
+    assert '<b class="rs ok">PASS</b> <small class="muted">#1</small>' in out and "결과 · 슬롯" in out
+    assert "LOT QQ-1 · 14 wafer 전체 보기" in out and "LOT 이름 1개" in out and "이 Wafer 스캔 시간" in out
+    full = _lot_screen(rows, k)
+    # 칸 설명은 올릴 때 만든다(LOTD-07 data-lt → _lotTip) — 구분 한 줄(LOTA-07) · Max 도 그 안에
+    _, t_re, t_max, t_no = screen(rows, meta("AOI-1", "AOI-2"),
+                                  [["lotHtml"], ["_lotTip", "1|" + ids[0]], ["_lotTip", "1|" + ids[2]], ["_lotTip", "1|" + ids[5]]],
+                                  state={"view": "lot", "lotPick": {"k": "lot", "v": k}})
+    assert f'data-lt="1|{ids[0]}"' in full and "재스캔 — 스캔 1(" not in full                 # 칸에는 열쇠만
+    assert "재스캔 — 스캔 1(" in t_re and "AOI-1) PASS 뒤 다시" in t_re and "스캔 2" in t_re
+    assert "Max — Defect 상한 초과" in t_max and t_no.endswith("스캔 2 · 스캔 안 함")
+    assert ">Max</i>" in full and "건너뜀·중단" in full and "스캔 안 함" in full
 
 
 def test_lot_tab_ignores_slot_ids_and_parses_kla_names():
@@ -786,7 +838,7 @@ def test_lot_tab_tags_retries_rescans_and_lists_every_wafer():
     lst = _lot_screen(rows)
     (k,) = _lot_keys(lst)
     out = _lot_screen(rows, k)
-    assert "재시도" in out and "재스캔(이름 바뀜)" in out and "재검사" not in out.split("LOT 추적")[-1]
+    assert "재시도" in out and "재스캔(이름 바뀜)" in out and "재검사" not in out.split("<h1>스캔을 어디에 했니?</h1>")[-1]
     assert "첫 검사" not in out and "다른 Job" not in out and "한 장 = 한 줄" not in out      # 10/25: 첫 검사 · 다른 Job 은 적지 않는다
     assert "같은 이력" not in out and out.count('class="lw mono') == 4
 
@@ -804,7 +856,7 @@ def test_scan_share_counts_only_rows_with_scan_sec_and_keeps_utilization():
     (pop,) = screen(rows[:2], meta("AOI-1"), [["devPopupHtml"]], state={"modalDev": "AOI-1", "modalDayI": 0})
     assert "그중 스캔 63%<" in pop and "근거" not in pop                    # 다 채워지면 비율만
     (pop,) = screen(rows[2:], meta("AOI-1"), [["devPopupHtml"]], state={"modalDev": "AOI-1", "modalDayI": 0})
-    assert "스캔 비율 · 채우기 전" in pop
+    assert "스캔 비율 없음" in pop and "채우기 전" not in pop   # 11/25 UTIL-20: 문제가 아니라 값이 없을 뿐 — 회색 보통 글씨
     (line,) = screen(rows, meta("AOI-1"), [["scLine", {"sc": [0, 0, 1, 1]}]])   # INI 분이 반올림으로 0 — 'NaN%' 대신 비움(PR #3 리뷰)
     assert line == ""
 
@@ -819,7 +871,7 @@ def test_lot_tab_merges_one_char_ocr_misreads_but_not_other_wafers():
     (k,) = _lot_keys(_lot_screen(rows))
     out = _lot_screen(rows, k)
     assert "ID 판독 차이 1" in out and "48135G04EWB7 → 38135G04EWB7" in out and "25 wafer" in out
-    assert out.split("Wafer × 검사")[1].count('class="lw mono') == 25                    # 한 장은 한 줄
+    assert out.split("Slot map &amp; 스캔 기록")[1].count('class="lw mono') == 25                    # 한 장은 한 줄
     other = ["99999X04EWB7" if x == "38135G04EWB7" else x for x in good]                  # 세 글자 넘게 다름 → 다른 Wafer
     rows2 = [w("K1", x, "00:10", "00:20", lot="TB500.INT795@6412", report="KLA:a") for x in other] + \
             [w("AOI-20", x, "02:10", "02:20", lot="LNF-PIDS3", report="b.htm") for x in good]
@@ -833,8 +885,125 @@ def test_lot_tab_matrix_cells_show_defect_counts():
             w("AOI-1", ids[1], "00:20", "00:30", lot="DEF-1", report="a.htm") | {"faults": "1,234"},
             w("AOI-1", ids[2], "00:30", "00:40", lot="DEF-1", report="a.htm")]
     (k,) = _lot_keys(_lot_screen(rows))
-    mx = _lot_screen(rows, k).split("Wafer × 검사")[1]
+    mx = _lot_screen(rows, k).split("Slot map &amp; 스캔 기록")[1]
     assert ">7</i>" in mx and ">1.2k</i>" in mx
+
+
+def _lot_pick(rows, title, mk=None, **st):
+    """제목이 `title` 인 Lot 을 골라 그린 화면(목록에서 data-key 로 찾는다)."""
+    lst = _lot_screen(rows, **({"lotMk": mk} if mk else {}))
+    k = next(k for k in _lot_keys(lst) if f'<b class="mono">{title}<' in lst.split(f'lp:lot:{k}"')[1].split("</button>")[0])
+    return _lot_screen(rows, k, **st)
+
+
+def _att(dev, ids, s, *, lot, report, status=None, day=DAY, **kw):
+    """한 Report(시도) — Wafer 마다 1분씩."""
+    out = []
+    for i, x in enumerate(ids):
+        a = _hhmm(s, i)
+        out.append(w(dev, x, a, _hhmm(s, i + 1), lot=lot, report=report, status=(status or {}).get(x, "Pass"), bs=s, be=_hhmm(s, len(ids) + 2), day=day) | kw)
+    return out
+
+
+def test_lot_tab_ocr_aliases_never_cycle_and_prefer_the_first_or_camtek_read():
+    """11/25(LOTB-01 · 09 · 04): 판독이 장비마다 번갈아 달라도(Camtek X · KLA Y · Camtek X · KLA Y) 별칭은 대표 ID 끼리만 이어 고리가 없다 — 모든 시도가 25장.
+    대표는 횟수가 같으면 Camtek 판독, 잘못 읽힌 장도 같은 열쇠라 재스캔이다."""
+    full = [f"LNFW{i:02d}X1" for i in range(25)]
+    mis = ["LNFV07X1" if x == "LNFW07X1" else x for x in full]
+    rows = _att("AOI-1", full, "01:00", lot="LNF", report="a.htm") + _att("K1", mis, "02:00", lot="LNF@6322", report="KLA:b") + \
+        _att("AOI-1", full, "03:00", lot="LNF", report="c.htm") + _att("K1", mis, "04:00", lot="LNF@6322", report="KLA:d")
+    out = _lot_pick(rows, "LNF")
+    assert out.count('class="lotatt"') == 4 and out.count('25<small class="muted">/25</small>') == 4
+    assert "LNFV07X1 → LNFW07X1" in out
+    re_rows = _att("AOI-1", full, "01:00", lot="LNF", report="a.htm") + _att("AOI-2", mis, "02:00", lot="LNF", report="b.htm")
+    out = _lot_pick(re_rows, "LNF")
+    assert "같은 Job 다른 단계" not in out and ">재스캔</span>" in out   # 잘못 읽힌 한 장도 재스캔(대표 ID 로 열쇠)
+
+
+def test_lot_tab_orders_attempts_by_batch_start_and_follows_the_model_rescan_key():
+    """11/25(LOTB-02 · 03): 시도의 시각은 Report 의 배치 시작 — Error 뒤 곧 재검사해 앞 Report 행이 뒤 INI 시각을 가져도 순서가 뒤집히지 않는다.
+    레시피만 바꾼 재검사(x20|x5 → x20)는 가동률 모델처럼 재스캔이다(다른 단계가 아니다)."""
+    a = [w("AOI-1", "DUPW01X1", "10:11", "10:13", lot="D37", report="a.htm", status="Alignment Error.", bs="10:00", be="10:05")]
+    b = [w("AOI-1", "DUPW02X1", "10:09", "10:10", lot="D37", report="b.htm", bs="10:08", be="10:40"),
+         w("AOI-1", "DUPW01X1", "10:11", "10:13", lot="D37", report="b.htm", bs="10:08", be="10:40")]
+    out = _lot_pick(a + b, "D37")
+    first, second = out.split('class="lotatt"')[1:3]
+    assert "ALIGN_ERROR" in first and "10:00" in first and "10:08" in second and "재시도" in second
+    ids = [f"MSAA{i:02d}X1" for i in range(5)]
+    rows = _att("AOI-1", ids, "01:00", lot="MS", report="a.htm", recipe="x20|x5") + _att("AOI-2", ids, "03:00", lot="MS", report="b.htm", recipe="x20")
+    out = _lot_pick(rows, "MS")
+    assert "같은 Job 다른 단계" not in out and ">재스캔<" in out
+
+
+def test_lot_tab_links_attempts_only_when_most_wafers_overlap():
+    """11/25(LOTB-05 · 11, D92 · D95 조건 추가): 그 Lot 의 마지막 스캔에서 7일 넘게 지난 시도는 작은 쪽 Wafer 의 절반 이상이 겹칠 때만 잇는다 —
+    ID 한 장만 겹친 두 Lot(몇 주 뒤 다시 쓰인 ID)은 '겹침' 으로 남는다. 가까운 시도(나눠 스캔 · DIA 몇 장)는 겹침이 적어도 잇는다.
+    형제 Wafer(한 글자 차이)가 섞인 재검사 카세트는 판독 차이로 짝짓지 않는다."""
+    aug = [f"AUGA{i:02d}X1" for i in range(10)]
+    octb = [f"OCTB{i:02d}X1" for i in range(9)] + [aug[0]]
+    rows = _att("AOI-1", aug, "01:00", lot="TSX", report="a.htm", day="2026-09-01") + _att("AOI-2", octb, "05:00", lot="TSX", report="b.htm")
+    assert len(_lot_keys(_lot_screen(rows))) == 2
+    near = _att("AOI-1", aug, "01:00", lot="TSX", report="a.htm") + _att("AOI-2", octb, "05:00", lot="TSX", report="b.htm")
+    assert len(_lot_keys(_lot_screen(near))) == 1                         # 같은 날 나눠 스캔한 것은 그대로 잇는다
+    rescan = _att("AOI-1", aug, "01:00", lot="TSX", report="a.htm", day="2026-09-01") + _att("AOI-2", aug[:3], "05:00", lot="TSX-RE", report="b.htm")
+    assert len(_lot_keys(_lot_screen(rescan))) == 1                       # 재검사(전부 겹침)는 멀어도 잇는다
+    P = [f"ABC12{i:02d}X" for i in range(1, 26)]
+    Q = [f"ABC13{i:02d}X" for i in range(1, 26)]
+    mixed = _att("AOI-1", P, "01:00", lot="PPP", report="a.htm") + _att("AOI-2", Q, "03:00", lot="QQQ", report="b.htm") + \
+        _att("AOI-3", ["ABC1202X", "ABC1301X"], "06:00", lot="PPP-RE", report="c.htm")
+    out = _lot_pick(mixed, "PPP")
+    assert "ID 판독 차이" not in out and "25 wafer" in out
+
+
+def test_lot_tab_counts_rows_it_cannot_group_and_duplicate_ids():
+    """11/25(LOTB-06 · 10): Wafer ID 를 못 읽은 행은 묶지 않지만 'ID 없음 n(Error n)' 으로 세고, 행이 하나도 안 남은 Report 도 이름 검색에 나온다.
+    한 Report 에 같은 ID 가 두 줄이면 둘 다 센다."""
+    ids = ["IDOK01X1", "IDOK02X1", "IDOK03X1", "IDOK04X1"]
+    rows = _att("AOI-1", ids + ["Slot 5"], "01:00", lot="SHORT", report="a.htm", status={"Slot 5": "Failed to read wafer id. Wafer Skipped."}) + \
+        _att("AOI-1", ["123456", "AB12"], "03:00", lot="WEIRD-1", report="b.htm")
+    out = _lot_pick(rows, "SHORT")
+    assert "ID 없음 1(Error 1)" in out
+    lst = _lot_screen(rows, lotQ="weird 1")
+    assert "Wafer ID 없음 — 묶지 않음" in lst and "WEIRD-1" in lst
+    dup = _att("AOI-1", [f"DUPR{i:02d}X1" for i in range(4)], "01:00", lot="DR", report="a.htm") + \
+        [w("AOI-1", "DUPR01X1", "01:20", "01:21", lot="DR", report="a.htm", status="Alignment Error.", bs="01:00", be="01:30")]
+    out = _lot_pick(dup, "DR")
+    assert '4<small class="muted">/5</small>' in out and "같은 ID 중복 1" in out
+
+
+def test_lot_tab_cards_count_distinct_wafers_and_skip_test_errors():
+    """11/25(LOT-01 · LOTB-07 · 08): Error · 재스캔 카드는 서로 다른 wafer 수(스캔 횟수는 밑줄), Test 스캔의 Error 는 세지 않는다(D64).
+    Camtek+KLA 를 거친 Lot 은 두 필터 모두에 나오고 Defect 는 나눠 적는다."""
+    ids = [f"ERRW{i:02d}X1" for i in range(4)]
+    bad = {ids[0]: "Alignment Error.", ids[1]: "Alignment Error."}
+    rows = _att("AOI-1", ids, "01:00", lot="ERR", report="a.htm", status=bad) + _att("AOI-1", ids, "03:00", lot="ERR", report="b.htm", status=bad)
+    out = _lot_pick(rows, "ERR")
+    assert '<p class="v num">2 wafer</p><p class="s">스캔 2번에서 4건</p>' in out
+    assert 'data-lt="0|ERRW00X1"' in out and "Defect" not in out.split('data-lt=')[1][:80]   # 칸 설명은 올릴 때 만든다(LOTD-07)
+    tst = _att("AOI-1", ids, "01:00", lot="ABC_TEST", report="a.htm", status={ids[0]: "Alignment Error."})
+    lst = _lot_screen(tst)
+    assert 'class="bad e"' not in lst
+    mix = _att("AOI-1", ids, "01:00", lot="TB500.INT764", report="a.htm", faults="300") + \
+        _att("K2", ids, "03:00", lot="TB500.INT764@6322", report="KLA:b", faults="40")
+    for mk in ("cam", "kla"):
+        assert len(_lot_keys(_lot_screen(mix, lotMk=mk))) == 1, mk
+    assert "1,200 · 160" in _lot_pick(mix, "TB500.INT764")
+
+
+def test_lot_tab_search_ignores_separators_and_finds_devices():
+    """11/25(LOTA-01 · 03): 'vxx 3d' 로도 'VXX-3D EDGE' 를 찾고, 입력이 장비 이름(AOI-2 · aoi2)과 같으면 그 장비에서 스캔한 LOT 을 최근 순으로 맨 위에."""
+    ids = [f"VXXA{i:02d}X1" for i in range(3)]
+    old = [f"OLDA{i:02d}X1" for i in range(3)]
+    rows = _att("AOI-2", old, "01:00", lot="OLD-1", report="a.htm") + _att("AOI-2", ids, "05:00", lot="VXX-3D EDGE", report="b.htm") + \
+        _att("AOI-1", [f"ZZZA{i:02d}X1" for i in range(3)], "07:00", lot="AOI2-NAME", report="c.htm")
+    for q in ("vxx 3d", "VXX3D", "vxx_3d edge"):
+        assert len(_lot_keys(_lot_screen(rows, lotQ=q))) == 1, q
+    lst = _lot_screen(rows, lotQ="aoi2")
+    assert "장비 AOI-2 에서 스캔한 LOT" in lst
+    ks = _lot_keys(lst)
+    assert len(ks) == 3                                                     # 장비 묶음 2개 + 이름 결과 1개
+    names = [lst.split(f'lp:lot:{k}"')[1].split("</b>")[0].rsplit(">", 1)[-1] for k in ks]
+    assert names == ["VXX-3D EDGE", "OLD-1", "AOI2-NAME"]                   # 장비 묶음은 최근 순, 그 아래 이름 결과
 
 
 def test_kla_tb500_job_names_are_shortened_for_display_only():
@@ -941,6 +1110,36 @@ def test_report_tab_counts_a_batch_that_crosses_midnight_once():
     assert "제외 — PASS 5장 미만" not in popup                              # 조각(6장 · 6장)이 아니라 합친 12장으로 판단
 
 
+def _batch(dev, lot, bs, n, minutes, job="R_TB500_LIVE_PI3"):
+    rep = f"{job}_6321_{lot}_18-Sep-26_({bs.replace(':', '.')}.00)_BatchReport.htm"
+    return [w(dev, f"{lot}-{k}", _hhmm(bs, k + 1), _hhmm(bs, k + 2), lot=lot, job=job, report=rep, bs=bs, be=_hhmm(bs, minutes)) for k in range(n)]
+
+
+def test_report_popup_marks_slow_batches_by_time_per_wafer_not_by_batch_length():
+    """11/25 RDL-04: 빨간 시간은 배치 시간이 아니라 장당 시간(÷ PASS 장 수)을 이 장비 표본 중앙과 비교한다 —
+    25장 배치(135분, 장당 5.4분)는 길어도 빨강이 아니고, 6장 60분(장당 10분)은 빨강."""
+    rows = _clean_batches(5) + _batch("AOI-1", "LOT-BIG", "17:00", 25, 135) + _batch("AOI-1", "LOT-SLOW", "20:00", 6, 60)
+    (popup,) = screen(rows, meta("AOI-1"), [["rptDevPopupHtml"]], state={"view": "report", "rptAll": {"job": "TB500 PI3", "dev": "AOI-1"}})
+    row = lambda lot: next(x for x in popup.split('class="rcpdev"') if lot in x)
+    assert "font-weight:600;color:" not in row("LOT-BIG</span>")
+    assert "font-weight:600;color:" in row("LOT-SLOW</span>") and "장당 10.0분" in row("LOT-SLOW</span>")
+    assert "장당 시간 중앙" in popup
+
+
+def test_report_tab_leaves_test_lot_batches_out_and_lets_uncomputed_devices_open_all_batches():
+    """11/25 RDL-18(현택): 시험(Test) Lot 의 배치는 장비 비교 표본에서 뺀다(이유는 팝업에 그대로).
+    RDL-05: 계산 못 한 장비 이름은 단추 — 누르면 그 장비의 모든 배치 팝업, 괄호에 제외 내역."""
+    rows = _clean_batches(5) + _batch("AOI-1", "X1-TEST", "20:00", 6, 40) + _clean_batches(4)
+    for r in rows[-sum(5 + i for i in range(4)):]:
+        r["device"] = "AOI-2"
+    html, popup = screen(rows, meta("AOI-1", "AOI-2"), [["reportHtml"], ["rptDevPopupHtml"]],
+                         state={"view": "report", "rptDev": "AOI-1", "rptAll": {"job": "TB500 PI3", "dev": "AOI-1"}})
+    assert "5 / 6" in html and "시험(Test) 1" in html and "10.0 ± 0.0분" in html
+    assert "제외 — 시험(Test) Lot" in popup
+    bad = html[html.index("계산 못 한 장비 1대"):]
+    assert '<button type="button" class="link" data-h=' in bad[:400] and ">AOI-2</button>(표본 4개 · 5개 미만)" in bad
+
+
 def _okw(dev, wafer, s, faults, **kw):
     r = w(dev, wafer, s, s[:3] + "09", **kw)
     r["faults"] = faults
@@ -990,3 +1189,66 @@ def test_overkill_period_ranks_jobs_and_defaults_to_camtek():
     assert "이 Job 을 돈 장비" in cam and "RDL3_K1" not in cam
     (k,) = screen(rows, mt, [["okHtml"]], state={"okMode": "span", "okMk": "kla"})
     assert "TB500 RDL3" in k                                              # KLA Job 은 화면 표기(D96)
+
+
+def test_device_popup_follows_the_list_order_and_separates_no_record_from_idle():
+    """11/25 점검(UTIL-03·04·05·08·11·14): 팝업 ‹ › 는 목록과 같은 필터 · 정렬, 기록 없는 장비는 대기도 '—' 와 한 줄 설명,
+    Error 카드는 '건' 만 크게, 자정 넘긴 배치의 둘째 날 이름표는 '전날부터', 값 있는 장비가 없으면 평균 '—'(0% 아님)."""
+    rows = [w("AOI-1", "W1", "08:00", "10:00"), w("AOI-2", "W2", "09:00", "09:30", status="Alignment Error."),
+            w("4F-AOI-01", "W3", "10:00", "10:05"),
+            w("AOI-1", "N1", "23:00", "23:40", lot="LOT-N", day="2026-09-17"), w("AOI-1", "N2", "23:40", "00:30", lot="LOT-N", day="2026-09-17", eday=DAY)]
+    mt = meta("AOI-1", "AOI-2", "AOI-3", "4F-AOI-01")
+    st = {"modalDev": "AOI-2", "modalDayI": 1}
+    (pop,) = screen(rows, mt, [["devPopupHtml"]], state=st)
+    assert "‹ AOI-1" in pop and "AOI-3 ›" in pop and 'data-fk="dev:err"' in pop and "Error 보기" in pop
+    assert ">1건<" in pop and "1건 · " not in pop                                    # Error 시간은 카드 아래 작은 줄
+    (pop,) = screen(rows, mt, [["devPopupHtml"]], state=st | {"sort": "low"})        # 가동률 낮은 순: 목록과 같은 순서(기록 없는 AOI-3 이 맨 앞)
+    assert "‹ AOI-3" in pop and "4F-AOI-01 ›" in pop
+    (pop,) = screen(rows, mt, [["devPopupHtml"]], state={"modalDev": "4F-AOI-01", "modalDayI": 1, "floor": "4"})
+    assert "‹ " not in pop and "Error 보기" in pop                                  # 4층만 걸면 앞뒤 장비도 4층 안에서
+    (pop,) = screen(rows, mt, [["devPopupHtml"]], state={"modalDev": "AOI-3", "modalDayI": 1})
+    assert "이 날 기록이 없습니다 — 장비가 쉬었는지 수집이 안 됐는지" in pop and "24시간" not in pop
+    (pop,) = screen(rows, mt, [["devPopupHtml"]], state={"modalDev": "AOI-1", "modalDayI": 1})
+    assert "LOT-N · 전날부터" in pop and "· 0장" not in pop
+    (pop,) = screen(rows, mt, [["devPopupHtml"]], state={"modalDev": "AOI-1", "modalDayI": 1, "lotFilter": "err"})
+    assert "Error 난 Lot 이 없습니다" in pop and "전체 Lot 보기" in pop and "이 날 이 장비의 기록이 없습니다" not in pop
+    (home,) = screen(rows, mt, [["homeHtml"]], state={"maker": "kla", "dayI": 1})
+    assert "이 조건(층 · 장비 종류)에 맞는 장비가 이 파일에 없습니다" in home and "0.0" not in home
+    (home,) = screen(rows, mt, [["homeHtml"]], state={"sort": "low", "dayI": 1})
+    assert home.index('data-row="dev:AOI-3"') < home.index('data-row="dev:4F-AOI-01"') and 'class="nobar"' in home and "nosep" not in home
+
+
+def _card(html, key):
+    m = re.search(r'<p class="k"[^>]*>' + re.escape(key) + r'(?: <span class="ii"[^>]*>ⓘ</span>)?</p><p class="v num"[^>]*>(.*?)</p>', html)
+    return re.sub(r"<[^>]+>", "", m.group(1)) if m else None
+
+
+def test_error_filter_keeps_minutes_carried_past_midnight_and_job_denominator_is_the_same_for_every_metric():
+    """11/25 점검(ERR-01 · ERR-02 · ERR-10): ① 유형 필터를 켜도 전날 Error 가 자정을 넘어 이어진 분(그날 건수 0 인 Lot)을 센다 —
+    필터 없을 때와 같은 대기 시간 ② Job별 'Lot n개 중' 은 지표와 상관없이 전체 시도(Error 없던 장비-일 포함) ③ 건수 지표에도 Error 난 Job 만."""
+    prev = (datetime.date.fromisoformat(DAY) - datetime.timedelta(days=1)).isoformat()
+    rows = [w("AOI-1", "E1", "23:30", "00:20", lot="LOT-N", status="Alignment Error.", day=prev, eday=DAY),
+            w("AOI-1", "E2", "08:00", "08:10", lot="LOT-B", status="Alignment Error."),
+            w("AOI-2", "P1", "09:00", "09:10", lot="LOT-C"),
+            w("AOI-1", "Q1", "10:00", "10:10", lot="LOT-D", job="J2")]
+    st = {"view": "errors", "pickDay": None, "metric": "min"}
+    (plain,) = screen(rows, meta("AOI-1", "AOI-2"), [["errorsHtml"]], state=st)
+    (filt,) = screen(rows, meta("AOI-1", "AOI-2"), [["errorsHtml"]], state={**st, "errFType": "ALIGN_ERROR"})
+    (cnt_,) = screen(rows, meta("AOI-1", "AOI-2"), [["errorsHtml"]], state={**st, "metric": "n"})
+    (prob,) = screen(rows, meta("AOI-1", "AOI-2"), [["errorsHtml"]], state={**st, "metric": "prob"})
+    assert _card(plain, "Error 대기") == _card(filt, "Error 대기") == "10시간 30분"   # 예전엔 필터를 켜면 자정 넘은 분이 빠져 줄었다(자정 넘은 분이 빠짐)
+    assert 'class="errfbar"' in filt and "모두 해제" not in filt               # 필터 하나면 '모두 해제' 없이 칩만
+    for h in (cnt_, prob):
+        assert "Lot 4개 중 2개 Error" in h                                      # J1: 장비-일마다 한 시도 — AOI-2 의 PASS 시도도 분모에(예전 건수 지표는 3)
+    assert cnt_.count('data-row="job:') == 1                                  # J2(Error 0건, Error 난 장비-일에서 돎)는 건수 지표에도 없다
+
+
+def test_overkill_bar_draws_severe_first_and_lot_row_marks_rows_lot_tracking_cannot_open():
+    """11/25 점검(ERR-05 · ERR-03 · ERR-20): 막대는 심한 칸부터(1,000↑ 기준이면 400~999 칸 없음) · Wafer ID 가 없어 '스캔을 어디에 했니?' 가 묶지 못하는 LOT 은 '열 수 없음'."""
+    rows = [_okw("AOI-1", "WAFER0001", "08:00", "500"), _okw("AOI-1", "WAFER0002", "08:10", "1500"),
+            _okw("AOI-2", "", "09:00", "800", lot="NOID")]
+    (all_, sev) = (screen(rows, meta("AOI-1", "AOI-2"), [["okHtml"]])[0], screen(rows, meta("AOI-1", "AOI-2"), [["okHtml"]], state={"okTier": "sev"})[0])
+    assert re.search(r'<span class="okbar"><i class="s"[^>]*></i><i class="o"', all_)
+    assert re.search(r'<span class="okbar sev"><i class="s"[^>]*></i></span>', sev)
+    assert "심한 1 / 2장 · 오버킬 2" in sev and "오버킬 2 / 2장 · 심한 1" in all_
+    assert all_.count("열 수 없음") == 1 and 'class="rowbtn okl na"' in all_

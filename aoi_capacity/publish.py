@@ -179,23 +179,54 @@ def lnk_target(share_dir: str, kind: Kind = LOT) -> str:
     return os.path.join(str(share_dir).strip().rstrip("\\/"), kind.stub)
 
 
-def _lnk_current(data: Optional[bytes], icon: Optional[str]) -> bool:
-    """이미 있는 .lnk 가 지금 아이콘 설정과 맞는지 — 맞으면 다시 만들지 않는다. 아이콘 없음(11/4 브라우저 아이콘)이면 옛 `AOI.ico` 를 가리키는 .lnk 는 다시 만든다."""
+def _lnk_has(data: bytes, text: str) -> bool:
+    """.lnk 바이트 안에 `text` 가 UTF-16 또는 ANSI 로 적혀 있는지(대소문자 무시 — 탐색기가 서버 이름을 대문자로 적기도 한다)."""
+    low = data.lower()
+    for enc in ("utf-16-le", _ansi()):
+        try:
+            if text.encode(enc).lower() in low:
+                return True
+        except (UnicodeError, LookupError):
+            continue
+    return False
+
+
+def _lnk_points_to(data: bytes, target: str) -> bool:
+    """.lnk 가 `target` 을 가리키는지 — 전체 경로가 그대로 있거나, UNC 면 LinkInfo 처럼 서버 · 공유 이름과 나머지 경로가 따로 있으면 맞다.
+    드라이브 문자 경로는 드라이브 뒤 경로만 본다(연결 드라이브는 .lnk 안에 UNC 로 적힌다)."""
+    raw = str(target)
+    t = raw.replace("/", "\\")
+    if _lnk_has(data, raw) or _lnk_has(data, t):
+        return True
+    if t.startswith("\\\\"):
+        parts = t[2:].split("\\")
+        return len(parts) >= 3 and _lnk_has(data, "\\\\" + "\\".join(parts[:2])) and _lnk_has(data, "\\".join(parts[2:]))
+    if len(t) > 2 and t[1] == ":":
+        return _lnk_has(data, t[2:].lstrip("\\"))
+    return False
+
+
+def _lnk_current(data: Optional[bytes], icon: Optional[str], target: Optional[str] = None) -> bool:
+    """이미 있는 .lnk 가 지금 아이콘 설정과 맞는지 — 맞으면 다시 만들지 않는다. 아이콘 없음(11/4 브라우저 아이콘)이면 옛 `AOI.ico` 를 가리키는 .lnk 는 다시 만든다.
+    `target` 을 주면 그 경로를 가리키는지도 본다(11/25 — 배포 폴더 표기를 바꾸거나 폴더를 옮기면 옛 경로 바로가기가 남았다)."""
     if not data:
+        return False
+    if target and not _lnk_points_to(data, target):
         return False
     return icon.encode("utf-16-le") in data if icon else ICON_NAME.encode("utf-16-le") not in data
 
 
 def _ensure_lnk(share_dir: str, kind: Kind, icon: Optional[str], roots: List[str]) -> bool:
-    """배포 폴더에 `kind.lnk` 가 있게 한다(없거나 아이콘 경로가 다를 때만 만든다). 있으면 True, 못 만들었으면 False."""
+    """배포 폴더에 `kind.lnk` 가 있게 한다(없거나 대상 · 아이콘 경로가 다를 때만 만든다). 있으면 True, 못 만들었으면 False."""
     path = os.path.join(share_dir, kind.lnk)
     try:
         cur = open(path, "rb").read() if os.path.isfile(path) else None
     except OSError:
         cur = None
-    if _lnk_current(cur, icon):
+    target = lnk_target(share_dir, kind)
+    if _lnk_current(cur, icon, target):
         return True
-    data = make_lnk(lnk_target(share_dir, kind), icon)
+    data = make_lnk(target, icon)
     if not data:
         return cur is not None
     _write_text(path, data, roots, tries=2)
@@ -261,15 +292,6 @@ def _prune(data_dir: str, keep: int, roots: List[str], protect=(), kind: Kind = 
     except OSError:
         return 0
     gone = 0
-    now = time.time()
-    for n in os.listdir(data_dir):                      # 쓰다 끊겨 남은 임시 파일(1시간 넘음)
-        if n.endswith(".tmp"):
-            fp = os.path.join(data_dir, n)
-            try:
-                if now - os.path.getmtime(fp) > 3600:
-                    os.remove(fp)
-            except OSError:
-                pass
     for n in names[:-keep] if keep > 0 else names:
         if n in protect:
             continue
@@ -278,6 +300,28 @@ def _prune(data_dir: str, keep: int, roots: List[str], protect=(), kind: Kind = 
             gone += 1
         except OSError:
             pass
+    return gone
+
+
+STALE_TMP_SEC = 3600
+
+
+def _drop_stale_tmp(data_dir: str, roots: List[str]) -> int:
+    """쓰다 끊겨 남은 임시 파일(1시간 넘음)을 지운다 — 배포 첫머리에서(PP-11: 예전엔 배포가 끝까지 가야만 돌아 실패가 이어지면 큰 찌꺼기가 쌓였다). 지운 개수."""
+    nas_guard.assert_local(data_dir, roots)
+    try:
+        names = [n for n in os.listdir(data_dir) if n.endswith(".tmp")]
+    except OSError:
+        return 0
+    gone, now = 0, time.time()
+    for n in names:
+        fp = os.path.join(data_dir, n)
+        try:
+            if now - os.path.getmtime(fp) > STALE_TMP_SEC:
+                os.remove(fp)
+                gone += 1
+        except OSError:
+            pass                                         # 열려 있으면 다음에
     return gone
 
 
@@ -293,7 +337,7 @@ def _pointed_name(share_dir: str, kind: Kind = LOT) -> str:
 
 def _publish(kind: Kind, cfg: dict, share_dir: str, *, rows: Optional[list] = None, dev_meta: Optional[list] = None,
              params_store: Optional[dict] = None, log: Optional[Callable[[str], None]] = None,
-             now: Optional[dt.datetime] = None) -> Dict[str, object]:
+             now: Optional[dt.datetime] = None, prep=None) -> Dict[str, object]:
     """`kind` 의 배포판을 만들어 `share_dir` 에 올린다(LOT 추적 · 전체 공통). → `publish_lot` 의 결과와 같은 모양."""
     share_dir = str(share_dir or "").strip()
     if not share_dir:
@@ -310,6 +354,7 @@ def _publish(kind: Kind, cfg: dict, share_dir: str, *, rows: Optional[list] = No
         time.sleep(REACH_RETRY_SEC)
         if not reach():
             raise FileNotFoundError(2, i18n.KO.PUBLISH_DIR_MISSING, share_dir)
+    _drop_stale_tmp(data_dir, roots)
     name = f"{kind.prefix}_{stamp}.html"
     n = 0
     while os.path.exists(os.path.join(data_dir, name)):      # 같은 분에 또 올리면 덮어쓰지 않고 번호를 붙인다
@@ -319,12 +364,12 @@ def _publish(kind: Kind, cfg: dict, share_dir: str, *, rows: Optional[list] = No
         full_cfg = dict(cfg, html_days=int(cfg.get("publish_full_days") or 0), write_csv=False)   # 모든 탭 · 최근 N일(0 = 전부) · CSV 는 쓰지 않는다
         if rows is not None:
             path = collect.write_html(full_cfg, rows, dev_meta or [], [], time.time(), mode="publish", log=log,
-                                      out_dir=data_dir, out_name=name, params_store=params_store)
+                                      out_dir=data_dir, out_name=name, params_store=params_store, prep=prep)
         else:
             path = collect.html_from_cache(full_cfg, log=log, out_dir=data_dir, out_name=name)
     elif rows is not None:
         path = collect.write_html(cfg, rows, dev_meta or [], [], time.time(), mode="publish", log=log, lot_only=True,
-                                  out_dir=data_dir, out_name=name, params_store={})
+                                  out_dir=data_dir, out_name=name, params_store={}, prep=prep)
     else:
         path = collect.html_from_cache(cfg, log=log, lot_only=True, out_dir=data_dir, out_name=name)
     stub = os.path.join(share_dir, kind.stub)
@@ -378,16 +423,40 @@ def publish_full(cfg: dict, share_dir: str, *, rows: Optional[list] = None, dev_
     return _publish(FULL, cfg, share_dir, rows=rows, dev_meta=dev_meta, params_store=params_store, log=log, now=now)
 
 
+#: 배포 실패 이유의 종류(11/25 PP-04) — 화면은 이 열쇠로 짧은 문장을 고르고, 예외 원문은 로그에만 둔다
+WHY_UNREACHABLE, WHY_DENIED, WHY_LOCKED, WHY_CONFIG, WHY_OTHER = "unreachable", "denied", "locked", "config", "other"
+_SHARING_WINERRORS = (32, 33)        # ERROR_SHARING_VIOLATION · ERROR_LOCK_VIOLATION
+
+
+def error_kind(exc: BaseException) -> str:
+    """배포 예외 → 이유 종류. 닿지 못함(FileNotFoundError · 네트워크 이름 없음) · 권한 없음 · 파일 잠김 · 설정(경로 칸) · 그 밖."""
+    if isinstance(exc, (ValueError, nas_guard.NasWriteRefused)):
+        return WHY_CONFIG
+    if getattr(exc, "winerror", None) in _SHARING_WINERRORS:
+        return WHY_LOCKED
+    if isinstance(exc, PermissionError):
+        return WHY_DENIED
+    if isinstance(exc, (FileNotFoundError, NotADirectoryError)) or getattr(exc, "winerror", None) in (53, 64, 67, 1222):
+        return WHY_UNREACHABLE
+    return WHY_OTHER
+
+
+def _unc_host(path: str) -> str:
+    p = str(path or "").strip().replace("/", "\\")
+    return p[2:].split("\\", 1)[0].casefold() if p.startswith("\\\\") else ""
+
+
 def _run_one(kind: Kind, cfg: dict, share_dir: str, rows: list, dev_meta: list, params_store: Optional[dict],
-             log: Optional[Callable[[str], None]], status: Optional[dict], prefix: str) -> Optional[Dict[str, object]]:
+             log: Optional[Callable[[str], None]], status: Optional[dict], prefix: str, prep=None) -> Optional[Dict[str, object]]:
     label = "전체 배포" if kind is FULL else "LOT 추적 배포"
     try:
-        res = _publish(kind, cfg, share_dir, rows=rows, dev_meta=dev_meta, params_store=params_store, log=log)
+        res = _publish(kind, cfg, share_dir, rows=rows, dev_meta=dev_meta, params_store=params_store, log=log, prep=prep)
     except Exception as exc:  # noqa: BLE001 - 배포는 부가 산출물이다(CSV 와 같은 취급)
         if log:
             log(f"{label} 실패(수집은 정상): {type(exc).__name__}: {exc}")
         if status is not None:
-            status.update({prefix + "error": f"{type(exc).__name__}: {exc}", prefix + "dir": share_dir})
+            status.update({prefix + "error": f"{type(exc).__name__}: {exc}", prefix + "dir": share_dir,
+                           prefix + "why": error_kind(exc)})
         return None
     if status is not None:
         status[prefix + "dir"] = share_dir
@@ -410,20 +479,40 @@ def _same_folder(a: str, b: str) -> bool:
 
 
 def publish_after_collect(cfg: dict, rows: list, dev_meta: list, log: Optional[Callable[[str], None]] = None,
-                          status: Optional[dict] = None, params_store: Optional[dict] = None) -> Optional[Dict[str, object]]:
+                          status: Optional[dict] = None, params_store: Optional[dict] = None,
+                          progress: Optional[Callable[[int, int, str], None]] = None,
+                          should_stop: Optional[Callable[[], bool]] = None, prep=None) -> Optional[Dict[str, object]]:
     """수집이 끝난 뒤 조용히 배포 — cfg `publish_dir`(LOT 추적) · `publish_full_dir`(전체)가 비어 있으면 그 배포는 안 한다. 실패해도 수집은 성공으로 두고 로그에 한 줄만 남긴다.
     LOT 추적을 먼저 올리고 전체가 이어진다(둘은 서로 영향이 없다). 돌려주는 값은 LOT 추적 결과(꺼짐 · 실패면 None).
 
     `status` 를 주면 결과를 거기에 적는다(10/30, 수집 창이 끝에 보여 주려고): 끝까지 올렸으면 `ok`(+`dir`), 안내 파일이 잠겨 못 바꿨으면 `locked`,
-    실패하면 `error`(+`dir`). 전체 배포는 같은 이름에 `full_` 을 붙인다(`full_ok` · `full_locked` · `full_error` · `full_dir`). 안 했으면(꺼짐) 비어 있다."""
+    실패하면 `error`(+`dir` · `why` = `error_kind`). 전체 배포는 같은 이름에 `full_` 을 붙인다(`full_ok` · `full_locked` · `full_error` · `full_dir` · `full_why`). 안 했으면(꺼짐) 비어 있다.
+
+    11/25: `progress(0, 0, '공유 폴더에 올리는 중 1/2 · …')` 로 단계를 알리고(예전엔 '완료 100%' 인 채 몇십 초 멈춘 듯 보였다, PP-01 · CORE-06),
+    `should_stop()` 이 참이면 아직 시작 안 한 배포는 건너뛴다(시작한 배포는 끝까지). LOT 추적이 공유 서버에 닿지 못했고 전체 배포 폴더가
+    같은 UNC 서버면 전체 배포는 같은 이유로 바로 건너뛴다 — 닿지 않는 서버를 두 번 기다리지 않게(PP-03)."""
     share_dir = str(cfg.get("publish_dir") or "").strip()
     full_dir = str(cfg.get("publish_full_dir") or "").strip()
-    res = _run_one(LOT, cfg, share_dir, rows, dev_meta, None, log, status, "") if _enabled(share_dir) else None
+    stop = should_stop or (lambda: False)
+    todo = [k for k, on in (("lot", _enabled(share_dir)), ("full", _enabled(full_dir))) if on]
+    say = (lambda i, what: progress(0, 0, i18n.KO.COLLECT_PHASE_PUBLISH_FMT.format(i=i, n=len(todo), what=what))) if progress else (lambda i, what: None)
+    res = None
+    if "lot" in todo and not stop():
+        say(1, i18n.KO.PUBLISH_WHAT_LOT)
+        res = _run_one(LOT, cfg, share_dir, rows, dev_meta, None, log, status, "", prep)
+    lot_st = status if status is not None else {}
     if _enabled(full_dir) and share_dir and _same_folder(share_dir, full_dir):     # 같은 폴더면 latest.js 가 겹쳐 서로 덮는다
         if log:
             log(i18n.KO.PUBLISH_FULL_SAME_DIR)
         if status is not None:
-            status.update(full_error=i18n.KO.PUBLISH_FULL_SAME_DIR, full_dir=full_dir)
-    elif _enabled(full_dir):
-        _run_one(FULL, cfg, full_dir, rows, dev_meta, params_store, log, status, "full_")
+            status.update(full_error=i18n.KO.PUBLISH_FULL_SAME_DIR, full_dir=full_dir, full_why=WHY_CONFIG)
+    elif _enabled(full_dir) and not stop():
+        if (lot_st.get("why") == WHY_UNREACHABLE and _unc_host(share_dir) and _unc_host(share_dir) == _unc_host(full_dir)):
+            if log:
+                log(i18n.KO.PUBLISH_SKIPPED_SAME_HOST)
+            if status is not None:
+                status.update(full_error=i18n.KO.PUBLISH_SKIPPED_SAME_HOST, full_dir=full_dir, full_why=WHY_UNREACHABLE)
+        else:
+            say(len(todo), i18n.KO.PUBLISH_WHAT_FULL)
+            _run_one(FULL, cfg, full_dir, rows, dev_meta, params_store, log, status, "full_", prep)
     return res

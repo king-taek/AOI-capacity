@@ -1,5 +1,8 @@
 """설정 · 정보(수집 탭 맨 아래에 들어간다) — 처음 수집 기간, 결과 HTML 기간, 배포 폴더, 데이터 폴더, 버전·업데이트.
 
+11/25: 배포 폴더 줄마다 [지금 올리기] [바탕화면에 바로가기] [폴더 열기] 와 마지막 배포 결과 한 줄(PP-05) — 옛 조사 도구의 '발행 시험' 카드는 없앴다.
+실제 올리기는 수집 페이지가 한다(`publish_requested` · `shortcut_requested`, 수집과 겹치지 않게).
+
 10/30: 주의 장비 기준 · 이력 보관 기간 · NAS 동시 읽기 · 어두운 화면은 옵션에서 뺐다(고정값은 `utils/prefs.py` 맨 위)."""
 from __future__ import annotations
 
@@ -11,12 +14,16 @@ from PyQt6.QtWidgets import QFrame, QGridLayout, QHBoxLayout, QLabel, QLineEdit,
 
 from ... import i18n
 from ...utils import paths, prefs
+
+K_ = i18n.KO
 from ..widgets.buttons import make_button
 from ..widgets.inputs import NoWheelSpinBox as QSpinBox
 
 
 class SettingsPage(QWidget):
     update_check_requested = pyqtSignal()
+    publish_requested = pyqtSignal(str)               # "lot" · "full" — 지금 올리기
+    shortcut_requested = pyqtSignal(str)              # "lot" · "full" — 바탕화면 바로가기
 
     def __init__(self, parent: Optional[QWidget] = None):
         super().__init__(parent)
@@ -43,6 +50,7 @@ class SettingsPage(QWidget):
 
         self._backfill = QSpinBox(card)
         self._backfill.setRange(1, 3650)
+        self._backfill.setPrefix(K.SET_BACKFILL_PREFIX)
         self._backfill.setSuffix(K.SET_BACKFILL_SUFFIX)
         self._backfill.setValue(int(p.backfill_days))
         self._html_days = QSpinBox(card)
@@ -82,11 +90,34 @@ class SettingsPage(QWidget):
                 r.addStretch(1)
             return r
 
+        self._pub_btns, self._pub_status = {}, {}
+
+        def pub_row(kind: str, edit: QLineEdit):
+            b_now = make_button(K.SET_PUBLISH_NOW, "default", card)
+            b_short = make_button(K.SET_PUBLISH_SHORTCUT, "ghost", card)
+            b_dir = make_button(K.BTN_OPEN_FOLDER, "ghost", card)
+            st = QLabel("", card)
+            st.setProperty("role", "muted")
+            st.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
+            st.hide()
+            self._pub_btns[kind], self._pub_status[kind] = (b_now, b_short, b_dir), st
+            b_now.clicked.connect(lambda: (self._save_publish_dirs(), self.publish_requested.emit(kind)))
+            b_short.clicked.connect(lambda: (self._save_publish_dirs(), self.shortcut_requested.emit(kind)))
+            b_dir.clicked.connect(lambda: edit.text().strip() and QDesktopServices.openUrl(QUrl.fromLocalFile(edit.text().strip())))
+            edit.textChanged.connect(lambda _t: self._sync_publish())
+            col = QVBoxLayout()
+            col.setSpacing(4)
+            r = hrow(edit, b_now, b_short, b_dir, stretch=False)
+            r.setStretch(0, 1)
+            col.addLayout(r)
+            col.addWidget(st)
+            return col
+
         rows = [
             (K.SET_BACKFILL_DAYS, hrow(self._backfill)),
             (K.SET_HTML_DAYS, hrow(self._html_days)),
-            (K.SET_PUBLISH_DIR, hrow(self._publish, stretch=False)),
-            (K.SET_PUBLISH_FULL_DIR, hrow(self._publish_full, stretch=False)),
+            (K.SET_PUBLISH_DIR, pub_row("lot", self._publish)),
+            (K.SET_PUBLISH_FULL_DIR, pub_row("full", self._publish_full)),
             (K.SET_DATA_DIR, hrow(self._data_dir, b_open, b_log)),
             (K.SET_VERSION, hrow(self._version, b_upd)),
         ]
@@ -100,7 +131,40 @@ class SettingsPage(QWidget):
         b_open.clicked.connect(lambda: QDesktopServices.openUrl(QUrl.fromLocalFile(str(paths.data_root()))))
         b_log.clicked.connect(lambda: QDesktopServices.openUrl(QUrl.fromLocalFile(str(paths.log_file()))))
         b_upd.clicked.connect(self.update_check_requested.emit)
+        self._pub_busy = False
+        self._sync_publish()
         self.refresh_version()
+
+    def _save_publish_dirs(self) -> None:
+        prefs.patch(publish_dir=self._publish.text().strip(), publish_full_dir=self._publish_full.text().strip())
+
+    def _sync_publish(self) -> None:
+        for kind, edit in (("lot", self._publish), ("full", self._publish_full)):
+            on = bool(edit.text().strip())
+            b_now, b_short, b_dir = self._pub_btns[kind]
+            b_now.setEnabled(on and not self._pub_busy)
+            b_short.setEnabled(on)
+            b_dir.setEnabled(on)
+            b_now.setToolTip("" if on else K_.SET_PUBLISH_OFF)
+
+    def set_publish_busy(self, busy: bool) -> None:
+        """수집 중 · 다른 올리기 중에는 '지금 올리기' 를 잠근다(같은 배포 폴더에 동시에 쓰지 않게)."""
+        self._pub_busy = bool(busy)
+        self._sync_publish()
+
+    def set_publish_status(self, kind: str, text: str, ok: bool = True) -> None:
+        st = self._pub_status.get(kind)
+        if st is None:
+            return
+        st.setText(text)
+        st.setProperty("role", "muted" if ok else "loadErr")
+        st.style().unpolish(st)
+        st.style().polish(st)
+        st.setVisible(bool(text))
+
+    def publish_status(self, kind: str) -> str:
+        st = self._pub_status.get(kind)
+        return st.text() if st is not None else ""
 
     def add_row(self, label: str, item) -> None:
         """설정 줄들 위에 '이름 | 값' 한 줄을 더한다 — 수집 페이지의 결과 폴더 · CSV · 결과 파일."""

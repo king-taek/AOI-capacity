@@ -24,8 +24,13 @@ def test_first_run_reads_everything_and_second_run_reads_nothing(tmp_path, fake_
     names = sorted(d["name"] for d in dev_meta if not d.get("missed"))   # 접근 못 한 장비는 meta 에 `missed` 로 따로 남는다
     assert names == ["8호기", "9호기", "AOI-10"]          # 꺼둔 행·접근 불가 행은 제외, * 는 AOI-10 만 새로 추가(AOI-9 는 명시 행이 이김)
     assert len(rows) == 9 and not errors
-    assert prog[-1][0] == prog[-1][1] > 0                 # 마지막 보고는 (total, total)
-    cache = json.loads((tmp_path / "out" / "aoi_cache.json").read_text(encoding="utf-8"))
+    # Report 읽기 단계는 (total, total) 로 끝나고, 그 뒤 정리 · 캐시 저장 · 결과 정리는 총량 없는 단계(busy)로 알린다 —
+    # 예전엔 100% 에 '오래된 이력 정리' 로 멈춘 채 캐시 저장(현장 30초+)을 해 멈춘 듯 보였다(11/25 PC-12)
+    reads = [p for p in prog if p[1] > 0]
+    assert reads[-1][0] == reads[-1][1] > 0
+    assert prog[-1] == (0, 0, collect.i18n.KO.COLLECT_PHASE_ROWS)
+    assert (0, 0, collect.i18n.KO.COLLECT_PHASE_SAVE) in prog
+    cache = collect.read_cache_file(str(tmp_path / "out" / "aoi_cache.json"))
     # 커서 키는 표시명도 경로도 아닌 영속 안정 키다(C03) — 이름·드라이브 문자를 바꿔도 이력이 갈라지지 않게.
     # 키는 처음 본 표시명에서 만들고 캐시의 `devices` 대응표가 경로 id 로 잇는다.
     assert len(cache["last_mtime"]) == 3
@@ -51,6 +56,28 @@ def test_new_report_is_picked_up_by_cursor(tmp_path, fake_nas):
     rows, dev_meta, _, _ = _run(cfg)
     assert {d["name"]: d["reports"] for d in dev_meta if not d.get("missed")} == {"8호기": 0, "9호기": 0, "AOI-10": 1}
     assert len(rows) == 12
+
+
+def test_future_mtime_report_does_not_freeze_the_cursor(tmp_path, fake_nas):
+    """CORE-04: 시계가 틀린 설비의 수정시각 +30일 Report 하나로 커서가 미래로 뛰면 그 뒤 정상 Report 를 전부 건너뛰었다.
+    커서는 지금 시각 + 여유까지만 가고, 이미 미래에 가 있는 옛 커서도 지금으로 돌아온다."""
+    nas, csv_path = fake_nas
+    rep_dir = nas / "X" / "AOI-10" / "Report"
+    src = next(rep_dir.glob("*.htm"))
+    far = time.time() + 30 * 86400
+    os.utime(src, (far, far))
+    cfg = make_cfg(tmp_path, csv_path)
+    logs = []
+    collect.collect(cfg, log=logs.append)
+    assert any("미래" in m for m in logs)
+    cache = json.loads((tmp_path / "out" / "aoi_cache.json").read_text(encoding="utf-8"))
+    assert cache["last_mtime"]["dev:AOI-10"] <= time.time() + collect.CLOCK_SKEW_SEC
+    rep = rep_dir / "2D@R2-GA285AAB_0859840PD-0A_6321_NEW_26-Sep-13_(06.00.00)_BatchReport.htm"
+    rep.write_text(src.read_text(encoding="utf-8"), encoding="utf-8")       # 지금 시각의 정상 Report
+    rows, dev_meta, _, _ = _run(cfg)
+    assert {d["name"]: d["reports"] for d in dev_meta if not d.get("missed")}["AOI-10"] == 1
+    last = {"dev:X": far}                                                   # 옛 버전이 남긴 미래 커서도 되돌린다
+    assert collect._advance_cursor(last, "dev:X", [], [], now=1000.0) and last["dev:X"] == 1000.0 + collect.CLOCK_SKEW_SEC
 
 
 def test_backfill_window_limits_first_run(tmp_path, fake_nas):
@@ -144,8 +171,8 @@ def test_reading_in_parallel_gives_exactly_the_same_result(tmp_path, fake_nas, w
     assert _fingerprint(rows) == _fingerprint(want_rows)
     assert [d["name"] for d in meta] == [d["name"] for d in want_meta]     # 장비 순서도 그대로
     assert len(errs) == len(want_err)
-    one = json.loads((tmp_path / "one" / "out" / "aoi_cache.json").read_text(encoding="utf-8"))
-    many = json.loads((tmp_path / f"p{workers}" / "out" / "aoi_cache.json").read_text(encoding="utf-8"))
+    one = collect.read_cache_file(str(tmp_path / "one" / "out" / "aoi_cache.json"))
+    many = collect.read_cache_file(str(tmp_path / f"p{workers}" / "out" / "aoi_cache.json"))
     assert one["last_mtime"] == many["last_mtime"]                         # 커서까지 같아야 한다
 
 
@@ -210,7 +237,7 @@ def test_parser_version_bump_reclassifies_cached_rows_without_touching_the_nas(t
     cfg = make_cfg(tmp_path, csv_path)
     _run(cfg)
     cache_path = tmp_path / "out" / "aoi_cache.json"
-    cache = json.loads(cache_path.read_text(encoding="utf-8"))
+    cache = collect.read_cache_file(str(cache_path))
     assert cache["parser_version"] == collect.PARSER_VERSION
     # 옛 규칙으로 저장된 캐시를 흉내 낸다: 번호를 낮추고 한 행의 분류를 틀리게 둔다
     cache["parser_version"] = 1
@@ -224,7 +251,7 @@ def test_parser_version_bump_reclassifies_cached_rows_without_touching_the_nas(t
     assert seen == {"htm": 0, "ini": 0, "recipes": 0, "scanlog": 0}                                     # 캐시만으로 고쳤다
     fixed = [r for r in rows if r["wafer_id"] == victim["wafer_id"] and r["device"] == victim["device"]]
     assert fixed and all(r["norm_status"] == "PASS" and r["scan_type"] == "" for r in fixed)
-    assert json.loads(cache_path.read_text(encoding="utf-8"))["parser_version"] == collect.PARSER_VERSION
+    assert collect.read_cache_file(str(cache_path))["parser_version"] == collect.PARSER_VERSION
 
 
 def test_recover_rereads_only_reports_whose_ini_was_missing(tmp_path, fake_nas, monkeypatch):
@@ -297,6 +324,50 @@ def test_device_whose_reports_all_fail_is_partial_not_done(tmp_path, fake_nas, m
     assert len(errors) == 1 and errors[0]["device"] == "AOI-10"
 
 
+def test_a_report_that_fails_once_is_read_again_at_the_end(tmp_path, fake_nas, monkeypatch):
+    """11/25(사용자: "수집 마무리하고나서 한번만 더 재시도"): 첫 패스에서 실패한 Report 는 끝에 한 번 더 읽는다 —
+    일시 오류면 오류 없이 저장되고, 두 번 다 실패해야 오류 · 재시도 횟수(tries 1)가 남는다."""
+    nas, csv_path = fake_nas
+    cfg = make_cfg(tmp_path, csv_path)
+    orig = collect.parse_report
+    calls = {}
+
+    rep_dir = nas / "X" / "AOI-10" / "Report"
+    for rep in rep_dir.glob("*.htm"):
+        rep.rename(rep_dir / ("FLAKY_" + rep.name))
+
+    def flaky(name, text):
+        if name.startswith("FLAKY_"):
+            calls[name] = calls.get(name, 0) + 1
+            if calls[name] == 1:
+                raise OSError(64, "지정된 네트워크 이름을 더 이상 사용할 수 없습니다")
+        return orig(name, text)
+
+    monkeypatch.setattr(collect, "parse_report", flaky)
+    stats: dict = {}
+    rows, dev_meta, errors, prog = _run(cfg, stats=stats)
+    assert not errors and calls and set(calls.values()) == {2}
+    assert stats["retry_reports"] == len(calls) and stats["retry_fixed"] == len(calls)
+    assert {d["name"]: d for d in dev_meta}["AOI-10"]["read_errors"] == 0
+    assert any(p[2].startswith(collect.i18n.KO.COLLECT_PHASE_RETRY_FMT.split("{")[0]) for p in prog)
+    cache = json.loads((tmp_path / "out" / "aoi_cache.json").read_text(encoding="utf-8"))
+    assert not cache["failed"]
+
+    def broken(name, text):
+        if name.startswith("FLAKY_"):
+            calls[name] = calls.get(name, 0) + 1
+            raise OSError(64, "끊김")
+        return orig(name, text)
+
+    calls.clear()
+    monkeypatch.setattr(collect, "parse_report", broken)
+    cfg2 = make_cfg(tmp_path / "b", csv_path)
+    rows, dev_meta, errors, _ = _run(cfg2)
+    assert errors and set(calls.values()) == {2}                       # 한 번 더 읽고도 실패하면 오류로 남는다(재시도는 한 번뿐)
+    cache = json.loads((tmp_path / "b" / "out" / "aoi_cache.json").read_text(encoding="utf-8"))
+    assert cache["failed"] and all(v["tries"] == 1 for v in cache["failed"].values())
+
+
 # ── INI 한 번만 읽기 · 사전 존재 확인 제거 · 단계별 계측 ─────────────────────────
 def test_same_ini_is_opened_once_per_run_and_no_stat_before_open(tmp_path, fake_nas, monkeypatch):
     """★ 같은 Wafer 가 여러 Report 에 나오면(재검사) INI 경로가 같다(실장비 3일치: 후보 13,920건 중 반복 1,090건).
@@ -321,8 +392,9 @@ def test_same_ini_is_opened_once_per_run_and_no_stat_before_open(tmp_path, fake_
     # 장비 3대 × (01B0 있음 1경로 + 99Z9 없음 2경로) = 고유 경로 9개 — 없는 Wafer 는 Job 폴더 이름 후보(원문 · `-0A` 뗀 것)를 다 본다.
     # 9호기 두 번째 Report 의 3건은 기억한 결과를 다시 쓴다(열기 0).
     assert seen["ini"] == 9 and seen["htm"] == 4
-    # 10/11(D86 Q4): EXACT 장(장비 3대의 01B0 — 고유 경로 3)마다 RecipesInfo.ini · ScanLog.ini 를 한 번씩, 재검사 Report 는 기억한 결과
-    assert seen["recipes"] == 3 and seen["scanlog"] == 3 and stats["scanlog_unique"] == 3
+    # 10/11(D86 Q4): EXACT 장(장비 3대의 01B0 — 고유 경로 3)마다 ScanLog.ini 를 한 번씩, 재검사 Report 는 기억한 결과.
+    # RecipesInfo.ini 는 RDL 이 아니면 ScanLog 가 있어 촬영 초를 잴 수 있는 장만 연다(PC-01) — 이 자료에는 ScanLog 가 없다
+    assert seen["recipes"] == 0 and seen["scanlog"] == 3 and stats["scanlog_unique"] == 3
     assert stats["ini_asked"] == 12 and stats["ini_unique"] == 9 and stats["ini_missing"] == 6
     nine = [r for r in rows if r["device"] == "9호기" and r["wafer_id"] == "K625407-01B0"]
     assert len(nine) == 2 and {r["ini_match"] for r in nine} == {"EXACT"}       # 두 Report 모두 같은 시각을 받았다
@@ -449,7 +521,7 @@ def _entry_fp(cache, rep):
 
 
 def _cache_of(cfg):
-    return json.loads(open(cfg["cache_file"], encoding="utf-8").read())
+    return collect.read_cache_file(cfg["cache_file"])
 
 
 def test_refresh_window_rereads_same_mtime_reports_inside_the_window_and_keeps_the_rest(tmp_path, fake_nas, monkeypatch):
@@ -669,8 +741,10 @@ def test_parallel_refresh_is_deterministic(tmp_path, fake_nas):
 # ══════════════════════════════════════════════════════════════════════════════
 # C15 — 캐시 파일: strict UTF-8 · 손상본 보존(.bad-<시각>) · 고유 임시 파일 · 실패 시 정리
 # ══════════════════════════════════════════════════════════════════════════════
-@pytest.mark.parametrize("garbage", [b'{"reports": {"\xff\xfe": {}}, "last_mtime": {}}', b'{"reports": {', b"[]"],
-                         ids=["bad-utf8", "truncated", "not-object"])
+@pytest.mark.parametrize("garbage", [b'{"reports": {"\xff\xfe": {}}, "last_mtime": {}}', b'{"reports": {', b"[]",
+                                     b'{"reports": {"k": {"rows": [[0, 5]]}}, "last_mtime": {}, "rows_fold": {"v": 1, "cols": ["device", "lot"], "pool": ["x"]}}',
+                                     b'{"reports": {"k": {"rows": [[0]]}}, "last_mtime": {}, "rows_fold": 3}'],
+                         ids=["bad-utf8", "truncated", "not-object", "fold-index", "fold-table"])
 def test_corrupt_cache_is_preserved_as_bad_file_not_overwritten_silently(tmp_path, fake_nas, garbage):
     """★ 예전에는 errors='replace' 로 읽어 손상 바이트가 U+FFFD 로 바뀌거나, 못 읽으면 조용히 빈 캐시로 덮어썼다."""
     nas, csv_path = fake_nas
@@ -684,7 +758,7 @@ def test_corrupt_cache_is_preserved_as_bad_file_not_overwritten_silently(tmp_pat
     bad = [p for p in out.iterdir() if p.name.startswith("aoi_cache.json.bad-")]
     assert len(bad) == 1 and bad[0].read_bytes() == garbage                    # 원본 그대로 보존
     assert stats["cache_preserved"] == str(bad[0])
-    fresh = json.loads((out / "aoi_cache.json").read_text(encoding="utf-8"))
+    fresh = collect.read_cache_file(str(out / "aoi_cache.json"))
     assert len(fresh["reports"]) == 3 and "_corrupt_source" not in fresh and "_status" not in fresh
     assert any("보존" in m for m in logs)
     assert not [p for p in out.iterdir() if p.name.endswith(".tmp")]
@@ -692,6 +766,62 @@ def test_corrupt_cache_is_preserved_as_bad_file_not_overwritten_silently(tmp_pat
     stats2 = {}
     collect.collect(cfg, stats=stats2)
     assert stats2["cache_status"] == collect.CACHE_OK and bad[0].read_bytes() == garbage
+
+
+@pytest.mark.parametrize("fails", [1, 2], ids=["once-then-ok", "stays-locked"])
+def test_locked_cache_is_not_treated_as_corrupt(tmp_path, fake_nas, monkeypatch, fails):
+    """CORE-02: 백신 · 백업이 캐시를 잠깐 잡아 OS 오류가 나면 예전엔 '손상' 으로 보고 빈 캐시로 다시 수집 · 원본을 .bad 로 밀어
+    backfill 창 밖 이력이 화면에서 사라졌다. 이제 한 번 더 열어 보고, 그래도 안 되면 수집을 멈추고 원본은 그대로 둔다."""
+    from aoi_capacity import nas_guard
+    nas, csv_path = fake_nas
+    cfg = make_cfg(tmp_path, csv_path)
+    collect.collect(cfg)
+    out = tmp_path / "out"
+    before = (out / "aoi_cache.json").read_bytes()
+    monkeypatch.setattr(collect, "CACHE_READ_RETRY_SEC", 0)
+    real = nas_guard.read_text
+    left = {"n": fails}
+
+    def locked(path, *a, **kw):
+        if str(path) == cfg["cache_file"] and left["n"] > 0:
+            left["n"] -= 1
+            raise PermissionError(13, "The process cannot access the file", str(path))
+        return real(path, *a, **kw)
+    monkeypatch.setattr(nas_guard, "read_text", locked)
+    stats = {}
+    if fails == 1:
+        rows, _, _ = collect.collect(cfg, stats=stats)
+        assert stats["cache_status"] == collect.CACHE_OK and len(rows) == 9
+    else:
+        with pytest.raises(collect.CacheUnreadable):
+            collect.collect(cfg, stats=stats)
+        assert (out / "aoi_cache.json").read_bytes() == before
+    assert not [p for p in out.iterdir() if ".bad-" in p.name]
+
+
+def test_cache_rows_are_folded_on_disk_and_come_back_exactly(tmp_path):
+    """CORE-07: 캐시 파일의 행은 결과 HTML 처럼 접는다(열 이름 한 번 + 같은 값은 풀 번호) — 읽으면 원래 dict 그대로
+    (빠진 열 · 문자열이 아닌 값 · OUT_COLS 밖 열 · 옛 형식 섞임 포함). 저장 뒤 다시 읽어 검증하는 규칙(C15)은 그대로."""
+    cfg = {"cache_file": str(tmp_path / "c" / "cache.json"), "nas_roots": [], "output_dir": str(tmp_path)}
+    full = {c: f"v-{c}" for c in collect.OUT_COLS}
+    rows_a = [dict(full), dict(full, lot="L2"), {"device": "AOI-1", "lot": "L2", "slots": 3, "extra": None, "x": [1, "a"]}]
+    rows_b = [{"device": "AOI-1", "status": "Pass", "flag": True, "n": 1}, {"device": "AOI-1", "status": "1"}]
+    cache = {"reports": {"a": {"rows": rows_a, "mtime": 1}, "b": {"rows": rows_b, "mtime": 2}, "c": {"rows": [], "mtime": 3}},
+             "last_mtime": {}, "failed": {}, "kla": {"dev:K1": {"lots": {"L": {"W": {"t": "x"}}}}}}
+    want = json.loads(json.dumps(cache))
+    collect._save_cache(cfg, cache)
+    raw = json.loads((tmp_path / "c" / "cache.json").read_text(encoding="utf-8"))
+    assert raw[collect.ROWS_FOLD_KEY]["cols"][:len(collect.OUT_COLS)] == collect.OUT_COLS
+    assert all(isinstance(r, list) for e in raw["reports"].values() for r in e["rows"])
+    assert cache["reports"]["a"]["rows"] is rows_a and rows_a[0] == full          # 저장은 메모리의 캐시를 바꾸지 않는다
+    back = collect.read_cache_file(cfg["cache_file"])
+    assert back["reports"] == want["reports"] and back["kla"] == want["kla"] and collect.ROWS_FOLD_KEY not in back
+    assert back["reports"]["b"]["rows"][0]["n"] == 1 and back["reports"]["b"]["rows"][1]["status"] == "1"   # 1 과 "1" · True 는 다르다
+    loaded = collect._load_cache(dict(cfg, cache_file=cfg["cache_file"]), rederive=False)
+    assert loaded["reports"]["a"]["rows"] == rows_a and collect.cache_status(loaded) == collect.CACHE_OK
+    legacy = tmp_path / "old.json"                                                # 옛 형식(행이 dict)도 그대로 읽는다
+    legacy.write_text(json.dumps(want), encoding="utf-8")
+    assert collect.read_cache_file(str(legacy))["reports"] == want["reports"]
 
 
 def test_cache_load_is_strict_utf8_but_report_reading_stays_lenient(tmp_path):
@@ -736,7 +866,7 @@ def test_save_cache_validates_what_it_wrote_and_uses_a_unique_tmp(tmp_path):
     out = collect._save_cache(cfg, cache)
     assert (out["path"], out["preserved"]) == (cfg["cache_file"], "")
     assert out["bytes"] > 0 and out["write_ms"] >= 0 and out["check_ms"] >= 0           # 11/4: 저장 세부 시간(로그용)
-    assert json.loads((tmp_path / "c" / "cache.json").read_text(encoding="utf-8"))["parser_version"] == collect.PARSER_VERSION
+    assert collect.read_cache_file(str(tmp_path / "c" / "cache.json"))["parser_version"] == collect.PARSER_VERSION
     assert [p.name for p in (tmp_path / "c").iterdir()] == ["cache.json"]
     t1, t2 = collect._unique_tmp("/a/b.json"), collect._unique_tmp("/a/b.json")
     assert t1 != t2 and t1.startswith("/a/b.json.") and t1.endswith(".tmp")
@@ -868,7 +998,30 @@ def test_cli_flags_and_exit_codes(tmp_path, fake_nas, monkeypatch, capsys):
     monkeypatch.setattr(collect, "parse_report", lambda name, text: (_ for _ in ()).throw(ValueError("전부 깨짐")))
     assert cli.main(["--config", str(cfg_path), "--rebuild-all"]) == cli.EXIT_FAILED
     assert (tmp_path / "cli" / "aoi_cache.json").read_bytes() == raw
-    assert "전체 재구축 거부" in capsys.readouterr().out
+    assert "전체 다시 만들기 거부" in capsys.readouterr().out   # 11/25 COPY-12: 화면(수집 창)과 같은 이름
+
+
+def test_cli_config_typo_broken_json_and_empty_html_range_stop_with_a_message(tmp_path, fake_nas, capsys):
+    """CORE-12 · CORE-09: --config 오타면 GUI 설정으로 조용히 다른 폴더에 쓰고, JSON 쉼표 하나면 traceback, 가진 데이터 밖
+    --from/--to 면 행 0개 HTML 을 거꾸로 된 이름으로 만들었다. 이제 셋 다 문구 + 종료 코드 1, 파일은 만들지 않는다."""
+    from aoi_capacity import cli
+    nas, csv_path = fake_nas
+    assert cli.main(["--config", str(tmp_path / "confg.json")]) == cli.EXIT_FAILED
+    assert "설정 파일을 찾을 수 없습니다" in capsys.readouterr().out
+    bad = tmp_path / "bad.json"
+    bad.write_text('{"output_dir": "x",\n "backfill_days": 3,}', encoding="utf-8")
+    assert cli.main(["--config", str(bad)]) == cli.EXIT_FAILED
+    assert "2번째 줄" in capsys.readouterr().out
+    cfg_path = _cli_config(tmp_path, csv_path)
+    cfg_path.write_bytes(b"\xef\xbb\xbf" + cfg_path.read_bytes())         # 메모장이 붙인 BOM 도 읽는다
+    assert cli.main(["--config", str(cfg_path)]) == cli.EXIT_OK
+    out = tmp_path / "cli" / "out"
+    before = sorted(p.name for p in out.iterdir())
+    for a, b in (("2025-01-01", "2025-01-31"), ("2026-10-01", "2026-10-31"), ("2026-09-20", "2026-09-13")):
+        assert cli.main(["--config", str(cfg_path), "--html-only", "--from", a, "--to", b]) == cli.EXIT_FAILED
+        assert "가진 데이터" in capsys.readouterr().out or a > b
+    assert sorted(p.name for p in out.iterdir()) == before
+    assert cli.main(["--config", str(cfg_path), "--html-only", "--from", "2026-09-13", "--to", "2026-09-13"]) == cli.EXIT_OK
 
 
 def test_cli_help_describes_what_backfill_really_does(monkeypatch, capsys):
@@ -909,7 +1062,7 @@ def _stop_after_reads(monkeypatch, n):
 
 
 def _cache_of(cfg):
-    return json.loads(open(cfg["cache_file"], encoding="utf-8").read())
+    return collect.read_cache_file(cfg["cache_file"])
 
 
 @pytest.mark.parametrize("workers", [1, 8])
@@ -958,7 +1111,7 @@ def test_rebuild_stop_saves_candidate_aside_and_resumes(tmp_path, fake_nas, monk
     with pytest.raises(collect.CollectCancelled):
         collect.collect(cfg, rebuild_all=True, should_stop=stop)
     assert open(cfg["cache_file"], "rb").read() == before                      # 원 캐시는 그대로
-    part = json.loads(open(resume, encoding="utf-8").read())
+    part = collect.read_cache_file(resume)
     assert len(part["reports"]) == 2 and part["resume"]["sig"].startswith("rebuild|")
     n0 = state["n"]
     rows, _, errs = collect.collect(cfg, rebuild_all=True)

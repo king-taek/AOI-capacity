@@ -3,7 +3,7 @@
 - 문자/NaN/음수/0/null/bool/너무 큰 값 → 성능·기간 값은 경고 + 기본값/클램프(`bool("false")` 없음)
 - 잘못된 scope·경로·폴더 이름 → 실행 차단(ConfigError), NAS 접근 0
 - prefs_version 이 잘못돼도 장비 목록을 기본 30대로 되돌리지 않는다
-- attention_util·attention_err 가 결과 HTML 의 meta.dashboard_settings 로 나간다(D14)
+- 11/25: '살펴볼 장비' 문턱(attention_util·attention_err, 옛 D14)은 없앴다 — 옛 설정에 남아 있어도 오류 없이 버리고 HTML 에도 넣지 않는다
 """
 from __future__ import annotations
 
@@ -60,10 +60,6 @@ def test_parse_bool_never_uses_truthiness(raw, expected):
     ("read_workers", "1", 1, None),
     ("refresh_window_days", -5, 0, config.OUT_OF_RANGE),
     ("refresh_window_days", "x", 0, config.BAD_INT),
-    ("attention_util", 140, 100, config.OUT_OF_RANGE),
-    ("attention_util", -1, 0, config.OUT_OF_RANGE),
-    ("attention_util", "35", 35, None),
-    ("attention_err", "many", 3, config.BAD_INT),
     ("write_csv", "false", False, None),
     ("write_csv", "true", True, None),
     ("write_csv", "abc", False, config.BAD_BOOL),
@@ -127,11 +123,11 @@ def test_partial_cfg_is_left_alone_and_unknown_keys_pass_through():
 
 def test_default_config_and_example_json_are_clean():
     assert config.normalize_config(collect.DEFAULT_CONFIG)[1] == []
-    assert collect.DEFAULT_CONFIG["attention_util"] == 40 and collect.DEFAULT_CONFIG["attention_err"] == 3
+    assert not config.RETIRED_KEYS & set(collect.DEFAULT_CONFIG)
     from aoi_capacity.utils import paths
     ex = json.loads((paths._project_root() / "docs" / "config.example.json").read_text(encoding="utf-8"))
     body = {k: v for k, v in ex.items() if not k.startswith("_")}
-    assert {"read_workers", "attention_util", "attention_err"} <= set(body)
+    assert "read_workers" in body and not config.RETIRED_KEYS & set(body)
     assert config.normalize_config(body)[1] == []
 
 
@@ -229,8 +225,7 @@ def test_gui_prefs_and_cli_config_normalize_the_same_way(tmp_path):
     assert gui["backfill_days"] == 30 and gui["refresh_window_days"] == 0 and gui["scan_dir"] == "ScanResult"
     # 10/30: 동시 읽기 · 보관 기간 · CSV · 주의 장비 기준은 옵션이 아니다 — 옛 prefs 값(RAW)이 있어도 고정값
     assert gui["read_workers"] == 4 and gui["retention_days"] == 0 and gui["write_csv"] is True
-    assert gui["attention_util"] == 40 and gui["attention_err"] == 3
-    assert cli_cfg["attention_util"] == 100          # CLI(config.json)는 그대로 — 값을 직접 적는 사람의 설정
+    assert not config.RETIRED_KEYS & (set(gui) | set(cli_cfg))   # 11/25: 옛 문턱 키는 오류 없이 버린다
     assert set(collect.DEFAULT_CONFIG) <= set(gui)
 
 
@@ -263,27 +258,16 @@ def test_prefs_bad_scope_type_reaches_collect_as_a_fatal_problem_not_a_widened_s
     assert prefs.to_collect_cfg(prefs.Prefs.from_dict({"scope_devices": "AOI-3"}))["scope_devices"] == ["AOI-3"]
 
 
-# ── D14: 문턱이 결과 HTML 로 나간다 ─────────────────────────────────────────
+# ── 11/25: '살펴볼 장비' 문턱(옛 D14)은 없앴다 — 옛 설정에 남아 있어도 오류 없이 버리고 HTML 에 넣지 않는다 ──
 def _meta(path: Path) -> dict:
     text = path.read_text(encoding="utf-8")
     return json.loads(text.split('id="embedded">')[1].split("</script>")[0])["meta"]
 
 
-def test_write_html_emits_dashboard_settings_from_cfg(tmp_path, fake_nas):
+def test_old_attention_keys_are_ignored_and_not_emitted(tmp_path, fake_nas):
+    out, problems = config.normalize_config({"attention_util": "bad", "attention_err": -9, "read_workers": 4})
+    assert problems == [] and out == {"read_workers": 4}
     nas, csv_path = fake_nas
     cfg = make_cfg(tmp_path, csv_path, attention_util=35, attention_err=5)
     target = collect.write_html(cfg, [], [], [], time.time())
-    assert _meta(Path(target))["dashboard_settings"] == {"attentionUtil": 35, "attentionErr": 5}
-    cfg = make_cfg(tmp_path, csv_path, attention_util="bad", attention_err=-9)
-    target = collect.write_html(cfg, [], [], [], time.time())
-    assert _meta(Path(target))["dashboard_settings"] == {"attentionUtil": 40, "attentionErr": 0}
-    cfg = make_cfg(tmp_path, csv_path)
-    cfg.pop("attention_util"); cfg.pop("attention_err")
-    target = collect.write_html(cfg, [], [], [], time.time())
-    assert _meta(Path(target))["dashboard_settings"] == {"attentionUtil": 40, "attentionErr": 3}
-
-
-def test_gui_dashboard_settings_use_the_default_attention_thresholds():
-    """10/30: '주의 장비 기준' 옵션을 없앴다 — GUI 수집은 기본값(가동률 40% 미만 · Error 3건 이상)을 HTML 로 보낸다."""
-    cfg = prefs.to_collect_cfg(prefs.Prefs())
-    assert config.dashboard_settings(cfg) == {"attentionUtil": 40, "attentionErr": 3}
+    assert "dashboard_settings" not in _meta(Path(target))
