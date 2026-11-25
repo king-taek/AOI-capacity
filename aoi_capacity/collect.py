@@ -3359,9 +3359,10 @@ MB = 1024 * 1024
 
 
 def _payload(emb: dict, meta: dict) -> str:
-    """접힌 행 + meta → HTML 에 박을 JSON 문자열. `</` → `<\\/` 는 JSON 으로는 같은 문자열이면서 HTML 파서가 `</script>` 로 읽지 못하게 한다."""
+    """접힌 행 + meta → HTML 에 박을 JSON 문자열. `<` → `\\u003c` 는 JSON 으로는 같은 문자열이면서 HTML 파서가 `</script>` 도,
+    `<!--<script` 의 '이중 이스케이프' 상태(데이터 뒤 화면 스크립트까지 삼켜 파일이 열리지 않는다 — JS-05)도 보지 못하게 한다."""
     emb["meta"] = meta
-    return json.dumps(emb, ensure_ascii=False, separators=(",", ":")).replace("</", "<\\/")
+    return json.dumps(emb, ensure_ascii=False, separators=(",", ":")).replace("<", "\\u003c")
 
 
 def _utf8_len(text: str) -> int:

@@ -811,7 +811,7 @@ const BOOT=(typeof window!=="undefined"&&window.AOI_BOOT)||null;
 let _bootQuiet=!!BOOT;
 const bootPhase=i=>{try{if(BOOT)BOOT.phase(i);}catch(e){}};
 function loadDemo(){
-  const run=()=>{let emb;bootPhase(1);try{emb=JSON.parse($("#embedded").textContent);}catch(e){errorPanel("embedded JSON 을 해석할 수 없습니다: "+(e&&e.message||e));return;}
+  const run=()=>{let emb;bootPhase(1);try{const el=$("#embedded");emb=JSON.parse(el.textContent);el.textContent="";}catch(e){errorPanel("embedded JSON 을 해석할 수 없습니다: "+(e&&e.message||e));return;}   /* PH-08: 해석한 원문(25~72MB)은 문서에서 비운다 — 사본 저장은 사본의 #embedded 를 새로 채운다 */
     bootPhase(2);
     try{rows=emb.cols?unfold(emb):(emb.rows||[]);meta=emb.meta||{generated:"",mode:"saved"};if(meta.lot_only)state.view="lot";else if(Array.isArray(meta.only_tabs)&&meta.only_tabs.length)state.view=meta.only_tabs[0];}   /* 공유 발행 파일(10/27): LOT 추적 탭만 */
     catch(e){log("로더 오류: "+(e&&e.message||e));errorPanel(String(e&&e.message||e));return;}
@@ -1439,7 +1439,7 @@ function saveHtml(extra,namePart){if(extra&&extra.type)extra=null;   /* 클릭 �
   const pool=[],idx=new Map(),F=new Set(pooled);const put=v=>{v=v==null?"":String(v);let i=idx.get(v);if(i==null){i=pool.length;pool.push(v);idx.set(v,i);}return i;};
   const emb={cols,pooled,pool,rows:rows.map(r=>cols.map(c=>F.has(c)?put(r[c]):(r[c]??""))),meta:{...meta,...(RG.groups.length||RG_EMB?{recipe_groups:RG}:{}),mode:meta.mode==="demo"?"demo":"saved",...(extra||{}),saved_iso:new Date().toISOString().slice(0,19)}};
   const clone=document.documentElement.cloneNode(true);{const ov=clone.querySelector("#aoi-boot");if(ov)ov.remove();}   /* 시작 화면 덮개가 아직 있을 때 저장해도 사본에는 남기지 않는다(사본의 boot 스크립트가 새로 띄운다) */
-  clone.querySelector("#embedded").textContent=JSON.stringify(emb).replace(/<\//g,"<\\/");
+  clone.querySelector("#embedded").textContent=JSON.stringify(emb).replace(/</g,"\\u003c");   /* JS-05: '<' 를 통째로 — '<!--<script' 도 막는다(collect._payload 와 같다) */
   clone.querySelector("#app").innerHTML='<main><p class="muted" style="padding:40px 0">불러오는 중…</p></main>';clone.querySelector("#toast").classList.remove("on");
   const blob=new Blob(["<!doctype html>\n"+clone.outerHTML],{type:"text/html;charset=utf-8"});const url=URL.createObjectURL(blob);
   const a=document.createElement("a");a.href=url;a.download="AOI_capacity_"+(namePart||"")+stamp()+".html";document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),4000);toast("사본을 저장했습니다");}

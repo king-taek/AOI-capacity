@@ -69,7 +69,7 @@ def old_write_html(cfg, rows, dev_meta, target):
     tpl = nas_guard.read_text(paths.template_path())
     emb = collect._embed_rows(rows)
     emb["meta"] = {"devices": dev_meta}
-    data = json.dumps(emb, ensure_ascii=False, separators=(",", ":")).replace("</", "<\\/")
+    data = json.dumps(emb, ensure_ascii=False, separators=(",", ":")).replace("<", "\\u003c")
     out = tpl.replace("__DATA__", data, 1)
     with open(target, "w", encoding="utf-8") as f:
         f.write(out)

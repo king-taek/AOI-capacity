@@ -71,3 +71,22 @@ def test_default_html_period_ends_on_the_collection_day_even_with_a_future_row(t
     emb = json.loads(s[i:s.index("</script>", i)])
     assert emb["meta"]["range"]["from"] <= today
     assert len(emb["rows"]) == 2                                    # 오늘 행이 기간 안에 남는다(예전엔 2029 기준으로 잘려 미래 행 하나만 남았다)
+
+
+def test_embedded_json_hides_every_angle_bracket_so_people_typed_text_cannot_swallow_the_script(tmp_path):
+    """JS-05: Lot · Job · 상태 같은 사람이 친 글자에 '<!--<script' 가 들어가면 '</' 만 바꾸던 예전 방식은 HTML 파서를 '이중 이스케이프' 상태로 넣어
+    #embedded 가 닫히지 않았다(파일이 영영 열리지 않음). '<' 를 통째로 \\u003c 로 — JSON 으로는 같은 글자다. 화면의 사본 저장도 같은 규칙."""
+    cfg = dict(collect.DEFAULT_CONFIG)
+    cfg.update({"output_dir": str(tmp_path), "cache_file": str(tmp_path / "c.json"), "html_days": 0, "scope_devices": ["*"]})
+    nasty = "<!--<script>x</script><img src=x onerror=1>"
+    row = {**{c: "" for c in collect.OUT_COLS}, "device": "AOI-1", "job": nasty, "lot": nasty, "wafer_id": "W1", "status": "Pass", "report": "R1.htm",
+           "wafer_start_time": "18-Sep-26 08:00:00 AM", "wafer_end_time": "18-Sep-26 08:30:00 AM"}
+    p = collect.write_html(cfg, [row], [{"name": "AOI-1"}], [], time.time(), mode="test")
+    s = Path(p).read_text(encoding="utf-8")
+    i = s.index('id="embedded">') + len('id="embedded">')
+    body = s[i:s.index("</script>", i)]
+    assert "<" not in body
+    emb = json.loads(body)
+    assert nasty in emb["pool"]
+    tpl = (Path(collect.__file__).parent / "ui" / "assets" / "template.html").read_text(encoding="utf-8")
+    assert 'JSON.stringify(emb).replace(/</g,"\\\\u003c")' in tpl           # 사본 저장(saveHtml)도 '<' 를 통째로
