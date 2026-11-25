@@ -29,9 +29,15 @@ def sha256(path: Path) -> str:
 
 
 def embedded(text: str) -> dict:
+    """`#embedded` → dict. 배포판(LOTD-04)의 gzip+base64 압축본도 푼다 — 'H4sI'(gzip 머리의 base64)로 시작하면."""
     head = text.index('id="embedded">') + len('id="embedded">')
     tail = text.index("</script>", head)
-    return json.loads(text[head:tail])
+    body = text[head:tail]
+    if body.lstrip().startswith("H4sI"):
+        import base64
+        import gzip
+        body = gzip.decompress(base64.b64decode(body.strip())).decode("utf-8")
+    return json.loads(body)
 
 
 def unfold(emb: dict) -> Tuple[List[dict], dict]:

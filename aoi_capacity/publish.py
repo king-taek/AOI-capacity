@@ -38,6 +38,8 @@ DATA_DIR = "data"
 KEEP_FILES = 3
 REPLACE_TRIES = 6
 REPLACE_WAIT_SEC = 1.0
+COMPRESS = True                                    # 11/25 LOTD-04 · PP-06: 데이터 파일 안의 데이터를 gzip+base64 로(LOT 106 → 16MB) — 팀원이 열 때마다 공유 폴더에서 통째로 읽는 양.
+                                                   # 파일 이름 · 위치 · latest.js · 안내 파일 · 바로가기는 그대로(이미 배포된 바로가기가 새 파일을 그대로 연다)
 REACH_RETRY_SEC = 3.0                              # 배포 폴더에 닿지 못하면 이만큼 기다렸다 한 번 더(공유 연결이 잠깐 끊긴 경우, 11/4)
 
 
@@ -364,14 +366,14 @@ def _publish(kind: Kind, cfg: dict, share_dir: str, *, rows: Optional[list] = No
         full_cfg = dict(cfg, html_days=int(cfg.get("publish_full_days") or 0), write_csv=False)   # 모든 탭 · 최근 N일(0 = 전부) · CSV 는 쓰지 않는다
         if rows is not None:
             path = collect.write_html(full_cfg, rows, dev_meta or [], [], time.time(), mode="publish", log=log,
-                                      out_dir=data_dir, out_name=name, params_store=params_store, prep=prep)
+                                      out_dir=data_dir, out_name=name, params_store=params_store, prep=prep, compress=COMPRESS)
         else:
-            path = collect.html_from_cache(full_cfg, log=log, out_dir=data_dir, out_name=name)
+            path = collect.html_from_cache(full_cfg, log=log, out_dir=data_dir, out_name=name, compress=COMPRESS)
     elif rows is not None:
         path = collect.write_html(cfg, rows, dev_meta or [], [], time.time(), mode="publish", log=log, lot_only=True,
-                                  out_dir=data_dir, out_name=name, params_store={}, prep=prep)
+                                  out_dir=data_dir, out_name=name, params_store={}, prep=prep, compress=COMPRESS)
     else:
-        path = collect.html_from_cache(cfg, log=log, lot_only=True, out_dir=data_dir, out_name=name)
+        path = collect.html_from_cache(cfg, log=log, lot_only=True, out_dir=data_dir, out_name=name, compress=COMPRESS)
     stub = os.path.join(share_dir, kind.stub)
     ok = _write_text(os.path.join(share_dir, LATEST_NAME), latest_text(name, kind), roots)
     try:

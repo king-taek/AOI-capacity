@@ -25,6 +25,7 @@ from PyQt6.QtWidgets import (QFileDialog, QFrame, QGridLayout, QHBoxLayout, QLab
 from ... import collect, i18n, nas_guard, publish
 from ...utils import paths, prefs, results
 from ...workers import failure_logs
+from ...workers import perf_test as perf_worker
 from ..widgets.buttons import make_button, set_role
 from ..widgets.collapsible import Collapsible
 from ..widgets.inputs import NoWheelDateEdit as QDateEdit, NoWheelSpinBox as QSpinBox
@@ -409,6 +410,8 @@ class CollectPage(QWidget):
         self._done_text = ""                                  # 11/25 QT-11: 방금 끝난 수집 — 실행 줄을 '✓ 수집 완료 [결과 열기] [다시 수집]' 으로
         self._pub_worker: Optional[_PublishWorker] = None
         self._pub_queue: List[tuple] = []
+        self._perf_worker: Optional[QThread] = None         # 속도 시험(11/25) 워커 자리
+        self._perf_dir = ""
         outer = QVBoxLayout(self)
         outer.setContentsMargins(0, 0, 0, 0)
         scroll = self._scroll = QScrollArea(self)
@@ -633,6 +636,15 @@ class CollectPage(QWidget):
         dl.addWidget(fcard)
         self._fl_worker: Optional[QThread] = None        # 실패 로그 워커 자리
 
+        # 속도 시험(11/25 — PH-01 · PH-03 · LOTD-01): 캐시로 결과 HTML 을 두 방식으로 만들어 시간 · 같음을 재고 LOT 시험 파일 두 장. NAS 접근 없음
+        pcard, pl = _tool(dev, K.PERF_TITLE, K.PERF_SHORT, K.PERF_WHEN)
+        self._b_perf_run = make_button(K.PERF_RUN, "default", pcard)
+        self._b_perf_open = make_button(K.PERF_OPEN, "ghost", pcard)
+        self._b_perf_open.hide()
+        self._perf_status = _label("", "muted", pcard, wrap=True)
+        pl.addLayout(_row(self._b_perf_run, self._b_perf_open, self._perf_status))
+        dl.addWidget(pcard)
+
         self._sec_dev = Collapsible(K.COLLECT_SEC_DEV, dev, body)
         lay.addWidget(self._sec_dev)
 
@@ -692,6 +704,8 @@ class CollectPage(QWidget):
         self._b_fl_run.clicked.connect(self._on_fail_logs)
         self._b_fl_open.clicked.connect(lambda: QDesktopServices.openUrl(QUrl.fromLocalFile(self._fl_out.text().strip())))
         self._b_fl_browse.clicked.connect(self._browse_fl_out)
+        self._b_perf_run.clicked.connect(self._on_perf)
+        self._b_perf_open.clicked.connect(lambda: self._perf_dir and QDesktopServices.openUrl(QUrl.fromLocalFile(self._perf_dir)))
         self._fl_days.valueChanged.connect(lambda v: prefs.patch(fail_log_days=int(v)))
         self._pick("normal")
         self.refresh_result()
@@ -794,7 +808,7 @@ class CollectPage(QWidget):
         self._make_html(*sorted((a, b)))
 
     def _make_html(self, a: str, b: str) -> None:
-        if self._html_worker is not None:
+        if self._html_worker is not None or self._perf_worker is not None:
             return
         w = _HtmlOnlyWorker(prefs.to_collect_cfg(prefs.load()), a, b, self)
         w.log.connect(self.append_log)
@@ -835,7 +849,7 @@ class CollectPage(QWidget):
 
     # ── 옛 기간 빈칸 채우기(10/24) ──
     def _nas_busy(self) -> bool:
-        return self._running or self._fl_worker is not None or self._gap_worker is not None
+        return self._running or self._fl_worker is not None or self._gap_worker is not None or self._perf_worker is not None
 
     def _busy_reason(self) -> str:
         """수집을 지금 시작할 수 없는 이유(없으면 "") — 실행 줄에 적는다(11/25 QT-12: 이유 없이 꺼지던 '평소 수집 시작')."""
@@ -847,6 +861,8 @@ class CollectPage(QWidget):
             return K.COLLECT_BUSY_PUBLISH
         if self._fl_worker is not None:
             return K.COLLECT_BUSY_FAILLOGS
+        if self._perf_worker is not None:
+            return K.COLLECT_BUSY_PERF
         return ""
 
     def _sync_buttons(self) -> None:
@@ -854,23 +870,29 @@ class CollectPage(QWidget):
         '평소 수집' 이 다시 켜졌고, 가진 데이터가 없는데 중지 뒤 '이 기간으로 만들기' 가 켜졌다). 모든 완료 콜백은 이것만 부른다."""
         run, gap, pub, fl, html = (self._running, self._gap_worker is not None, self._pub_worker is not None,
                                    self._fl_worker is not None, self._html_worker is not None)
+        perf = self._perf_worker is not None
         busy = self._busy_reason()
         self._b_run.setEnabled(not run and not busy)
         self._b_run.setText(self._run_label())
         if gap:
             self._b_gaps.setEnabled(not getattr(self, "_gap_stopping", False))
         else:
-            self._b_gaps.setEnabled(not run and not fl and not pub and bool(self._gap_n))
-        self._b_fl_run.setEnabled(not run and not fl and not gap)
+            self._b_gaps.setEnabled(not run and not fl and not pub and not perf and bool(self._gap_n))
+        self._b_fl_run.setEnabled(not run and not fl and not gap and not perf)
+        if perf:                                              # 도는 중에는 멈춤 단추
+            self._b_perf_run.setEnabled(not getattr(self, "_perf_stopping", False))
+        else:
+            self._b_perf_run.setEnabled(not run and not gap and not pub and not fl and not html)
+        self._b_perf_run.setText(K.PERF_STOP if perf else K.PERF_RUN)
         for w in (self._fl_days, self._fl_out, self._b_fl_browse):
             w.setEnabled(not fl)
         have = bool(self._span)
-        self._b_html.setEnabled(not run and not html and have)
-        self._b_all.setEnabled(not run and not html and have)
+        self._b_html.setEnabled(not run and not html and not perf and have)
+        self._b_all.setEnabled(not run and not html and not perf and have)
         for w in (*self._cards.values(), self._refresh_days, self._r_from, self._r_to, self._b_from, self._out, self._b_out):
             w.setEnabled(not run)
-        self.settings_page.set_publish_busy(run or pub)
-        self._oc_pub.setEnabled(not run and not pub)
+        self.settings_page.set_publish_busy(run or pub or perf)
+        self._oc_pub.setEnabled(not run and not pub and not perf)
         if not run:
             if busy:
                 self._status.setProperty("role", "muted")
@@ -878,7 +900,7 @@ class CollectPage(QWidget):
             elif self._done_text:
                 self._status.setProperty("role", "doneOk")
                 self._status.setText(self._done_text)
-            elif self._status.text() in (K.COLLECT_BUSY_GAPS, K.COLLECT_BUSY_PUBLISH, K.COLLECT_BUSY_FAILLOGS):
+            elif self._status.text() in (K.COLLECT_BUSY_GAPS, K.COLLECT_BUSY_PUBLISH, K.COLLECT_BUSY_FAILLOGS, K.COLLECT_BUSY_PERF):
                 self._status.setText(K.COLLECT_IDLE)
             _repolish(self._status)
 
@@ -1095,7 +1117,7 @@ class CollectPage(QWidget):
     def publish_now(self, kinds) -> None:
         """kinds = "lot" · "full" 또는 그 목록 — 설정에 적힌 폴더로 캐시에서 다시 만들어 올린다(장비 NAS 접근 없음). 비어 있는 폴더는 건너뛴다."""
         kinds = [kinds] if isinstance(kinds, str) else list(kinds)
-        if self._pub_worker is not None or self._running:
+        if self._pub_worker is not None or self._running or self._perf_worker is not None:
             self.error.emit(K.SET_PUBLISH_DIR if kinds[:1] == ["lot"] else K.SET_PUBLISH_FULL_DIR, K.SET_PUBLISH_BUSY)
             return
         cfg = prefs.to_collect_cfg(prefs.load())
@@ -1159,7 +1181,7 @@ class CollectPage(QWidget):
 
     # ── 실패 로그 수집(10/20) ──
     def _on_fail_logs(self) -> None:
-        if self._fl_worker is not None or self._gap_worker is not None:
+        if self._fl_worker is not None or self._gap_worker is not None or self._perf_worker is not None:
             return
         if self._running:
             self.error.emit(K.FAIL_LOGS_TITLE, K.WAFER_LOGS_BUSY)
@@ -1199,6 +1221,45 @@ class CollectPage(QWidget):
         if chosen:
             self._fl_out.setText(chosen)
 
+    # ── 속도 시험(11/25) ──
+    def _on_perf(self) -> None:
+        if self._perf_worker is not None:                     # 도는 중에 다시 누르면 멈춤(지금 만드는 한 장은 끝낸다)
+            self._perf_worker.stop()
+            self._perf_stopping = True
+            self._perf_status.setText(K.PERF_STOPPING)
+            self._sync_buttons()
+            return
+        if self._running or self._gap_worker is not None or self._pub_worker is not None or self._fl_worker is not None \
+                or self._html_worker is not None:
+            self.error.emit(K.PERF_TITLE, K.PERF_BUSY)
+            return
+        w = perf_worker.PerfTestWorker(prefs.to_collect_cfg(prefs.load()), "", self)
+        w.log.connect(self.append_log)
+        w.progress.connect(lambda _d, _t, phase: self._perf_status.setText(phase))
+        w.done.connect(self._on_perf_done)
+        w.finished.connect(lambda w=w: self._worker_done("_perf_worker", w))
+        self._perf_worker = w
+        self._perf_stopping = False
+        self._sec_dev.set_open(True)
+        self._b_perf_open.hide()
+        self._perf_status.setText(K.PERF_RUNNING)
+        self._sync_buttons()
+        w.start()
+
+    def _on_perf_done(self, result, err: str) -> None:
+        if result:
+            self._perf_dir = str(result.get("dir") or "")
+            fmt = K.PERF_STOPPED_FMT if result.get("stopped") else K.PERF_DONE_FMT
+            text = fmt.format(path=self._perf_dir)
+            self._b_perf_open.setVisible(bool(self._perf_dir))
+            if self._perf_dir:
+                QDesktopServices.openUrl(QUrl.fromLocalFile(self._perf_dir))
+        else:
+            text = err
+            self.error.emit(K.PERF_TITLE, err)
+        self._perf_status.setText(text)
+        self.append_log(text)
+
     def shutdown(self, ms: int = 15_000) -> None:
         """창을 닫을 때 — 로그 모으기를 멈추고(지금까지 담은 것으로 zip 마무리) 기다린다. 올리는 중인 배포는 끝날 때까지 기다린다."""
         w = self._pub_worker
@@ -1211,7 +1272,7 @@ class CollectPage(QWidget):
             except RuntimeError:
                 pass
             self._pub_worker = None
-        for attr in ("_fl_worker", "_gap_worker"):
+        for attr in ("_fl_worker", "_gap_worker", "_perf_worker"):
             w = getattr(self, attr, None)
             if w is None:
                 continue

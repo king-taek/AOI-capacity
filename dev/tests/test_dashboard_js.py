@@ -476,12 +476,27 @@ def test_multi_and_single_scans_are_different_jobs_but_the_same_material():
             dict(w("AOI-1", "P1", "11:00", "11:05", lot="LOT-P", job="R_TB500_LIVE_PI2"), scan_mode="SINGLE"),
             dict(w("AOI-1", "P2", "12:00", "12:05", lot="LOT-Q", job="R_TB500_LIVE_PI2"), recipe="PI|PI_Bubble")]
     D = run(rows, meta("AOI-1", "AOI-2"))
-    assert set(D["pool"]["job"]) >= {"TB500_RDL4-Multi", "TB500_RDL4-Single", "TB500_RDL4-미구분", "R_TB500_LIVE_PI2", "R_TB500_LIVE_PI2-Multi"}
+    assert set(D["pool"]["job"]) >= {"TB500_RDL4-Multi", "TB500_RDL4-Single", "TB500_RDL4-미구분", "R_TB500_LIVE_PI2"}
     assert J not in D["pool"]["job"]
+    assert "R_TB500_LIVE_PI2-Multi" not in D["pool"]["job"]      # 11/25 RDL-02: PI 는 나누지 않는다(D81 — 모두 멀티로 본다)
     t = at(D, "AOI-1")
     assert t["d"] == 10                                         # 멀티 PASS 뒤 같은 Wafer 단일 = Rescan(자재 키는 원문 Job)
     rpt, = screen(rows, meta("AOI-1"), [["reportHtml"]])
-    assert "TB500 RDL4-Multi" in rpt and "TB500 RDL4-Single" in rpt and "TB500 PI2-Multi" in rpt
+    assert "TB500 RDL4-Multi" in rpt and "TB500 RDL4-Single" in rpt and "TB500 PI2" in rpt and "TB500 PI2-Multi" not in rpt
+
+
+def test_pi_jobs_are_not_split_by_a_few_pipe_rows():
+    """11/25 RDL-02: PI 는 멀티/단일로 나누지 않는다(D81). 레시피 칸 '|' 가 있는 Report 하나가 같은 장비의 다른 Report 까지
+    '-Multi' 로 채워(D78 near) 그 장비가 PI 비교에서 빠졌다 — 복사본 · Test_ 접두 Job 도 원문 그대로. RDL 은 D76 그대로."""
+    PI, CP = "R_TB500_LIVE_PI2", "R_TB500_LIVE_PI2 AOI-21 Copy _0614"
+    rows = [dict(w("AOI-17", "P1", "08:00", "08:05", lot="LOT-A", job=PI, report="a.htm"), recipe="PI|PI_Bubble"),
+            dict(w("AOI-17", "P2", "10:00", "10:05", lot="LOT-B", job=PI, report="b.htm")),
+            dict(w("AOI-20", "P3", "11:00", "11:05", lot="LOT-C", job=CP, report="c.htm"), recipe="PI|PI_Bubble"),
+            dict(w("AOI-1", "R1", "12:00", "12:10", lot="LOT-R", job="TB500_RDL4 - Multi", report="r.htm"), scan_mode="MULTI")]
+    D = run(rows, meta("AOI-17", "AOI-20", "AOI-1"))
+    jobs = set(D["pool"]["job"])
+    assert {PI, CP, "TB500_RDL4-Multi"} <= jobs
+    assert not any(j.startswith("R_TB500_LIVE_PI") and j.endswith(("-Multi", "-Single", "-미구분")) for j in jobs)
 
 
 def test_floor_and_maker_filters_combine():
@@ -792,6 +807,25 @@ def test_lot_tab_never_merges_past_25_wafers_and_shows_cross_rows():
     assert "다른 LOT 과 겹침 1번" in out and ">다른 LOT</span>" in out and 'class="lotatt xo"' in out   # 10/24: '.x'(닫기 단추 32px) 와 겹쳐 줄이 납작해지던 것 — 이름을 xo 로
     assert "다른 LOT 이름" not in out and "스캔 순서 <span" in out and "다른 LOT 1번(흐림)" in out           # 11/25(LOT-03 · LOTE-07 · LOTA-13): 한 낱말 줄기 · 표 제목 숫자
 
+
+def test_lot_tab_marks_other_lot_columns_with_a_band_and_keeps_rows_one_height():
+    """11/25(LOTC-01 · LOTC-16): 다른 LOT 으로 묶인 열은 흐리게 하지 않고(흐린 PASS 가 재스캔 색과 같아 보였다) 그 열 위 회색 '다른' 띠 + 툴팁에 그 LOT 이름.
+    검사 순서 표는 Job · Error 원인을 한 칸 두 줄로 — 칸 안 줄바꿈(overflow-wrap:anywhere)이 없어 줄 높이가 고르다."""
+    first = [w("AOI-1", f"AUG{i:06d}X", "00:10", "00:20", lot="TSX-1", report="a.htm") for i in range(25)]
+    err = [w("AOI-1", "AUG000000X", "01:10", "01:20", lot="TSX-1", report="b.htm", status="Alignment Error.")]
+    third = [w("AOI-1", f"AUG{i:06d}X", "04:10", "04:20", lot="TYPO-9", report="c.htm") for i in range(5)] + \
+            [w("AOI-1", "NEWW00000001", "04:10", "04:20", lot="TYPO-9", report="c.htm")]
+    out = _lot_pick(first + err + third, "TSX-1")
+    assert '<span class="ldl">LOT</span>' in out and 'class="lxb"' in out and ">다른</span>" in out
+    band = out.split('class="lxb"')[1].split("</span>")[0]
+    assert "TYPO-9 · 6 wafer" in band                                       # 띠 툴팁 = 그 열이 묶인 다른 LOT
+    assert "다른 LOT: TYPO-9" in out and "흐린 열" not in out and '<span class="lxk">다른</span> 띠' in out
+    assert 'class="ljc"' in out and 'class="lj2" title="ALIGN_ERROR 1"' in out and "<span>Job · Error 원인</span>" in out
+    assert "<span>Error 원인</span>" not in out and "--lotrh:38px" in out
+    tpl = (ROOT / "aoi_capacity" / "ui" / "assets" / "template.html").read_text(encoding="utf-8")
+    assert ".lotmx .lc.xc" not in tpl                                       # 칸을 흐리는 규칙 없음
+    ok = _lot_pick(first, "TSX-1")
+    assert "--lotrh:30px" in ok and 'class="ljc"' not in ok and 'class="lxb"' not in ok
 
 def test_lot_tab_wafer_search_counts_before_cut_and_wafer_mode_shows_results():
     """11/25 점검(LOTA-04 · LOTA-05 · LOTA-06 · LOTA-07 · LOTC-08): Wafer 검색은 자르기 전 개수를 적고 3글자 미만이면 찾지 않는다.
@@ -1126,6 +1160,20 @@ def test_report_popup_marks_slow_batches_by_time_per_wafer_not_by_batch_length()
     assert "장당 시간 중앙" in popup
 
 
+def test_report_tab_first_card_is_the_device_median_like_the_bars():
+    """11/25 RDL-01: 맨 위 첫 카드는 장비 막대 · 범례와 같은 '장비 중앙' — Job 전체 회귀(계산 못 한 장비의 느린 표본까지 섞인 선)는 작은 줄로."""
+    rows = _clean_batches(5)
+    for i in range(4):
+        rows += _batch("AOI-2", f"SLOW-{i}", f"{8 + 3 * i:02d}:00", 10 + i, 170)
+    (html,) = screen(rows, meta("AOI-1", "AOI-2"), [["reportHtml"]], state={"view": "report"})
+    card = html[html.index('<section class="cards sm"'):]
+    card = card[:card.index("</div>")]
+    assert "장비 중앙 (25장 환산)" in card and "2시간 15분" in card                     # AOI-1 하나 = 10 + 5×25
+    assert "Job 전체 회귀 " in card and "Job 전체 회귀 2시간 15분" not in card          # 느린 AOI-2 표본이 섞인 회귀는 다른 값
+    (one,) = screen(_clean_batches(4), meta("AOI-1"), [["reportHtml"]], state={"view": "report"})
+    assert "25장 환산 (Job 전체 회귀)" in one                                          # 장비 막대가 없으면 회귀값 카드 그대로
+
+
 def test_report_tab_leaves_test_lot_batches_out_and_lets_uncomputed_devices_open_all_batches():
     """11/25 RDL-18(현택): 시험(Test) Lot 의 배치는 장비 비교 표본에서 뺀다(이유는 팝업에 그대로).
     RDL-05: 계산 못 한 장비 이름은 단추 — 누르면 그 장비의 모든 배치 팝업, 괄호에 제외 내역."""
@@ -1164,6 +1212,27 @@ def test_overkill_day_counts_pass_and_max_fault_and_lists_only_devices_with_over
     assert ">50%<" in sev and "심한 오버킬 기준" in sev                  # 심한 단계: 목록 순위·비율이 심한 기준(AOI-1 2 / 4), 카드 1은 늘 400↑
 
 
+def test_overkill_excluded_count_follows_the_scope_and_tells_reasons():
+    """11/25 ERR-04: '제외 n장' 은 분모와 같은 범위(고른 날 · 층 · 장비 종류)에서 뺀 장만 센다 — 예전엔 파일의 모든 행을 센 한 숫자였다.
+    이유별 수(건너뜀 · 중단 · Error · Test · Defect 값 없음)는 툴팁."""
+    prev = (datetime.date.fromisoformat(DAY) - datetime.timedelta(days=1)).isoformat()
+    rows = [_okw("AOI-1", "W1", "08:00", "500"),
+            _okw("AOI-1", "W2", "08:10", "", status="Alignment Error."),
+            _okw("AOI-1", "W3", "08:20", "", status="Wafer Skipped."),
+            _okw("AOI-1", "W4", "08:30", ""),                                   # PASS 인데 Defect 값 없음
+            _okw("AOI-1", "T1", "09:00", "2000", lot="TEST-LOT"),
+            _okw("AOI-1", "P1", "09:00", "", day=prev, status="Wafer Skipped."),  # 전날 — 이 날 범위 밖
+            _okw("K1", "K1", "10:00", "", status="Wafer Skipped.")]               # KLA — Camtek 범위 밖
+    mt = meta("AOI-1", "K1")
+    (day, kla, span) = (screen(rows, mt, [["okHtml"]])[0], screen(rows, mt, [["okHtml"]], state={"okMk": "kla"})[0],
+                        screen(rows, mt, [["okHtml"]], state={"okMode": "span"})[0])
+    assert "분모 1장(PASS + 상한 초과 Error)" in day and "제외 4장 ⓘ" in day
+    tip = day[day.index('data-key="ok:xn"'):day.index("제외 4장 ⓘ")]
+    assert "건너뜀 1" in tip and "Error 1" in tip and "Test 1" in tip and "Defect 값 없음 1" in tip
+    assert "제외 1장 ⓘ" in kla                                                # KLA 는 K1 의 건너뜀 하나
+    assert "제외 5장 ⓘ" in span                                               # 기간: 전날 건너뜀까지(Camtek)
+
+
 def test_overkill_scope_follows_model_test_rule_own_maker_buttons_and_selected_day():
     """리뷰(PR #9): ① Lot 에 TEST 가 붙어 있으면(TEST_LOT 처럼 밑줄이어도) 모델처럼 Test 로 빼고 ② 다른 탭의 Gen5 를 물려받지 않으며
     ③ 자정을 넘긴 Report 도 고른 날의 장만으로 LOT 줄을 만든다(합계에 오버킬이 있는데 LOT 줄이 없던 것)."""
@@ -1189,6 +1258,20 @@ def test_overkill_period_ranks_jobs_and_defaults_to_camtek():
     assert "이 Job 을 돈 장비" in cam and "RDL3_K1" not in cam
     (k,) = screen(rows, mt, [["okHtml"]], state={"okMode": "span", "okMk": "kla"})
     assert "TB500 RDL3" in k                                              # KLA Job 은 화면 표기(D96)
+
+
+def test_overkill_period_bar_end_ignores_small_rows_and_cuts_them():
+    """11/25 ERR-06: 막대 끝(100%)은 뒤로 보낸 25장 미만 줄을 빼고 잰다 — 1위(40장 중 20장 = 50%)가 칸 끝까지,
+    5장 중 5장(100%)인 맨 아래 줄은 칸 끝에서 잘리고 ▸."""
+    rows = [_okw("AOI-1", f"A{k}", f"08:{k:02d}", "1500" if k < 20 else "10", job="JOB_BIG") for k in range(40)]
+    rows += [_okw("AOI-1", f"B{k}", f"10:{k:02d}", "1500", job="JOB_SMALL", lot="LOT-S") for k in range(5)]
+    (html,) = screen(rows, meta("AOI-1"), [["okHtml"]], state={"okMode": "span"})
+    big = html[html.index('data-row="JOBBIG"'):]
+    big = big[:big.index("</button>")]
+    small = html[html.index('data-row="JOBSMALL"'):]
+    small = small[:small.index("</button>")]
+    assert 'class="s" style="width:100.0%"' in big and "▸" not in big
+    assert 'class="s" style="width:100.0%"' in small and "▸" in small
 
 
 def test_device_popup_follows_the_list_order_and_separates_no_record_from_idle():
@@ -1241,6 +1324,18 @@ def test_error_filter_keeps_minutes_carried_past_midnight_and_job_denominator_is
     for h in (cnt_, prob):
         assert "Lot 4개 중 2개 Error" in h                                      # J1: 장비-일마다 한 시도 — AOI-2 의 PASS 시도도 분모에(예전 건수 지표는 3)
     assert cnt_.count('data-row="job:') == 1                                  # J2(Error 0건, Error 난 장비-일에서 돎)는 건수 지표에도 없다
+
+
+def test_error_probability_bar_end_ignores_rows_with_under_five_attempts():
+    """11/25 ERR-06: 발생 확률 Job별 막대의 끝(100%)은 뒤로 보낸 줄(시도 5회 미만)을 빼고 잰다 — 넘는 작은 줄은 칸 끝에서 잘리고 ▸."""
+    rows = [w("AOI-1", f"W{k}", f"{8 + k:02d}:00", f"{8 + k:02d}:10", lot=f"LOT-{k}", job="JA", report=f"a{k}.htm",
+              status="Alignment Error." if k < 3 else "Pass") for k in range(6)]
+    rows.append(w("AOI-1", "X1", "20:00", "20:10", lot="LOT-X", job="JB", report="x.htm", status="Alignment Error."))
+    (html,) = screen(rows, meta("AOI-1"), [["errorsHtml"]], state={"view": "errors", "pickDay": None, "metric": "prob"})
+    rows_ = html[html.index("<h2>Job별"):]
+    first, second = rows_.split('data-row="job:')[1:3]
+    assert "width:100%" in first and "▸" not in first                           # JA 3/6 = 50% 가 칸 끝
+    assert "width:100%" in second and "▸" in second                             # JB 1/1 = 100% → 잘리고 ▸
 
 
 def test_overkill_bar_draws_severe_first_and_lot_row_marks_rows_lot_tracking_cannot_open():
