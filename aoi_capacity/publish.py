@@ -398,6 +398,29 @@ def publish_full(cfg: dict, share_dir: str, *, rows: Optional[list] = None, dev_
     return _publish(FULL, cfg, share_dir, rows=rows, dev_meta=dev_meta, params_store=params_store, log=log, now=now)
 
 
+#: 배포 실패 이유의 종류(11/25 PP-04) — 화면은 이 열쇠로 짧은 문장을 고르고, 예외 원문은 로그에만 둔다
+WHY_UNREACHABLE, WHY_DENIED, WHY_LOCKED, WHY_CONFIG, WHY_OTHER = "unreachable", "denied", "locked", "config", "other"
+_SHARING_WINERRORS = (32, 33)        # ERROR_SHARING_VIOLATION · ERROR_LOCK_VIOLATION
+
+
+def error_kind(exc: BaseException) -> str:
+    """배포 예외 → 이유 종류. 닿지 못함(FileNotFoundError · 네트워크 이름 없음) · 권한 없음 · 파일 잠김 · 설정(경로 칸) · 그 밖."""
+    if isinstance(exc, (ValueError, nas_guard.NasWriteRefused)):
+        return WHY_CONFIG
+    if getattr(exc, "winerror", None) in _SHARING_WINERRORS:
+        return WHY_LOCKED
+    if isinstance(exc, PermissionError):
+        return WHY_DENIED
+    if isinstance(exc, (FileNotFoundError, NotADirectoryError)) or getattr(exc, "winerror", None) in (53, 64, 67, 1222):
+        return WHY_UNREACHABLE
+    return WHY_OTHER
+
+
+def _unc_host(path: str) -> str:
+    p = str(path or "").strip().replace("/", "\\")
+    return p[2:].split("\\", 1)[0].casefold() if p.startswith("\\\\") else ""
+
+
 def _run_one(kind: Kind, cfg: dict, share_dir: str, rows: list, dev_meta: list, params_store: Optional[dict],
              log: Optional[Callable[[str], None]], status: Optional[dict], prefix: str, prep=None) -> Optional[Dict[str, object]]:
     label = "전체 배포" if kind is FULL else "LOT 추적 배포"
@@ -407,7 +430,8 @@ def _run_one(kind: Kind, cfg: dict, share_dir: str, rows: list, dev_meta: list, 
         if log:
             log(f"{label} 실패(수집은 정상): {type(exc).__name__}: {exc}")
         if status is not None:
-            status.update({prefix + "error": f"{type(exc).__name__}: {exc}", prefix + "dir": share_dir})
+            status.update({prefix + "error": f"{type(exc).__name__}: {exc}", prefix + "dir": share_dir,
+                           prefix + "why": error_kind(exc)})
         return None
     if status is not None:
         status[prefix + "dir"] = share_dir
@@ -430,20 +454,40 @@ def _same_folder(a: str, b: str) -> bool:
 
 
 def publish_after_collect(cfg: dict, rows: list, dev_meta: list, log: Optional[Callable[[str], None]] = None,
-                          status: Optional[dict] = None, params_store: Optional[dict] = None, prep=None) -> Optional[Dict[str, object]]:
+                          status: Optional[dict] = None, params_store: Optional[dict] = None,
+                          progress: Optional[Callable[[int, int, str], None]] = None,
+                          should_stop: Optional[Callable[[], bool]] = None, prep=None) -> Optional[Dict[str, object]]:
     """수집이 끝난 뒤 조용히 배포 — cfg `publish_dir`(LOT 추적) · `publish_full_dir`(전체)가 비어 있으면 그 배포는 안 한다. 실패해도 수집은 성공으로 두고 로그에 한 줄만 남긴다.
     LOT 추적을 먼저 올리고 전체가 이어진다(둘은 서로 영향이 없다). 돌려주는 값은 LOT 추적 결과(꺼짐 · 실패면 None).
 
     `status` 를 주면 결과를 거기에 적는다(10/30, 수집 창이 끝에 보여 주려고): 끝까지 올렸으면 `ok`(+`dir`), 안내 파일이 잠겨 못 바꿨으면 `locked`,
-    실패하면 `error`(+`dir`). 전체 배포는 같은 이름에 `full_` 을 붙인다(`full_ok` · `full_locked` · `full_error` · `full_dir`). 안 했으면(꺼짐) 비어 있다."""
+    실패하면 `error`(+`dir` · `why` = `error_kind`). 전체 배포는 같은 이름에 `full_` 을 붙인다(`full_ok` · `full_locked` · `full_error` · `full_dir` · `full_why`). 안 했으면(꺼짐) 비어 있다.
+
+    11/25: `progress(0, 0, '공유 폴더에 올리는 중 1/2 · …')` 로 단계를 알리고(예전엔 '완료 100%' 인 채 몇십 초 멈춘 듯 보였다, PP-01 · CORE-06),
+    `should_stop()` 이 참이면 아직 시작 안 한 배포는 건너뛴다(시작한 배포는 끝까지). LOT 추적이 공유 서버에 닿지 못했고 전체 배포 폴더가
+    같은 UNC 서버면 전체 배포는 같은 이유로 바로 건너뛴다 — 닿지 않는 서버를 두 번 기다리지 않게(PP-03)."""
     share_dir = str(cfg.get("publish_dir") or "").strip()
     full_dir = str(cfg.get("publish_full_dir") or "").strip()
-    res = _run_one(LOT, cfg, share_dir, rows, dev_meta, None, log, status, "", prep) if _enabled(share_dir) else None
+    stop = should_stop or (lambda: False)
+    todo = [k for k, on in (("lot", _enabled(share_dir)), ("full", _enabled(full_dir))) if on]
+    say = (lambda i, what: progress(0, 0, i18n.KO.COLLECT_PHASE_PUBLISH_FMT.format(i=i, n=len(todo), what=what))) if progress else (lambda i, what: None)
+    res = None
+    if "lot" in todo and not stop():
+        say(1, i18n.KO.PUBLISH_WHAT_LOT)
+        res = _run_one(LOT, cfg, share_dir, rows, dev_meta, None, log, status, "", prep)
+    lot_st = status if status is not None else {}
     if _enabled(full_dir) and share_dir and _same_folder(share_dir, full_dir):     # 같은 폴더면 latest.js 가 겹쳐 서로 덮는다
         if log:
             log(i18n.KO.PUBLISH_FULL_SAME_DIR)
         if status is not None:
-            status.update(full_error=i18n.KO.PUBLISH_FULL_SAME_DIR, full_dir=full_dir)
-    elif _enabled(full_dir):
-        _run_one(FULL, cfg, full_dir, rows, dev_meta, params_store, log, status, "full_", prep)
+            status.update(full_error=i18n.KO.PUBLISH_FULL_SAME_DIR, full_dir=full_dir, full_why=WHY_CONFIG)
+    elif _enabled(full_dir) and not stop():
+        if (lot_st.get("why") == WHY_UNREACHABLE and _unc_host(share_dir) and _unc_host(share_dir) == _unc_host(full_dir)):
+            if log:
+                log(i18n.KO.PUBLISH_SKIPPED_SAME_HOST)
+            if status is not None:
+                status.update(full_error=i18n.KO.PUBLISH_SKIPPED_SAME_HOST, full_dir=full_dir, full_why=WHY_UNREACHABLE)
+        else:
+            say(len(todo), i18n.KO.PUBLISH_WHAT_FULL)
+            _run_one(FULL, cfg, full_dir, rows, dev_meta, params_store, log, status, "full_", prep)
     return res

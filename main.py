@@ -93,7 +93,7 @@ def _run_gui(logger: logging.Logger) -> int:
     from PyQt6.QtWidgets import QApplication
 
     from aoi_capacity.ui import theme
-    from aoi_capacity.ui.main_window import MainWindow
+    from aoi_capacity.ui.main_window import MainWindow, install_excepthook
 
     QApplication.setApplicationName(APP_ID)
     QApplication.setApplicationDisplayName(i18n.KO.APP_TITLE)
@@ -107,6 +107,7 @@ def _run_gui(logger: logging.Logger) -> int:
     if paths.ensure_user_files():
         logger.info("copied default devices.csv to %s", paths.devices_csv_path())
     win = MainWindow()
+    install_excepthook(win)                                            # 11/25 QT-01: 버튼 처리 중 오류로 창이 통째로 꺼지지 않게
     win.show()
     return int(app.exec())
 

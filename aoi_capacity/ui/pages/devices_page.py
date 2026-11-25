@@ -4,19 +4,31 @@ from __future__ import annotations
 import os
 from typing import Dict, List, Optional
 
-from PyQt6.QtCore import Qt, QThread, pyqtSignal
+import logging
+
+from PyQt6.QtCore import Qt, QThread, QTimer, pyqtSignal
+from PyQt6.QtGui import QBrush, QColor
 from PyQt6.QtWidgets import (QAbstractItemView, QFileDialog, QHBoxLayout, QHeaderView, QLabel, QMenu, QTableWidget,
                              QTableWidgetItem, QVBoxLayout, QWidget)
 
 from ... import devices as devices_mod
 from ... import i18n, nas_guard
 from ...utils import paths, prefs
+from .. import theme
 from ..widgets.buttons import make_button
 
+log = logging.getLogger("aoi.ui")
+SAVED_NOTE_MS = 6000
 COLS = ("name", "root", "sub", "on", "memo", "status")
 HEADERS = (i18n.KO.DEV_COL_NAME, i18n.KO.DEV_COL_ROOT, i18n.KO.DEV_COL_SUB, i18n.KO.DEV_COL_ON, i18n.KO.DEV_COL_MEMO, i18n.KO.DEV_COL_STATUS)
 _STATUS_TEXT = {"ok": i18n.KO.DEV_STATUS_OK, "no_report": i18n.KO.DEV_STATUS_NO_REPORT,
                 "unreachable": i18n.KO.DEV_STATUS_UNREACHABLE, "out_of_scope": i18n.KO.DEV_STATUS_OUT_OF_SCOPE}
+#: 11/25 QT-18: 상태 칸 색 — 결과 HTML 의 .pill 과 같은 뜻(정상 초록 · Report 폴더 없음 노랑 · 접근 불가 빨강 · 범위 밖 회색)
+_STATUS_TONE = {"ok": ("good_ink", "good_soft"), "auto": ("good_ink", "good_soft"), "no_report": ("warn_ink", "warn_soft"),
+                "unreachable": ("crit_ink", "crit_soft"), "error": ("crit_ink", "crit_soft"), "out_of_scope": ("ink_3", "off")}
+_SUMMARY_ORDER = (("ok", i18n.KO.DEV_STATUS_OK), ("auto", i18n.KO.DEV_STATUS_AUTO), ("no_report", i18n.KO.DEV_STATUS_NO_REPORT),
+                  ("unreachable", i18n.KO.DEV_STATUS_UNREACHABLE), ("error", i18n.KO.DEV_STATUS_ERROR),
+                  ("out_of_scope", i18n.KO.DEV_STATUS_OUT_OF_SCOPE))
 
 
 class _CheckWorker(QThread):
@@ -89,9 +101,20 @@ class DevicesPage(QWidget):
         self._b_more.setMenu(more)
         bar.addWidget(self._b_more)
         bar.addStretch(1)
+        self._saved = QLabel(i18n.KO.DEV_SAVED_INLINE, self)       # 11/25 QT-18: 저장 알림은 버튼 옆 초록 글자(예전엔 상단 바 구석 회색 4초)
+        self._saved.setProperty("role", "doneOk")
+        self._saved.hide()
+        bar.addWidget(self._saved)
         bar.addWidget(self._b_revert)
         bar.addWidget(self._b_save)
         lay.addLayout(bar)
+        self._summary = QLabel("", self)                            # 연결 확인 요약 한 줄 — '정상 33 · 접근 불가 8'
+        self._summary.setProperty("role", "checkSum")
+        self._summary.hide()
+        lay.addWidget(self._summary)
+        self._saved_timer = QTimer(self)
+        self._saved_timer.setSingleShot(True)
+        self._saved_timer.timeout.connect(self._saved.hide)
 
         self._table = QTableWidget(0, len(COLS), self)
         self._table.setHorizontalHeaderLabels(HEADERS)
@@ -179,6 +202,7 @@ class DevicesPage(QWidget):
 
     def _mark_dirty(self) -> None:
         self._dirty = True
+        self._saved.hide()
         self._update_buttons()
 
     def is_dirty(self) -> bool:
@@ -215,8 +239,14 @@ class DevicesPage(QWidget):
         except nas_guard.NasWriteRefused as exc:
             self.error.emit(i18n.KO.COLLECT_OUTPUT_ON_NAS_TITLE, str(exc))
             return False
+        except OSError as exc:                      # 11/25 QT-01: Excel 이 잡고 있으면 — 예전엔 처리 안 된 예외로 창이 통째로 꺼졌다(편집 내용도)
+            log.warning("devices.csv save failed: %s: %s", type(exc).__name__, exc)
+            self.error.emit(i18n.KO.DEV_SAVE_FAIL_TITLE, i18n.KO.DEV_SAVE_LOCKED)
+            return False
         self._dirty = False
         self._update_buttons()
+        self._saved.show()
+        self._saved_timer.start(SAVED_NOTE_MS)
         self.message.emit(i18n.KO.DEV_SAVED_TOAST)
         self.saved.emit()
         return True
@@ -271,11 +301,21 @@ class DevicesPage(QWidget):
             devices_mod.write_devices_csv(fn, rows)
         except nas_guard.NasWriteRefused as exc:
             self.error.emit(i18n.KO.COLLECT_OUTPUT_ON_NAS_TITLE, str(exc))
+        except OSError as exc:
+            log.warning("devices.csv export failed: %s: %s", type(exc).__name__, exc)
+            self.error.emit(i18n.KO.DEV_SAVE_FAIL_TITLE, i18n.KO.DEV_SAVE_LOCKED)
 
     def check_connections(self) -> None:
         rows = self.rows()
+        self._table.blockSignals(True)             # 11/25 QT-02: 상태 칸 글자는 편집이 아니다 — '저장하지 않은 변경' 으로 잡히지 않게
         for r in range(self._table.rowCount()):
-            self._table.item(r, 5).setText(i18n.KO.DEV_STATUS_CHECKING)
+            it = self._table.item(r, 5)
+            it.setText(i18n.KO.DEV_STATUS_CHECKING)
+            it.setData(Qt.ItemDataRole.ForegroundRole, None)
+            it.setData(Qt.ItemDataRole.BackgroundRole, None)
+        self._table.blockSignals(False)
+        self._summary.hide()
+        self._b_check.setEnabled(False)            # 확인 중엔 한 번만
         self._check_token += 1
         p = prefs.load()
         # 수집 범위(scope)까지 들어간 cfg 를 그대로 쓴다 — 범위 밖 행은 연결 확인도 하지 않는다
@@ -287,14 +327,31 @@ class DevicesPage(QWidget):
     def _on_checked(self, token: int, rows) -> None:
         if token != self._check_token:
             return
+        self._b_check.setEnabled(True)
+        col = theme.colors()
+        counts = {k: 0 for k, _ in _SUMMARY_ORDER}
+        self._table.blockSignals(True)
         for r, row in enumerate(rows):
             if r >= self._table.rowCount():
                 break
             st = str(row.get("status", ""))
             if st.startswith("auto:"):
-                text = i18n.KO.DEV_STATUS_AUTO_FMT.format(n=st.split(":")[1])
+                text, tone = i18n.KO.DEV_STATUS_AUTO_FMT.format(n=st.split(":")[1]), "auto"
+            elif st.startswith("error:"):
+                text, tone = i18n.KO.DEV_STATUS_ERROR, "error"
             else:
-                text = _STATUS_TEXT.get(st, st)
-            self._table.blockSignals(True)
-            self._table.item(r, 5).setText(text)
-            self._table.blockSignals(False)
+                text, tone = _STATUS_TEXT.get(st, st), st
+            it = self._table.item(r, 5)
+            it.setText(text)
+            if st.startswith("error:"):
+                it.setToolTip(st[6:])
+            fg, bg = _STATUS_TONE.get(tone, (None, None))
+            it.setData(Qt.ItemDataRole.ForegroundRole, QBrush(QColor(col[fg])) if fg else None)
+            it.setData(Qt.ItemDataRole.BackgroundRole, QBrush(QColor(col[bg])) if bg else None)
+            if tone in counts:
+                counts[tone] += 1
+        self._table.blockSignals(False)
+        parts = [i18n.KO.DEV_CHECK_ITEM_FMT.format(label=label, n=counts[k]) for k, label in _SUMMARY_ORDER
+                 if counts[k] or k in ("ok", "unreachable")]
+        self._summary.setText(i18n.KO.DEV_CHECK_SUMMARY_FMT.format(items=" · ".join(parts)))
+        self._summary.show()

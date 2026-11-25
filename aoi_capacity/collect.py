@@ -114,6 +114,7 @@ DEFAULT_CONFIG: Dict[str, object] = {
     "recipe_groups_file": "",                     # D67: 결과 HTML 에 담을 레시피 묶음(화면에서 내보낸 JSON). 비우면 데이터 폴더·다운로드에서 가장 최근 것
 }
 MAX_READ_RETRY = 3   # 읽기에 실패한 Report 를 몇 번까지 다시 시도하고 커서를 붙잡아 둘지
+RETRY_FAILED_ONCE = True   # 11/25: 읽기에 실패한 Report 는 수집 끝에 한 번 더 읽는다(일시 오류가 다음 수집까지 남지 않게)
 INI_KEYS = {
     "Recipe": ["Name"],
     "AutoCycleInfo": ["Machine", "Operator", "WaferStartTime", "WaferEndTime", "BatchStartTime", "OCRID",
@@ -3103,7 +3104,7 @@ def _collect(cfg: dict, full: bool, backfill: bool, *, recover: bool, refresh_wi
     want_params = bool(cfg.get("collect_params", True)) and not rdl_patch
     have_params = frozenset(pstore.get("snaps", {}))
 
-    def read_one(job):
+    def read_raw(job):
         d, _dm, e, _key, scan_root, backups = job
         _check(should_stop)
         t_job = clock()
@@ -3120,6 +3121,11 @@ def _collect(cfg: dict, full: bool, backfill: bool, *, recover: bool, refresh_wi
             raise
         except Exception as ex:  # noqa: BLE001
             out = (job, mtime, None, f"{type(ex).__name__}: {ex}", clock() - t_job, sha, None)
+        return out
+
+    def read_one(job):
+        d, e = job[0], job[2]
+        out = read_raw(job)
         progress(done.bump(), total, i18n.KO.COLLECT_PHASE_PARSE_FMT.format(device=d["name"], name=e.name))
         with left_lock:                       # 여러 스레드가 같이 줄이므로 잠그고 센다
             dk = str(d["key"])
@@ -3209,7 +3215,38 @@ def _collect(cfg: dict, full: bool, backfill: bool, *, recover: bool, refresh_wi
 
     ctx["flush"] = flush_read
     ctx["advance"] = advance_finished
-    _run(cfg, jobs, read_one, should_stop, group=lambda j: nas_group(j[0]["path"]), on_result=merge, tick=checkpoint)
+    # 11/25(사용자: "수집 마무리하고나서 한번만 더 재시도"): 읽다 실패한 Report 는 바로 합치지 않고 모아 두었다가 첫 패스가 끝난 뒤
+    # 한 번 더 읽는다 — 잠깐 끊긴 SMB 같은 일시 오류가 다음 수집까지 '일부 실패' 로 남지 않게. 두 번째도 실패하면 그 결과(오류)를 합친다.
+    # 모아 둔 동안 그 장비는 합칠 것이 남아 있어(pending_m) 커서가 이 파일을 지나가지 않는다 — 도중에 멈추면 다음 수집에서 다시 읽는다.
+    held: List[Tuple[int, tuple]] = []
+
+    def merge_first(idx, res) -> None:
+        if res[3] is not None and RETRY_FAILED_ONCE:
+            held.append((idx, res))
+            return
+        merge(idx, res)
+
+    _run(cfg, jobs, read_one, should_stop, group=lambda j: nas_group(j[0]["path"]), on_result=merge_first, tick=checkpoint)
+    if held:
+        held.sort(key=lambda x: x[0])
+        _say(log, f"읽지 못한 Report {len(held)}개를 한 번 더 읽습니다")
+        again = _Counter()
+
+        def read_again(item):
+            job = item[1][0]
+            out = read_raw(job)
+            progress(again.bump(), len(held), i18n.KO.COLLECT_PHASE_RETRY_FMT.format(device=job[0]["name"], name=job[2].name))
+            return out
+
+        fixed = [0]
+
+        def merge_again(i, res) -> None:
+            fixed[0] += res[3] is None
+            merge(held[i][0], res)
+
+        _run(cfg, held, read_again, should_stop, group=lambda h: nas_group(h[1][0][0]["path"]), on_result=merge_again, tick=checkpoint)
+        stats["retry_reports"], stats["retry_fixed"] = len(held), fixed[0]
+        _say(log, f"한 번 더 읽기: {len(held)}개 중 {fixed[0]}개를 읽었습니다")
     # 끝나는 대로 합쳤으므로 dict 순서를 입력 순서로 되돌린다 — 읽는 스레드 수와 상관없이 결과가 같다(예전 규칙)
     for _i, k in sorted(ins_reports):
         reports[k] = reports.pop(k)
@@ -3258,7 +3295,7 @@ def _collect(cfg: dict, full: bool, backfill: bool, *, recover: bool, refresh_wi
                                  "recovered": 0, "refreshed": 0, "retried": 0, "kept": 0, "listing": "skipped"})
     t3 = clock()
 
-    progress(total, total, i18n.KO.COLLECT_PHASE_RETENTION)
+    progress(0, 0, i18n.KO.COLLECT_PHASE_RETENTION)             # 총량 없는 단계 — 100% 로 멈춘 듯 보이지 않게(11/25 PC-12)
     # 0 = 기한 없이 보관(10/5) — 아무것도 지우지 않는다
     cutoff = (dt.datetime.now() - dt.timedelta(days=float(cfg["retention_days"]))) if cfg["retention_days"] else dt.datetime.min
 
@@ -3297,6 +3334,7 @@ def _collect(cfg: dict, full: bool, backfill: bool, *, recover: bool, refresh_wi
         dirty.add(DIRTY_RESUME)
     stats["cache_dirty"] = dict(sorted(dirty.reasons.items()))
     if dirty:
+        progress(0, 0, i18n.KO.COLLECT_PHASE_SAVE)              # 현장 30초 넘게 걸리는 단계 — 단계 글자로 알린다(11/25 PC-12)
         saved = _save_cache(cfg, cache, drop_resume=rebuild)
         stats["cache_saved"] = True
         stats["cache_write_ms"], stats["cache_check_ms"], stats["cache_bytes"] = saved.get("write_ms", 0), saved.get("check_ms", 0), saved.get("bytes", 0)
@@ -3309,6 +3347,7 @@ def _collect(cfg: dict, full: bool, backfill: bool, *, recover: bool, refresh_wi
         _say(log, "캐시에 바뀐 것이 없어 저장을 생략합니다")
     if (cache.get("params") or {}).get("snaps"):
         stats["params_store"] = cache["params"]                 # D89: write_html(timing=stats) 이 파라미터 탭 묶음을 만든다(메타 timing 에는 넣지 않는다)
+    progress(0, 0, i18n.KO.COLLECT_PHASE_ROWS)
     rows, hidden = _rows_from_cache(cache, index, cfg, stats)
     dev_meta.extend(_missed_meta(cfg, devs, seen_log))
     _mark_device_status(dev_meta, rows)

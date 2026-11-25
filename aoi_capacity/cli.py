@@ -92,9 +92,9 @@ def _progress_printer():
             pct = int(done * 100 / total)
             if pct != last["pct"] and pct % 10 == 0:
                 last["pct"] = pct
-                _print(f"{pct:3d}%  {phase}")
+                _print(f"{pct:3d}%  {phase}".replace("\n", " · "))
         elif phase:
-            _print(phase)
+            _print(phase.replace("\n", " · "))
     return cb
 
 

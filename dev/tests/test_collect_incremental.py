@@ -24,7 +24,12 @@ def test_first_run_reads_everything_and_second_run_reads_nothing(tmp_path, fake_
     names = sorted(d["name"] for d in dev_meta if not d.get("missed"))   # 접근 못 한 장비는 meta 에 `missed` 로 따로 남는다
     assert names == ["8호기", "9호기", "AOI-10"]          # 꺼둔 행·접근 불가 행은 제외, * 는 AOI-10 만 새로 추가(AOI-9 는 명시 행이 이김)
     assert len(rows) == 9 and not errors
-    assert prog[-1][0] == prog[-1][1] > 0                 # 마지막 보고는 (total, total)
+    # Report 읽기 단계는 (total, total) 로 끝나고, 그 뒤 정리 · 캐시 저장 · 결과 정리는 총량 없는 단계(busy)로 알린다 —
+    # 예전엔 100% 에 '오래된 이력 정리' 로 멈춘 채 캐시 저장(현장 30초+)을 해 멈춘 듯 보였다(11/25 PC-12)
+    reads = [p for p in prog if p[1] > 0]
+    assert reads[-1][0] == reads[-1][1] > 0
+    assert prog[-1] == (0, 0, collect.i18n.KO.COLLECT_PHASE_ROWS)
+    assert (0, 0, collect.i18n.KO.COLLECT_PHASE_SAVE) in prog
     cache = collect.read_cache_file(str(tmp_path / "out" / "aoi_cache.json"))
     # 커서 키는 표시명도 경로도 아닌 영속 안정 키다(C03) — 이름·드라이브 문자를 바꿔도 이력이 갈라지지 않게.
     # 키는 처음 본 표시명에서 만들고 캐시의 `devices` 대응표가 경로 id 로 잇는다.
@@ -317,6 +322,50 @@ def test_device_whose_reports_all_fail_is_partial_not_done(tmp_path, fake_nas, m
     assert by["AOI-10"]["read_errors"] == 1 and by["AOI-10"]["status"] == collect.DEV_PARTIAL
     assert by["9호기"]["read_errors"] == 0 and by["9호기"]["status"] == collect.DEV_OK and by["9호기"]["rows"] == 3
     assert len(errors) == 1 and errors[0]["device"] == "AOI-10"
+
+
+def test_a_report_that_fails_once_is_read_again_at_the_end(tmp_path, fake_nas, monkeypatch):
+    """11/25(사용자: "수집 마무리하고나서 한번만 더 재시도"): 첫 패스에서 실패한 Report 는 끝에 한 번 더 읽는다 —
+    일시 오류면 오류 없이 저장되고, 두 번 다 실패해야 오류 · 재시도 횟수(tries 1)가 남는다."""
+    nas, csv_path = fake_nas
+    cfg = make_cfg(tmp_path, csv_path)
+    orig = collect.parse_report
+    calls = {}
+
+    rep_dir = nas / "X" / "AOI-10" / "Report"
+    for rep in rep_dir.glob("*.htm"):
+        rep.rename(rep_dir / ("FLAKY_" + rep.name))
+
+    def flaky(name, text):
+        if name.startswith("FLAKY_"):
+            calls[name] = calls.get(name, 0) + 1
+            if calls[name] == 1:
+                raise OSError(64, "지정된 네트워크 이름을 더 이상 사용할 수 없습니다")
+        return orig(name, text)
+
+    monkeypatch.setattr(collect, "parse_report", flaky)
+    stats: dict = {}
+    rows, dev_meta, errors, prog = _run(cfg, stats=stats)
+    assert not errors and calls and set(calls.values()) == {2}
+    assert stats["retry_reports"] == len(calls) and stats["retry_fixed"] == len(calls)
+    assert {d["name"]: d for d in dev_meta}["AOI-10"]["read_errors"] == 0
+    assert any(p[2].startswith(collect.i18n.KO.COLLECT_PHASE_RETRY_FMT.split("{")[0]) for p in prog)
+    cache = json.loads((tmp_path / "out" / "aoi_cache.json").read_text(encoding="utf-8"))
+    assert not cache["failed"]
+
+    def broken(name, text):
+        if name.startswith("FLAKY_"):
+            calls[name] = calls.get(name, 0) + 1
+            raise OSError(64, "끊김")
+        return orig(name, text)
+
+    calls.clear()
+    monkeypatch.setattr(collect, "parse_report", broken)
+    cfg2 = make_cfg(tmp_path / "b", csv_path)
+    rows, dev_meta, errors, _ = _run(cfg2)
+    assert errors and set(calls.values()) == {2}                       # 한 번 더 읽고도 실패하면 오류로 남는다(재시도는 한 번뿐)
+    cache = json.loads((tmp_path / "b" / "out" / "aoi_cache.json").read_text(encoding="utf-8"))
+    assert cache["failed"] and all(v["tries"] == 1 for v in cache["failed"].values())
 
 
 # ── INI 한 번만 읽기 · 사전 존재 확인 제거 · 단계별 계측 ─────────────────────────

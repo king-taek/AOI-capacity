@@ -5,16 +5,17 @@
 
   평소 수집(처음이면 '처음 수집')  ← 거의 늘 이것
   ─ 결과가 이상하거나 비어 있을 때만 ─
-  빠진 날 채우기(backfill) · 최근 며칠 다시 읽기(refresh) · 시간 미확인 복구(recover) · 전체 다시 만들기(rebuild)
-  · 기간 다시 읽기(range, 10/5 — 전체 다시 만들기 밑, 날짜 두 칸)
+  빠진 날 채우기(backfill) · 최근 며칠 다시 읽기(refresh) · 시간 미확인 복구(recover) · 기간 다시 읽기(range, 10/5 — 날짜 두 칸)
+  ('전체 다시 만들기' 카드는 11/25 사용자 요청으로 없앴다 — 명령줄 `--rebuild-all` 은 그대로)
 
 카드는 한 번에 하나만 고르고, 수집이 끝나면 '평소 수집' 으로 돌아간다(문제 해결용 수집이 다음에도 켜져 있지 않게).
 결과 화면은 이 프로그램 안에 없다 — 수집이 만든 HTML 을 사용자가 더블클릭해서 본다('결과 화면 열기' 는 편의 버튼)."""
 from __future__ import annotations
 
+import logging
 import os
 import time
-from typing import Dict, Optional
+from typing import Dict, List, Optional
 
 from PyQt6.QtCore import QDate, QStandardPaths, QThread, Qt, QTimer, QUrl, pyqtSignal
 from PyQt6.QtGui import QDesktopServices
@@ -24,18 +25,20 @@ from PyQt6.QtWidgets import (QFileDialog, QFrame, QGridLayout, QHBoxLayout, QLab
 from ... import collect, i18n, nas_guard, publish
 from ...utils import paths, prefs, results
 from ...workers import failure_logs
-from ..widgets.buttons import make_button
+from ..widgets.buttons import make_button, set_role
 from ..widgets.collapsible import Collapsible
 from ..widgets.inputs import NoWheelDateEdit as QDateEdit, NoWheelSpinBox as QSpinBox
 from .settings_page import SettingsPage
 
 MAX_LOG_LINES = 1000
 K = i18n.KO
+log = logging.getLogger("aoi.ui")
 
 #: 상황 카드의 열쇠 → 워커 인자(full, backfill, recover). refresh 는 prefs.refresh_window_days 로 간다(D60).
-MODES = ("normal", "backfill", "refresh", "recover", "rebuild", "range")
+#: 11/25: '전체 다시 만들기'(rebuild) 카드는 없앴다(사용자: "안 할 것 같아") — CLI `--rebuild-all` 만 남는다.
+MODES = ("normal", "backfill", "refresh", "recover", "range")
 _ARGS = {"normal": (False, False, False), "backfill": (False, True, False), "refresh": (False, False, False),
-         "recover": (False, False, True), "rebuild": (True, False, False), "range": (False, False, False)}   # range 는 refresh_range() 로
+         "recover": (False, False, True), "range": (False, False, False)}   # range 는 refresh_range() 로
 # 10/24: 'RDL 영역 INI 패치' 카드는 '옛 기간 빈칸 채우기' 로 합쳤다(같은 일 — Wafer 폴더 안만 읽는다). CLI 의 rdl_patch 는 그대로.
 
 
@@ -61,6 +64,12 @@ def _card(parent: QWidget, title: str = "") -> tuple:
     if title:
         lay.addWidget(_label(title, "cardTitle", f))
     return f, lay
+
+
+def _why_text(why: str) -> str:
+    """배포 실패 이유 종류(publish.error_kind) → 짧은 문장. 원문 예외는 로그에만(11/25 PP-04)."""
+    return {publish.WHY_UNREACHABLE: K.PUBLISH_WHY_UNREACHABLE, publish.WHY_DENIED: K.PUBLISH_WHY_DENIED,
+            publish.WHY_LOCKED: K.PUBLISH_WHY_LOCKED, publish.WHY_CONFIG: K.PUBLISH_NO_DIR}.get(why, K.PUBLISH_WHY_OTHER)
 
 
 def _days_text(days) -> str:
@@ -120,21 +129,25 @@ class _HtmlOnlyWorker(QThread):
             self.done.emit(None, f"{type(ex).__name__}: {ex}")
 
 
-class _LotPublishWorker(QThread):
-    """LOT 추적 배포판을 폴더에 올린다(10/27) — 캐시만 읽고 장비 NAS 는 건드리지 않는다. 끝나면 (결과 dict | None, 오류 문구)."""
+class _PublishWorker(QThread):
+    """배포판을 지금 올린다(11/25 — 설정의 배포 폴더 줄 '지금 올리기' · 수집 알림의 '다시 올리기'). 캐시만 읽고 장비 NAS 는 건드리지 않는다.
+    jobs = [(종류 "lot" | "full", 폴더)] 를 차례로 올리고 하나 끝날 때마다 one(종류, 결과 dict | None, 이유 종류) — 예외 원문은 로그에만."""
     log = pyqtSignal(str)
-    done = pyqtSignal(object, str)
+    one = pyqtSignal(str, object, str)
 
-    def __init__(self, cfg: dict, out_dir: str, parent=None):
+    def __init__(self, cfg: dict, jobs: list, parent=None):
         super().__init__(parent)
-        self._args = (cfg, out_dir)
+        self._cfg, self._jobs = cfg, list(jobs)
 
     def run(self) -> None:  # noqa: D401
-        cfg, out_dir = self._args
-        try:
-            self.done.emit(publish.publish_lot(cfg, out_dir, log=self.log.emit), "")
-        except Exception as ex:  # noqa: BLE001
-            self.done.emit(None, f"{type(ex).__name__}: {ex}")
+        for kind, out_dir in self._jobs:
+            fn = publish.publish_full if kind == "full" else publish.publish_lot
+            try:
+                self.one.emit(kind, fn(self._cfg, out_dir, log=self.log.emit), "")
+            except Exception as ex:  # noqa: BLE001
+                self.log.emit(f"publish {kind} failed: {type(ex).__name__}: {ex}")
+                log.warning("publish %s failed: %s: %s", kind, type(ex).__name__, ex)
+                self.one.emit(kind, None, publish.error_kind(ex))
 
 
 class _GapFillWorker(QThread):
@@ -164,7 +177,7 @@ class _GapFillWorker(QThread):
 
 
 def eta_text(sec, rough: bool = False) -> str:
-    """초 → '약 12분' · '1분 안쪽' · '약 1시간 20분'. 실측이 없으면 앞에 '대략'."""
+    """초 → '약 12분' · '1분 안쪽' · '약 1시간 20분'. 11/25: 실측이 없어도 글자는 같다('대략 약' 겹침 없앰) — 대략인 것은 배지 툴팁으로."""
     sec = max(0, int(sec or 0))
     m = (sec + 30) // 60
     t = K.ETA_UNDER_MIN if sec < 60 else K.ETA_MIN_FMT.format(m=m) if m < 60 else K.ETA_HOUR_FMT.format(h=m // 60, m=m % 60)
@@ -183,7 +196,7 @@ class ModeCard(QFrame):
         self.setProperty("selected", "false")
         self.setProperty("enabled", "true")
         self.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
+        self.setFocusPolicy(Qt.FocusPolicy.TabFocus)     # 11/25: 포커스 테두리는 키보드로 왔을 때만(누르면 '고름' 테두리만)
         self.setAccessibleName(title)
         lay = QVBoxLayout(self)
         lay.setContentsMargins(14, 11, 14, 11)
@@ -231,14 +244,16 @@ class ModeCard(QFrame):
         return self._title.text()
 
     def set_badges(self, items) -> None:
-        """[(글자, 종류)] — 종류: rec(추천 · 초록) · warn(주의 · 노랑) · slow(회색) · "" (파랑)."""
+        """[(글자, 종류[, 툴팁])] — 종류: rec(추천 · 초록) · warn(주의 · 노랑) · slow(회색) · "" (파랑)."""
         while self._badges.count():
             w = self._badges.takeAt(0).widget()
             if w is not None:
                 w.deleteLater()
-        for text, kind in items:
+        for text, kind, *tip in items:
             b = _label(text, "badge", self)
             b.setProperty("kind", kind)
+            if tip and tip[0]:
+                b.setToolTip(tip[0])
             b.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
             self._badges.addWidget(b, 0, Qt.AlignmentFlag.AlignVCenter)
 
@@ -333,15 +348,17 @@ class _GapRow:
         self.bar.setRange(0, 1000)
         self.bar.setTextVisible(False)
         self.bar.setFixedSize(120, 6)
+        self.pct = _label("", "gapPct", parent)            # 11/25 QT-13: 막대가 '채워진 비율' 임을 숫자로 — 옆 글자는 '비어 있음' 이라 반대로 읽혔다
         self.count = _label("", "gapCount", parent)
         self.note = _label("", "muted", parent)
-        for c, w in enumerate((self.name, self.bar, self.count, self.note)):
+        for c, w in enumerate((self.name, self.bar, self.pct, self.count, self.note)):
             grid.addWidget(w, row, c, Qt.AlignmentFlag.AlignVCenter)
-        self._ws = (self.name, self.bar, self.count, self.note)
+        self._ws = (self.name, self.bar, self.pct, self.count, self.note)
 
     def set(self, missing: int, have: int, text: str, note: str) -> None:
         total = missing + have
         self.bar.setValue(int(1000 * have / total) if total else 1000)
+        self.pct.setText(K.GAPS_FILLED_PCT_FMT.format(p=int(100 * have / total) if total else 100))
         self.count.setText(text)
         self.count.setProperty("kind", "warn" if missing else "ok")
         _repolish(self.count)
@@ -360,6 +377,7 @@ class CollectPage(QWidget):
     stop_requested = pyqtSignal()
     devices_requested = pyqtSignal()                   # 결과 알림의 '장비 목록' — 접근 못 한 장비를 고치러 간다
     error = pyqtSignal(str, str)
+    publish_done = pyqtSignal(str, object, str)        # 지금 올리기 · 다시 올리기 한 건이 끝남(종류, 결과 | None, 이유) — 설정 줄이 마지막 결과를 적는다
 
     def __init__(self, parent: Optional[QWidget] = None):
         super().__init__(parent)
@@ -368,6 +386,9 @@ class CollectPage(QWidget):
         self._plan_worker: Optional[_PlanWorker] = None
         self._mode = "normal"
         self._first_run = False
+        self._done_text = ""                                  # 11/25 QT-11: 방금 끝난 수집 — 실행 줄을 '✓ 수집 완료 [결과 열기] [다시 수집]' 으로
+        self._pub_worker: Optional[_PublishWorker] = None
+        self._pub_queue: List[tuple] = []
         outer = QVBoxLayout(self)
         outer.setContentsMargins(0, 0, 0, 0)
         scroll = self._scroll = QScrollArea(self)
@@ -406,10 +427,8 @@ class CollectPage(QWidget):
         self._cards["refresh"] = ModeCard("refresh", K.MODE_REFRESH_TITLE, K.MODE_REFRESH_WHEN, K.MODE_REFRESH_WHAT, pick)
         self._cards["recover"] = ModeCard("recover", K.MODE_RECOVER_TITLE, K.MODE_RECOVER_WHEN, K.MODE_RECOVER_WHAT, pick)
         self._cards["range"] = ModeCard("range", K.MODE_RANGE_TITLE, K.MODE_RANGE_WHEN, K.MODE_RANGE_WHAT, pick)
-        self._cards["rebuild"] = ModeCard("rebuild", K.MODE_REBUILD_TITLE, K.MODE_REBUILD_WHEN, "", pick)
         for i, key in enumerate(("backfill", "refresh", "recover", "range")):
             grid.addWidget(self._cards[key], i // 2, i % 2)
-        grid.addWidget(self._cards["rebuild"], 2, 0, 1, 2)
         grid.setColumnStretch(0, 1)
         grid.setColumnStretch(1, 1)
         # 카드 안 입력 — 빠진 날의 시작일(10/22) · 최근 며칠 · 다시 읽을 기간(10/5)
@@ -422,7 +441,7 @@ class CollectPage(QWidget):
         self._refresh_days.setRange(1, 90)
         self._refresh_days.setValue(max(1, int(p.refresh_pick_days or 3)))
         self._refresh_days.setSuffix(K.MODE_REFRESH_DAYS_SUFFIX)
-        self._refresh_days.setFixedWidth(84)
+        self._refresh_days.setFixedWidth(72)
         self._cards["refresh"].extra.addWidget(_label(K.MODE_REFRESH_DAYS_PREFIX, "muted", self._cards["refresh"]))
         self._cards["refresh"].extra.addWidget(self._refresh_days)
         self._cards["refresh"].extra.addStretch(1)
@@ -440,7 +459,6 @@ class CollectPage(QWidget):
         self._cards["normal"].set_badges([(K.MODE_BADGE_REC, "rec")])
         for k in ("backfill", "refresh", "recover", "range"):
             self._cards[k].set_badges([(K.MODE_BADGE_MEDIUM, "slow")])
-        self._cards["rebuild"].set_badges([(K.MODE_BADGE_SLOW, "warn")])
 
         rule = QFrame(pick)
         rule.setProperty("role", "rule")
@@ -456,10 +474,14 @@ class CollectPage(QWidget):
         self._b_stop.hide()
         self._b_run = make_button(K.BTN_COLLECT_NOW, "primary", pick)
         self._b_run.setProperty("size", "lg")
+        self._b_done_open = make_button(K.BTN_OPEN_RESULT, "primary", pick)     # 11/25 QT-11: 끝나면 다음에 누를 단추가 바로 옆에
+        self._b_done_open.setProperty("size", "lg")
+        self._b_done_open.hide()
         act = _row(self._plan, stretch=False, spacing=10)
         act.setStretch(0, 1)
         act.addWidget(self._status)
         act.addWidget(self._b_stop)
+        act.addWidget(self._b_done_open)
         act.addWidget(self._b_run)
         pl.addLayout(act)
         # 수집 결과 알림(10/24) — 예전엔 끝날 때마다 '확인' 을 눌러야 닫히는 팝업이었다. 이제 카드 안에 남고 다음 수집 때 사라진다.
@@ -473,14 +495,22 @@ class CollectPage(QWidget):
         self._oc_x.clicked.connect(self._outcome.hide)
         ol.addLayout(_row(self._oc_title, self._oc_x, stretch=False))
         ol.itemAt(0).layout().setStretch(0, 1)
-        self._oc_body = _label("", "outcomeBody", self._outcome, wrap=True)
-        self._oc_body.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
-        ol.addWidget(self._oc_body)
+        # 11/25 QT-16: 문제마다 한 항목(굵은 머리 + 흐린 설명 + 그 문제의 단추) — 예전엔 여러 문장이 줄바꿈으로만 이어졌다
+        self._oc_items = QVBoxLayout()
+        self._oc_items.setSpacing(8)
+        ol.addLayout(self._oc_items)
+        self._oc_body = _label("", "outcomeBody", self._outcome, wrap=True)   # 항목 글자를 모은 것(읽기 · 테스트용, 숨김)
+        self._oc_body.hide()
         self._oc_dev = make_button(K.OUTCOME_GO_DEVICES, "default", self._outcome)
         self._oc_dev.clicked.connect(self.devices_requested.emit)
         self._oc_log = make_button(K.OUTCOME_SHOW_LOG, "ghost", self._outcome)
         self._oc_log.clicked.connect(self.show_log)
-        ol.addLayout(_row(self._oc_dev, self._oc_log))
+        self._oc_pub = make_button(K.OUTCOME_REPUBLISH, "default", self._outcome)
+        self._oc_pub.clicked.connect(self._on_republish)
+        self._oc_pub_kinds: List[str] = []
+        self._oc_pub_status = _label("", "muted", self._outcome)
+        for b in (self._oc_dev, self._oc_log, self._oc_pub, self._oc_pub_status):
+            b.hide()
         self._outcome.hide()
         pl.addWidget(self._outcome)
         lay.addWidget(pick)
@@ -498,7 +528,7 @@ class CollectPage(QWidget):
         gg = QGridLayout()
         gg.setHorizontalSpacing(14)
         gg.setVerticalSpacing(6)
-        gg.setColumnStretch(3, 1)
+        gg.setColumnStretch(4, 1)
         self._gap_rows = {"slot": _GapRow(self._gaps, gg, 0, K.GAPS_ROW_SLOT, K.GAPS_ROW_SLOT_TIP),
                           "sec": _GapRow(self._gaps, gg, 1, K.GAPS_ROW_SEC, K.GAPS_ROW_SEC_TIP),
                           "params": _GapRow(self._gaps, gg, 2, K.GAPS_ROW_PARAMS, K.GAPS_ROW_PARAMS_TIP),
@@ -510,7 +540,7 @@ class CollectPage(QWidget):
         self._gap_bar.setFixedHeight(6)
         self._gap_bar.hide()
         gl.addWidget(self._gap_bar)
-        self._b_gaps = make_button(K.GAPS_RUN, "primary", self._gaps)
+        self._b_gaps = make_button(K.GAPS_RUN, "default", self._gaps)         # 11/25 QT-13: 주 버튼은 '평소 수집 시작' 하나
         self._b_gaps.setEnabled(False)
         self._gap_status = _label("", "muted", self._gaps, wrap=True)
         gl.addLayout(_row(self._b_gaps, self._gap_status, stretch=False))
@@ -535,6 +565,19 @@ class CollectPage(QWidget):
         self._span: Optional[tuple] = None
         hl.addWidget(self._have)
         hl.addLayout(_row(self._d_from, _label("~", "muted", hbox), self._d_to, self._b_html, self._b_all))
+        # 11/25 QT-17: 만드는 동안 흐르는 막대 + 한 줄, 끝나면 같은 구역에 짧게(경로 전체는 툴팁) + 폴더 열기
+        self._html_bar = QProgressBar(hbox)
+        self._html_bar.setRange(0, 0)
+        self._html_bar.setTextVisible(False)
+        self._html_bar.setFixedHeight(6)
+        self._html_bar.hide()
+        self._html_status = _label("", "muted", hbox)
+        self._html_status.hide()
+        self._b_html_folder = make_button(K.BTN_OPEN_FOLDER, "ghost", hbox)
+        self._b_html_folder.hide()
+        self._html_path = ""
+        hl.addWidget(self._html_bar)
+        hl.addLayout(_row(self._html_status, self._b_html_folder))
         self._sec_html = Collapsible(K.COLLECT_SEC_HTML, hbox, body)
         lay.addWidget(self._sec_html)
         self._days_worker: Optional[_DaysWorker] = None
@@ -546,39 +589,18 @@ class CollectPage(QWidget):
         dl.setContentsMargins(0, 0, 0, 0)
         dl.setSpacing(8)
 
-        # LOT 추적 발행 시험(10/27) — 이 PC 에서만 만든다. 공유 폴더 쓰기는 없다(임시 카드 — 시험이 끝나면 지운다)
-        pcard, pl = _tool(dev, K.LOT_PUB_TITLE, K.LOT_PUB_SHORT, K.LOT_PUB_WHEN)
-        self._lp_out = QLineEdit(str(p.publish_dir or "") or str(paths.data_root() / collect.LOT_PUBLISH_DIR), pcard)
-        self._lp_out.setProperty("role", "mono")
-        r = _row(_label(K.LOT_PUB_OUT, "muted", pcard), self._lp_out, stretch=False)
-        r.setStretch(1, 1)
-        pl.addLayout(r)
-        self._b_lp_run = make_button(K.LOT_PUB_RUN, "primary", pcard)
-        self._b_lp_view = make_button(K.LOT_PUB_VIEW, "default", pcard)
-        self._b_lp_view.setEnabled(False)
-        self._b_lp_open = make_button(K.LOT_PUB_OPEN, "ghost", pcard)
-        self._b_lp_short = make_button(K.LOT_PUB_SHORTCUT, "default", pcard)
-        self._lp_status = _label("", "muted", pcard, wrap=True)
-        self._lp_status.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
-        self._lp_status.hide()
-        pl.addLayout(_row(self._b_lp_run, self._b_lp_view, self._b_lp_short, self._b_lp_open))
-        pl.addWidget(self._lp_status)
-        dl.addWidget(pcard)
-        self._lp_worker: Optional[_LotPublishWorker] = None
-        self._lp_path = ""
-
         # 실패 로그 수집(10/20)
         fcard, fl = _tool(dev, K.FAIL_LOGS_TITLE, K.FAIL_LOGS_SHORT, K.FAIL_LOGS_WHEN)
         self._fl_days = QSpinBox(fcard)
         self._fl_days.setRange(1, 90)
         self._fl_days.setValue(max(1, min(90, int(p.fail_log_days or 3))))
         self._fl_days.setSuffix(K.FAIL_LOGS_DAYS_SUFFIX)
-        self._fl_days.setFixedWidth(84)
+        self._fl_days.setFixedWidth(72)
         self._fl_out = QLineEdit(str(paths.data_root() / "fail_logs"), fcard)
         self._fl_out.setProperty("role", "mono")
         self._b_fl_browse = make_button(K.BTN_BROWSE, parent=fcard)
         self._fl_status = _label("", "muted", fcard, wrap=True)
-        self._b_fl_run = make_button(K.FAIL_LOGS_RUN, "primary", fcard)
+        self._b_fl_run = make_button(K.FAIL_LOGS_RUN, "default", fcard)
         self._b_fl_open = make_button(K.FAIL_LOGS_OPEN, "ghost", fcard)
         r = _row(_label(K.FAIL_LOGS_DAYS_PREFIX, "muted", fcard), self._fl_days, 12, _label(K.WAFER_LOGS_OUT, "muted", fcard), self._fl_out,
                  self._b_fl_browse, stretch=False)
@@ -629,6 +651,11 @@ class CollectPage(QWidget):
         self._b_folder.clicked.connect(lambda: QDesktopServices.openUrl(
             QUrl.fromLocalFile(str(paths.output_dir(prefs.load().output_dir)))))
         self._b_run.clicked.connect(self._on_run)
+        self._b_done_open.clicked.connect(self._open_result)
+        self._b_html_folder.clicked.connect(lambda: self._html_path and QDesktopServices.openUrl(
+            QUrl.fromLocalFile(os.path.dirname(self._html_path))))
+        self.settings_page.publish_requested.connect(self.publish_now)
+        self.settings_page.shortcut_requested.connect(self._on_shortcut)
         self._b_gaps.clicked.connect(self._on_gaps)
         self._b_html.clicked.connect(self._on_html_only)
         self._b_all.clicked.connect(self._on_html_all)
@@ -640,10 +667,6 @@ class CollectPage(QWidget):
         self._b_from.dateChanged.connect(lambda _d: self._mode == "backfill" and self.refresh_plan())
         self._out.editingFinished.connect(self._apply_out)
         self._b_fl_run.clicked.connect(self._on_fail_logs)
-        self._b_lp_run.clicked.connect(self._on_lot_publish)
-        self._b_lp_view.clicked.connect(lambda: self._lp_path and QDesktopServices.openUrl(QUrl.fromLocalFile(self._lp_path)))
-        self._b_lp_short.clicked.connect(self._on_lot_shortcut)
-        self._b_lp_open.clicked.connect(lambda: QDesktopServices.openUrl(QUrl.fromLocalFile(self._lp_out.text().strip())))
         self._b_fl_open.clicked.connect(lambda: QDesktopServices.openUrl(QUrl.fromLocalFile(self._fl_out.text().strip())))
         self._b_fl_browse.clicked.connect(self._browse_fl_out)
         self._fl_days.valueChanged.connect(lambda v: prefs.patch(fail_log_days=int(v)))
@@ -661,8 +684,12 @@ class CollectPage(QWidget):
         for k, c in self._cards.items():
             c.set_selected(k == key)
         self._apply_refresh_option()
-        self._b_run.setText(K.MODE_RUN_FMT.format(title=self._cards[key].title()))
+        self.clear_done()
+        self._b_run.setText(self._run_label())
         self.refresh_plan()
+
+    def _run_label(self) -> str:
+        return K.BTN_COLLECT_AGAIN if self._done_text else K.MODE_RUN_FMT.format(title=self._cards[self._mode].title())
 
     def _on_refresh_days(self, v: int) -> None:
         prefs.patch(refresh_pick_days=int(v))
@@ -714,13 +741,14 @@ class CollectPage(QWidget):
         if getattr(self, attr, None) is w:
             setattr(self, attr, None)
         w.deleteLater()
+        if attr != "_days_worker":
+            self._sync_buttons()
 
     def _on_days(self, got) -> None:
         if not got or not got[0]:
             self._have.setText(K.HTML_ONLY_NONE)
-            self._b_html.setEnabled(False)
-            self._b_all.setEnabled(False)
             self._span = None
+            self._sync_buttons()
             return
         first, last, n = got
         self._span = (first, last)
@@ -731,8 +759,7 @@ class CollectPage(QWidget):
         days = int(prefs.to_collect_cfg(prefs.load()).get("html_days") or 0)
         self._d_from.setDate(max(lo, hi.addDays(-(days - 1))) if days > 0 else lo)
         self._d_to.setDate(hi)
-        self._b_html.setEnabled(not self._running)
-        self._b_all.setEnabled(not self._running)
+        self._sync_buttons()
 
     def _on_html_all(self) -> None:
         if self._span:
@@ -746,33 +773,96 @@ class CollectPage(QWidget):
     def _make_html(self, a: str, b: str) -> None:
         if self._html_worker is not None:
             return
-        self._b_html.setEnabled(False)
-        self._b_all.setEnabled(False)
         w = _HtmlOnlyWorker(prefs.to_collect_cfg(prefs.load()), a, b, self)
         w.log.connect(self.append_log)
         w.done.connect(self._on_html_done)
         w.finished.connect(lambda w=w: self._worker_done("_html_worker", w))
         self._html_worker = w
+        self._sec_html.set_open(True)
+        self._html_bar.show()
+        self._html_status.setText(K.HTML_ONLY_RUNNING)
+        self._html_status.setToolTip("")
+        self._html_status.show()
+        self._b_html_folder.hide()
+        self._sync_buttons()
         w.start()
 
+    def make_default_html(self) -> None:
+        """수집 실패 안내의 '결과 파일만 다시 만들기' — 수집이 만들었을 기간(설정의 결과 HTML 기본 기간)으로 바로 만든다."""
+        self._sec_html.set_open(True)
+        QTimer.singleShot(0, lambda: self._scroll.ensureWidgetVisible(self._sec_html, 0, 40))
+        if self._span:
+            self._on_html_only()
+
     def _on_html_done(self, path, err: str) -> None:
-        self._b_html.setEnabled(not self._running)
-        self._b_all.setEnabled(not self._running and bool(self._span))
+        self._html_worker = None if self._html_worker is not None and not self._html_worker.isRunning() else self._html_worker
+        self._html_bar.hide()
         if path:
+            self._html_path = str(path)
             self.append_log(K.HTML_ONLY_DONE_FMT.format(path=path))
-            self._status.setText(K.HTML_ONLY_DONE_FMT.format(path=path))
+            self._html_status.setText(K.HTML_ONLY_DONE_SHORT_FMT.format(name=os.path.basename(str(path))))
+            self._html_status.setToolTip(str(path))
+            self._b_html_folder.show()
             QDesktopServices.openUrl(QUrl.fromLocalFile(str(path)))
         else:
+            self._html_status.setText(K.HTML_ONLY_FAIL_FMT.format(error=err))
             self.append_log(K.HTML_ONLY_FAIL_FMT.format(error=err))
             self.error.emit(K.HTML_ONLY_TITLE, K.HTML_ONLY_FAIL_FMT.format(error=err))
+        QTimer.singleShot(0, self._sync_buttons)
 
     # ── 옛 기간 빈칸 채우기(10/24) ──
     def _nas_busy(self) -> bool:
         return self._running or self._fl_worker is not None or self._gap_worker is not None
 
+    def _busy_reason(self) -> str:
+        """수집을 지금 시작할 수 없는 이유(없으면 "") — 실행 줄에 적는다(11/25 QT-12: 이유 없이 꺼지던 '평소 수집 시작')."""
+        if self._running:
+            return ""
+        if self._gap_worker is not None:
+            return K.COLLECT_BUSY_GAPS
+        if self._pub_worker is not None:
+            return K.COLLECT_BUSY_PUBLISH
+        if self._fl_worker is not None:
+            return K.COLLECT_BUSY_FAILLOGS
+        return ""
+
+    def _sync_buttons(self) -> None:
+        """버튼 켜짐/꺼짐을 한 곳에서 정한다(11/25 QT-14 — 완료 콜백마다 따로 계산하다 서로 덮었다: 배포 중 실패 로그가 끝나면
+        '평소 수집' 이 다시 켜졌고, 가진 데이터가 없는데 중지 뒤 '이 기간으로 만들기' 가 켜졌다). 모든 완료 콜백은 이것만 부른다."""
+        run, gap, pub, fl, html = (self._running, self._gap_worker is not None, self._pub_worker is not None,
+                                   self._fl_worker is not None, self._html_worker is not None)
+        busy = self._busy_reason()
+        self._b_run.setEnabled(not run and not busy)
+        self._b_run.setText(self._run_label())
+        if gap:
+            self._b_gaps.setEnabled(not getattr(self, "_gap_stopping", False))
+        else:
+            self._b_gaps.setEnabled(not run and not fl and not pub and bool(self._gap_n))
+        self._b_fl_run.setEnabled(not run and not fl and not gap)
+        for w in (self._fl_days, self._fl_out, self._b_fl_browse):
+            w.setEnabled(not fl)
+        have = bool(self._span)
+        self._b_html.setEnabled(not run and not html and have)
+        self._b_all.setEnabled(not run and not html and have)
+        for w in (*self._cards.values(), self._refresh_days, self._r_from, self._r_to, self._b_from, self._out, self._b_out):
+            w.setEnabled(not run)
+        self.settings_page.set_publish_busy(run or pub)
+        self._oc_pub.setEnabled(not run and not pub)
+        if not run:
+            if busy:
+                self._status.setProperty("role", "muted")
+                self._status.setText(busy)
+            elif self._done_text:
+                self._status.setProperty("role", "doneOk")
+                self._status.setText(self._done_text)
+            elif self._status.text() in (K.COLLECT_BUSY_GAPS, K.COLLECT_BUSY_PUBLISH, K.COLLECT_BUSY_FAILLOGS):
+                self._status.setText(K.COLLECT_IDLE)
+            _repolish(self._status)
+
     def _on_gaps(self) -> None:
         if self._gap_worker is not None:                      # 도는 중에 다시 누르면 멈춤
             self._gap_worker.stop()
+            self._gap_stopping = True
             self._b_gaps.setEnabled(False)
             self._gap_status.setText(K.WAFER_LOGS_STOPPING)
             return
@@ -784,10 +874,11 @@ class CollectPage(QWidget):
         w.done.connect(self._on_gaps_done)
         w.finished.connect(lambda w=w: self._worker_done("_gap_worker", w))
         self._gap_worker = w
+        self._gap_stopping = False
         self._gap_t0 = time.monotonic()
         self._b_gaps.setText(K.BTN_STOP)
         self._gap_status.setText(K.GAPS_RUNNING)
-        self._b_run.setEnabled(False)
+        self._sync_buttons()
         w.start()
 
     def _on_gaps_progress(self, done: int, total: int, phase: str) -> None:
@@ -810,9 +901,11 @@ class CollectPage(QWidget):
     def _on_gaps_done(self, st, err: str) -> None:
         self._gap_bar.hide()
         self._gap_total = None
+        self._gap_stopping = False
         self._b_gaps.setText(K.GAPS_RUN)
-        self._b_gaps.setEnabled(True)
-        self._b_run.setEnabled(not self._running)
+        if self._gap_worker is not None and not self._gap_worker.isRunning():
+            self._gap_worker = None
+        QTimer.singleShot(0, self._sync_buttons)              # 워커가 끝난(finished) 뒤 한 번 더 — 자리가 비워진 다음에 정한다
         if st is None:
             msg = K.GAPS_FAIL_FMT.format(error=err)
             self.error.emit(K.GAPS_TITLE, msg)
@@ -833,7 +926,7 @@ class CollectPage(QWidget):
         self._gap_n = n
         if self._gap_worker is None:
             self._gaps.setVisible(bool(plan.total_reports) and (n > 0 or bool(self._gap_status.text())))
-            self._b_gaps.setEnabled(n > 0 and not self._nas_busy())
+        self._sync_buttons()
         rows = (("slot", plan.slot_missing, plan.slot_have, K.GAPS_MISSING_WAFER_FMT, plan.slot_from, plan.slot_to),
                 ("sec", plan.sec_missing, plan.sec_have, K.GAPS_MISSING_WAFER_FMT, plan.sec_from, plan.sec_to),
                 ("params", plan.params_missing, plan.params_have, K.GAPS_MISSING_REPORT_FMT, plan.params_from, plan.params_to),
@@ -851,7 +944,7 @@ class CollectPage(QWidget):
             g.set_visible(bool(miss or have))
         self._gap_eta.setText(K.GAPS_ETA_FMT.format(t=eta_text(total_sec, rough_any)) if n else "")
         self._gap_eta.setVisible(bool(n))
-        self._gap_eta.setToolTip(K.ETA_BASIS_TIP)
+        self._gap_eta.setToolTip(K.ETA_ROUGH_TIP if rough_any else K.ETA_BASIS_TIP)
 
     def _open_result(self) -> None:
         QDesktopServices.openUrl(QUrl.fromLocalFile(str(results.ensure_html())))
@@ -864,7 +957,6 @@ class CollectPage(QWidget):
         if bdays:
             cfg["backfill_days"] = bdays
         self._cards["backfill"].set_texts(what=K.MODE_BACKFILL_WHAT_FMT.format(days=bdays or int(p.backfill_days)))
-        self._cards["rebuild"].set_texts(what=K.MODE_REBUILD_WHAT_FMT.format(days=_days_text(prefs.RETENTION_DAYS_FIXED)))
         self._plan_token += 1
         token = self._plan_token
         self._plan.setText(K.COLLECT_PLAN_LOADING)
@@ -904,9 +996,7 @@ class CollectPage(QWidget):
             return
         self._update_cards(plan, n_recover)
         self._update_gaps(plan)
-        if self._mode == "rebuild":
-            text = K.COLLECT_PLAN_FULL_FMT.format(days=_days_text(plan.retention_days))
-        elif self._mode == "range":
+        if self._mode == "range":
             a, b = self.refresh_range()
             text = K.COLLECT_PLAN_RANGE_FMT.format(a=a, b=b)
         elif plan.mode == "first":
@@ -927,11 +1017,12 @@ class CollectPage(QWidget):
 
     def _update_cards(self, plan, n_recover) -> None:
         """캐시로 아는 사실을 카드에 적는다: 처음이면 '처음 수집' 하나만, 복구 대상 수, 마지막 수집이 오래됐는지."""
-        first = plan.total_reports == 0 and self._mode != "rebuild"
+        first = plan.total_reports == 0
         if first != self._first_run:
             self._first_run = first
-            for k in ("backfill", "refresh", "recover", "rebuild", "range"):
+            for k in ("backfill", "refresh", "recover", "range"):
                 self._cards[k].set_available(not first, K.MODE_DISABLED_FIRST)
+        self._trouble.set_note(K.COLLECT_TROUBLE_LOCKED if first else "")      # 11/25 QT-12: 왜 못 누르는지 — 마우스를 올리지 않아도 보이게
         n = self._cards["normal"]
         if first:
             n.set_texts(title=K.MODE_FIRST_TITLE, when=K.MODE_FIRST_WHEN, what=K.MODE_FIRST_WHAT_FMT.format(days=plan.backfill_days))
@@ -942,85 +1033,97 @@ class CollectPage(QWidget):
             stale = days > collect.PATTERN_MAX_DAYS
             n.set_texts(title=K.MODE_NORMAL_TITLE, when=K.MODE_STALE_FMT.format(days=days) if stale else K.MODE_NORMAL_WHEN, what=K.MODE_NORMAL_WHAT)
             n.set_badges([(K.MODE_BADGE_REC, "rec")])
-        if self._mode == "normal":
-            self._b_run.setText(K.MODE_RUN_FMT.format(title=n.title()))
+        self._b_run.setText(self._run_label())
         et = plan.etas or {}
 
         def eta(mode):
-            sec, rough = et.get(mode, (None, True))
-            return None if sec is None else eta_text(sec, rough)
+            sec, _rough = et.get(mode, (None, True))
+            return None if sec is None else eta_text(sec)
+
+        def tip(mode):                                    # 11/25 QT-08: 대략인지는 글자가 아니라 툴팁으로
+            return K.ETA_ROUGH_TIP if et.get(mode, (None, True))[1] else K.ETA_BASIS_TIP
 
         if not first and eta("incremental"):
-            n.set_badges([(K.MODE_BADGE_REC, "rec"), (K.MODE_BADGE_USUAL_ETA_FMT.format(t=eta("incremental")), "slow")])
+            n.set_badges([(K.MODE_BADGE_REC, "rec"), (K.MODE_BADGE_USUAL_ETA_FMT.format(t=eta("incremental")), "slow", tip("incremental"))])
         if not first:
             for m, name in (("backfill", "backfill"), ("range", "range")):
                 if eta(m):
-                    self._cards[name].set_badges([(K.MODE_BADGE_USUAL_ETA_FMT.format(t=eta(m)), "slow")])
-            self._cards["refresh"].set_badges([(K.MODE_BADGE_TARGET_ETA_FMT.format(n=plan.reread_reports, t=eta("refresh")), "slow")]
-                                              if plan.reread_reports else [(K.MODE_BADGE_MEDIUM, "slow")])
-            self._cards["rebuild"].set_badges([(K.MODE_BADGE_ETA_FMT.format(t=eta("rebuild")), "warn")])
+                    self._cards[name].set_badges([(K.MODE_BADGE_ETA_FMT.format(t=eta(m)), "slow", tip(m))])
+            self._cards["refresh"].set_badges([(K.MODE_BADGE_TARGET_ETA_FMT.format(n=plan.reread_reports, t=eta("refresh")), "slow", tip("refresh"))]
+                                              if plan.reread_reports and eta("refresh") else [(K.MODE_BADGE_MEDIUM, "slow")])
         if n_recover is not None and not first:
-            self._cards["recover"].set_badges([(K.MODE_BADGE_TARGET_ETA_FMT.format(n=n_recover, t=eta("recover")), "warn") if n_recover
+            self._cards["recover"].set_badges([(K.MODE_BADGE_TARGET_ETA_FMT.format(n=n_recover, t=eta("recover")), "warn", tip("recover"))
+                                               if n_recover and eta("recover") else (K.MODE_BADGE_TARGET_FMT.format(n=n_recover), "warn") if n_recover
                                                else (K.MODE_BADGE_NONE, "slow")])
 
     def wafer_logs_running(self) -> bool:
         # 실패 로그 · 빈칸 채우기도 NAS 를 읽으니 가동률 수집과 겹치지 않게
         return self._fl_worker is not None or self._gap_worker is not None
 
-    # ── LOT 추적 발행 시험(10/27) ──
-    def _on_lot_publish(self) -> None:
-        if self._lp_worker is not None:
+    # ── 배포 지금 올리기(11/25 — 설정의 배포 폴더 줄 · 수집 알림의 '다시 올리기'. 옛 '발행 시험' 카드를 대신한다) ──
+    def publish_now(self, kinds) -> None:
+        """kinds = "lot" · "full" 또는 그 목록 — 설정에 적힌 폴더로 캐시에서 다시 만들어 올린다(장비 NAS 접근 없음). 비어 있는 폴더는 건너뛴다."""
+        kinds = [kinds] if isinstance(kinds, str) else list(kinds)
+        if self._pub_worker is not None or self._running:
+            self.error.emit(K.SET_PUBLISH_DIR if kinds[:1] == ["lot"] else K.SET_PUBLISH_FULL_DIR, K.SET_PUBLISH_BUSY)
             return
-        if self._running:
-            self.error.emit(K.LOT_PUB_TITLE, K.LOT_PUB_BUSY)
+        cfg = prefs.to_collect_cfg(prefs.load())
+        jobs = [(k, str(cfg.get("publish_full_dir" if k == "full" else "publish_dir") or "").strip()) for k in kinds]
+        jobs = [(k, d) for k, d in jobs if d]
+        if not jobs:
             return
-        out = self._lp_out.text().strip() or str(paths.data_root() / collect.LOT_PUBLISH_DIR)
-        self._lp_out.setText(out)
-        w = _LotPublishWorker(prefs.to_collect_cfg(prefs.load()), out, self)
+        w = _PublishWorker(cfg, jobs, self)
         w.log.connect(self.append_log)
-        w.done.connect(self._on_lot_publish_done)
-        w.finished.connect(lambda w=w: self._worker_done("_lp_worker", w))
-        self._lp_worker = w
-        self._b_lp_run.setEnabled(False)
-        self._b_run.setEnabled(False)                    # 수집 끝의 자동 배포와 같은 폴더에 동시에 쓰지 않는다
-        self._lp_status.setText(K.LOT_PUB_RUNNING)
-        self._lp_status.show()
+        w.one.connect(self._on_publish_one)
+        w.finished.connect(lambda w=w: self._publish_finished(w))
+        self._pub_worker = w
+        for k, _d in jobs:
+            self.settings_page.set_publish_status(k, K.SET_PUBLISH_RUNNING)
+        self._sync_buttons()
         w.start()
 
-    def _on_lot_shortcut(self) -> None:
-        out = self._lp_out.text().strip()
+    def _on_publish_one(self, kind: str, got, why: str) -> None:
+        when = time.strftime("%H:%M")
+        if got is None:
+            text = K.SET_PUBLISH_FAIL_FMT.format(when=when, why=_why_text(why))
+        elif not got.get("pointer_ok"):
+            text = K.SET_PUBLISH_DONE_LOCKED_FMT.format(when=when)
+        else:
+            text = K.SET_PUBLISH_DONE_FMT.format(when=when, size=f"{int(got['bytes']) / 1048576:.1f}MB", sec=got["sec"])
+        self.settings_page.set_publish_status(kind, text, ok=got is not None)
+        self.append_log(text)
+        if kind in self._oc_pub_kinds:
+            self._oc_pub_status.setText(K.OUTCOME_REPUBLISH_DONE if got is not None else _why_text(why))
+            self._oc_pub_status.show()
+        self.publish_done.emit(kind, got, why)
+
+    def _publish_finished(self, w) -> None:
+        if self._pub_worker is w:
+            self._pub_worker = None
+        w.deleteLater()
+        self._sync_buttons()
+
+    def _on_republish(self) -> None:
+        self._oc_pub_status.setText(K.OUTCOME_REPUBLISHING)
+        self._oc_pub_status.show()
+        self.publish_now(self._oc_pub_kinds or ["lot", "full"])
+
+    def _on_shortcut(self, kind: str) -> None:
+        cfg = prefs.to_collect_cfg(prefs.load())
+        out = str(cfg.get("publish_full_dir" if kind == "full" else "publish_dir") or "").strip()
+        title = K.SET_PUBLISH_FULL_DIR if kind == "full" else K.SET_PUBLISH_DIR
         if not out or not os.path.isabs(out):
-            msg = K.PUBLISH_NO_DIR if not out else K.PUBLISH_NOT_ABS_FMT.format(path=out)
-            self._lp_status.setText(msg)
-            self._lp_status.show()
-            self.error.emit(K.LOT_PUB_TITLE, msg)
+            self.error.emit(title, K.PUBLISH_NO_DIR if not out else K.PUBLISH_NOT_ABS_FMT.format(path=out))
             return
         desk = QStandardPaths.writableLocation(QStandardPaths.StandardLocation.DesktopLocation) or str(paths.data_root())
         try:
-            path = publish.write_shortcut(desk, out, prefs.to_collect_cfg(prefs.load()))
+            path = publish.write_shortcut(desk, out, cfg, kind=publish.FULL if kind == "full" else publish.LOT)
         except Exception as ex:  # noqa: BLE001
-            self._lp_status.setText(f"{type(ex).__name__}: {ex}")
-            self._lp_status.show()
-            self.error.emit(K.LOT_PUB_TITLE, f"{type(ex).__name__}: {ex}")
+            log.warning("shortcut failed: %s: %s", type(ex).__name__, ex)
+            self.error.emit(title, _why_text(publish.error_kind(ex)))
             return
-        text = K.LOT_PUB_SHORTCUT_DONE_FMT.format(path=path)
-        self._lp_status.setText(text)
-        self._lp_status.show()
-        self.append_log(text)
-
-    def _on_lot_publish_done(self, got, err: str) -> None:
-        self._b_lp_run.setEnabled(True)
-        self._b_run.setEnabled(not self._running)
-        if got is None:
-            self._lp_status.setText(err)
-            self.error.emit(K.LOT_PUB_TITLE, err)
-            return
-        self._lp_path = os.path.join(str(got["dir"]), publish.STUB_NAME)
-        self._b_lp_view.setEnabled(True)
-        text = K.LOT_PUB_DONE_FMT.format(size=f"{int(got['bytes']) / 1048576:.1f}MB", sec=got["sec"], path=self._lp_path)
-        if not got.get("pointer_ok"):
-            text += "\n" + K.LOT_PUB_POINTER_LOCKED
-        self._lp_status.setText(text)
+        text = K.SET_PUBLISH_SHORTCUT_DONE_FMT.format(path=path)
+        self.settings_page.set_publish_status(kind, text, ok=True)
         self.append_log(text)
 
     # ── 실패 로그 수집(10/20) ──
@@ -1042,6 +1145,8 @@ class CollectPage(QWidget):
         w.start()
 
     def _on_fail_logs_done(self, result, err: str) -> None:
+        if self._fl_worker is not None and not self._fl_worker.isRunning():
+            self._fl_worker = None
         self._set_fail_logs_running(False)
         if result:
             fmt = K.FAIL_LOGS_DONE_FMT if result.get("items") else K.FAIL_LOGS_NONE_FMT
@@ -1055,9 +1160,8 @@ class CollectPage(QWidget):
     def _set_fail_logs_running(self, on: bool) -> None:
         if on:
             self._sec_dev.set_open(True)
-        for w in (self._b_fl_run, self._fl_days, self._fl_out, self._b_fl_browse):
-            w.setEnabled(not on)
-        self._b_run.setEnabled(not on and not self._running)
+        QTimer.singleShot(0, self._sync_buttons)
+        self._sync_buttons()
 
     def _browse_fl_out(self) -> None:
         chosen = QFileDialog.getExistingDirectory(self, K.WAFER_LOGS_OUT, self._fl_out.text())
@@ -1065,7 +1169,13 @@ class CollectPage(QWidget):
             self._fl_out.setText(chosen)
 
     def shutdown(self, ms: int = 15_000) -> None:
-        """창을 닫을 때 — 로그 모으기를 멈추고(지금까지 담은 것으로 zip 마무리) 기다린다."""
+        """창을 닫을 때 — 로그 모으기를 멈추고(지금까지 담은 것으로 zip 마무리) 기다린다. 올리는 중인 배포는 끝날 때까지 기다린다."""
+        w = self._pub_worker
+        if w is not None:
+            try:
+                w.wait(ms)
+            except RuntimeError:
+                self._pub_worker = None
         for attr in ("_fl_worker", "_gap_worker"):
             w = getattr(self, attr, None)
             if w is None:
@@ -1078,36 +1188,100 @@ class CollectPage(QWidget):
 
     def set_running(self, running: bool) -> None:
         self._running = running
-        self._b_run.setEnabled(not running and self._lp_worker is None)
-        self._b_fl_run.setEnabled(not running and self._fl_worker is None)
-        if self._gap_worker is None:
-            self._b_gaps.setEnabled(not running and bool(self._gap_n))
         self._b_stop.setVisible(running)
         self._b_stop.setEnabled(running)
-        for w in (*self._cards.values(), self._refresh_days, self._r_from, self._r_to, self._out, self._b_out, self._b_html, self._b_all):
-            w.setEnabled(not running)
-        self._b_all.setEnabled(not running and bool(self._span))
+        self._status.setProperty("role", "muted")
         self._status.setText(K.COLLECT_RUNNING if running else K.COLLECT_IDLE)
+        _repolish(self._status)
         if running:
             self._outcome.hide()
+            self.clear_done()
+        self._sync_buttons()
         if not running:
             self._pick("normal")                         # 문제 해결용 수집은 한 번만 — 다음엔 평소 수집으로 돌아간다
 
     def set_status(self, text: str) -> None:
+        self._status.setProperty("role", "muted")
         self._status.setText(text)
+        _repolish(self._status)
+
+    def show_done(self, text: str) -> None:
+        """11/25 QT-11: 수집이 끝나면 실행 줄을 '✓ 수집 완료 · 39대 · 3분 20초  [결과 열기](주)  [다시 수집]' 으로 — 다음 고르기 · 수집 때 원래대로."""
+        self._done_text = text
+        have = results.html_path().is_file()
+        self._b_done_open.setVisible(have)
+        set_role(self._b_run, "default" if have else "primary")
+        self._sync_buttons()
+
+    def clear_done(self) -> None:
+        if not self._done_text:
+            return
+        self._done_text = ""
+        self._b_done_open.hide()
+        set_role(self._b_run, "primary")
+        self._status.setProperty("role", "muted")
+        self._status.setText(K.COLLECT_IDLE)
+        _repolish(self._status)
+        self._b_run.setText(self._run_label())
 
     def mode_title(self) -> str:
         """고른 수집 방법의 이름 — 로딩 화면 제목에 쓴다."""
         return self._cards[self._mode].title()
 
-    def show_outcome(self, title: str, lines: list, devices: bool = False) -> None:
-        """수집 결과 알림을 카드 안에 띄운다. lines 가 비면 숨긴다."""
-        if not lines:
+    def show_outcome(self, title: str, items: list, devices: bool = False) -> None:
+        """수집 결과 알림을 카드 안에 띄운다. items 가 비면 숨긴다.
+        11/25 QT-16: 항목마다 굵은 머리 + 흐린 설명 + 그 문제에 맞는 단추(장비 목록 확인 · 로그 보기 · 다시 올리기). 문자열을 주면 머리만 있는 항목."""
+        while self._oc_items.count():
+            it = self._oc_items.takeAt(0)
+            w = it.widget()
+            if w is not None:
+                for b in (self._oc_dev, self._oc_log, self._oc_pub, self._oc_pub_status):
+                    if b.parent() is w:
+                        b.setParent(self._outcome)
+                        b.hide()
+                w.deleteLater()
+        if not items:
             self._outcome.hide()
             return
+        items = [{"head": x, "desc": "", "action": "devices" if devices and i == 0 else ""} if isinstance(x, str) else x
+                 for i, x in enumerate(items)]
         self._oc_title.setText(title)
-        self._oc_body.setText("\n".join(lines))
-        self._oc_dev.setVisible(devices)
+        self._oc_body.setText("\n".join(" — ".join(t for t in (x.get("head", ""), x.get("desc", "")) if t) for x in items))
+        used = set()
+        for x in items:
+            box = QFrame(self._outcome)
+            box.setProperty("role", "ocItem")
+            bl = QHBoxLayout(box)
+            bl.setContentsMargins(0, 0, 0, 0)
+            bl.setSpacing(10)
+            col = QVBoxLayout()
+            col.setSpacing(1)
+            head = _label(x.get("head", ""), "ocHead", box, wrap=True)
+            head.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
+            if x.get("tip"):
+                head.setToolTip(x["tip"])
+            col.addWidget(head)
+            if x.get("desc"):
+                col.addWidget(_label(x["desc"], "ocDesc", box, wrap=True))
+            bl.addLayout(col, 1)
+            act = x.get("action", "")
+            btns = {"devices": (self._oc_dev,), "log": (self._oc_log,), "republish": (self._oc_pub_status, self._oc_pub)}.get(act, ())
+            if act and act not in used:
+                used.add(act)
+                for b in btns:
+                    b.setParent(box)
+                    bl.addWidget(b, 0, Qt.AlignmentFlag.AlignTop)
+                    b.setVisible(b is not self._oc_pub_status)
+                if act == "republish":
+                    self._oc_pub_kinds = list(dict.fromkeys(x.get("kinds") or ["lot", "full"]))
+                    self._oc_pub_status.setText("")
+            self._oc_items.addWidget(box)
+        if "log" not in used:                               # 로그 보기는 늘 한 군데 — 마지막 항목 옆
+            last = self._oc_items.itemAt(self._oc_items.count() - 1).widget()
+            self._oc_log.setParent(last)
+            last.layout().addWidget(self._oc_log, 0, Qt.AlignmentFlag.AlignTop)
+            self._oc_log.show()
+        self._sync_buttons()
         self._outcome.show()
 
     def show_log(self) -> None:

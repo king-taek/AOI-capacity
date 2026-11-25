@@ -9,6 +9,7 @@ def make_button(text: str, role: str = "default", parent: QWidget | None = None,
     b = QPushButton(text, parent)
     b.setProperty("role", role)
     b.setCursor(Qt.CursorShape.PointingHandCursor)
+    b.setFocusPolicy(Qt.FocusPolicy.TabFocus)          # 11/25: 포커스 테두리는 키보드로 옮겨 왔을 때만(HTML 의 :focus-visible) — 누른 뒤 테두리가 남지 않게
     if tooltip:
         b.setToolTip(tooltip)
     return b
