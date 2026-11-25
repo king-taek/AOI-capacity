@@ -255,7 +255,7 @@ def test_fill_gaps_fills_kla_image_count_from_result_file_only(tmp_path, kla_nas
     nas, csv_path = kla_nas
     cfg = make_cfg(tmp_path, csv_path)
     collect.collect(cfg)
-    cache = json.load(open(cfg["cache_file"], encoding="utf-8"))
+    cache = collect.read_cache_file(cfg["cache_file"])
     recs = [r for e in cache["kla"].values() for ws in e["lots"].values() for r in ws.values()]
     for r in recs:
         r.pop("images", None)                                           # 11/4 전에 읽은 옛 기록

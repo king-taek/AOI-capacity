@@ -203,8 +203,9 @@ def main(argv=None) -> int:
         _print(K.CLI_CANCELLED)
         return EXIT_CANCELLED
     warnings: list = []
-    collect.write_html(cfg, rows, dev_meta, errors, started, mode="auto", log=_print, timing=stats, warnings=warnings)
-    publish.publish_after_collect(cfg, rows, dev_meta, log=_print, params_store=stats.get("params_store"))       # 10/27: 배포 폴더가 있으면 조용히(실패해도 수집은 성공)
+    prep = collect.HtmlPrep(rows)                              # 수집 HTML · 배포판이 같은 준비를 한 번만(PH-01)
+    collect.write_html(cfg, rows, dev_meta, errors, started, mode="auto", log=_print, timing=stats, warnings=warnings, prep=prep)
+    publish.publish_after_collect(cfg, rows, dev_meta, log=_print, params_store=stats.get("params_store"), prep=prep)       # 10/27: 배포 폴더가 있으면 조용히(실패해도 수집은 성공)
     if stats.get("cache_status") == collect.CACHE_CORRUPT:
         _print(K.CLI_CACHE_CORRUPT_FMT.format(path=stats.get("cache_preserved", "")))
     bad = [d for d in dev_meta if d.get("error")]

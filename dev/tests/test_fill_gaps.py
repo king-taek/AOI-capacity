@@ -19,7 +19,7 @@ def _wafer_dirs(nas: Path):
 
 
 def _cache(cfg):
-    return json.loads(open(cfg["cache_file"], encoding="utf-8").read())
+    return collect.read_cache_file(cfg["cache_file"])
 
 
 def _sec_rows(cfg):
@@ -66,9 +66,9 @@ def test_fill_gaps_leaves_value_empty_when_folder_was_rewritten_later(tmp_path, 
     assert all(e.get("sec_checked") for e in _cache(cfg)["reports"].values() if any(r.get("ini_match") == "EXACT" for r in e["rows"]))
 
 
-@pytest.mark.parametrize("chunk", [1, 2000])
-def test_fill_gaps_stop_keeps_what_was_read(tmp_path, fake_nas, monkeypatch, chunk):
-    """멈추면 이미 읽은 장은 남는다 — 저장 단위(SEC_FILL_CHUNK)보다 작은 실행도(PR #3 리뷰: 덩어리째 버리던 것)."""
+@pytest.mark.parametrize("every", [0.0, 60.0])
+def test_fill_gaps_stop_keeps_what_was_read(tmp_path, fake_nas, monkeypatch, every):
+    """멈추면 이미 읽은 장은 남는다 — 중간 저장 간격(CHECKPOINT_MIN_SEC)이 오기 전에 멈춰도(PR #3 리뷰: 덩어리째 버리던 것)."""
     nas, csv_path = fake_nas
     cfg = make_cfg(tmp_path, csv_path, read_workers=1, collect_params=False)
     collect.collect(cfg)
@@ -76,10 +76,26 @@ def test_fill_gaps_stop_keeps_what_was_read(tmp_path, fake_nas, monkeypatch, chu
         (w / "ScanLog.ini").write_text(SCANLOG, encoding="utf-8")
     total = collect.plan_run(cfg).sec_missing
     assert total >= 2
-    monkeypatch.setattr(collect, "SEC_FILL_CHUNK", chunk)
+    monkeypatch.setattr(collect, "CHECKPOINT_MIN_SEC", every)
     seen = []
     st = collect.fill_gaps(cfg, progress=lambda d, t, p: seen.append(p) if "스캔" in p else None, should_stop=lambda: len(seen) >= 1)
     assert st["stopped"] == 1
     left = collect.plan_run(cfg).sec_missing
     assert 0 < left < total
     assert collect.fill_gaps(cfg)["sec"]["targets"] == left and collect.plan_run(cfg).sec_missing == 0
+
+
+def test_fill_gaps_saves_the_cache_once_at_the_end_not_per_step(tmp_path, fake_nas, monkeypatch):
+    """PC-05: 다섯 단계(RDL · 슬롯 · KLA · 스캔 비율 · 파라미터)가 각자 저장하던 것을 끝에 한 번 — 중간 저장은 평소 수집과 같은 간격(60초)일 때만."""
+    nas, csv_path = fake_nas
+    cfg = make_cfg(tmp_path, csv_path)
+    collect.collect(dict(cfg, collect_params=False))
+    for w in _wafer_dirs(nas):
+        (w / "ScanLog.ini").write_text(SCANLOG, encoding="utf-8")
+    saves = []
+    real = collect._save_cache
+    monkeypatch.setattr(collect, "_save_cache", lambda *a, **k: saves.append(1) or real(*a, **k))
+    st = collect.fill_gaps(cfg)
+    assert st["sec"]["filled"] > 0 and st["params"]["targets"] > 0 and {"rdl", "slot", "kla", "sec", "params"} <= set(st)
+    assert len(saves) == 1
+    assert collect.plan_run(cfg).sec_missing == 0 and collect.plan_run(cfg).params_missing == 0

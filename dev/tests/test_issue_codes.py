@@ -62,7 +62,7 @@ def test_render_issue_rows_fills_new_rows_only_and_never_mutates_or_touches_old_
 
 
 def _cache_rows(cfg):
-    cache = json.loads(Path(cfg["cache_file"]).read_text(encoding="utf-8"))
+    cache = collect.read_cache_file(cfg["cache_file"])
     return [r for e in cache["reports"].values() for r in e["rows"]]
 
 
@@ -95,7 +95,7 @@ def test_old_free_text_rows_and_new_coded_rows_coexist_and_wording_changes_need_
     cfg = make_cfg(tmp_path, csv_path)
     collect.collect(cfg)
     cache_path = Path(cfg["cache_file"])
-    cache = json.loads(cache_path.read_text(encoding="utf-8"))
+    cache = collect.read_cache_file(str(cache_path))
     # 옛 캐시 흉내: 첫 Report 의 행에서 issue_codes 를 지우고 옛 자유 문장을 남긴다(옛 스키마)
     first = next(iter(cache["reports"].values()))
     for r in first["rows"]:

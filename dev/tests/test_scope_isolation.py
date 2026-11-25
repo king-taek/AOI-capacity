@@ -297,7 +297,7 @@ def test_other_device_cache_is_kept_but_excluded_from_output(tmp_path, scoped_na
 
     rows, _, _ = collect.collect(_cfg(tmp_path, csv_path))
     assert {r["device"] for r in rows} == {"AOI-1", "AOI-8", "AOI-9", "AOI-25"}   # 범위 밖은 화면에서 빠진다
-    cache = json.loads((tmp_path / "out" / "aoi_cache.json").read_text(encoding="utf-8"))
+    cache = collect.read_cache_file(str(tmp_path / "out" / "aoi_cache.json"))
     for gone in ("AOI-24", "AOI-2", "AOI-10", "AOI-3"):    # ★ 다른 장비 캐시는 지우지 않는다
         assert any(f"{gone}{os.sep}" in e["path"] for e in cache["reports"].values()), gone
 
@@ -307,11 +307,11 @@ def test_display_rename_keeps_one_device_and_one_cursor(tmp_path, scoped_nas):
     cfg = _cfg(tmp_path, csv_path)
     rows, _, _ = collect.collect(cfg)
     assert "AOI-25" in {r["device"] for r in rows}
-    before = json.loads((tmp_path / "out" / "aoi_cache.json").read_text(encoding="utf-8"))["last_mtime"]
+    before = collect.read_cache_file(str(tmp_path / "out" / "aoi_cache.json"))["last_mtime"]
 
     csv_path.write_text(csv_path.read_text(encoding="utf-8-sig").replace("AOI-25,", "25호기,", 1), encoding="utf-8-sig")
     rows2, dev_meta2, _ = collect.collect(cfg)
-    after = json.loads((tmp_path / "out" / "aoi_cache.json").read_text(encoding="utf-8"))["last_mtime"]
+    after = collect.read_cache_file(str(tmp_path / "out" / "aoi_cache.json"))["last_mtime"]
     assert list(before) == list(after)                     # 커서 키는 경로라 이름을 바꿔도 그대로
     names2 = {r["device"] for r in rows2}
     assert "25호기" in names2 and "AOI-25" not in names2    # 옛 행도 새 표시명으로(둘로 갈라지지 않음)
@@ -323,7 +323,7 @@ def test_legacy_name_cursor_is_migrated_not_duplicated(tmp_path, scoped_nas):
     cfg = _cfg(tmp_path, csv_path)
     collect.collect(cfg)
     cache_file = tmp_path / "out" / "aoi_cache.json"
-    cache = json.loads(cache_file.read_text(encoding="utf-8"))
+    cache = collect.read_cache_file(str(cache_file))
     n_before = len(cache["last_mtime"])
     old_key = next(k for k in cache["last_mtime"] if k.rstrip("\\/").lower().endswith("aoi-25"))
     cache["last_mtime"]["AOI-25"] = cache["last_mtime"].pop(old_key)              # 옛 형식(표시명 키)으로 되돌린다
@@ -332,7 +332,7 @@ def test_legacy_name_cursor_is_migrated_not_duplicated(tmp_path, scoped_nas):
     cache_file.write_text(json.dumps(cache), encoding="utf-8")
 
     rows, dev_meta, _ = collect.collect(cfg)
-    migrated = json.loads(cache_file.read_text(encoding="utf-8"))["last_mtime"]
+    migrated = collect.read_cache_file(str(cache_file))["last_mtime"]
     assert len(migrated) == n_before and "AOI-25" not in migrated                 # 경로 키로 이관(개수 그대로)
     assert all(d["reports"] == 0 for d in dev_meta if d.get("scope") != "out")     # 커서가 살아 있어 재수집 없음
     assert "AOI-25" in {r["device"] for r in rows}
@@ -359,7 +359,7 @@ def test_failed_report_blocks_cursor_and_is_retried(tmp_path, scoped_nas, monkey
     monkeypatch.setattr(collect, "parse_report", flaky)
     rows, _, errors = collect.collect(cfg)
     assert len(errors) == 1 and errors[0]["tries"] == 1
-    cache = json.loads((tmp_path / "out" / "aoi_cache.json").read_text(encoding="utf-8"))
+    cache = collect.read_cache_file(str(tmp_path / "out" / "aoi_cache.json"))
     cur = _cursor_of(cache, "AOI-25")
     # ★ 커서가 실패 파일을 넘어가지 않았다(넘어갔다면 그 Report 는 영영 다시 읽히지 않는다)
     assert cur is None or cur < bad.stat().st_mtime
@@ -368,7 +368,7 @@ def test_failed_report_blocks_cursor_and_is_retried(tmp_path, scoped_nas, monkey
     boom["on"] = False                                      # 다음 수집에서 다시 읽힌다
     rows2, dev_meta2, errors2 = collect.collect(cfg)
     assert not errors2 and len(rows2) > len(rows)
-    cache2 = json.loads((tmp_path / "out" / "aoi_cache.json").read_text(encoding="utf-8"))
+    cache2 = collect.read_cache_file(str(tmp_path / "out" / "aoi_cache.json"))
     assert not cache2["failed"] and _cursor_of(cache2, "AOI-25") >= good.stat().st_mtime
 
 
@@ -386,7 +386,7 @@ def test_permanently_broken_report_stops_blocking_after_retries(tmp_path, scoped
     for _ in range(collect.MAX_READ_RETRY):
         _, _, errors = collect.collect(cfg)
         assert len(errors) == 1
-    cache = json.loads((tmp_path / "out" / "aoi_cache.json").read_text(encoding="utf-8"))
+    cache = collect.read_cache_file(str(tmp_path / "out" / "aoi_cache.json"))
     assert _cursor_of(cache, "AOI-25") >= good.stat().st_mtime            # 커서가 다시 전진한다
     assert next(f for f in cache["failed"].values() if f["path"] == str(bad))["tries"] == collect.MAX_READ_RETRY    # 오류 기록은 남는다
 

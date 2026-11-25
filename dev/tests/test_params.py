@@ -97,7 +97,7 @@ def test_import_zips_resolves_references_and_skips_out_of_scope(tmp_path, fake_n
     folder = _zip(tmp_path)
     st = collect.import_param_zips(cfg, str(folder))
     assert st["added"] == 1
-    cache = json.loads(open(cfg["cache_file"], encoding="utf-8").read())
+    cache = collect.read_cache_file(cfg["cache_file"])
     [s] = cache["params"]["snaps"].values()
     assert s["dev"] == "AOI-9" and s["job"] and set(s["f"]) == {"Recipe.ini", "RTP.txt"}
     assert collect.import_param_zips(cfg, str(folder))["added"] == 0        # 두 번 넣지 않는다
@@ -146,7 +146,7 @@ def test_fill_params_reads_only_wafer_folders_of_reports_without_snapshots(tmp_p
     assert after.params_missing == 0 and after.params_have >= 1
     opened.clear()
     assert collect.fill_params(cfg)["targets"] == 0 and not [p for p in opened if str(nas) in p]
-    cache = json.loads(open(cfg["cache_file"], encoding="utf-8").read())
+    cache = collect.read_cache_file(cfg["cache_file"])
     assert cache["eta"]["params_fill"][0][0] == st["targets"]
 
 
@@ -227,3 +227,16 @@ def test_jobs_differing_only_in_separators_or_case_merge_but_copy_does_not():
     byname = {J["j"]: J for J in m["jobs"]}
     assert set(byname) == {"TB500_RDL4-Multi", "TB500_RDL4 - Multi COPY"}   # 표시 이름 = 가장 최근 스캔의 원문
     assert byname["TB500_RDL4-Multi"]["n"] == 3
+
+
+def test_small_runs_do_not_inflate_the_per_report_estimate():
+    """PC-04: Report 2개짜리 평소 수집(개당 1초처럼 보임)이 쌓여도 큰 실행의 예상이 부풀지 않는다 — 개수로 가중 · 20개 미만은 뺀다."""
+    cache: dict = {}
+    for n, w in ((360, 32.2), (36, 4.8), (138, 11.1), (2, 1.9), (2, 2.0), (2, 1.9)):
+        collect.record_eta(cache, "incremental", n, w, 10.0)
+    sec, rough = collect.estimate_sec(cache["eta"], "rebuild", 402)
+    per = (4.8 + 11.1) / (36 + 138)                                         # 최근 5개(360개짜리는 밀려남) 중 20개 이상인 둘만
+    assert not rough and sec == int(round(10.0 + 402 * per)) and sec < 60     # 예전(중앙값)은 402 × 0.95 ≈ 380초
+    small = {}
+    collect.record_eta(small, "incremental", 3, 3.0, 1.0)
+    assert collect.estimate_sec(small["eta"], "refresh", 10) == (11, False)   # 작은 기록뿐이면 그것으로
