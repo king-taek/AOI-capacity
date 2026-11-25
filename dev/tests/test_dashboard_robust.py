@@ -90,13 +90,3 @@ def test_embedded_json_hides_every_angle_bracket_so_people_typed_text_cannot_swa
     assert nasty in emb["pool"]
     tpl = (Path(collect.__file__).parent / "ui" / "assets" / "template.html").read_text(encoding="utf-8")
     assert 'JSON.stringify(emb).replace(/</g,"\\\\u003c")' in tpl           # 사본 저장(saveHtml)도 '<' 를 통째로
-
-
-def test_screen_keeps_working_when_one_tab_fails_and_says_why_it_is_empty():
-    """JS-03 · JS-04 · JS-11 · JS-13(11/25) 의 자리 — 브라우저 확인은 Chromium 으로 따로 했다(탭 하나가 던지면 그 자리에 안내, 다른 탭 계속).
-    여기서는 코드가 남아 있는지만 본다."""
-    tpl = (Path(collect.__file__).parent / "ui" / "assets" / "template.html").read_text(encoding="utf-8")
-    assert "const prevH=H;H=[];" in tpl and "}catch(e){H=prevH;throw e;}" in tpl and 'safeHtml(()=>V==="home"' in tpl   # JS-03
-    assert ".homelist .rowbtn span:has(>.st)" in tpl                                                                       # JS-04
-    assert "이 브라우저에는 저장할 수 없습니다" in tpl and "return true;}catch(e){_rgNoSave=true;return false;}" in tpl        # JS-11
-    assert "개를 모두 읽지 못했습니다(시각 형식)" in tpl and "장비 정보가 없는 파일입니다" in tpl and '${V==null?" disabled":""}' in tpl   # JS-13

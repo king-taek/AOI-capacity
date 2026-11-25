@@ -131,7 +131,6 @@ button{font:inherit;color:inherit}
 .nav .ind:not(.run) .l,.nav .ind:not(.run) .m,.nav .ind:not(.run) .r{opacity:0}.nav .ind.run .s{opacity:0}
 .nav .ind .l{width:7px;border-radius:7px 0 0 7px;transform-origin:0 50%}.nav .ind .r{width:7px;border-radius:0 7px 7px 0;transform-origin:0 50%}.nav .ind .m{width:1px;transform-origin:0 50%}
 .nav button{position:relative;z-index:1}.nav button.on{background:transparent;color:var(--nav-on)}.nav button:not(.on):hover{color:var(--ink)}
-.nav button:disabled{opacity:.45;cursor:default}.nav button:disabled:hover{color:inherit}   /* JS-13: 보여 줄 데이터가 없을 때 */
 [data-reveal]{overflow:hidden}
 .thead button.th{all:unset;cursor:pointer;display:inline-flex;align-items:center;gap:4px;justify-content:flex-end;width:100%;color:var(--ink-3);font-weight:600;font-size:11.5px;white-space:nowrap}
 .thead button.th:hover,.thead button.th.on{color:var(--ink)}
@@ -233,10 +232,6 @@ main{max-width:1420px;margin:0 auto;padding:22px 24px 90px}
 .missnote b{margin-right:6px}
 .st.bad{background:var(--crit-soft);color:var(--crit-ink)}
 .st.warn{background:var(--warn-soft);color:#7A5200}
-/* JS-04(11/25): 홈 목록 이름 칸(96px)에선 '수집 실패 · 일부 누락' 칩이 통째로 '…' 로 잘렸다 — 이름 바로 옆 경고 점(빨강 · 주황)으로. 이름만 줄이고 점은 늘 보인다.
-   글은 그대로 두어(크기 0) title · 화면 읽기에 남는다 */
-.homelist .rowbtn span:has(>.st){display:flex;align-items:center}.homelist .rowbtn span:has(>.st)>[data-tx]{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.homelist .rowbtn .st{flex:none;font-size:0;line-height:0;padding:0;width:9px;height:9px;margin-left:5px}.homelist .rowbtn .st.bad{background:var(--crit)}.homelist .rowbtn .st.warn{background:var(--warn)}
 .chart{position:relative;display:flex;align-items:flex-end;justify-content:center;gap:3px;border-bottom:1px solid var(--line-2)}
 .chart button,.chart>span.b{flex:1 1 0;min-width:0;display:flex;flex-direction:column;justify-content:flex-end;height:100%;border:0;background:none;padding:0;cursor:pointer}
 .chart .v{display:block;font-size:10.5px;color:var(--ink-2);text-align:center;margin-bottom:3px}
@@ -1835,12 +1830,10 @@ function rgLoad(){RG_EMB=rgNorm(meta.recipe_groups);let ls=null;try{ls=rgNorm(JS
   RG=(ls&&(!RG_EMB||ls.saved>RG_EMB.saved))?ls:(RG_EMB||{v:1,saved:"",groups:[]});}
 const rgSame=(a,b)=>JSON.stringify((a&&a.groups)||[])===JSON.stringify((b&&b.groups)||[]);
 function rgApply(){Object.assign(D,groupJobs(D.pool.job,D.detail,D.allDays||D.days,D.devices,recipeMap(RG)));}
-let _rgNoSave=false;   /* JS-11: 이 브라우저가 저장을 막았다(사생활 모드 · 정책) — 안내와 '내보내기' 강조 */
-function rgSaveLocal(){try{localStorage.setItem(RG_LS,JSON.stringify(RG));_rgNoSave=false;return true;}catch(e){_rgNoSave=true;return false;}}
+function rgSaveLocal(){try{localStorage.setItem(RG_LS,JSON.stringify(RG));}catch(e){}}
 function rgCommit(groups,msg,keep){const p=(n=>String(n).padStart(2,"0")),d=new Date();
   RG={v:1,saved:`${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`,groups:groups.filter(g=>g.jobs.length)};
-  const saved=rgSaveLocal();rgApply();
-  if(!saved)msg=(msg?msg+" — ":"")+"이 브라우저에는 저장할 수 없습니다. 창을 닫기 전에 '내보내기' 하세요";
+  rgSaveLocal();rgApply();
   /* Job 묶음 번호가 바뀌었으니 번호를 쥔 필터·팝업은 놓는다 */
   const st=state.modalJob!=null?state.stack.filter(k=>k!=="type"):state.stack;
   setState({modalJob:null,errFJob:null,errJob:null,stack:st,rgSel:keep?state.rgSel:[],rgName:keep?state.rgName:""});if(msg)toast(msg);}
@@ -1876,8 +1869,7 @@ function recipePopupHtml(){
   const close=()=>setState(CLOSE.recipe());
   const tog=raw=>()=>{const s=new Set(state.rgSel||[]);s.has(raw)?s.delete(raw):s.add(raw);setState({rgSel:[...s]});};
   const dirty=!rgSame(RG,RG_EMB);
-  const status=dirty&&_rgNoSave?`<span class="pill" style="background:var(--crit-soft);color:var(--crit-ink)" title="사생활 모드 · 회사 정책으로 이 브라우저가 저장을 막았습니다">저장 안 됨 · 창을 닫기 전에 내보내기</span>`
-    :dirty?`<span class="pill" style="background:#FFF4DB;color:#8A5A00" title="내보내기 한 파일을 수집기가 찾아 다음 HTML 부터 담습니다">이 브라우저에만 저장됨 · 내보내기 필요</span>`
+  const status=dirty?`<span class="pill" style="background:#FFF4DB;color:#8A5A00" title="내보내기 한 파일을 수집기가 찾아 다음 HTML 부터 담습니다">이 브라우저에만 저장됨 · 내보내기 필요</span>`
     :(RG.groups.length?`<span class="pill ok">이 HTML 에 담긴 묶음</span>`:`<span class="pill" style="background:#F0F3F7;color:#5A6673">묶음 없음 · 자동 묶음만</span>`);
   const cards=RG.groups.map(g=>{const lots=g.jobs.reduce((a,j)=>a+((byRaw.get(j)||{}).c||0),0);
     return `<div class="rgcard" data-key="rg:${esc(g.name)}"><div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap"><b style="font-size:13.5px">${esc(g.name)}</b><span class="num" style="font-size:12px;color:#5A6673">Job ${g.jobs.length}개 · Lot ${lots}개</span><div class="spacer"></div>
@@ -1889,7 +1881,7 @@ function recipePopupHtml(){
   return `<div class="ov z58"><button class="scrim" data-h="${h(close)}" aria-label="닫기"></button><div class="dlg w1120" role="dialog" aria-modal="true" aria-labelledby="dlg-recipe-title" data-dlg="recipe">
     <div class="dh"><h2 id="dlg-recipe-title" tabindex="-1" class="mid">레시피 묶음</h2><span class="sub">묶음 ${RG.groups.length}개 · 묶인 Job ${inUser.size}개${RG.saved?" · 저장 "+esc(RG.saved.replace("T"," ").slice(0,16)):""}</span>${status}
       <div class="spacer"></div>
-      <button class="btn${dirty&&_rgNoSave?" primary":""}" data-h="${h(rgExport)}" title="recipe_groups.json 으로 내려받습니다 — 수집기가 데이터 폴더·다운로드 폴더에서 찾아 다음 HTML 에 담습니다">내보내기</button>
+      <button class="btn" data-h="${h(rgExport)}" title="recipe_groups.json 으로 내려받습니다 — 수집기가 데이터 폴더·다운로드 폴더에서 찾아 다음 HTML 에 담습니다">내보내기</button>
       <button class="btn" data-h="${h(()=>{const f=document.getElementById("rgFile");if(f){f.value="";f.click();}})}" title="내보냈던 recipe_groups.json 을 불러옵니다">가져오기</button>
       ${dirty&&(RG_EMB||RG.groups.length)?`<button class="btn" data-h="${h(rgRevert)}" title="이 브라우저에서 고친 것을 버리고 이 HTML 에 담긴 묶음으로">되돌리기</button>`:""}
       <button class="x" data-h="${h(close)}" data-fk="x:recipe" title="닫기 (Esc)">✕</button><input type="file" id="rgFile" accept=".json,application/json" hidden></div>
@@ -1979,30 +1971,16 @@ function layoutPairLabels(root){const box=root.querySelector('[data-key="rcp:mde
     const [a,b]=L.map(el=>el.getBoundingClientRect()).sort((x,y)=>x.left-y.left);if(b.left-a.right<8)tr.classList.add("mg");}
   if(!box.__ro&&typeof ResizeObserver==="function"){let w=box.clientWidth,q=0;box.__ro=new ResizeObserver(()=>{if(box.clientWidth===w||q)return;w=box.clientWidth;
     q=requestAnimationFrame(()=>{q=0;layoutPairLabels(document);});});box.__ro.observe(box);}}
-/* JS-03(11/25): 탭 하나의 오류가 화면 전체를 멈추지 않게 — 본문 · 팝업을 그리다 예외가 나면 그 자리에 안내를 그리고 다른 탭은 계속 쓴다.
-   HTML 을 다 만들기 전에 예외가 새면 클릭 처리표(H)를 예전 것으로 되돌린다(화면은 그대로, 단추도 그대로 동작) */
-function safeHtml(f,what){try{return f();}catch(e){const m=String(e&&e.message||e);log("화면 오류("+what+"): "+m);try{console.error(e);}catch(_){}
-  return `<div class="panel" style="padding:28px 24px"><h2>이 ${what}을 그리지 못했습니다</h2><p class="muted" style="margin-top:6px">${esc(m)}</p><p class="muted" style="margin-top:6px">다른 탭은 계속 쓸 수 있습니다. 같은 일이 되풀이되면 이 파일과 함께 알려 주세요.</p></div>`;}}
 function render(){
-  const prevH=H;H=[];
+  H=[];
   const app=$("#app");const _snap=deckSnap(app);
   const ae=document.activeElement,fk=ae&&ae.getAttribute?ae.getAttribute("data-fk"):null;
   const prevTop=_lastTop;
   let html;
-  try{
-  if(!D||!D.days.length){
-    /* JS-13(11/25): 빈 화면의 까닭을 나눠 적는다 — 행이 없음 · 행은 있으나 시각을 모두 못 읽음 · 장비 정보가 없는 파일 */
-    const nr=rows.length,nb=D?D.badRows||0:0,nd=D?D.devices.length:0;
-    const [t1,t2]=!nr?["아직 수집한 데이터가 없습니다","수집 프로그램에서 '수집' 을 실행한 뒤 이 파일을 다시 여세요."]
-      :nb>=nr?[`행 ${nr.toLocaleString("ko-KR")}개를 모두 읽지 못했습니다(시각 형식)`,"수집 창에서 '결과 파일만 다시 만들기' 로 새로 만든 뒤 다시 여세요. 되풀이되면 수집 로그와 함께 알려 주세요."]
-      :!nd?["장비 정보가 없는 파일입니다","수집 창에서 '결과 파일만 다시 만들기' 로 새로 만든 뒤 다시 여세요."]
-      :["보여 줄 날이 없습니다","이 파일의 행이 수집 범위의 장비 · 기간에 들지 않습니다. 수집 창에서 '결과 파일만 다시 만들기' 로 새로 만든 뒤 다시 여세요."];
-    html=headerHtml(null)+`<div class="stage" data-key="stage"><main data-key="view:none"><div class="panel" style="padding:28px 24px"><h2>${esc(t1)}</h2><p class="muted" style="margin-top:6px">${esc(t2)}</p></div></main></div>`+footHtml();}
+  if(!D||!D.days.length)html=headerHtml(null)+`<div class="stage" data-key="stage"><main data-key="view:none"><div class="panel" style="padding:28px 24px"><h2>아직 수집한 데이터가 없습니다</h2><p class="muted" style="margin-top:6px">수집 프로그램에서 '수집' 을 실행한 뒤 이 파일을 다시 여세요.</p></div></main></div>`+footHtml();
   else{const V=state.view;let body="";
-    body=safeHtml(()=>V==="home"?homeHtml():V==="errors"?errorsHtml():V==="overkill"?okHtml():V==="recipe"?rcpHtml():V==="lot"?lotHtml():V==="param"?paramHtml():reportHtml(),"탭");
-    let pops="";try{pops=popupsHtml();}catch(e){log("화면 오류(팝업): "+(e&&e.message||e));try{console.error(e);}catch(_){}state.stack=[];toast("팝업을 그리지 못해 닫았습니다: "+(e&&e.message||e));}
-    html=headerHtml(V)+`<div class="stage" data-key="stage" data-anim="el"><main data-key="view:${V}">${body}</main></div>`+footHtml()+pops;}
-  }catch(e){H=prevH;throw e;}
+    if(V==="home")body=homeHtml();else if(V==="errors")body=errorsHtml();else if(V==="overkill")body=okHtml();else if(V==="recipe")body=rcpHtml();else if(V==="lot")body=lotHtml();else if(V==="param")body=paramHtml();else body=reportHtml();
+    html=headerHtml(V)+`<div class="stage" data-key="stage" data-anim="el"><main data-key="view:${V}">${body}</main></div>`+footHtml()+popupsHtml();}
   const tpl=document.createElement("template");tpl.innerHTML=html;
   if(app.getAttribute("data-anim")!=="el")app.setAttribute("data-anim","el");
   morphChildren(app,tpl.content);
@@ -2076,7 +2054,7 @@ function headerHtml(V){
   const pickHtml=`<hr><b>탭 골라 HTML 만들기</b>${ALL_TABS.map(([k,l])=>`<button class="btn" role="menuitemcheckbox" aria-checked="${pk.includes(k)}" data-h="${h(()=>setState({pickTabs:pk.includes(k)?pk.filter(x=>x!==k):[...pk,k]}))}" data-fk="pick:${k}">${pk.includes(k)?"☑":"☐"} ${l}</button>`).join("")}<button class="btn on" ${pk.length?"":"disabled"} data-h="${h(()=>saveHtml({only_tabs:ALL_TABS.map(t=>t[0]).filter(k=>pk.includes(k))},"탭"+pk.length+"개_"))}" data-fk="pick:go">${pk.length?"고른 "+pk.length+"개 탭만 HTML로 저장":"탭을 고르세요"}</button>`;
   const setBtn=state.devOn&&!lotOnly&&!only?`<span class="setwrap"><button class="btn${state.setOpen?" on":""}" data-h="${h(()=>setState({setOpen:!state.setOpen}))}" data-fk="set:btn" aria-haspopup="true" aria-expanded="${state.setOpen}" title="숨긴 탭 설정">⚙ 설정</button>${state.setOpen?`<div class="setpop" role="menu"><b>숨긴 탭</b>${hid.length?hid.map(([k,l])=>`<button class="btn" role="menuitem" data-h="${h(()=>{setState({unhid:[...state.unhid,k],setOpen:false});S.go(k)();})}" title="탭 줄로 복귀하고 엽니다">${l}</button>`).join(""):`<span class="setnone">숨긴 탭이 없습니다</span>`}${hasD?pickHtml:""}</div>`:""}</span>`:"";
   return `<header class="hdr" data-key="hdr"><div class="brand"><span class="${_mkCls}" data-static aria-hidden="true">${BRAND_SVG}</span>${lotOnly?"AOI":"AOI 가동 현황"}</div>
-    ${lotOnly?"":`<nav class="nav"><i class="ind" data-key="ind" data-static aria-hidden="true"><b class="l"></b><b class="m"></b><b class="r"></b><b class="s"></b></i>${nav.map(([k,l])=>`<button class="${V===k?"on":""}" data-h="${h(S.go(k))}" data-fk="nav:${k}"${V==null?" disabled":""}>${l}</button>`).join("")}</nav>`}
+    ${lotOnly?"":`<nav class="nav"><i class="ind" data-key="ind" data-static aria-hidden="true"><b class="l"></b><b class="m"></b><b class="r"></b><b class="s"></b></i>${nav.map(([k,l])=>`<button class="${V===k?"on":""}" data-h="${h(S.go(k))}" data-fk="nav:${k}">${l}</button>`).join("")}</nav>`}
     <div class="spacer"></div>
     ${hasD&&!lotOnly?`<div class="hacts"><button class="btn" data-h="${h(saveHtml)}" title="지금 데이터를 담은 HTML 사본을 내려받습니다">사본 저장</button>
       <button class="btn" data-h="${h(()=>setState({stack:pushTop("recipe")}))}" data-fk="rg:open" title="같은 레시피인 Job 을 묶어 이름을 붙입니다">레시피 묶음</button></div>`:""}
