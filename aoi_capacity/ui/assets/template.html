@@ -26,7 +26,7 @@
   --run:#2E6BA8; --err:#C5453C; --off:#E9EDF2; --nodata:#F0F3F7; --prev:#C9D1DA;
   --good:#276B48; --good-soft:#E7F0EA; --warn:#B0862F; --warn-soft:#FBEFD6; --crit:#C5453C; --crit-ink:#9C3527; --crit-soft:#FAE7E4;
   /* 화면 전용 — 막대 6단계(D48-⑦ 용어: Scan · Rescan · Test · Error · 에러 후 대기 · 대기) */
-  --dup:#8FB8DE; --test:#B49BD6; --test-ink:#7A5BA8; --stop:#F1D3CE; --idle:#E9EDF2; --future:#F7F9FB;
+  --dup:#8FB8DE; --test:#9B7FC8; --test-ink:#7A5BA8; --stop:#E3A69D; --idle:#E9EDF2; --future:#F7F9FB;
   --nav-on:#1D4E82; --sans:'Segoe UI','Malgun Gothic','Apple SD Gothic Neo',system-ui,sans-serif;
   --mono:Consolas,'Cascadia Mono',ui-monospace,monospace; --ease:cubic-bezier(.16,1,.3,1);
 }
@@ -1270,7 +1270,7 @@ return {day,today,generated:(metaIn&&metaIn.generated)||"",generated_iso:genIso,
 }
 
 /* ---------- ④ 화면 ---------- */
-const RUN="#2E6BA8", DUP="#8FB8DE", TEST="#B49BD6", ERR="#C5453C", STOP="#F1D3CE", IDLE="#E9EDF2", FUTURE="#F7F9FB";
+const RUN="#2E6BA8", DUP="#8FB8DE", TEST="#9B7FC8", ERR="#C5453C", STOP="#E3A69D", IDLE="#E9EDF2", FUTURE="#F7F9FB";
 const SEGC={0:RUN,1:ERR,2:TEST,3:STOP,4:DUP};
 const HEAT=["#d5eaff","#b2ceed","#91b3d8","#7097c2","#4f7dad","#2e6398"];   /* 한 색조(RUN) 6단, OKLCH 밝기 단조 — 낮음 → 높음 */
 const MONO="Consolas,'Cascadia Mono',ui-monospace,monospace";
