@@ -9,13 +9,17 @@
   시작할 때 한 번(새 버전이면 묻는다) + 켜 둔 동안 `UPDATE_RECHECK_MS` 마다 조용히(10/24) — 실행 중 확인은 창을 띄우지 않고
   상단 바에 '새 버전 받기' 알림만 두며, 수집 · Wafer 로그 모으기 · 다른 안내 창이 떠 있을 때는 건너뛴다.
 - 테스트(conftest)는 `_check_for_update_async` 를 클래스 수준에서 막는다.
+- 11/25: 처리 안 된 예외는 `install_excepthook` 이 로그에 남기고 안내 시트로 알린다 — 창은 그대로(예전엔 PyQt6 가 abort 해 창이 통째로 사라졌다, QT-01).
+  수집 실패는 종류별 쉬운 문장 + 다음 행동 단추, 원문은 '자세히' · app.log(CORE-10 · QT-15). 끝나면 실행 줄에 '✓ 수집 완료 [결과 열기]'(QT-11).
 """
 from __future__ import annotations
 
 import logging
 import os
+import sys
 import threading
 import time
+import traceback
 from typing import Dict, Optional
 
 from PyQt6.QtCore import QObject, Qt, QThread, QTimer, pyqtSignal
@@ -25,7 +29,7 @@ from PyQt6.QtWidgets import QApplication, QHBoxLayout, QMainWindow, QStackedWidg
 from .. import devices, i18n
 from ..utils import paths, prefs, results
 from ..workers.collector import CollectorWorker, CollectResult
-from .pages.collect_page import CollectPage
+from .pages.collect_page import CollectPage, _why_text as why_text
 from .pages.devices_page import DevicesPage
 from .widgets import sheets
 from .widgets.loading_overlay import LoadingOverlay
@@ -44,6 +48,31 @@ def dur_text(sec: float) -> str:
     if s < 3600:
         return K.DUR_MIN_FMT.format(m=s // 60, s=s % 60)
     return K.DUR_HOUR_FMT.format(h=s // 3600, m=s // 60 % 60)
+
+def install_excepthook(win) -> None:
+    """버튼 처리(슬롯) 안의 처리 안 된 예외 — 로그에 남기고 안내 시트를 띄운다. 창 · 편집 중인 내용은 그대로 둔다.
+    PyQt6 는 sys.excepthook 이 기본값이면 슬롯 예외에서 프로세스를 abort 한다(실측 rc=134). 시트 안에서 또 나면 로그만."""
+    state = {"busy": False}
+
+    def hook(etype, value, tb):
+        log.error("unhandled exception", exc_info=(etype, value, tb))
+        if state["busy"] or issubclass(etype, KeyboardInterrupt):
+            return
+        state["busy"] = True
+        try:
+            detail = "".join(traceback.format_exception_only(etype, value)).strip()
+            act = sheets.notice(win, i18n.KO.UNHANDLED_TITLE, i18n.KO.UNHANDLED_BODY, kind="error", detail=detail,
+                                actions=[("log", i18n.KO.ACT_LOG)])
+            if act == "log":
+                win.nav.set_current("collect")
+                win.collect_page.show_log()
+        except Exception:  # noqa: BLE001 - 안내 경로에서 새 예외를 만들지 않는다
+            log.exception("excepthook notice failed")
+        finally:
+            state["busy"] = False
+
+    sys.excepthook = hook
+
 
 # 살아 있는 워커를 모듈 전역에 잡아둔다 — 창이 먼저 사라져도 QThread 가 GC 로 죽지 않게.
 _LIVE_COLLECTORS: Dict[int, CollectorWorker] = {}
@@ -105,6 +134,7 @@ class MainWindow(QMainWindow):
         self._update_token = 0
         self._update_worker: Optional[_UpdateWorker] = None
         self._update_info: Optional[dict] = None
+        self._close_when_done = False
         self._restore_geometry()
 
         central = QWidget(self)
@@ -208,6 +238,10 @@ class MainWindow(QMainWindow):
         if self.collect_page.wafer_logs_running():          # Wafer 로그 모으기와 동시에 NAS 를 읽지 않는다(10/9)
             sheets.warn(self, i18n.KO.WAFER_LOGS_TITLE, i18n.KO.WAFER_LOGS_BUSY)
             return
+        busy = self.collect_page._busy_reason()             # 지금 올리기 중 — 같은 배포 폴더에 동시에 쓰지 않는다
+        if busy:
+            sheets.warn(self, i18n.KO.COLLECT_BUSY_TITLE, busy)
+            return
         self._confirm_devices_dirty()
         p = prefs.load()
         cfg = prefs.to_collect_cfg(p)
@@ -268,8 +302,10 @@ class MainWindow(QMainWindow):
         if not self._is_current(token):
             return
         self.overlay.set_device_state(name, state)
-        if detail:
-            self.overlay.set_detail(f"{name} · {detail}")
+        if state == "error":                              # 11/25 QT-06: 장비 오류는 빨간 한 줄로 — 흐린 '지금 읽는 것' 줄에 섞지 않는다
+            self.overlay.set_device_error(name)
+            if detail:
+                log.info("device error %s: %s", name, detail)
 
     def _on_collect_log(self, token: int, line: str) -> None:
         if self._is_current(token):
@@ -285,35 +321,61 @@ class MainWindow(QMainWindow):
             self._release_worker(token)
             return
         self._finish_collect(token)
-        unreachable, partial = result.unreachable_devices, result.partial_devices
-        toast = i18n.KO.COLLECT_DONE_TOAST_FMT.format(devices=max(0, result.devices - len(unreachable)), elapsed=dur_text(result.elapsed))
+        unreachable = result.unreachable_devices
+        n_dev = max(0, result.devices - len(unreachable))
+        toast = i18n.KO.COLLECT_DONE_TOAST_FMT.format(devices=n_dev, elapsed=dur_text(result.elapsed))
+        done = i18n.KO.COLLECT_DONE_OK_FMT.format(devices=n_dev, elapsed=dur_text(result.elapsed))
+        when = time.strftime("%H:%M")
         if result.published and not any(w.get("kind") == "publish_locked" for w in result.warnings):
             toast += i18n.KO.COLLECT_DONE_TOAST_PUBLISHED                    # 10/30: 올렸다는 것도 한 줄로 — 조용히만 하면 되는지 알 수 없었다
+            done += i18n.KO.COLLECT_DONE_TOAST_PUBLISHED
         if result.published_full and not any(w.get("kind") == "publish_full_locked" for w in result.warnings):
             toast += i18n.KO.COLLECT_DONE_TOAST_PUBLISHED_FULL
-        self.collect_page.set_status(toast)
+            done += i18n.KO.COLLECT_DONE_TOAST_PUBLISHED_FULL
         self.collect_page.append_log(toast)
         self._refresh_last_collect()
+        self.collect_page.show_done(done)
+        for kind, wk, ok_dir in (("lot", "publish", result.published), ("full", "publish_full", result.published_full)):
+            fail = next((x for x in result.warnings if x.get("kind") == wk), None)      # 설정의 배포 줄에 마지막 결과 한 줄(PP-05)
+            if fail:
+                self.settings_page.set_publish_status(kind, i18n.KO.SET_PUBLISH_FAIL_FMT.format(when=when, why=why_text(fail.get("why", ""))), ok=False)
+            elif any(x.get("kind") == wk + "_locked" for x in result.warnings):
+                self.settings_page.set_publish_status(kind, i18n.KO.SET_PUBLISH_DONE_LOCKED_FMT.format(when=when))
+            elif ok_dir:
+                self.settings_page.set_publish_status(kind, i18n.KO.SET_PUBLISH_AUTO_FMT.format(when=when))
         # 10/24: 문제는 '확인' 을 눌러야 닫히는 팝업 대신 수집 카드 안 알림으로 — 다음 수집 때까지 남는다
-        lines = list(result.warning_lines)          # C06: HTML 은 정상, CSV 만 못 썼을 때의 사유
-        if unreachable:
-            lines.append(i18n.KO.COLLECT_DONE_UNREACHABLE_FMT.format(n=len(unreachable), names=", ".join(unreachable)))
-        if partial:
-            lines.append(i18n.KO.COLLECT_DONE_PARTIAL_FMT.format(n=len(partial), names=", ".join(partial), reports=len(result.errors)))
-        elif result.errors and not lines:
-            lines.append(i18n.KO.COLLECT_DONE_SEE_LOG)
-        if unreachable:
-            lines.append(i18n.KO.COLLECT_DONE_UNREACHABLE_HINT)
-        self.collect_page.show_outcome(i18n.KO.COLLECT_DONE_WITH_ERRORS_TITLE, lines, devices=bool(unreachable))
+        # 11/25 QT-16: 문제마다 한 항목(머리 · 설명 · 단추). 오류 원문은 로그에만(워커가 warning_lines 를 로그로 보냈다)
+        self.collect_page.show_outcome(i18n.KO.COLLECT_DONE_WITH_ERRORS_TITLE, result.outcome_items)
+        if self._close_when_done:
+            QTimer.singleShot(0, self.close)
 
     def _on_collect_failed(self, token: int, message: str) -> None:
         if not self._is_current(token):
             self._release_worker(token)
             return
+        w = _LIVE_COLLECTORS.get(token)
+        info = dict(getattr(w, "failure", None) or {})
         self._finish_collect(token)
         log.error("collect failed: %s", message)
         self.collect_page.append_log(message)
-        sheets.error(self, i18n.KO.COLLECT_FAILED_TITLE, i18n.KO.COLLECT_FAILED_FMT.format(detail=message))
+        if self._close_when_done:
+            QTimer.singleShot(0, self.close)
+            return
+        self.show_failure(info.get("kind") or "other", message)
+
+    def show_failure(self, kind: str, detail: str) -> None:
+        """수집 실패 안내 — 종류별 쉬운 문장 + 해결 단추, 예외 원문은 접힌 '자세히'(CORE-10 · QT-15)."""
+        K = i18n.KO
+        body = {"html": K.FAIL_HTML_BODY, "config": K.FAIL_CONFIG_BODY, "nas": K.FAIL_NAS_BODY, "rebuild": K.FAIL_REBUILD_BODY,
+                "io": K.FAIL_IO_BODY}.get(kind, K.FAIL_OTHER_BODY)
+        actions = {"html": [("html", K.ACT_HTML_ONLY)], "config": [("devices", K.ACT_DEVICES)]}.get(kind, []) + [("log", K.ACT_LOG)]
+        act = sheets.notice(self, K.COLLECT_FAILED_TITLE, body, kind="error", detail=detail, actions=actions)
+        if act == "html":
+            self.collect_page.make_default_html()
+        elif act == "devices":
+            self.nav.set_current("devices")
+        elif act == "log":
+            self.collect_page.show_log()
 
     def _on_collect_cancelled(self, token: int) -> None:
         if not self._is_current(token):
@@ -415,7 +477,7 @@ class MainWindow(QMainWindow):
         w.signals.applied.connect(self._on_update_applied)
         w.signals.failed.connect(self._on_update_failed)
         self._update_worker = w
-        self.overlay.show_overlay(i18n.KO.UPDATE_DOWNLOADING, cancelable=False)
+        self.overlay.show_overlay(i18n.KO.UPDATE_OVERLAY_TITLE, cancelable=False, devices=False)   # 11/25 QT-07: 장비 칸 · 범례 없이
         self.overlay.set_progress(0, 0, i18n.KO.UPDATE_PHASE_DOWNLOAD)
         w.start()
 
@@ -462,6 +524,19 @@ class MainWindow(QMainWindow):
             self.setWindowState(self.windowState() | Qt.WindowState.WindowMaximized)
 
     def closeEvent(self, ev) -> None:  # noqa: N802
+        w = self._worker
+        if (w is not None and w.isRunning() and getattr(w, "phase", "") == "publish" and not self._close_when_done):
+            # 11/25 PP-01: 배포 중 닫으면 3초 뒤 스레드를 버려 배포가 조용히 끊겼다 — 끝나면 닫을지 묻는다
+            ans = sheets.ask(self, i18n.KO.LOADING_CLOSE_BUSY_TITLE, i18n.KO.LOADING_CLOSE_BUSY_BODY,
+                             SB.Yes | SB.No | SB.Cancel, SB.Yes)
+            if ans == SB.Yes:
+                self._close_when_done = True
+                self.flash_status(i18n.KO.LOADING_CLOSE_WAITING)
+                ev.ignore()
+                return
+            if ans != SB.No:
+                ev.ignore()
+                return
         maximized = bool(self.windowState() & Qt.WindowState.WindowMaximized)
         g = self.normalGeometry() if maximized else self.geometry()
         prefs.patch(window_width=int(g.width()), window_height=int(g.height()), window_maximized=maximized)
