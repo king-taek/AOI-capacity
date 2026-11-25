@@ -1278,14 +1278,14 @@ function init(){
   /* ── 그래프 툴팁 · 교차 강조(10/6 사용자 — 모든 그래프를 interactive 하게) ──
      브라우저 기본 title 은 1초 뒤에야 뜨고 한 줄이라 그래프 값을 읽기 어렵다. 그래프 요소(TIP_SEL — 막대 · 타임라인 · 점 · 분포 칸 · [data-tip])는 올리는 즉시 뜨는 툴팁(첫 줄 굵게)으로,
      키보드 포커스도 같다. title 은 첫 호버 때 data-tip 으로 옮긴다(빈 요소에는 aria-label 로 남긴다). 점(.sd[data-dev])에 올리면 같은 장비의 점이 모든 그래프에서 함께 켜지고 나머지는 흐려진다(클래스만 — 다시 그리지 않는다). */
-  {const TIP_SEL='[data-tip],[data-bar],.chart [title],.tline [title],.hbar[title],.hit[title],.callout[title],.srng[title],.mbar[title],.mbar [title],.dtrack [title],.stk [title],.hist [title],.hist[title],.bsw [title],.dbrow[title],.tbars [title]';
+  {const TIP_SEL='[data-tip],[data-bar],.chart [title],.tline [title],.hbar[title],.hit[title],.callout[title],.srng[title],.mbar[title],.mbar [title],.dtrack [title],.stk [title],.hist [title],.hist[title],.bsw [title],.dbrow[title],.tbars [title],[data-lt]';
     let el=null,box=null,lx=0,ly=0;
     /* 24시간 막대(가동률 목록 · 장비 팝업)는 한 요소 안의 그라디언트라 마우스 위치(분)로 구간을 찾아 말해 준다 */
     const hh=v=>String(Math.floor(v/60)).padStart(2,"0")+":"+String(Math.floor(v%60)).padStart(2,"0"),SEGN={0:"Scan",1:"Error",2:"Test",3:"에러 후 대기",4:"Rescan"};
     const barText=(n,x)=>{const [day,dev]=n.dataset.bar.split("|"),t=S.at(day,dev);if(!t)return dev+"\n이 날 기록 없음";const r=n.getBoundingClientRect(),den=S.den(t),m=Math.max(0,Math.min(1439,Math.floor((x-r.left)/Math.max(1,r.width)*1440))),g=S.segsOf(t).find(q=>m>=q.a&&m<q.b);
       if(g)return dev+" · "+SEGN[g.k]+"\n"+hh(g.a)+" ~ "+hh(g.b)+" ("+Math.round(g.b-g.a)+"분)";
       return m>=den?dev+"\n"+hh(m)+" — 아직 오지 않은 시간":dev+" · 대기\n"+hh(m)+" 무렵 — 스캔 기록 없는 시간";};
-    const textOf=(n,x)=>{if(n.hasAttribute("data-bar"))return barText(n,x==null?lx:x);let t=n.getAttribute("data-tip");if(t==null&&n.hasAttribute("title")){t=n.getAttribute("title");n.setAttribute("data-tip",t);n.removeAttribute("title");if(!n.textContent.trim()&&!n.getAttribute("aria-label"))n.setAttribute("aria-label",t.replace(/\n+/g," · "));}return t;};
+    const textOf=(n,x)=>{if(n.hasAttribute("data-bar"))return barText(n,x==null?lx:x);if(n.hasAttribute("data-lt"))return _lotTip?_lotTip(n.getAttribute("data-lt")):"";let t=n.getAttribute("data-tip");if(t==null&&n.hasAttribute("title")){t=n.getAttribute("title");n.setAttribute("data-tip",t);n.removeAttribute("title");if(!n.textContent.trim()&&!n.getAttribute("aria-label"))n.setAttribute("aria-label",t.replace(/\n+/g," · "));}return t;};
     const hide=()=>{el=null;if(box)box.hidden=true;};
     const place=()=>{if(!box||box.hidden)return;const w=box.offsetWidth,hh=box.offsetHeight,W=innerWidth,H2=innerHeight;let x=lx+14,y=ly+18;if(x+w>W-8)x=Math.max(8,lx-w-14);if(y+hh>H2-8)y=Math.max(8,ly-hh-12);box.style.left=x+"px";box.style.top=y+"px";};
     const show=(n,x,y)=>{const t=textOf(n,x);if(!t){hide();return;}el=n;lx=x;ly=y;if(!box){box=document.createElement("div");box.className="tip";box.setAttribute("role","tooltip");box.hidden=true;document.body.appendChild(box);}
@@ -1313,7 +1313,9 @@ function init(){
   document.addEventListener("keydown",e=>{if(e.key==="Tab"){trapTab(e);return;}
     if((e.ctrlKey||e.metaKey)&&e.shiftKey&&(e.key==="D"||e.key==="d")){e.preventDefault();setState({devOn:!state.devOn,setOpen:false});return;}
     if(e.key!=="Escape")return;if(state.setOpen&&!state.stack.length){setState({setOpen:false});return;}closeTop();});
-  document.addEventListener("input",e=>{const el=e.target;const k=el&&el.dataset?el.dataset.in:null;if(k&&INPUT_KEYS.has(k))setState({[k]:el.value});});
+  document.addEventListener("input",e=>{const el=e.target;const k=el&&el.dataset?el.dataset.in:null;if(!k||!INPUT_KEYS.has(k))return;
+    if(k==="lotQ"){state.lotQ=el.value;clearTimeout(_lotQT);_lotQT=setTimeout(render,LOT_Q_MS);return;}   /* LOT 검색: 120ms 더 안 칠 때 한 번만 그린다(값은 바로 state 에 — 그 사이 다른 렌더가 와도 입력이 지워지지 않는다) */
+    setState({[k]:el.value});});
   document.addEventListener("change",e=>{const el=e.target;if(el&&el.id==="rgFile"&&el.files&&el.files[0])rgImportFile(el.files[0]);
     const k=el&&el.dataset?el.dataset.in:null;
     if(k==="day"){const i=D.days.indexOf(el.value);if(i>=0)goDay(i);else{el.value=D.days[state.dayI]||"";toast("그 날짜에는 이 기간의 데이터가 없습니다");}return;}
@@ -2558,11 +2560,11 @@ function paramHtml(){
    이름 · 코드는 별칭일 뿐 묶는 근거가 아니다. 합치지 못한 쌍(다른 Lot 이름으로 같은 Wafer 를 검사)은 고른 Lot 의 검사 순서에 흐린 줄로 보여 준다. 이 파일에 담긴 기록 전부를 본다(헤더 기간과 무관). 원천 행에서 계산 — 모델과 따로.
    Wafer ID 로 쓰지 않는 것: 6자 미만 · 숫자만 · SLOT 번호 자리표시(SLOT10 은 길이가 6이라 예전엔 통과했다). */
 const lotIdOk=w=>{const id=String(w||"").toUpperCase().replace(/[^A-Z0-9]/g,"");return id.length>=6&&!/^\d+$/.test(id)&&!/^SLOT\d*$/.test(id)?id:null;};
-const LOT_MAX=25,LOT_NEAR_DAYS=7;
+const LOT_MAX=25,LOT_NEAR_DAYS=7,LOT_Q_MS=120;
 const LOT_PH=/^(TEST([-_\s].*)?|\d{1,2}|X|LOTID NOT CONFIGURED|NL_.*|LOADPORT.*)$/i;   /* 이름으로 쓰기엔 자리표시 — 표시 이름을 고를 때 뒤로 미룬다 */
 /* KLA 는 'Lot이름@공정코드 꼬리표'(TB500.INT764@6322) — @ 앞이 Lot 이름, 뒤 낱말이 공정 코드 */
 function lotParse(r){const n=String(r.lot||"").trim();if(isKla(r.device)){const m=/^(.*?)@([^\s@]+)(?:\s.*)?$/.exec(n);if(m&&m[1])return {name:m[1],proc:m[2]};}return {name:n,proc:""};}
-let _lotIx=null;
+let _lotIx=null,_lotR=null,_lotTip=null,_lotQT=0;   /* 색인 · 오른쪽 결과 재사용 · 격자 칸 설명 · 검색 입력 지연 */
 /* 11/25 점검: Test 판정은 가동률 모델과 같은 하나(D64 · D87 — Lot 원문 어디든 TEST · No Pattern Job) */
 const lotTest=(lot,job)=>/TEST/i.test(String(lot||""))||MONITOR_JOB_RE.test(String(job||""));
 /* 검색 비교 — 띄어쓰기 · 하이픈 · 밑줄 같은 기호는 무시한다(영문 · 숫자 · 한글만, 대문자로) */
@@ -2718,7 +2720,13 @@ function lotHtml(){
     <div style="padding:8px 12px 0">${segHtml(S.segGroup([{k:"all",label:"전체"},{k:"cam",label:"Camtek"},{k:"kla",label:"KLA"}],mk,k=>setState({lotMk:k})))}</div>
     <p class="muted" style="font-size:11.5px;margin:8px 12px 4px">${Q?`검색 결과 ${list.length}개${list.length>40?" · 40개 표시":""}`:"최근 Lot 30개"}</p><div class="lotscroll">${shown.map((o,i)=>lpHead(o,i)+pickBtn(o)).join("")||`<p class="empty">없음</p>`}</div></div>`;
   let right=`<div class="panel" style="padding:28px;color:#5A6673;font-size:13px">왼쪽에서 Lot 이나 Wafer ID 를 고르세요.</div>`;
-  if(pick){const F=lotFamily(pick);const A=F.atts,M=A.filter(a=>!a.x);
+  /* 오른쪽(표 · 지도 · 격자)은 고른 Lot 과 lot* 상태(검색어 · 종류 필터 빼고)가 같으면 지난 결과를 다시 쓴다(11/25 — 검색어를 칠 때마다 큰 Lot 격자를 다시 만들었다).
+     핸들러 번호(data-h · data-dh)만 이번 렌더의 H 로 옮긴다 */
+  const rKey=pick?JSON.stringify([lotOnly,Object.keys(state).filter(k=>/^lot/.test(k)&&k!=="lotQ"&&k!=="lotMk").sort().map(k=>[k,state[k]])]):"";
+  const hit=!!(pick&&_lotR&&_lotR.rows===rows&&_lotR.key===rKey);
+  if(hit){const off=H.length,R0=_lotR;for(const fn of R0.hs)H.push(fn);right=R0.html.replace(/data-(h|dh)="(\d+)"/g,(m,k,i)=>`data-${k}="${+i-R0.h0+off}"`);_lotTip=R0.tip;}
+  const h0=H.length;
+  if(pick&&!hit){const F=lotFamily(pick);const A=F.atts,M=A.filter(a=>!a.x);
     if(!M.length)right=`<div class="panel" style="padding:24px">이 ${pick.k==="lot"?"Lot":"Wafer"} 에는 따라갈 Wafer ID 가 없습니다(슬롯 번호 같은 짧은 ID 뿐).</div>`;
     else{const tot={f:0,b:0,scan:0,fN:0},SM=F.sum;for(const a of M){tot.f+=a.f;tot.fN+=a.fN;tot.b+=a.bmin||0;tot.scan+=a.scan;}
       const devs=new Set(M.map(a=>a.dev)),nX=A.length-M.length,al=[...F.names].filter(n=>n!==(F.L?F.L.title:""));
@@ -2747,9 +2755,14 @@ function lotHtml(){
       const idsBySlot=[...F.ids].sort((p,q)=>(slotNow(p)??999)-(slotNow(q)??999)||(p<q?-1:1));
       const code=(a,id)=>{const x=a.w.get(id);return !x?"-":a.test?"T":x.pass?(x.tag==="re"||x.tag==="ren"?"R":"P"):x.c?"E":"S";};
       const COL={P:RUN,R:DUP,E:ERR,S:"#C9D2DC",T:TEST},CN={P:"PASS",R:"재스캔 PASS",E:"Error",S:"건너뜀/중단",T:"Test","-":"검사 안 함"};
-      const cell=(a,id,num)=>{const c=code(a,id);if(c==="-")return `<i class="lc"></i>`;const x=a.w.get(id);const okL=(c==="P"||c==="R")&&x.f!=null?(x.f>=1000?2:x.f>=400?1:0):(!x.pass&&/max\s*fault/i.test(String(x.r.status||""))?3:0);   /* 상한 초과는 원인 코드가 없어(현택 10/30: Error 로 세지 않음) 건너뜀/중단 칸 — 문구로 가린다 */
-        const tip=`${id}${lotIdOk(x.r.wafer_id)!==id?" (판독 "+x.r.wafer_id+")":""}${sno(x)!=null?" · Slot #"+sno(x):""} · ${a.dev} · ${a.lot} · ${fmtT(a.t)} · ${x.pass?"PASS":x.c?x.c:String(x.r.status||"").slice(0,40)}${x.f!=null?" · Defect "+x.f:""}${x.min!=null?" · "+hm(x.min):""}${a.x?" · 다른 LOT 이름":""}`;
-        return `<i class="lc${a.x?" xc":""}${okL?" okc ok"+okL:""}" style="background-color:${okL===1?OK_OV:okL>=2?OK_SEV:COL[c]}" title="${esc(tip+(okL===1?" · 오버킬":okL===2?" · 심한 오버킬":okL===3?" · 심한 오버킬(상한 초과)":""))}">${num&&x.pass&&x.f!=null?(x.f<1000?x.f:x.f<10000?(x.f/1000).toFixed(1)+"k":Math.round(x.f/1000)+"k"):x.c&&num?"E":""}</i>`;};
+      const okLv=(c,x)=>(c==="P"||c==="R")&&x.f!=null?(x.f>=1000?2:x.f>=400?1:0):(!x.pass&&/max\s*fault/i.test(String(x.r.status||""))?3:0);   /* 상한 초과는 원인 코드가 없어(현택 10/30: Error 로 세지 않음) 건너뜀/중단 칸 — 문구로 가린다 */
+      /* 칸 설명은 마우스를 올릴 때 만든다(11/25 — 큰 Lot 은 칸 750개 × 150자를 늘 담았다). 칸에는 'A 번호|Wafer ID' 만(data-lt) */
+      const AI=new Map(A.map((a,i)=>[a,i]));
+      _lotTip=s=>{const j=s.indexOf("|"),a=A[+s.slice(0,j)],id=s.slice(j+1),x=a&&a.w.get(id);if(!x)return "";const okL=okLv(code(a,id),x);
+        const tip=`${id}${lotIdOk(x.r.wafer_id)!==id?" (판독 "+x.r.wafer_id+")":""}${sno(x)!=null?" · Slot #"+sno(x):""} · ${a.dev} · ${a.lot} · ${fmtT(a.t)} · ${x.pass?"PASS":x.c?x.c:String(x.r.status||"").slice(0,40)}${x.f!=null?" · Defect "+x.f:""}${x.min!=null?" · "+hm(x.min):""}${a.x?" · 다른 LOT 이름":""}${x.dups?` · 같은 Report 에 ${x.dups.length+1}줄: ${[...x.dups,x].map(y=>y.pass?"PASS":y.c||String(y.r.status||"").slice(0,20)).join(" / ")}`:""}`;
+        return tip+(okL===1?" · 오버킬":okL===2?" · 심한 오버킬":okL===3?" · 심한 오버킬(상한 초과)":"");};
+      const cell=(a,id,num)=>{const c=code(a,id);if(c==="-")return `<i class="lc"></i>`;const x=a.w.get(id);const okL=okLv(c,x);
+        return `<i class="lc${a.x?" xc":""}${okL?" okc ok"+okL:""}" style="background-color:${okL===1?OK_OV:okL>=2?OK_SEV:COL[c]}" data-lt="${AI.get(a)}|${esc(id)}">${num&&x.pass&&x.f!=null?(x.f<1000?x.f:x.f<10000?(x.f/1000).toFixed(1)+"k":Math.round(x.f/1000)+"k"):x.c&&num?"E":""}</i>`;};
       const dshort=d=>String(d).replace(/^4F-AOI-0?/,"4F-").replace(/^AOI-/,"");const runs=[];for(const a of AC){const r=runs[runs.length-1];if(r&&r.d===a.dev)r.n++;else runs.push({d:a.dev,n:1});}
       const head=`<span class="ldl">장비</span>${runs.map(r=>`<span class="ldv" style="grid-column:span ${r.n}" title="${esc(r.d)}">${esc(r.n>2?r.d:dshort(r.d))}</span>`).join("")}<span class="ldl">검사 #</span>${AC.map((a,i)=>`<span class="lh${a.x?" xc":""}" title="${esc(a.dev+" · "+a.lot+" · "+fmtT(a.t))}">${cut+i+1}</span>`).join("")}`;
       const slotLab=id=>{const n=slotNow(id);return n!=null?`<span class="sn">#${n}</span>`:`<span class="sn none">${sBase?"—":""}</span>`;};
@@ -2776,6 +2789,7 @@ function lotHtml(){
           <div class="lotatt head"><span class="ix">#</span><span>시작</span><span>장비</span><span>Lot 이름</span><span>Job</span><span>레시피</span><span class="r">PASS</span>${anyE?"<span>Error 원인</span>":""}${anyF?'<span class="r">Defect</span>':""}${lotOnly?"":'<span class="r">배치 시간</span><span>구분</span><span></span>'}</div><div class="lotbox">${tl}</div></div>
         ${lotOnly?"":slots}
         <div class="panel" style="padding:12px 16px;overflow-x:auto"><h3 style="margin:0 0 8px;font-size:14px;display:flex;gap:10px;align-items:center;flex-wrap:wrap">Wafer × 검사 <span class="lotleg">${[["P","PASS"],["R","재스캔"],["E","Error"],["S","건너뜀"],["T","Test"]].map(([c,n])=>`<span><i style="background-color:${COL[c]}"></i>${n}</span>`).join("")}<span class="okleg"><i style="background-color:${OK_OV}"></i>오버킬 400↑</span><span class="okleg"><i style="background-color:${OK_SEV}"></i>심한 오버킬 1,000↑</span>${cut?`<span class="muted">최근 30번만</span>`:""}</span></h3>${mx}</div>${wd}`;}}
+  if(pick&&!hit)_lotR={rows,key:rKey,html:right,h0,hs:H.slice(h0),tip:_lotTip};
   return `<div class="bar-h"><h1>스캔을 어디에 했니?</h1><span style="font-size:12.5px;color:#5A6673">Wafer ID 로 묶음 · 조회 기간과 무관</span></div>
     <div class="lotgrid">${left}<div>${right}</div></div>`;}
 /* ---------- RDL 단일스캔 탭(옛 '레시피' 탭, D70 · D74 · 10/6 개편) ----------
