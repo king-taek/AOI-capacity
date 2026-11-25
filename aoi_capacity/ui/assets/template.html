@@ -1298,6 +1298,8 @@ const JOB_ALIAS={
   "R_MSFT_Kendall_0859275PD_BS-CAMTEK":"Kendall BS"};
 /* 나뉜 이름(D76)의 표기명: 줄기가 같은 표기명 Job 이 있으면 그 표기명 + '-Multi' · '-Single' · '-미구분' */
 const JOB_ALIAS_STEM=Object.fromEntries(Object.entries(JOB_ALIAS).map(([k,v])=>[jobStem(k),v]));
+/* COPY-02(11/25): 같은 '멀티/단일을 알 수 없음' 을 Job 이름 끝에선 '-미구분', 타일 · 범례에선 '판정 못 함' 으로 불렀다 — 보이는 이름만 '-판정 못 함' 으로(통계 · 저장 이름은 그대로, D76) */
+const jobShow=s=>String(s??"").replace(/-미구분$/,"-판정 못 함");
 function jobAlias(raw){if(JOB_ALIAS[raw])return JOB_ALIAS[raw];const m=String(raw||"").match(/^(.*)-(Multi|Single|미구분)$/);if(!m)return null;const a=JOB_ALIAS_STEM[jobStem(m[1])];return a?a+"-"+m[2]:null;}
 /* KLA TB500 Job 표기(10/25, 사용자): SetupID `ROOT-HVM-4DT-TB500-H-M1-<이름>` 에서 공통 접두와 끝의 장비 표시 `_K1`~`_K6` 를 떼고 **원문 낱말 순서 그대로** 적는다 —
    `SEQ_TB500_RDL1_(M)_K5` → `SEQ TB500 RDL1 Multi` · `RDL3_K2` → `TB500 RDL3` · `RDL4_AUTO_RBB` → `TB500 RDL4 AUTO_RBB`. 원문에 TB500 이 없으면 앞에 붙이고(SEQ 가 있으면 SEQ 뒤가 아니라 원문 자리),
@@ -1311,7 +1313,7 @@ function klaJobAlias(raw){const s=String(raw||"");if(!s.startsWith(KLA_TB_PRE))r
   for(const x of t){const known=x==="TB500"||/^(SEQ|Multi|RDL\d)$/i.test(x);if(!known&&gap&&out.length)out[out.length-1]+="_"+x;else out.push(x);gap=!known;}
   return out.join(" ");}
 /* Job 묶음의 표시 이름: 레시피 묶음 이름(D67) → 표기명(JOB_ALIAS) → KLA TB500 표기 → 대표 원문. al = 원문이 아닌 이름(고정폭 글꼴을 쓰지 않는다) */
-function jobNm(G){if(!G)return{nm:"",al:false,raw:""};const raw=D.pool.job[G.l]||"(Job 없음)";if(G.nm)return{nm:G.nm,al:true,raw};const a=jobAlias(raw)||klaJobAlias(raw);return{nm:a||raw,al:!!a,raw};}
+function jobNm(G){if(!G)return{nm:"",al:false,raw:""};const raw=D.pool.job[G.l]||"(Job 없음)";if(G.nm)return{nm:G.nm,al:true,raw};const a=jobAlias(raw)||klaJobAlias(raw);return{nm:jobShow(a||raw),al:!!a,raw};}
 const PROPS={attentionUtil:40,attentionErr:3};   /* 살펴볼 장비 문턱 — meta.dashboard_settings 의 같은 이름 숫자가 있으면 그것으로(D14) */
 function applySettings(m){const o=(m&&m.dashboard_settings)||{};for(const k of Object.keys(PROPS)){const v=Number(o[k]);if(o[k]!==undefined&&Number.isFinite(v)&&v>=0)PROPS[k]=v;}}
 let D=null;
@@ -3003,7 +3005,7 @@ function rcpHtml(){
     const sfxC=gi=>{if(PI)return /enhanced/i.test(String(D.pool.job[D.jobGroups[gi].l]))?MODE_C.S:MODE_C.M;const s=rcpSuffix(gi);return s==="Multi"?MODE_C.M:s==="Single"?MODE_C.S:s==="미구분"?MODE_C.U:"#8A96A3";};
     /* Job 칩 = 통계에 넣을지 고르는 켜기/끄기 단추 */
     const chips=members.map(([gi,n])=>{const raw=String(D.pool.job[D.jobGroups[gi].l]),off=rcpOffOf(raw);
-      return `<button type="button" class="jchip jtog${off?" off":""}" aria-pressed="${!off}" data-key="jc:${esc(raw)}" data-fk="jc:${esc(raw)}" data-h="${h(()=>rcpToggleJob(raw))}" title="${esc(raw)} — ${off?"통계에서 뺀 상태 · 누르면 포함":"통계에 포함 중 · 누르면 제외"}"><i class="ck" aria-hidden="true">${off?"":"✓"}</i><i class="sw" style="background-color:${sfxC(gi)}"></i>${esc(cut(raw,34))} <b class="num">${n.toLocaleString("ko-KR")}</b></button>`;}).join("");
+      return `<button type="button" class="jchip jtog${off?" off":""}" aria-pressed="${!off}" data-key="jc:${esc(raw)}" data-fk="jc:${esc(raw)}" data-h="${h(()=>rcpToggleJob(raw))}" title="${esc(jobShow(raw))} — ${off?"통계에서 뺀 상태 · 누르면 포함":"통계에 포함 중 · 누르면 제외"}"><i class="ck" aria-hidden="true">${off?"":"✓"}</i><i class="sw" style="background-color:${sfxC(gi)}"></i>${esc(cut(jobShow(raw),34))} <b class="num">${n.toLocaleString("ko-KR")}</b></button>`;}).join("");
     const offN=members.filter(([gi])=>rcpOffOf(leadOf(gi))).length;
     const jobsRow=`<div class="jchips"><span class="muted" style="font-size:11.5px">통계에 넣을 Job</span>${chips}${offN?`<button class="link" data-h="${h(()=>setState({rcpOff:{...(state.rcpOff||{}),...Object.fromEntries(members.map(([gi])=>[leadOf(gi),false]))}}))}">모두 포함</button>`:""}${rcpExclChip(SF.k,from,to)}</div>`;
     const unitSeg=segHtml([{label:"Wafer당",on:!U.lot,pick:()=>setState({rcpUnit:"wafer"})},{label:"LOT당",on:U.lot,pick:()=>setState({rcpUnit:"lot"})}],'aria-label="통계를 보는 단위"');
