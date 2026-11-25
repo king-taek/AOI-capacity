@@ -3,6 +3,8 @@
 API (참고 저장소와 같은 시그니처)
     sheets.info(parent, title, text) / warn / error   → StandardButton.Ok
     sheets.ask(parent, title, text, buttons, default) → 사용자가 누른 StandardButton
+    sheets.notice(parent, title, text, kind, detail, actions) → 누른 보조 단추의 열쇠(확인이면 "") — 11/25: 원문은 접힌 '자세히', 다음 행동 단추
+시트가 떠 있는 동안 창의 나머지(상단 바 · 페이지 · 로딩 덮개)는 잠가 Tab 이 시트 안에서만 돈다(11/25 QT-04).
 호스트(`SheetHost`)는 MainWindow 가 `self._sheets` 로 만들어 둔다. 호스트를 못 찾으면 네이티브 QMessageBox 로 폴백.
 """
 from __future__ import annotations
@@ -11,7 +13,7 @@ from typing import Optional
 
 from PyQt6.QtCore import QEvent, QEventLoop, QObject, Qt
 from PyQt6.QtGui import QColor, QPainter
-from PyQt6.QtWidgets import QFrame, QHBoxLayout, QLabel, QMessageBox, QVBoxLayout, QWidget
+from PyQt6.QtWidgets import QFrame, QHBoxLayout, QLabel, QMessageBox, QPushButton, QVBoxLayout, QWidget
 
 from ... import i18n
 from .. import theme
@@ -38,6 +40,7 @@ class SheetHost(QWidget):
         self._default = SB.NoButton
         self._escape = SB.NoButton
         self._frame: Optional[QFrame] = None
+        self._action = ""
         parent.installEventFilter(self)
         self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
 
@@ -68,15 +71,27 @@ class SheetHost(QWidget):
         else:
             super().keyPressEvent(ev)
 
-    def _finish(self, btn) -> None:
+    def _finish(self, btn, action: str = "") -> None:
         self._result = btn
+        self._action = action
         if self._loop:
             self._loop.quit()
 
-    def run(self, title: str, text: str, buttons, default, kind: str = "info"):
-        """모달로 띄우고 누른 버튼을 돌려준다(중첩 이벤트 루프)."""
+    def last_action(self) -> str:
+        return self._action
+
+    def _behind(self):
+        """시트 뒤의 위젯(메인 창의 central) — 떠 있는 동안 잠가 Tab · 단축키가 뒤로 새지 않게 한다."""
+        p = self.parent()
+        cw = p.centralWidget() if hasattr(p, "centralWidget") else None
+        return cw if cw is not None and cw is not self else None
+
+    def run(self, title: str, text: str, buttons, default, kind: str = "info", detail: str = "", actions=()):
+        """모달로 띄우고 누른 버튼을 돌려준다(중첩 이벤트 루프). 보조 단추(actions = [(열쇠, 글자)])를 누르면 결과는 SB.NoButton 이고
+        `last_action()` 이 그 열쇠다."""
         if self._loop:  # 이미 떠 있으면 네이티브 폴백(중첩 방지)
-            return _native(self.parent(), title, text, buttons, default, kind)
+            return _native(self.parent(), title, text + (f"\n\n{detail}" if detail else ""), buttons, default, kind)
+        self._action = ""
         self.setGeometry(self.parent().rect())
         frame = QFrame(self)
         frame.setProperty("role", "sheet")
@@ -93,7 +108,28 @@ class SheetHost(QWidget):
         b.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
         lay.addWidget(t)
         lay.addWidget(b)
+        if detail:                                       # 예외 원문 — 접혀 있다가 누르면 펼친다
+            d = QLabel(detail, frame)
+            d.setProperty("role", "sheetDetail")
+            d.setWordWrap(True)
+            d.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
+            d.hide()
+            tog = QPushButton(i18n.KO.SHEET_DETAIL_SHOW, frame)
+            tog.setProperty("role", "link")
+            tog.setCursor(Qt.CursorShape.PointingHandCursor)
+
+            def _toggle(_c=False, d=d, tog=tog):
+                d.setVisible(not d.isVisible())
+                tog.setText(i18n.KO.SHEET_DETAIL_HIDE if d.isVisible() else i18n.KO.SHEET_DETAIL_SHOW)
+                self._center()
+            tog.clicked.connect(_toggle)
+            lay.addWidget(tog, 0, Qt.AlignmentFlag.AlignLeft)
+            lay.addWidget(d)
         row = QHBoxLayout()
+        for key, label in actions:
+            ab = make_button(label, "default", frame)
+            ab.clicked.connect(lambda _c=False, _k=key: self._finish(SB.NoButton, _k))
+            row.addWidget(ab)
         row.addStretch(1)
         chosen = [x for x in _ORDER if buttons & x]
         self._default = default if default in chosen else (chosen[0] if chosen else SB.NoButton)
@@ -106,6 +142,10 @@ class SheetHost(QWidget):
         lay.addLayout(row)
         self._frame = frame
         self._result = SB.NoButton
+        behind = self._behind()
+        was = behind.isEnabled() if behind is not None else True
+        if behind is not None:
+            behind.setEnabled(False)
         self.show()
         self.raise_()
         frame.show()
@@ -114,6 +154,8 @@ class SheetHost(QWidget):
         self._loop = QEventLoop(self)
         self._loop.exec()
         self._loop = None
+        if behind is not None:
+            behind.setEnabled(was)
         frame.hide()
         frame.deleteLater()
         self._frame = None
@@ -164,3 +206,13 @@ def error(parent, title, text):
 
 def ask(parent, title, text, buttons=SB.Yes | SB.No, default=SB.Yes):
     return _show(parent, title, text, buttons, default, "ask")
+
+
+def notice(parent, title, text, kind: str = "error", detail: str = "", actions=()) -> str:
+    """확인 단추 + 보조 단추(actions = [(열쇠, 글자)]) + 접힌 '자세히'(detail). → 누른 보조 단추의 열쇠, 확인 · Esc 면 ""."""
+    host = host_for(parent)
+    if host is None:
+        _native(parent, title, text + (f"\n\n{detail}" if detail else ""), SB.Ok, SB.Ok, kind)
+        return ""
+    host.run(title, text, SB.Ok, SB.Ok, kind, detail=detail, actions=actions)
+    return host.last_action()

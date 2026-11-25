@@ -2,11 +2,15 @@
 
 구성(위→아래, 10/24 다시 짬 — 숫자가 제목보다 크던 것 · 빈 줄 · 0 인 범례를 걷어냄)
   ● 평소 수집                                01:23   ← 제목 = 고른 수집 방법
-  Report 읽기                  37 / 240 · 남은 약 4분   ← 단계 + 개수(총량을 모르면 '장비 16 / 41')
+  Report 읽는 중 · AOI-15      37 / 240 · 남은 약 4분   ← 단계 · 장비 + 개수(총량을 모르면 '장비 16 / 41')
   ▮▮▮▮▮▮▯▯▯▯▯▯▯▯▯▯▯▯▯▯▯▯▯▯▯▯▯▯▯▯      ← 장비 스트립: 칸 하나 = 장비 하나, 올리면 이름 · 상태
   ━━━━━━━━━━━━━━━━━━━━╸               ← 진행 막대. 총량을 모르면 빛이 흐르는 busy
-  AOI-15 · 파일명(모노, 흐림)                     ← 지금 읽는 것 — 없으면 줄째 숨김
-  ■ 완료 12  ■ 읽는 중 4  ■ 접근 불가 1    [중지]   ← 0 인 항목은 적지 않음, 문제 장비 이름은 툴팁
+  파일명(모노, 흐림)                              ← 지금 읽는 것(단계 글자의 줄바꿈 뒤) — 없으면 줄째 숨김
+  AOI-7 접근 불가 — 끝난 뒤 알림에 정리합니다(빨강) ← 장비 오류가 있을 때만(11/25 — 예전엔 흐린 줄에 섞였다)
+  ■ 완료 12  ■ 읽는 중 4  ■ 접근 불가 1    [중지]   ← 0 인 항목은 적지 않음, 문제 장비 이름은 툴팁. 칸과 범례는 같은 색 표(STATE_COLORS)
+
+떠 있는 동안 뒤(상단 바 · 페이지)는 잠가 Tab · Space 가 덮개 밖으로 새지 않는다(11/25 QT-04). Esc 로는 멈추지 않는다 — 중지는 단추로만.
+업데이트처럼 장비가 없는 작업은 `show_overlay(devices=False)` 로 장비 칸 · 범례를 숨긴다.
 
 계약: `set_progress(done, total, phase)` — `total<=0` 이면 busy. 애니메이션 타이머는 보이는 동안만 돈다.
 """
@@ -37,6 +41,13 @@ def _state_label(state: str) -> str:
 
 def _c(key: str) -> QColor:
     return QColor(theme.colors()[key])
+
+
+#: 장비 칸 색과 범례 색의 단일 출처(11/25 QT-05 — 범례 '대기' 가 칸과 다른 회색이었고 '건너뜀' 이 빠져 있었다)
+STATE_COLORS = {"wait": "nodata", "listing": "accent", "parsing": "accent", "done": "good", "partial": "warn", "error": "crit", "skipped": "line_2"}
+#: 범례 순서 — (상태들, 글자 열쇠)
+LEGEND = ((("done",), "LOADING_LEGEND_DONE"), (("listing", "parsing"), "LOADING_LEGEND_READ"), (("wait",), "LOADING_LEGEND_WAIT"),
+          (("skipped",), "LOADING_LEGEND_SKIP"), (("partial",), "LOADING_LEGEND_PARTIAL"), (("error",), "LOADING_LEGEND_ERR"))
 
 
 def _left_text(sec: float) -> str:
@@ -132,8 +143,7 @@ class DeviceStrip(QWidget):
             p.drawRoundedRect(QRectF(0, 4, self.width(), 10), 3, 3)
             return
         gap, cell = self._geom()
-        colors = {"wait": _c("nodata"), "listing": _c("accent"), "parsing": _c("accent"),
-                  "done": _c("good"), "partial": _c("warn"), "error": _c("crit"), "skipped": _c("line_2")}
+        colors = {k: _c(v) for k, v in STATE_COLORS.items()}
         x = 0.0
         for name in self._names:
             st = self._state.get(name, "wait")
@@ -270,6 +280,11 @@ class LoadingOverlay(QWidget):
         self._detail.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred)
         self._detail.hide()
         lay.addWidget(self._detail)
+        self._err = QLabel("", self._card)                 # 장비 오류(접근 불가) — 흐린 줄과 따로, 빨간 작은 글씨
+        self._err.setProperty("role", "loadErr")
+        self._err.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred)
+        self._err.hide()
+        lay.addWidget(self._err)
 
         lay.addSpacing(2)
         foot = QHBoxLayout()
@@ -284,6 +299,8 @@ class LoadingOverlay(QWidget):
         lay.addLayout(foot)
         self._total = 0
         self._eta_total = None
+        self._locked: List[QWidget] = []
+        self._errs = []
 
     # ── 배치 ──
     def eventFilter(self, obj: QObject, ev: QEvent) -> bool:  # noqa: N802
@@ -301,12 +318,34 @@ class LoadingOverlay(QWidget):
         p.fillRect(self.rect(), QColor(15, 19, 25, 170) if theme.is_dark_mode() else QColor(15, 23, 32, 110))
 
     # ── API ──
-    def show_overlay(self, title: str = "", cancelable: bool = True) -> None:
+    def _lock_behind(self, on: bool) -> None:
+        """덮개 뒤의 형제 위젯(상단 바 · 페이지)을 잠근다/푼다 — 잠근 것만 되돌린다."""
+        if on:
+            par = self.parentWidget()
+            sibs = [w for w in (par.findChildren(QWidget, options=Qt.FindChildOption.FindDirectChildrenOnly) if par else [])
+                    if w is not self and w.isEnabled()]
+            for w in sibs:
+                w.setEnabled(False)
+            self._locked.extend(sibs)
+        else:
+            for w in self._locked:
+                try:
+                    w.setEnabled(True)
+                except RuntimeError:                         # 이미 지워진 위젯
+                    pass
+            self._locked = []
+
+    def show_overlay(self, title: str = "", cancelable: bool = True, devices: bool = True) -> None:
         self._t0 = time.time()
         self._title.setText(title or i18n.KO.LOADING_COLLECT_TITLE)
         self._phase.setText("")
         self._detail.setText("")
         self._detail.hide()
+        self._err.setText("")
+        self._err.hide()
+        self._errs = []
+        self._devices.setVisible(devices)
+        self._legend.setVisible(devices)
         self._count.setText("")
         self._left.setText("")
         self._total = 0
@@ -318,14 +357,33 @@ class LoadingOverlay(QWidget):
         self._stop.setText(i18n.KO.BTN_STOP)
         self._update_legend()
         self.setGeometry(self.parent().rect())
+        if not self._locked:
+            self._lock_behind(True)
         self.show()
         self.raise_()
         self._center()
         self._timer.start()
+        if cancelable:
+            self._stop.setFocus()
+        else:
+            self.setFocus()
 
     def hide_overlay(self) -> None:
         self._timer.stop()
         self.hide()
+        self._lock_behind(False)
+
+    def set_device_error(self, name: str) -> None:
+        """장비 오류(접근 불가)를 빨간 한 줄로 — 끝난 뒤 알림 상자에 정리된다."""
+        if name in self._errs:
+            return
+        self._errs.append(name)
+        K = i18n.KO
+        first = self._errs[0]
+        self._err.setText(K.LOADING_DEVICE_ERR_FMT.format(name=first) if len(self._errs) == 1
+                          else K.LOADING_DEVICE_ERR_MORE_FMT.format(name=first, n=len(self._errs) - 1))
+        self._err.setToolTip(", ".join(self._errs))
+        self._err.show()
 
     def set_devices(self, names: List[str]) -> None:
         self._devices.set_devices(names)
@@ -340,8 +398,10 @@ class LoadingOverlay(QWidget):
 
     def set_progress(self, done: int, total: int, message: str = "") -> None:
         if message and self._stop.isEnabled():
+            head, _sep, sub = message.partition("\n")             # 줄바꿈 뒤(파일 이름)는 흐린 줄로(11/25 QT-06)
             fm = self._phase.fontMetrics()
-            self._phase.setText(fm.elidedText(message, Qt.TextElideMode.ElideMiddle, max(160, self._card.width() - 220)))
+            self._phase.setText(fm.elidedText(head, Qt.TextElideMode.ElideMiddle, max(160, self._card.width() - 220)))
+            self.set_detail(sub)
         self._total = total if total and total > 0 else 0
         if self._total:
             self._bar.set_fraction(done / total)
@@ -398,11 +458,7 @@ class LoadingOverlay(QWidget):
         c = self._devices.counts()
         col = theme.colors()
         K = i18n.KO
-        items = ((col["good"], K.LOADING_LEGEND_DONE, c["done"]),
-                 (col["accent"], K.LOADING_LEGEND_READ, c["listing"] + c["parsing"]),
-                 (col["line_2"], K.LOADING_LEGEND_WAIT, c["wait"]),
-                 (col["warn"], K.LOADING_LEGEND_PARTIAL, c["partial"]),
-                 (col["crit"], K.LOADING_LEGEND_ERR, c["error"]))
+        items = ((col[STATE_COLORS[states[0]]], getattr(K, key), sum(c[s] for s in states)) for states, key in LEGEND)
         self._legend.setText("&nbsp;&nbsp;&nbsp;".join(f'<span style="color:{color}">■</span>&nbsp;{label}&nbsp;<b>{n}</b>'
                                                        for color, label, n in items if n))
         tips = []
