@@ -292,6 +292,9 @@ def test_pure_noop_run_leaves_cache_mtime_and_bytes_untouched(tmp_path, fake_nas
 def test_zero_new_rows_but_state_change_still_saves(tmp_path, fake_nas, monkeypatch):
     """rows 0건이어도 재시도 상태 · 규칙 번호 · 보관 정리 · 커서가 바뀌면 저장한다 — 놓치면 커서·복구 상태를 잃는다."""
     nas, csv_path = fake_nas
+    old = time.time() - 7200                                    # CORE-04: 커서는 지금 시각 너머로 가지 않는다 — 미래 시각 대신 과거로 시간을 짠다
+    for rep in nas.rglob("*.htm"):
+        os.utime(rep, (old, old))
     cfg = make_cfg(tmp_path, csv_path)
     collect.collect(cfg)
     # (1) 규칙 번호만 다르다 → parser
@@ -304,7 +307,7 @@ def test_zero_new_rows_but_state_change_still_saves(tmp_path, fake_nas, monkeypa
     # (2) 새 Report 가 깨졌다 → failed(rows 는 그대로 9)
     bad = nas / "X" / "AOI-10" / "Report" / "BROKEN_x_BatchReport.htm"
     bad.write_text("<html>", encoding="utf-8")
-    t = time.time() + 30
+    t = time.time() - 3600
     os.utime(bad, (t, t))
     real = collect.parse_report
     monkeypatch.setattr(collect, "parse_report", lambda n, x: (_ for _ in ()).throw(ValueError("x")) if "BROKEN" in n else real(n, x))
@@ -314,7 +317,7 @@ def test_zero_new_rows_but_state_change_still_saves(tmp_path, fake_nas, monkeypa
         assert len(rows) == 9 and len(errors) == 1 and stats["cache_saved"] and "failed" in stats["cache_dirty"]
     assert "cursor" in stats["cache_dirty"]                     # 마지막 재시도 뒤 커서가 그 파일을 넘어간다(rows 0)
     # 시계 오차 창(CLOCK_SKEW_SEC) 안에 있는 동안은 나열에 다시 걸려 한 번 더 읽힌다 — 더 새 Report 가 커서를 밀면 그 뒤로는 no-op
-    make_device(nas / "X", "AOI-10", report_name="2D@R2-GA285AAB_0859840PD-0A_6321_NEWER_26-Sep-13_(09.00.00)_BatchReport.htm", mtime=t + 600)
+    make_device(nas / "X", "AOI-10", report_name="2D@R2-GA285AAB_0859840PD-0A_6321_NEWER_26-Sep-13_(09.00.00)_BatchReport.htm", mtime=t + 1800)
     stats = {}
     rows, _, _ = collect.collect(cfg, stats=stats)
     assert len(rows) == 12 and stats["cache_dirty"].get("reports") == 1
