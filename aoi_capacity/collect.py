@@ -289,6 +289,15 @@ class RebuildRejected(Exception):
     """전체 재구축(`rebuild_all`)의 후보 캐시가 검증에 걸렸다. **원 캐시는 바뀌지 않았다.**"""
 
 
+class CacheUnreadable(RuntimeError):
+    """캐시 파일을 **열 수 없다**(OS 오류 — 백신 · 백업 · 같은 PC 의 다른 수집이 잡고 있음, CORE-02). 손상과 다르다:
+    빈 캐시로 시작하면 backfill 창 밖 이력이 화면에서 사라지고 원본이 `.bad-…` 로 밀려나므로 **수집을 멈추고** 원본은 그대로 둔다."""
+
+
+#: 캐시를 열다 OS 오류가 나면 이만큼 기다렸다가 한 번 더 열어 본다(CORE-02 — 잠깐 잡고 있는 백신 · 백업).
+CACHE_READ_RETRY_SEC = 2.0
+
+
 #: 캐시 파일을 읽은 결과 — `stats["cache_status"]` 로 나간다. "corrupt" 면 원본을 `.bad-<시각>` 으로 보존한다(`_save_cache`).
 CACHE_OK, CACHE_MISSING, CACHE_CORRUPT = "ok", "missing", "corrupt"
 #: `_load_cache` 가 손상 사실을 `_save_cache` 로 넘기는 비공개 키 — 저장 전에 빠지므로 파일에는 남지 않는다.
@@ -1780,7 +1789,7 @@ def _load_cache(cfg: dict, full: bool = False, log: Optional[LogFn] = None, rede
         dirty.add(DIRTY_CREATED)
         return cache
     try:
-        loaded = json.loads(nas_guard.read_text(path, errors="strict"))
+        loaded = json.loads(_read_cache_text(path))
         if not isinstance(loaded, dict) or not isinstance(loaded.get("reports", {}), dict):
             raise ValueError("캐시 JSON 의 최상위가 객체가 아닙니다")
         cache.update(loaded)
@@ -1790,7 +1799,10 @@ def _load_cache(cfg: dict, full: bool = False, log: Optional[LogFn] = None, rede
                 dirty.add(DIRTY_FORMAT)
         cache.pop(_CORRUPT_KEY, None)
         cache["_status"] = CACHE_OK
-    except (UnicodeDecodeError, ValueError, OSError) as e:      # json.JSONDecodeError 는 ValueError
+    except OSError as e:                                         # 열 수 없음은 손상이 아니다(CORE-02) — 멈추고 원본은 그대로
+        _LOG.warning("캐시 파일을 열 수 없음(수집 중단, 원본 그대로): %s — %s: %s", path, type(e).__name__, e)
+        raise CacheUnreadable(i18n.KO.CACHE_UNREADABLE_FMT.format(path=path, error=f"{type(e).__name__}: {e}")) from e
+    except (UnicodeDecodeError, ValueError) as e:      # json.JSONDecodeError 는 ValueError
         cache = _empty_cache()
         cache["_status"] = CACHE_CORRUPT
         cache[_CORRUPT_KEY] = {"path": path, "error": f"{type(e).__name__}: {e}"}
@@ -1803,6 +1815,18 @@ def _load_cache(cfg: dict, full: bool = False, log: Optional[LogFn] = None, rede
         if n:
             _say(log, f"분류 규칙이 바뀌어 캐시 행 {n}개의 상태·검사 종류를 다시 계산했습니다(NAS 는 읽지 않음)")
     return cache
+
+
+def _read_cache_text(path: str) -> str:
+    """캐시 본문(strict UTF-8). OS 오류면 `CACHE_READ_RETRY_SEC` 뒤 한 번 더 — 그래도 안 되면 OSError 를 그대로 올린다.
+    디코딩 오류(UnicodeDecodeError = ValueError)는 다시 열지 않는다(손상은 기다려도 그대로다)."""
+    try:
+        return nas_guard.read_text(path, errors="strict")
+    except UnicodeDecodeError:
+        raise
+    except OSError:
+        time.sleep(CACHE_READ_RETRY_SEC)
+        return nas_guard.read_text(path, errors="strict")
 
 
 def _rederive_rows(cache: dict) -> int:

@@ -716,6 +716,37 @@ def test_corrupt_cache_is_preserved_as_bad_file_not_overwritten_silently(tmp_pat
     assert stats2["cache_status"] == collect.CACHE_OK and bad[0].read_bytes() == garbage
 
 
+@pytest.mark.parametrize("fails", [1, 2], ids=["once-then-ok", "stays-locked"])
+def test_locked_cache_is_not_treated_as_corrupt(tmp_path, fake_nas, monkeypatch, fails):
+    """CORE-02: 백신 · 백업이 캐시를 잠깐 잡아 OS 오류가 나면 예전엔 '손상' 으로 보고 빈 캐시로 다시 수집 · 원본을 .bad 로 밀어
+    backfill 창 밖 이력이 화면에서 사라졌다. 이제 한 번 더 열어 보고, 그래도 안 되면 수집을 멈추고 원본은 그대로 둔다."""
+    from aoi_capacity import nas_guard
+    nas, csv_path = fake_nas
+    cfg = make_cfg(tmp_path, csv_path)
+    collect.collect(cfg)
+    out = tmp_path / "out"
+    before = (out / "aoi_cache.json").read_bytes()
+    monkeypatch.setattr(collect, "CACHE_READ_RETRY_SEC", 0)
+    real = nas_guard.read_text
+    left = {"n": fails}
+
+    def locked(path, *a, **kw):
+        if str(path) == cfg["cache_file"] and left["n"] > 0:
+            left["n"] -= 1
+            raise PermissionError(13, "The process cannot access the file", str(path))
+        return real(path, *a, **kw)
+    monkeypatch.setattr(nas_guard, "read_text", locked)
+    stats = {}
+    if fails == 1:
+        rows, _, _ = collect.collect(cfg, stats=stats)
+        assert stats["cache_status"] == collect.CACHE_OK and len(rows) == 9
+    else:
+        with pytest.raises(collect.CacheUnreadable):
+            collect.collect(cfg, stats=stats)
+        assert (out / "aoi_cache.json").read_bytes() == before
+    assert not [p for p in out.iterdir() if ".bad-" in p.name]
+
+
 def test_cache_load_is_strict_utf8_but_report_reading_stays_lenient(tmp_path):
     cache_file = tmp_path / "c.json"
     cache_file.write_bytes(b'{"reports": {}, "last_mtime": {}, "failed": {}, "note": "\xff"}')

@@ -277,6 +277,8 @@ CLI_PLAN_FMT = ("모드 {mode} · 캐시 Report {total}개(다시 읽기 {reread
                 " · 새 Report 는 NAS 를 본 뒤 셈")
 CLI_REBUILD_REJECTED_FMT = "전체 재구축 거부 — 기존 캐시·HTML 은 그대로입니다: {error}"
 CLI_CACHE_CORRUPT_FMT = "캐시 파일이 손상되어 처음부터 다시 수집했습니다. 손상 원본 보존: {path}"
+CACHE_UNREADABLE_FMT = ("캐시 파일을 열 수 없습니다 — 다른 프로그램(백신 · 백업 · 다른 수집)이 쓰는 중일 수 있으니 잠시 뒤 다시 해 주세요."
+                        " 캐시는 그대로 두었습니다: {path} ({error})")
 CLI_UNREACHABLE_FMT = "접근 실패 장비: {items}"
 CLI_UNREACHABLE_ITEM_FMT = "{name} ({error})"
 CLI_PARTIAL_FMT = "일부 Report 를 읽지 못한 장비: {items}"

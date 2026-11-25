@@ -169,8 +169,12 @@ def main(argv=None) -> int:
         return EXIT_PARTIAL if warnings_h else EXIT_OK
     rebuild = bool(args.rebuild_all or args.full) or None            # None 이면 cfg 의 rebuild_all 을 따른다
     refresh = args.refresh_window                                      # None 이면 cfg 의 refresh_window_days 를 따른다
-    plan = collect.plan_run(cfg, backfill=args.backfill, recover=args.recover,
-                            refresh_window_days=refresh, rebuild_all=rebuild)
+    try:
+        plan = collect.plan_run(cfg, backfill=args.backfill, recover=args.recover,
+                                refresh_window_days=refresh, rebuild_all=rebuild)
+    except collect.CacheUnreadable as ex:                              # 캐시가 잠겨 있다 — 빈 캐시로 시작하지 않는다(CORE-02)
+        _print(str(ex))
+        return EXIT_FAILED
     _print(K.CLI_PLAN_FMT.format(mode=plan.mode, total=plan.total_reports, reread=plan.reread_reports,
                                  keep=plan.keep_reports, recover=plan.recover_reports))
     stats: dict = {}
@@ -180,6 +184,9 @@ def main(argv=None) -> int:
                                                  progress=_progress_printer(), log=_print, stats=stats)
     except collect.RebuildRejected as ex:
         _print(K.CLI_REBUILD_REJECTED_FMT.format(error=ex))
+        return EXIT_FAILED
+    except collect.CacheUnreadable as ex:
+        _print(str(ex))
         return EXIT_FAILED
     except (collect.CollectCancelled, KeyboardInterrupt):      # Ctrl+C — 읽은 것은 collect 가 저장했다(10/11)
         _print(K.CLI_CANCELLED)
