@@ -60,6 +60,16 @@ def test_lot_only_file_has_all_days_blank_columns_and_no_csv(tmp_path, sample):
         assert [r.get(c) or "" for r in back] == [r.get(c) or "" for r in keep_rows], c                   # LOT 추적이 쓰는 열은 그대로
 
 
+def test_lot_only_file_can_be_limited_to_recent_days(tmp_path, sample):
+    """11/25(LOTD-05): cfg `publish_lot_days` 를 주면 LOT 추적 배포판도 최근 N일(+ 그 기간 Wafer 의 앞선 시도 맥락) — 기본 0 은 지금처럼 전부."""
+    rows, meta = sample
+    assert collect.DEFAULT_CONFIG["publish_lot_days"] == 0
+    path = collect.write_html(_cfg(tmp_path / "main", publish_lot_days=7), rows, meta["devices"], [], 0.0, lot_only=True,
+                              out_dir=str(tmp_path / "pub"), out_name="lot.html")
+    m = sample_rows.embedded(Path(path).read_text(encoding="utf-8"))["meta"]
+    assert m["lot_only"] is True and m["range"]["from"] > m["data_from"] and m["range"]["to"] == m["data_to"]
+
+
 def test_out_dir_under_a_nas_root_is_refused(tmp_path, sample):
     rows, meta = sample
     nas = tmp_path / "nas"

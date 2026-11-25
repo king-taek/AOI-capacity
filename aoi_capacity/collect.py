@@ -112,6 +112,7 @@ DEFAULT_CONFIG: Dict[str, object] = {
     "collect_params": True,                       # D89: Report 마다 INI 를 찾은 첫 Wafer 폴더의 레시피 파라미터 파일을 읽어 둔다(파라미터 탭). 끄면 읽지 않는다
     "publish_full_dir": config_mod.PUBLISH_FULL_DIR_DEFAULT,                  # 10/30: 모든 탭을 담은 전체 배포 폴더(LOT 추적 폴더 옆, 비우면 배포 안 함)
     "publish_full_days": config_mod.PUBLISH_FULL_DAYS_DEFAULT,                # 10/30: 전체 배포에 담을 최근 일수(기본 90, 0 = 가진 데이터 전부)
+    "publish_lot_days": config_mod.PUBLISH_LOT_DAYS_DEFAULT,                  # 11/25: LOT 추적 배포에 담을 최근 일수(기본 0 = 가진 데이터 전부 — 파일이 한 달에 약 20MB 씩 커지면 180 같은 한도)
     "publish_dir": config_mod.PUBLISH_DIR_DEFAULT,                            # 10/27: LOT 추적 배포 폴더(팀 공유 — 장비 NAS 아래는 거부). 비우면 배포 안 함, 있으면 수집이 끝날 때마다 조용히 올린다
     "recipe_groups_file": "",                     # D67: 결과 HTML 에 담을 레시피 묶음(화면에서 내보낸 JSON). 비우면 데이터 폴더·다운로드에서 가장 최근 것
 }
@@ -3497,9 +3498,10 @@ def write_html(cfg: dict, rows: List[dict], dev_meta: List[dict], errors: List[d
     memo: Dict[str, str] = {}
     known_days = sorted({d for d in (_row_day(r, memo) for r in all_rows) if d})
     explicit = bool(day_from or day_to)
-    if not explicit and not lot_only and int(cfg.get("html_days") or 0) > 0:
+    keep_days = int(cfg.get("publish_lot_days") or 0) if lot_only else int(cfg.get("html_days") or 0)   # LOT 추적 배포판은 따로(11/25, 기본 0 = 전부)
+    if not explicit and keep_days > 0:
         anchor = dt.date.fromisoformat(known_days[-1]) if known_days else now.date()   # 가진 데이터의 끝날부터 거꾸로
-        day_from = (anchor - dt.timedelta(days=int(cfg["html_days"]) - 1)).isoformat()
+        day_from = (anchor - dt.timedelta(days=keep_days - 1)).isoformat()
     rows, r_from, r_to = rows_for_range(all_rows, day_from or "", day_to or "")
     if r_from:
         meta["range"] = {"from": r_from, "to": r_to, "explicit": explicit}

@@ -44,6 +44,7 @@ class Prefs:
     publish_dir: str = _config.PUBLISH_DIR_DEFAULT             # LOT 추적 배포 폴더(팀 공유 — 10/27). 비우면 배포 안 함, 있으면 수집이 끝날 때마다 조용히 올린다
     publish_full_dir: str = _config.PUBLISH_FULL_DIR_DEFAULT   # 전체 배포 폴더(모든 탭 — 10/30). 비우면 배포 안 함
     publish_full_days: int = _config.PUBLISH_FULL_DAYS_DEFAULT  # 전체 배포에 담을 최근 일수(0 = 가진 데이터 전부, 기본 90)
+    publish_lot_days: int = _config.PUBLISH_LOT_DAYS_DEFAULT    # LOT 추적 배포에 담을 최근 일수(0 = 가진 데이터 전부, 기본 — 11/25)
     refresh_window_days: int = 0      # D60: 최근 N일 안의 Report 는 캐시에 있어도 다시 읽기(0 = 끔). 수집 페이지 체크박스가 켜고 끈다
     prefs_version: int = PREFS_VERSION
     extra: Dict[str, Any] = field(default_factory=dict)
@@ -195,6 +196,7 @@ def to_collect_cfg(p: Prefs) -> Dict[str, Any]:
         "publish_dir": str(p.publish_dir or "").strip(),
         "publish_full_dir": str(p.publish_full_dir or "").strip(),
         "publish_full_days": p.publish_full_days,
+        "publish_lot_days": p.publish_lot_days,
     })
     # ★ CLI(config.json)와 같은 규칙으로 정규화한다 — 성능·기간 값은 고치고, 범위·경로 문제는 그대로 두어 수집 진입점이 막는다(C13)
     cfg, _problems = _config.normalize_config(cfg)
