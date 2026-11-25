@@ -111,9 +111,12 @@ def test_range_picks_the_same_row_objects_in_the_same_order_as_before(a, b):
 def test_embed_and_payload_match_the_old_copy_then_fold_then_dump():
     rows = _rows()
     assert collect._embed_rows(rows) == _old_embed(rows)
-    blank = collect.LOT_ONLY_BLANK_COLS
-    copies = [{**r, **{c: "" for c in blank}} for r in rows]
-    assert collect._embed_rows(rows, blank) == _old_embed(copies)
+    lot, full = collect._embed_rows(rows, collect.LOT_ONLY_COLS), collect._embed_rows(rows)   # LOT 배포판은 쓰는 열만(LOTD-03)
+
+    def dec(e):
+        return [{c: (e["pool"][v] if c in e["pooled"] else v) for c, v in zip(e["cols"], r)} for r in e["rows"]]
+    assert lot["cols"] == list(collect.LOT_ONLY_COLS)
+    assert dec(lot) == [{c: d[c] for c in collect.LOT_ONLY_COLS} for d in dec(full)]
     meta = {"generated": "x</y", "n": 1, "k": [1, "가"]}
     emb = _old_embed(rows)
     old = json.dumps(dict(emb, meta=meta), ensure_ascii=False, separators=(",", ":")).replace("<", "\\u003c")

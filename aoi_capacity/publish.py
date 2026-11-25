@@ -182,24 +182,55 @@ def lnk_target(share_dir: str, kind: Kind = LOT) -> str:
     return os.path.join(str(share_dir).strip().rstrip("\\/"), kind.stub)
 
 
-def _lnk_current(data: Optional[bytes], icon: Optional[str]) -> bool:
-    """이미 있는 .lnk 가 지금 아이콘 설정과 맞는지 — 맞으면 다시 만들지 않는다. 아이콘 없음(11/4 브라우저 아이콘)이면 옛 `AOI.ico` 를 가리키는 .lnk 는 다시 만든다."""
+def _lnk_has(data: bytes, text: str) -> bool:
+    """.lnk 바이트 안에 `text` 가 UTF-16 또는 ANSI 로 적혀 있는지(대소문자 무시 — 탐색기가 서버 이름을 대문자로 적기도 한다)."""
+    low = data.lower()
+    for enc in ("utf-16-le", _ansi()):
+        try:
+            if text.encode(enc).lower() in low:
+                return True
+        except (UnicodeError, LookupError):
+            continue
+    return False
+
+
+def _lnk_points_to(data: bytes, target: str) -> bool:
+    """.lnk 가 `target` 을 가리키는지 — 전체 경로가 그대로 있거나, UNC 면 LinkInfo 처럼 서버 · 공유 이름과 나머지 경로가 따로 있으면 맞다.
+    드라이브 문자 경로는 드라이브 뒤 경로만 본다(연결 드라이브는 .lnk 안에 UNC 로 적힌다)."""
+    raw = str(target)
+    t = raw.replace("/", "\\")
+    if _lnk_has(data, raw) or _lnk_has(data, t):
+        return True
+    if t.startswith("\\\\"):
+        parts = t[2:].split("\\")
+        return len(parts) >= 3 and _lnk_has(data, "\\\\" + "\\".join(parts[:2])) and _lnk_has(data, "\\".join(parts[2:]))
+    if len(t) > 2 and t[1] == ":":
+        return _lnk_has(data, t[2:].lstrip("\\"))
+    return False
+
+
+def _lnk_current(data: Optional[bytes], icon: Optional[str], target: Optional[str] = None) -> bool:
+    """이미 있는 .lnk 가 지금 아이콘 설정과 맞는지 — 맞으면 다시 만들지 않는다. 아이콘 없음(11/4 브라우저 아이콘)이면 옛 `AOI.ico` 를 가리키는 .lnk 는 다시 만든다.
+    `target` 을 주면 그 경로를 가리키는지도 본다(11/25 — 배포 폴더 표기를 바꾸거나 폴더를 옮기면 옛 경로 바로가기가 남았다)."""
     if not data:
+        return False
+    if target and not _lnk_points_to(data, target):
         return False
     return icon.encode("utf-16-le") in data if icon else ICON_NAME.encode("utf-16-le") not in data
 
 
 def _ensure_lnk(share_dir: str, kind: Kind, icon: Optional[str], roots: List[str]) -> bool:
-    """배포 폴더에 `kind.lnk` 가 있게 한다(없거나 아이콘 경로가 다를 때만 만든다). 있으면 True, 못 만들었으면 False."""
+    """배포 폴더에 `kind.lnk` 가 있게 한다(없거나 대상 · 아이콘 경로가 다를 때만 만든다). 있으면 True, 못 만들었으면 False."""
     path = os.path.join(share_dir, kind.lnk)
     try:
         cur = open(path, "rb").read() if os.path.isfile(path) else None
     except OSError:
         cur = None
-    if _lnk_current(cur, icon):
+    target = lnk_target(share_dir, kind)
+    if _lnk_current(cur, icon, target):
         return True
     t0 = time.perf_counter()
-    data = make_lnk(lnk_target(share_dir, kind), icon)
+    data = make_lnk(target, icon)
     if not data:
         if os.name == "nt":                              # PP-08: 못 만드는 PC 는 수집마다 PowerShell 을 띄운다 — 얼마나 걸리는지 로그로 먼저 잰다
             _LOG.info("바로가기 .lnk 못 만듦(%.1f초) → .url: %s", time.perf_counter() - t0, path)
