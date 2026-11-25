@@ -840,7 +840,7 @@ def test_lot_tab_merges_one_char_ocr_misreads_but_not_other_wafers():
     (k,) = _lot_keys(_lot_screen(rows))
     out = _lot_screen(rows, k)
     assert "ID 판독 차이 1" in out and "48135G04EWB7 → 38135G04EWB7" in out and "25 wafer" in out
-    assert out.split("Wafer × 스캔")[1].count('class="lw mono') == 25                    # 한 장은 한 줄
+    assert out.split("Slot map &amp; 스캔 기록")[1].count('class="lw mono') == 25                    # 한 장은 한 줄
     other = ["99999X04EWB7" if x == "38135G04EWB7" else x for x in good]                  # 세 글자 넘게 다름 → 다른 Wafer
     rows2 = [w("K1", x, "00:10", "00:20", lot="TB500.INT795@6412", report="KLA:a") for x in other] + \
             [w("AOI-20", x, "02:10", "02:20", lot="LNF-PIDS3", report="b.htm") for x in good]
@@ -854,7 +854,7 @@ def test_lot_tab_matrix_cells_show_defect_counts():
             w("AOI-1", ids[1], "00:20", "00:30", lot="DEF-1", report="a.htm") | {"faults": "1,234"},
             w("AOI-1", ids[2], "00:30", "00:40", lot="DEF-1", report="a.htm")]
     (k,) = _lot_keys(_lot_screen(rows))
-    mx = _lot_screen(rows, k).split("Wafer × 스캔")[1]
+    mx = _lot_screen(rows, k).split("Slot map &amp; 스캔 기록")[1]
     assert ">7</i>" in mx and ">1.2k</i>" in mx
 
 
