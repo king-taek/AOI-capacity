@@ -868,7 +868,7 @@ def test_cli_flags_and_exit_codes(tmp_path, fake_nas, monkeypatch, capsys):
     monkeypatch.setattr(collect, "parse_report", lambda name, text: (_ for _ in ()).throw(ValueError("전부 깨짐")))
     assert cli.main(["--config", str(cfg_path), "--rebuild-all"]) == cli.EXIT_FAILED
     assert (tmp_path / "cli" / "aoi_cache.json").read_bytes() == raw
-    assert "전체 재구축 거부" in capsys.readouterr().out
+    assert "전체 다시 만들기 거부" in capsys.readouterr().out   # 11/25 COPY-12: 화면(수집 창)과 같은 이름
 
 
 def test_cli_help_describes_what_backfill_really_does(monkeypatch, capsys):

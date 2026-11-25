@@ -2865,7 +2865,7 @@ def _collect(cfg: dict, full: bool, backfill: bool, *, recover: bool, refresh_wi
     t1 = clock()
     window_days = (float(cfg["retention_days"]) or float(UNLIMITED_DAYS)) if rebuild else None   # 0 = 기한 없음 → 전부
     if rebuild:
-        _say(log, f"전체 재구축: 보관 기간 {cfg['retention_days']}일 안의 Report 를 전부 새 후보 캐시에 모읍니다"
+        _say(log, f"전체 다시 만들기: 보관 기간 {cfg['retention_days']}일 안의 Report 를 전부 새 후보 캐시에 모읍니다"
                   f"(검증을 통과할 때만 기존 캐시 {len(old_cache['reports'])}개 항목을 바꿉니다)")
     elif backfill:
         _say(log, f"초기 수집: 최근 {cfg['backfill_days']}일 안의 Report 를 전부 읽습니다")
@@ -3097,8 +3097,8 @@ def _collect(cfg: dict, full: bool, backfill: bool, *, recover: bool, refresh_wi
         carried = _carry_over(old_cache, cache, index, plan, cutoff)
         reasons = _validate_rebuild(old_cache, cache, plan, n_new + resumed_n)   # 이어하기: 앞서 읽어 둔 후보도 읽은 것으로 센다
         if reasons:
-            raise RebuildRejected("전체 재구축 후보를 버리고 기존 캐시를 그대로 둡니다 — " + " / ".join(reasons))
-        _say(log, f"전체 재구축: 새로 읽은 Report {n_new}개 · 이전 이력 이관 {carried['reports']}개"
+            raise RebuildRejected("전체 다시 만들기 후보를 버리고 기존 캐시를 그대로 둡니다 — " + " / ".join(reasons))
+        _say(log, f"전체 다시 만들기: 새로 읽은 Report {n_new}개 · 이전 이력 이관 {carried['reports']}개"
                   f"(미접근 장비 {carried['unreachable']}대 · 목록 밖 {carried['foreign']}개) · 읽기 실패 {len(errors)}건(이전 행 유지)")
     # 장비의 경로·Report 폴더를 캐시에 남긴다 — 'HTML 만 다시 만들기'(NAS 없이)가 Report 열기 경로를 그대로 쓰게. 바뀔 때만 저장 이유가 된다
     devinfo = [{k: dm.get(k, "") for k in ("name", "key", "note", "report_dir")} for dm in dev_meta if not dm.get("error")]
