@@ -363,6 +363,7 @@ main{max-width:1420px;margin:0 auto;padding:22px 24px 90px}
 .ptw{overflow:auto;max-height:72vh;border-top:1px solid #EDF1F5}.ptab{border-collapse:collapse;font-size:12px;width:max-content}.ptab th{position:sticky;top:0;background:#F6F8FA;z-index:1;font-weight:600;text-align:left;padding:6px 8px;border-bottom:1px solid #DCE3EA;white-space:nowrap}
 .ptab th.pdv small{display:block;font-weight:400;color:#7A8794;font-size:10.5px}.ptab td{padding:4px 8px;border-bottom:1px solid #F0F3F6;white-space:nowrap;max-width:220px;overflow:hidden;text-overflow:ellipsis}.ptab td.pk{position:sticky;left:0;background:#fff;max-width:260px}
 .ptab td.pu{color:#5A6673}.ptab td.pm{color:#2B3640;background:#FAFBFC}.ptab td.pc{color:#9AA5B1}.ptab td.dif{background:#FFF1B8;color:#5C4300;font-weight:600}.ptab td.mis{color:#C9D2DC;text-align:center}.ptab tr.pz td{background:#F2F5F8;font-weight:600;color:#2B3640;position:static}
+.ptall{padding:0;overflow:hidden;margin-bottom:10px}.ptall .ptw{max-height:calc(100vh - 230px);border-top:0}.ptab tr.pgr td{padding:0;background:#fff;border-top:1px solid #DCE3EA;border-bottom:1px solid #EDF1F5;max-width:none;overflow:visible}.ptab tbody:first-of-type tr.pgr td{border-top:0}.ptab tr.pgr .pgh{position:sticky;left:0;width:auto;max-width:min(100%,900px)}.ptab tr.pmore td{color:#5A6673;font-size:11.5px;background:#FBFCFD;white-space:normal}
 .phist{display:grid;grid-template-columns:70px 90px minmax(0,1.2fr) minmax(0,2fr);gap:10px;padding:7px 0;border-bottom:1px solid #F0F3F6;font-size:12px;align-items:start}
 .cards.lotcards .v{font-size:18px}.cards.lotcards>div{padding-left:14px;padding-right:12px}
 .lotgrid{display:grid;grid-template-columns:300px minmax(0,1fr);gap:16px;align-items:start}.lotlist .lotscroll{max-height:70vh;overflow:auto}
@@ -1854,9 +1855,9 @@ function setRange(f,t,p){const A=D.allDays;if(!A||!A.length)return;f=f||A[0];t=t
   const note=i<0&&cur?`하루 날짜 ${md(cur)} → ${md(days[days.length-1])}`:(same?state.dayNote:"");   /* 같은 기간을 다시 고르면(입력 · change 두 번) 알림을 지우지 않는다 */
   setState({vp:p||"custom",dayI:i>=0?i:days.length-1,pickDay:state.view==="errors"?null:undefined,dayNote:note,errDays:null,errDayI:null,errDev:null,modalDev:null,modalDayI:null,modalType:null,modalJob:null,selLot:null,
     stack:state.stack.filter(k=>k==="recipe")});}
-function rangeHtml(dim){if(!D||!D.allDays||!D.allDays.length)return"";const A=D.allDays,lo=A[0],hi=A[A.length-1];
+function rangeHtml(dim,free){if(!D||!D.allDays||!D.allDays.length)return"";const A=D.allDays,lo=A[0],hi=A[A.length-1];
   const segs=[["7","최근 7일"],["30","1달"],["all","전체"]].map(([k,l])=>({label:l,on:state.vp===k,pick:()=>{const [f,t]=rangeOf(k);setRange(f,t,k);}}));
-  return `<div class="rangebar${dim?" dim":""}" data-key="rangebar" title="${dim?"이 탭은 하루 날짜 기준입니다 — 기간 버튼은 회색(비활성처럼 보임). 누르면 조회 기간이 바뀝니다":"이 기간의 날만 모든 탭에 보입니다"}(가진 데이터 ${lo} ~ ${hi})">${segHtml(segs)}<input class="inp" type="date" data-in="vf" data-fk="range:vf" value="${esc(D.days[0])}" min="${lo}" max="${hi}" aria-label="보이는 기간 시작"><span class="muted">~</span><input class="inp" type="date" data-in="vt" data-fk="range:vt" value="${esc(D.days[D.days.length-1])}" min="${lo}" max="${hi}" aria-label="보이는 기간 끝"><span class="num rdays">${D.days.length}일</span>${dim?`<span class="dimnote">이 탭은 하루 날짜 기준</span>`:""}</div>`;}
+  return `<div class="rangebar${dim?" dim":""}" data-key="rangebar" title="${free?"이 탭(파라미터)은 파일 끝날 기준 최신 값이라 조회 기간과 무관합니다. 누르면 다른 탭의 조회 기간이 바뀝니다":dim?"이 탭은 하루 날짜 기준입니다 — 기간 버튼은 회색(비활성처럼 보임). 누르면 조회 기간이 바뀝니다":"이 기간의 날만 모든 탭에 보입니다"}(가진 데이터 ${lo} ~ ${hi})">${segHtml(segs)}<input class="inp" type="date" data-in="vf" data-fk="range:vf" value="${esc(D.days[0])}" min="${lo}" max="${hi}" aria-label="보이는 기간 시작"><span class="muted">~</span><input class="inp" type="date" data-in="vt" data-fk="range:vt" value="${esc(D.days[D.days.length-1])}" min="${lo}" max="${hi}" aria-label="보이는 기간 끝"><span class="num rdays">${D.days.length}일</span>${dim?`<span class="dimnote">${free?"이 탭은 조회 기간과 무관":"이 탭은 하루 날짜 기준"}</span>`:""}</div>`;}
 /* 10/6 handoff C8(재검토 A): 날짜 조작은 두 줄 — 위 '조회 기간'(모든 탭), 아래 '하루 날짜'(가동률 · Error 일자별).
    하루는 기간 안의 데이터 날짜만(D.days). 기간을 바꿔 하루가 밖으로 나가면 기간의 마지막 날로 옮기고 그때만 짧게 알린다(state.dayNote) */
 const goDay=i=>setState({dayI:i,pickDay:undefined,dayNote:""});
@@ -1864,7 +1865,7 @@ const goDay=i=>setState({dayI:i,pickDay:undefined,dayNote:""});
 const dayBasis=V=>V==="home"||(V==="overkill"&&(state.okMode||"day")==="day")||(V==="errors"&&(state.pickDay===undefined?true:!!state.pickDay));
 function dateControlsHtml(V,day){const n=D.days.length,i=state.dayI,usesDay=dayBasis(V);
   return `<div class="date-controls${usesDay?" by-day":""}" data-key="dates">
-    <div class="date-control-row" data-key="dates:range"><b class="dcl">조회 기간</b>${rangeHtml(usesDay)}</div>
+    <div class="date-control-row" data-key="dates:range"><b class="dcl">조회 기간</b>${rangeHtml(usesDay||V==="param",V==="param")}</div>
     ${usesDay?`<div class="date-control-row" data-key="daynav"><b class="dcl">하루 날짜</b><div class="daynav">
       <button class="ib" data-h="${h(()=>{if(state.dayI>0)goDay(state.dayI-1);})}" title="이전 날짜" data-fk="day:prev" ${i>0?"":"disabled"}>‹</button>
       <span class="daylab num"><input class="inp" type="date" data-in="day" data-fk="day:date" value="${esc(day)}" min="${D.days[0]}" max="${D.days[n-1]}" aria-label="하루 날짜"><span class="dow">${dayName(day).replace(/^.*\s/,"")}</span>${D.partialDays&&D.partialDays.includes(day)?`<span class="partial" title="보관 기간의 첫날 — 수집 창이 이 날 도중에 시작해 하루 전체가 아닙니다">부분</span>`:""}</span>
@@ -2526,8 +2527,10 @@ function prmBody(i){const PM=prmData();const got=_prm.get(i);if(got)return got;
     render();})();
   return _prm.get(i);}
 function paramHtml(){
-  const PM=prmData();const head=`<div class="bar-h"><h1>파라미터</h1><span style="font-size:12.5px;color:#5A6673">Job 을 고르면 장비마다 가장 최근에 스캔한 Lot 의 레시피 값을 나란히 — 다수와 다른 칸만 노랑</span></div>`;
-  if(!PM||!PM.jobs.length)return head+`<div class="panel" style="padding:24px;color:#5A6673;font-size:13px">이 파일에는 파라미터 기록이 없습니다. 다음 수집부터 Lot 마다 첫 Wafer 의 레시피 파일을 읽어 담습니다(30일 로그 zip 으로 이력을 한 번 채울 수도 있습니다 — 수집 창).</div>`;
+  /* 11/25 RDL-20: 이 탭은 파일 끝날 기준 최신 스냅숏만 보인다(params_for_range) — 조회 기간을 바꿔도 그대로라 제목 옆에 적고 헤더의 조회 기간 줄은 회색(dateControlsHtml) */
+  const pEnd=(meta&&meta.range&&meta.range.to)||(D&&(D.allDays||D.days||[]).slice(-1)[0])||"";
+  const PM=prmData();const head=`<div class="bar-h"><h1>파라미터</h1><span style="font-size:12.5px;color:#5A6673">Job 을 고르면 장비마다 가장 최근에 스캔한 Lot 의 레시피 값을 나란히 — 다수와 다른 칸만 노랑</span><div class="spacer"></div>${pEnd?`<span class="scope-badge" data-key="scope" title="파라미터는 파일 끝날까지의 가장 최근 값입니다 — 위 조회 기간을 바꿔도 달라지지 않습니다">파일 끝날(${esc(md(pEnd))}) 기준 최신 · 조회 기간과 무관</span>`:""}</div>`;
+  if(!PM||!PM.jobs.length)return head+`<div class="panel" style="padding:24px;color:#5A6673;font-size:13px">이 파일에는 파라미터 기록이 없습니다. 수집할 때마다 Lot 의 첫 Wafer 레시피 값을 모읍니다. 지난 기간은 수집 창의 「옛 기간 빈칸 채우기」 로 채울 수 있습니다.</div>`;
   const Q=(state.prmQ||"").trim().toUpperCase();
   const jobs=PM.jobs.map((J,i)=>({i,J,last:J.t||""}));
   const list=(Q?jobs.filter(o=>o.J.j.toUpperCase().includes(Q)):jobs).sort((a,b)=>b.last.localeCompare(a.last));
@@ -2543,24 +2546,25 @@ function paramHtml(){
   const devs=J.d,only=!!state.prmOnlyDiff,open=state.prmOpen||{};
   let nAll=0,nDiff=0;for(const g of J.g)for(const z of g[2])for(const it of z[2]){nAll++;if(Object.keys(it[4]).length||it[5].length)nDiff++;}
   const devHead=devs.map((d,di)=>`<th class="pdv" title="${esc(d+" · 가장 최근 스캔 "+J.l[di][0]+" · "+S_(J.l[di][1]))}">${esc(d)}<small>${esc((J.l[di][0]||"").slice(5,10).replace("-","/"))}</small></th>`).join("");
+  const NC=3+devs.length;
   const groupHtml=(g,gi)=>{const name=S_(g[0]),fold=!!g[1];const isOpen=open[name]!=null?open[name]:!fold;
     let n=0,nd=0;for(const z of g[2])for(const it of z[2]){n++;if(Object.keys(it[4]).length||it[5].length)nd++;}
     if(only&&!nd)return "";
-    let body="";if(isOpen){let rowsN=0;const parts=[];
+    const parts=[];let rowsN=0;if(isOpen){
       for(const z of g[2]){const zn=S_(z[0]),al=S_(z[1]);const its=only?z[2].filter(it=>Object.keys(it[4]).length||it[5].length):z[2];if(!its.length)continue;
         if(rowsN>=PRM_MAX_ROWS)break;
-        parts.push(`<tr class="pz"><td colspan="${3+devs.length}">${esc(zn||"(공통)")}${al?` <span class="muted">· ${esc(al)}</span>`:""}</td></tr>`);
+        parts.push(`<tr class="pz"><td colspan="${NC}">${esc(zn||"(공통)")}${al?` <span class="muted">· ${esc(al)}</span>`:""}</td></tr>`);
         for(const it of its){if(rowsN++>=PRM_MAX_ROWS)break;const maj=S_(it[3]),note=S_(it[2]);
           parts.push(`<tr><td class="pk mono"${note?` data-tip="${esc(note)}"`:""}>${esc(S_(it[0]))}${it[6]?` <span class="muted" data-tip="다수값이 둘 이상 동률 — 장비 순서상 앞 값을 다수로 봤습니다">≈</span>`:""}</td><td class="pu">${esc(S_(it[1]))}</td><td class="pm mono">${esc(maj)}</td>${
             devs.map((d,di)=>{const x=it[4][di];if(x!=null)return `<td class="pc dif mono" data-tip="${esc(d+": "+S_(x)+" (다수 "+maj+")")}">${esc(S_(x))}</td>`;if(it[5].includes(di))return `<td class="pc mis">—</td>`;return `<td class="pc mono">${esc(maj)}</td>`;}).join("")}</tr>`);}}
-      body=`<div class="ptw"><table class="ptab"><thead><tr><th>키</th><th>단위</th><th>다수값</th>${devHead}</tr></thead><tbody>${parts.join("")}</tbody></table></div>${rowsN>PRM_MAX_ROWS?`<p class="muted" style="font-size:11.5px;margin:6px 0 0">줄이 많아 처음 ${PRM_MAX_ROWS}줄만 — '다른 칸 있는 줄만' 을 켜면 다른 값을 모두 봅니다</p>`:""}`;}
-    return `<section class="panel pgrp" data-key="pg:${esc(name)}"><button type="button" class="pgh" aria-expanded="${isOpen}" data-h="${h(()=>setState({prmOpen:{...open,[name]:!isOpen}}))}"><span class="chev">${isOpen?"▾":"▸"}</span><b>${esc(name)}</b><span class="muted">${n}개${nd?` · <b style="color:#8A6100">다른 줄 ${nd}</b>`:" · 모두 같음"}</span>${fold?`<span class="pill" style="margin-left:auto">장비마다 다를 수 있음 · 접어 둠</span>`:""}</button>${body}</section>`;};
+      if(rowsN>PRM_MAX_ROWS)parts.push(`<tr class="pmore"><td colspan="${NC}">줄이 많아 처음 ${PRM_MAX_ROWS}줄만 — '다른 칸 있는 줄만' 을 켜면 다른 값을 모두 봅니다</td></tr>`);}
+    return `<tbody class="pgb" data-key="pg:${esc(name)}"><tr class="pgr"><td colspan="${NC}"><button type="button" class="pgh" aria-expanded="${isOpen}" data-h="${h(()=>setState({prmOpen:{...open,[name]:!isOpen}}))}"><span class="chev">${isOpen?"▾":"▸"}</span><b>${esc(name)}</b><span class="muted">${n}개${nd?` · <b style="color:#8A6100">다른 줄 ${nd}</b>`:" · 모두 같음"}</span>${fold?`<span class="pill">장비마다 다를 수 있음 · 접어 둠</span>`:""}</button></td></tr>${parts.join("")}</tbody>`;};
   const hist=J.h||[];const hOpen=!!state.prmHist;
   const histHtml=`<section class="panel pgrp" data-key="pg:__hist"><button type="button" class="pgh" aria-expanded="${hOpen}" data-h="${h(()=>setState({prmHist:!hOpen}))}"><span class="chev">${hOpen?"▾":"▸"}</span><b>바뀐 이력</b><span class="muted">${hist.length?hist.length+"번":"이 기간에 바뀐 적 없음"}</span></button>${hOpen&&hist.length?`<div style="padding:4px 16px 12px">${hist.slice(0,80).map(e=>`<div class="phist"><span class="num">${esc(e[0].slice(5).replace("-","/"))}</span><b>${esc(devs[e[1]])}</b><span class="mono muted" style="word-break:break-all">${esc(S_(e[2]))}</span><div>${e[3].map(c=>`<div class="mono" style="font-size:11.5px"><span>${esc(S_(c[0]))}</span>: <s class="muted">${esc(S_(c[1])||"(없음)")}</s> → <b>${esc(S_(c[2])||"(없음)")}</b></div>`).join("")}${e[4]?`<div class="muted" style="font-size:11.5px">… ${e[4]}개 더</div>`:""}</div></div>`).join("")}</div>`:""}</section>`;
   const right=`<div class="panel" style="padding:12px 16px;margin-bottom:12px;display:flex;gap:12px;align-items:center;flex-wrap:wrap"><h2 class="mono" style="margin:0;font-size:15px;word-break:break-all">${esc(jname)}</h2>
       <span class="muted" style="font-size:12.5px">장비 ${devs.length}대 · 키 ${nAll}개 · 장비끼리 다른 줄 ${nDiff}개</span><div class="spacer"></div>
       <button type="button" class="btn${only?" on":""}" aria-pressed="${only}" data-h="${h(()=>setState({prmOnlyDiff:!only}))}">다른 칸 있는 줄만</button></div>
-    ${J.g.map(groupHtml).join("")}${histHtml}`;
+    <section class="panel ptall" data-key="pg:table"><div class="ptw"><table class="ptab"><thead><tr><th>키</th><th>단위</th><th>다수값</th>${devHead}</tr></thead>${J.g.map(groupHtml).join("")}</table></div></section>${histHtml}`;
   return head+`<div class="lotgrid">${left}<div style="min-width:0">${right}</div></div>`;}
 /* ---------- LOT 추적 탭(10/11 사용자, D87 → 10/19 D92: Wafer ID 로 Lot 을 묶는다) ----------
    Lot 이름은 사람이 적어 틀리고(오타 · 'TEST' · 'LotID not configured'), 세 글자 코드는 몇 달 뒤 다른 Wafer 에 다시 쓰인다(TSX 가 8월과 9월에 서로 다른 25장).

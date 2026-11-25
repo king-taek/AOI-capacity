@@ -1131,7 +1131,11 @@ def test_param_tab_unpacks_a_job_on_demand_and_marks_differing_cells(page_factor
     assert pg.locator(".ptab td.dif").all_inner_texts() == ["9"]                       # Threshold — AOI-7 만 다름
     body = pg.locator('main[data-key="view:param"]').inner_text()
     assert "Lot" in body and "Wafer" in body and "um" in body                          # CR/AF 는 글자, 단위 칸
-    assert pg.locator('section.pgrp:has-text("광학") .ptab').count() == 0              # 장비 고유 그룹은 접힌 채
+    assert pg.locator('tbody.pgb:has-text("광학") tr:not(.pgr)').count() == 0       # 장비 고유 그룹은 접힌 채(11/25: 그룹마다 표 → 한 표 + 그룹 머리 줄)
+    assert pg.locator("table.ptab").count() == 1                                       # 한 표라 장비 열이 그룹마다 같은 자리
+    xs = pg.evaluate("[...document.querySelectorAll('table.ptab tbody')].filter(b => b.rows.length > 2).map(b => [...b.rows].find(r => r.cells.length > 3).cells[3].getBoundingClientRect().x)")
+    assert len(set(round(x) for x in xs)) == 1
+    assert "조회 기간과 무관" in body and pg.locator(".rangebar.dim").count() == 1      # 이 탭은 파일 끝날 기준 최신 — 조회 기간 줄은 회색
     assert not errors and not requests
     ctx.close()
 
