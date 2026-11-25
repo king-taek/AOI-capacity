@@ -170,6 +170,25 @@ def test_auto_row_finds_allowed_machines_without_listing_the_share(tmp_path, sco
     assert not tripwire.hits, tripwire.hits
 
 
+def test_auto_row_pointing_at_an_out_of_scope_machine_itself_is_blocked(tmp_path, scoped_nas, monkeypatch):
+    """CORE-01: `폴더 *` 행의 NAS경로가 **장비 폴더 자체**(안에 Report)여도 이름이 범위 밖이면 수집 대상이 아니다 —
+    그 장비의 Report 폴더도 확인하지 않는다(허용 이름 `root/<이름>` 확인 길로만). 범위 안 이름(폴더 또는 행 이름)이면 예전처럼 그 하나를 받는다."""
+    nas, csv_path = scoped_nas
+    cfg = _cfg(tmp_path, csv_path)
+    root = str(nas / "X" / "AOI-2")
+    probed = []
+    real = devices._has_report
+    monkeypatch.setattr(devices, "_has_report", lambda p, c: probed.append(os.path.abspath(p)) or real(p, c))
+    blocked = {"name": "새장비", "root": root, "sub": devices.AUTO, "on": True, "memo": ""}
+    assert devices.devices_from_rows([blocked], cfg) == []
+    assert devices.check_rows([blocked], cfg)[0]["status"] == "no_report"
+    assert os.path.abspath(root) not in probed, probed
+    ok = {"name": "", "root": str(nas / "Y" / "AOI-25"), "sub": devices.AUTO, "on": True, "memo": ""}
+    assert [d["name"] for d in devices.devices_from_rows([ok], cfg)] == ["AOI-25"]
+    wide = devices.devices_from_rows([blocked], _cfg(tmp_path, csv_path, scope_devices=["*"]))
+    assert len(wide) == 1                                   # 제한 없음(`*`)이면 예전 그대로
+
+
 def test_check_rows_reports_out_of_scope_without_touching(tmp_path, scoped_nas, tripwire):
     nas, csv_path = scoped_nas
     rows = devices.read_devices_csv(csv_path)
