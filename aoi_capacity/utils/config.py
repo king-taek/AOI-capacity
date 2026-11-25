@@ -35,6 +35,7 @@ RULES: Dict[str, Tuple[str, Any, Optional[int], Optional[int]]] = {
     "read_workers": (INT, 8, 1, MAX_WORKERS),
     "refresh_window_days": (INT, 0, 0, MAX_DAYS),
     "full_list_every_hours": (INT, 168, 0, 8760), # Report 폴더 전체 나열 주기(시간, 0 = 매번, 기본 7일)
+    "gap_fill_sec": (INT, 60, 0, 3600),           # 11/25: 수집 끝에 옛 빈칸을 최근 것부터 채우는 최대 초(0 = 끔)
     "attention_util": (INT, 40, 0, 100),          # D14: 살펴볼 장비 — 가동률 미만(%)
     "attention_err": (INT, 3, 0, 999),            # D14: 살펴볼 장비 — Error 건수 이상
     "html_days": (INT, 30, 0, 36500),             # 수집 뒤 만드는 결과 HTML 에 담을 최근 일수(0 = 가진 데이터 전부, 10/5)

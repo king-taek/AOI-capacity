@@ -74,10 +74,11 @@ def test_fill_gaps_fills_slot_no_from_wafer_ini_only_when_folder_not_rewritten(t
     """10/25 '옛 기간 빈칸 채우기' 의 슬롯 번호 줄 — 빈 slot_no 를 Wafer 폴더의 WaferInfo.ini 한 장만 읽어 채운다.
     INI 의 WaferStartTime 이 행과 다르면(나중 검사가 덮어씀) 쓰지 않고, 해 본 Report 는 다시 열지 않는다."""
     import json
-    from conftest import make_cfg
+    from conftest import as_old_cache, make_cfg
     nas, csv_path = fake_nas
     cfg = make_cfg(tmp_path, csv_path, collect_params=False)
     collect.collect(cfg)
+    as_old_cache(cfg)
     inis = [p for p in nas.rglob("WaferInfo.ini")]
     assert inis
     for ini in inis:
@@ -96,10 +97,11 @@ def test_fill_gaps_fills_slot_no_from_wafer_ini_only_when_folder_not_rewritten(t
 
 def test_fill_gaps_leaves_slot_empty_when_ini_was_rewritten(tmp_path, fake_nas):
     import json
-    from conftest import make_cfg
+    from conftest import as_old_cache, make_cfg
     nas, csv_path = fake_nas
     cfg = make_cfg(tmp_path, csv_path, collect_params=False)
     collect.collect(cfg)
+    as_old_cache(cfg)
     for ini in nas.rglob("WaferInfo.ini"):
         t = ini.read_text(encoding="utf-8")
         import re

@@ -495,6 +495,9 @@ class CollectPage(QWidget):
         gl.addLayout(_row(gtitle, ginfo, stretch=False))
         gl.itemAt(gl.count() - 1).layout().addStretch(1)
         gl.itemAt(gl.count() - 1).layout().addWidget(self._gap_eta)
+        sec = int(collect.GAP_FILL_SEC)                          # 11/25: 평소 수집 끝에 최근 것부터 조금씩(collect.fill_gaps_budget_into) — 이 카드는 한꺼번에 채울 때
+        self._gap_auto = _label(K.GAPS_AUTO_NOTE_FMT.format(sec=sec) if sec else K.GAPS_AUTO_OFF, "muted", self._gaps, wrap=True)
+        gl.addWidget(self._gap_auto)
         gg = QGridLayout()
         gg.setHorizontalSpacing(14)
         gg.setVerticalSpacing(6)

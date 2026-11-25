@@ -78,6 +78,10 @@ MAX_READ_THREADS = 64
 #: 폴더 전체(장비당 최대 5,849개)를 매번 받아 오던 목록 단계가 9/18 30일치 실측 5.5분이었다. 이름 규칙 밖 파일(`EXPORT.htm` 같은)과
 #: 나중에 다시 쓰인 옛 Report 를 놓치지 않도록 **전체 나열은 처음·backfill·rebuild·recover·refresh 와 장비마다 `full_list_every_hours`(기본 7일)에 한 번** 한다.
 FULL_LIST_EVERY_HOURS = 7 * 24   # 기본 7일(10/5 사용자 확정) — cfg `full_list_every_hours`(0 = 매번 전체 나열). 10/5 실측: 전체 나열이 평소 수집 100~199초의 거의 전부, 패턴 나열은 13~28초
+#: 평소 수집이 끝날 때 남은 빈칸(슬롯 번호 · 스캔 비율 · RDL 판정 · 파라미터 · KLA 이미지 개수)을 **최근 것부터** 이 초만큼만 채운다(cfg `gap_fill_sec`, 0 = 끔).
+#: 근거: 현장 INI 처리량 약 116개/초(9/29 실측, NAS 4대 × 동시 8) → 60초면 Wafer 파일 약 7,000개(슬롯만이면 약 7,000장, 스캔 비율까지면 약 2,500장).
+#: 패턴 나열 평소 수집(13~28초, 10/5 실측)이 많아야 1분 남짓 길어지고, 캐시 저장은 수집 끝의 한 번 그대로다(현장 저장 1번 33초 — 따로 저장하지 않는다).
+GAP_FILL_SEC = 60
 PATTERN_MAX_DAYS = 14          # 커서가 이보다 오래됐으면(며칠 수집을 쉬었으면) 패턴 여러 개보다 전체 나열이 낫다
 _MONTHS = ("Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec")
 #: 패턴 나열 함수(폴더, 패턴) → 항목 목록. Windows 에서만 있다 — 다른 OS(개발·CI)는 None 이라 예전처럼 전체 나열만 한다(테스트는 가짜로 바꿔 끼운다).
@@ -100,6 +104,7 @@ DEFAULT_CONFIG: Dict[str, object] = {
     "cache_file": "",
     "scope_devices": list(scope.DEFAULT_SCOPE),   # ★ 수집 허용 장비. ["*"] 면 제한 없음
     "read_workers": READ_WORKERS,                 # NAS 를 동시에 몇 개씩 읽을지(1 = 한 줄로)
+    "gap_fill_sec": GAP_FILL_SEC,                    # 11/25: 수집 끝에 옛 빈칸(슬롯 · 스캔 비율 · RDL 판정 · 파라미터 · KLA 이미지)을 최근 것부터 채우는 최대 초(0 = 끔)
     "full_list_every_hours": FULL_LIST_EVERY_HOURS,   # 전체 나열 주기(시간, 0 = 매번). 사이에는 이름의 날짜 패턴으로만 나열 — 이름 규칙 밖 파일·나중에 다시 쓰인 옛 Report 는 다음 전체 나열 때 잡힌다
     "refresh_window_days": 0,                     # D60: 최근 N일 안의 Report 는 캐시에 있어도 다시 읽는다(0 = 끔). 창 밖 이력은 보존
     "rebuild_all": False,                         # D60: 보관 기간 전부를 새 후보 캐시에 모아 검증 뒤 교체(옛 --full 의 별칭)
@@ -1190,6 +1195,189 @@ def fill_gaps(cfg: dict, log: Optional[LogFn] = None, progress: Optional[Progres
     return out
 
 
+
+
+# ----------------------------------------------------------------------------- 평소 수집 끝의 빈칸 채우기(11/25)
+#: 새로 읽은 Report 는 이 값들을 이미 읽어 보았다 — 빈칸 채우기가 다시 열지 않게 표시한다(못 채운 것은 Wafer 폴더에 정말 없는 값: 옛 장비의 ActiveSlot 등).
+FRESH_CHECKED = ("slot_checked", "sec_checked", "rdl_checked")
+
+
+def _row_time(r: dict) -> float:
+    t = parse_dt(r.get("wafer_start_time") or r.get("batch_start"))
+    return t.timestamp() if t else 0.0
+
+
+def fill_gaps_budget_into(cfg: dict, cache: dict, devs: List[dict], budget_sec: float, log, progress, should_stop,
+                          dirty: Optional["_Dirty"] = None) -> Dict[str, int]:
+    """'옛 기간 빈칸 채우기' 를 **평소 수집 끝에 조금씩**(11/25 현택: "평소 수집 때 왜 자동으로 안 되나") — 메모리의 캐시에 바로 넣고 저장은 부르는 쪽(수집 끝의 한 번).
+    읽는 곳은 `fill_gaps` 와 같다: 캐시 행이 가리키는 Wafer 폴더 **안**의 정확 경로(WaferInfo · ScanLog · RecipesInfo · 둘째 레시피 메타 · 파라미터 파일)와
+    KLA 기록이 가리키는 결과 파일 한 장(규칙 4 — Report 나열 · 읽기 · 재귀 없음). 범위 게이트를 지난 장비(`devs`)만, 같은 시각 확인(폴더가 그 뒤 다시 쓰였으면 쓰지 않음).
+    순서는 **최근 Wafer 부터**(화면에서 자주 보는 기간이 먼저 찬다), 시간이 다 되면 그 자리에서 멈추고 다음 수집이 이어 간다(해 본 Report 만 `*_checked`).
+    사용자가 중지하면 `CollectCancelled` 를 그대로 던진다(수집의 중지와 같다 — 넣은 값은 수집의 중지 저장이 담는다).
+    스레드는 읽기만, 행 고치기는 메인 스레드가 끝나는 대로. → 통계 {targets, done, slot, sec, rdl, params, kla, left, timed_out}."""
+    st = {"targets": 0, "done": 0, "slot": 0, "sec": 0, "rdl": 0, "params": 0, "kla": 0, "left": 0, "timed_out": 0}
+    budget = float(budget_sec or 0)
+    if budget <= 0:
+        return st
+    dirty = dirty if dirty is not None else _Dirty()
+    cam = _cam_by_key(devs)
+    kla_by = {str(d["key"]): d for d in devs if d.get("kind") == "kla"}
+    want_params = bool(cfg.get("collect_params", True))
+    have_params = (cache.get("params") or {}).get("snaps") or {}
+    tasks: list = []                     # (시각, 종류, …) — 종류 w: Wafer 폴더 하나(필요한 값 묶음) · p: 파라미터(Report 마다) · k: KLA 결과 파일
+    left: Dict[Tuple[int, str], int] = {}  # (Report, 표시) → 아직 안 끝난 장 수 — 0 이 되면 그 Report 에 표시
+    for key, e in (cache.get("reports") or {}).items():
+        if e.get("superseded_by"):
+            continue
+        rows = [r for r in e.get("rows") or () if r.get("ini_match") == "EXACT" and not r.get("kind")]
+        need_slot = not e.get("slot_checked") and any(_needs_slot(r) for r in rows)
+        need_sec = not e.get("sec_checked") and any(_needs_sec(r) for r in rows)
+        need_rdl = _needs_rdl_patch(e)
+        need_p = want_params and key not in have_params and bool(rows)
+        if not (need_slot or need_sec or need_rdl or need_p):
+            continue
+        d = cam.get(key.split("|", 1)[0])
+        if d is None:
+            continue                                     # 이번 장비 목록 · 수집 범위 밖 — 손대지 않는다
+        scan_root = os.path.join(d["path"], str(d.get("scan_dir") or cfg["scan_dir"]))
+        backups = _backup_roots(d, scan_root)
+        counts = {"slot_checked": 0, "sec_checked": 0, "rdl_checked": 0}
+        p_done = False
+        for r in rows:
+            w = _rdl_wafer_dir(r, scan_root, backups)
+            if not w:
+                continue
+            needs = tuple(k for k, on in (("slot", need_slot and _needs_slot(r)), ("sec", need_sec and _needs_sec(r)),
+                                          ("rdl", need_rdl and _rdl_unjudged(r))) if on)
+            if needs:
+                tasks.append((_row_time(r), "w", e, r, w, needs, d["name"]))
+                for n in needs:
+                    counts[n + "_checked"] += 1
+            if need_p and not p_done:
+                tasks.append((_row_time(r), "p", e, r, w, key, d["name"]))
+                p_done = True
+        for flag, on in (("slot_checked", need_slot), ("sec_checked", need_sec), ("rdl_checked", need_rdl)):
+            if on and not counts[flag]:
+                e[flag] = True                           # 되짚을 폴더가 없다 — 다음에도 마찬가지(fill_gaps 와 같다)
+                dirty.add(DIRTY_UPDATED)
+            elif counts[flag]:
+                left[(id(e), flag)] = counts[flag]
+    for k, lot, w, r in _kla_img_targets(cache):
+        d = kla_by.get(k)
+        if d is not None:
+            try:
+                tk = dt.datetime.fromisoformat(str(r.get("t") or "")).timestamp()
+            except ValueError:
+                tk = 0.0
+            tasks.append((tk, "k", k, lot, w, r, d))
+    if not tasks:
+        return st
+    tasks.sort(key=lambda t: -t[0])                    # 최근 것부터(같은 NAS 안에서는 이 순서로 꺼낸다 — `_run`)
+    st["targets"] = len(tasks)
+    deadline = time.monotonic() + budget
+    _say(log, f"빈칸 채우기(최대 {int(budget)}초): 남은 일 {len(tasks):,}개 — 최근 것부터 채웁니다")
+    memo, done = _IniMemo(), _Counter()
+    phase = i18n.KO.GAPS_AUTO_PHASE_FMT.format(sec=int(budget))
+
+    def path_of(t) -> str:
+        return str(t[6]["path"]) if t[1] == "k" else t[4]
+
+    def one(t):
+        _check(should_stop)
+        kind = t[1]
+        out: dict = {}
+        if kind == "w":
+            _tt, _k, _e, r, w, needs, _n = t
+            if "slot" in needs or "rdl" in needs:
+                ok, got = memo.get(os.path.join(w, "WaferInfo.ini"))
+                same = ok == "ok" and got.get("AutoCycleInfo", {}).get("WaferStartTime", "") == r.get("wafer_start_time")
+                if "slot" in needs and same:
+                    slot = str(got.get("AutoCycleInfo", {}).get("ActiveSlot", "")).strip()
+                    if slot.isdigit():
+                        out["slot"] = str(int(slot))
+                if "rdl" in needs and same:
+                    rk, names = memo.recipes(os.path.join(w, "RecipesInfo.ini"))
+                    if rk == "ok" and names:
+                        out["rdl"] = ("|".join(names), rdl_mode_from(names, r.get("outcome", "PASS")))
+                    elif rk == "missing":
+                        out["rdl"] = (got.get("Recipe", {}).get("Name", "") or r.get("recipe", ""), rdl_mode_from(None, r.get("outcome", "PASS")))
+            if "sec" in needs:
+                lk, lv = memo.sub("scanlog", read_scan_log, os.path.join(w, "ScanLog.ini"))
+                if lk == "ok":
+                    rk, names = memo.recipes(os.path.join(w, "RecipesInfo.ini"))
+                    second = None
+                    if rk == "ok" and names and len(names) > 1:
+                        ek, ev = memo.sub("extmeta", read_ext_meta, os.path.join(w, f"ExtendedScanMetaData_{names[1]}.json"))
+                        second = ev if ek == "ok" else None
+                    out["sec"] = scan_seconds(parse_dt(r.get("wafer_start_time")), parse_dt(r.get("wafer_end_time")), lv, second)
+        elif kind == "p":
+            _tt, _k, _e, r, w, _key, _n = t
+            ok, got = memo.get(os.path.join(w, "WaferInfo.ini"))
+            if ok == "ok" and got.get("AutoCycleInfo", {}).get("WaferStartTime", "") == r.get("wafer_start_time"):
+                try:
+                    out["files"] = params_mod.snapshot(params_mod.read_wafer_files(w))
+                except OSError:
+                    out["files"] = {}
+            else:
+                out["files"] = {}                        # 폴더가 그 뒤 다시 쓰였다(또는 없다) — 빈 스냅숏으로 남겨 다시 열지 않는다(CORE-05 와 같은 규칙)
+        else:
+            _tt, _k, _kk, lot, w, r, d = t
+            try:
+                out["rec"] = kla_mod.parse_result(nas_guard.read_bytes(os.path.join(str(d["path"]), str(r.get("dd") or ""), lot, w, str(r["file"])))
+                                                  [:kla_mod.MAX_READ].decode("utf-8", errors="replace"))
+            except OSError:
+                out["rec"] = None                        # 못 읽으면 키를 넣지 않아 다음에 다시
+        progress(done.bump(), len(tasks), phase)
+        return out
+
+    def apply(i, out) -> None:
+        t = tasks[i]
+        kind = t[1]
+        st["done"] += 1
+        if kind == "w":
+            _tt, _k, e, r, _w, needs, _n = t
+            if out.get("slot"):
+                r["slot_no"] = out["slot"]
+                st["slot"] += 1
+            if out.get("sec") is not None:
+                r["scan_sec"] = str(out["sec"])
+                st["sec"] += 1
+            if out.get("rdl"):
+                r["recipe"], r["scan_mode"] = out["rdl"]
+                st["rdl"] += 1
+            for n in needs:
+                k2 = (id(e), n + "_checked")
+                left[k2] -= 1
+                if left[k2] <= 0:
+                    e[n + "_checked"] = True
+            dirty.add(DIRTY_UPDATED)
+        elif kind == "p":
+            _tt, _k, _e, r, _w, key, name = t
+            bst = parse_dt(r.get("batch_start", ""))
+            if params_mod.put(cache.setdefault("params", params_mod.empty_store()), key, dev=name, job=r.get("job", ""), setup=r.get("setup", ""),
+                              t=bst.strftime("%Y-%m-%d %H:%M") if bst else "", report=str(r.get("report") or ""), files=out.get("files") or {}):
+                dirty.add(DIRTY_PARAMS)
+            st["params"] += 1 if out.get("files") else 0
+        else:
+            rec, r = out.get("rec"), t[5]
+            if rec is not None:
+                r["images"] = rec.get("images")
+                st["kla"] += 1 if rec.get("images") is not None else 0
+                dirty.add(DIRTY_KLA)
+
+    def stop_now() -> bool:
+        return bool(should_stop and should_stop()) or time.monotonic() >= deadline
+    try:
+        _run(cfg, tasks, one, stop_now, group=lambda t: nas_group(path_of(t)), on_result=apply)
+    except CollectCancelled:
+        if should_stop and should_stop():
+            raise                                        # 사용자가 멈췄다 — 수집의 중지와 같이(넣은 값은 수집의 중지 저장이 담는다)
+        st["timed_out"] = 1
+    st["left"] = st["targets"] - st["done"]
+    _say(log, f"빈칸 채우기: {st['done']:,}/{st['targets']:,}개 — 슬롯 번호 {st['slot']:,}장 · 스캔 비율 {st['sec']:,}장 · RDL 판정 {st['rdl']:,}장"
+              f" · 파라미터 {st['params']:,}개 · KLA 이미지 개수 {st['kla']:,}장"
+              + (f" · 시간이 다 되어 {st['left']:,}개는 다음 수집에서 이어서" if st["left"] else ""))
+    return st
 
 
 def read_recipes_info(path) -> List[str]:
@@ -3000,7 +3188,8 @@ def _collect(cfg: dict, full: bool, backfill: bool, *, recover: bool, refresh_wi
                 ins_reports.append((idx, key))
             reports[key] = {"mtime": mtime, "device": d["name"], "device_id": did, "device_key": dk,
                             "rel": _rel_key(e.name), "path": e.path, "sha256": sha, "revision": revision,
-                            "rows": rows_of, "seen": time.time(), "parser_version": PARSER_VERSION}
+                            "rows": rows_of, "seen": time.time(), "parser_version": PARSER_VERSION,
+                            **{f: True for f in FRESH_CHECKED}}           # 11/25: 이번에 읽으며 슬롯 · 스캔 비율 · RDL 판정을 이미 해 봤다 — 빈칸 채우기가 다시 열지 않게
             if failed.pop(key, None) is not None:
                 dirty.add(DIRTY_FAILED)
             by_dev[dk]["ok"].append(mtime)
@@ -3127,6 +3316,8 @@ def _collect(cfg: dict, full: bool, backfill: bool, *, recover: bool, refresh_wi
     if dirty and _units > 0 and not resume_after and not resumed_n:   # 예상 시간의 근거(10/11) — 이미 저장할 이유가 있는 실행에만, 이어하기로 끝낸 실행(일부만 읽음)은 빼고 남긴다
         record_eta(cache, "rebuild" if rebuild else "rdl_patch" if rdl_patch else "range" if rng else "refresh" if refresh_days > 0 else "recover" if recover
                    else "backfill" if backfill else "incremental", _units, clock() - t0 - _fixed, _fixed)
+    if not rebuild and not rdl_patch:                          # 11/25: 남은 옛 빈칸을 최근 것부터 정해진 초만큼 — 저장은 아래의 한 번
+        stats["gaps"] = fill_gaps_budget_into(cfg, cache, devs, float(cfg.get("gap_fill_sec", GAP_FILL_SEC) or 0), log, progress, should_stop, dirty)
     if cache.pop("resume", None) is not None:                    # 끝까지 갔다 — 이어하기 표시는 거둔다
         dirty.add(DIRTY_RESUME)
     stats["cache_dirty"] = dict(sorted(dirty.reasons.items()))
