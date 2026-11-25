@@ -927,6 +927,7 @@ def test_lot_tab_cards_count_distinct_wafers_and_skip_test_errors():
     rows = _att("AOI-1", ids, "01:00", lot="ERR", report="a.htm", status=bad) + _att("AOI-1", ids, "03:00", lot="ERR", report="b.htm", status=bad)
     out = _lot_pick(rows, "ERR")
     assert '<p class="v num">2 wafer</p><p class="s">스캔 2번에서 4건</p>' in out
+    assert 'data-lt="0|ERRW00X1"' in out and "Defect" not in out.split('data-lt=')[1][:80]   # 칸 설명은 올릴 때 만든다(LOTD-07)
     tst = _att("AOI-1", ids, "01:00", lot="ABC_TEST", report="a.htm", status={ids[0]: "Alignment Error."})
     lst = _lot_screen(tst)
     assert 'class="bad e"' not in lst
