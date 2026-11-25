@@ -201,6 +201,7 @@ BATCH_WINDOW_MARGIN_SEC = 600
 #: 코드는 안정된 식별자다 — 바꾸면 옛 캐시의 코드를 못 읽는다. 문장은 `i18n/ko.py` 의 `ISSUE_TEXTS[코드]`(위치 인자 {0},{1}).
 ISSUE_NO_WAFER_ID_ROW = "NO_WAFER_ID_ROW"                 # LoadPort/Slot 자리표시 행 — INI 경로 없음
 ISSUE_JOB_UNKNOWN = "JOB_UNKNOWN"                         # Job 을 몰라 INI 경로를 만들지 않음
+ISSUE_SETUP_UNKNOWN = "SETUP_UNKNOWN"                     # Setup 을 몰라 INI 경로를 만들지 않음(CORE-14)
 ISSUE_MOVED_ONLY = "MOVED_ONLY"                           # Wafer 폴더에 MoveResultFlag 만 있음
 ISSUE_INI_NOT_FOUND = "INI_NOT_FOUND"                     # 예상 경로에 없음(백업 없음)
 ISSUE_INI_NOT_FOUND_BACKUPS = "INI_NOT_FOUND_BACKUPS"     # {0}=백업 폴더 수 — 어디에도 없음
@@ -215,7 +216,7 @@ ISSUE_BATCH_NO_WAFER = "BATCH_NO_WAFER"                   # {0}=행 수, {1}=오
 ISSUE_SLOT_ERROR = "SLOT_ERROR"                           # {0}=영향 Slot 수 (kind=slot)
 ISSUE_MULTI_LOT = "MULTI_LOT"                             # {0}=Lot 수
 ISSUE_MULTI_JOB = "MULTI_JOB"                             # {0}=Job 수
-ISSUE_CODES = (ISSUE_NO_WAFER_ID_ROW, ISSUE_JOB_UNKNOWN, ISSUE_MOVED_ONLY, ISSUE_INI_NOT_FOUND, ISSUE_INI_NOT_FOUND_BACKUPS,
+ISSUE_CODES = (ISSUE_NO_WAFER_ID_ROW, ISSUE_JOB_UNKNOWN, ISSUE_SETUP_UNKNOWN, ISSUE_MOVED_ONLY, ISSUE_INI_NOT_FOUND, ISSUE_INI_NOT_FOUND_BACKUPS,
                ISSUE_INI_READ_ERROR, ISSUE_TIME_MISSING_OR_REVERSED, ISSUE_INI_STALE, ISSUE_LOT_MISMATCH, ISSUE_WAFER_ID_MISMATCH,
                ISSUE_FOUND_IN_BACKUP, ISSUE_JOB_FOLDER_DIFFERS, ISSUE_BATCH_NO_WAFER, ISSUE_SLOT_ERROR, ISSUE_MULTI_LOT, ISSUE_MULTI_JOB)
 _ISSUE_ESC = (("%", "%25"), (";", "%3B"), ("=", "%3D"), (",", "%2C"))
@@ -560,7 +561,11 @@ def parse_report(name: str, text: str) -> dict:
                         rep["summary"][k] = row[i + 1]
     job, setup = split_job_setup(rep["summary"].get("Job/Setup", ""))
     if job:
-        rep["equipment"], rep["process_code"] = job, setup
+        # CORE-14: `Job/Setup` 에 Setup 이 없으면('/' 없음 · 'Job/') 파일 이름 규칙의 Setup(4자리)을 그대로 둔다 — 빈 Setup 으로 덮으면
+        # 경로에서 그 칸이 사라져 Lot 자리를 Setup 폴더로 본다. 그래도 비면 rows_for_report 가 경로를 만들지 않는다(SETUP_UNKNOWN).
+        rep["equipment"] = job
+        if setup:
+            rep["process_code"] = setup
     elif not rep["equipment"]:
         # Job/Setup 도 없고 파일명 규칙(4자리 Setup)에도 안 맞는 옛 형식 — 표의 Lot 으로 되찾는다.
         rep["equipment"], rep["process_code"] = _job_setup_by_table_lot(name, rep["wafers"])
@@ -1678,6 +1683,9 @@ def rows_for_report(dev_name: str, rep: dict, scan_root: str, memo: Optional[_In
         elif not job_folder_variants(rep["equipment"]):
             # Job 을 끝내 못 읽은 옛 형식 — 빈 칸은 경로에서 사라져 남의 INI 를 가리키므로 경로를 만들지 않는다(규칙 4). 행은 남긴다.
             r["ini_match"], r["issue_codes"] = "NOT_FOUND", issue_field([ISSUE_JOB_UNKNOWN])
+        elif not str(rep.get("process_code") or "").strip():
+            # CORE-14: Setup 도 끝내 모르면 같은 이유로 경로를 만들지 않는다({Scanresult}/{Job}/{Lot}/… 는 남의 폴더다, 규칙 4).
+            r["ini_match"], r["issue_codes"] = "NOT_FOUND", issue_field([ISSUE_SETUP_UNKNOWN])
         else:
             jobs_try = job_folder_variants(rep["equipment"])
             rels = [os.path.join(j, rep["process_code"], w["lot"], w["wafer_id"]) for j in jobs_try]
@@ -3924,7 +3932,7 @@ def write_html(cfg: dict, rows: List[dict], dev_meta: List[dict], errors: List[d
                timing: Optional[dict] = None, warnings: Optional[List[dict]] = None,
                day_from: str = "", day_to: str = "", params_store: Optional[dict] = None,
                lot_only: bool = False, out_dir: str = "", out_name: str = "", prep: Optional["HtmlPrep"] = None,
-               compress: bool = False) -> str:
+               compress: bool = False, stages: Optional[dict] = None, meta_extra: Optional[dict] = None) -> str:
     """template.html 에 데이터를 넣어 출력 폴더에 HTML 한 장을 쓴다(분할 없음).
 
     `compress`(11/25 LOTD-04 · PP-06): 데이터를 gzip+base64 로 접어 담는다(`_gzip64`) — 공유 폴더 배포판(publish.py)만 켠다.
@@ -3942,15 +3950,20 @@ def write_html(cfg: dict, rows: List[dict], dev_meta: List[dict], errors: List[d
     HTML 이 **주 산출물**이고 CSV 는 부가 산출물이다(C06). CSV 를 못 쓰는 OS 오류(Excel 이 열어 둔 파일에 `os.replace` →
     PermissionError 등)는 수집을 실패로 만들지 않는다 — `warnings` 리스트를 주면 `{"kind": WARN_CSV, "path", "error", "html"}` 를
     넣어 주고 HTML 경로를 정상 반환한다(리스트를 안 주면 로그만 남긴다). 프로그래밍 오류(OSError 가 아닌 것)는 그대로 올린다.
-    HTML 쓰기 실패는 여전히 예외다."""
+    HTML 쓰기 실패는 여전히 예외다.
+
+    수집 창 '속도 시험'(11/25 PH-01 · PH-03 · LOTD-01)만 쓰는 두 인자 — 안 주면 아무 일도 없다: `stages`(dict)에 단계별 초
+    (prep 준비 · range 기간 자르기 · params · fold 접기 · json · write 쓰기 · csv)를 적고, `meta_extra` 를 meta 에 더한다(시험 표식)."""
     nas_guard.check_cfg(cfg)  # ★ NAS 아래에는 절대 쓰지 않는다
     if progress:
         progress(0, 0, i18n.KO.COLLECT_PHASE_WRITE)
 
     t_html = time.perf_counter()
+    st = stages if stages is not None else {}
     if prep is None or prep.rows is not rows:
         prep = HtmlPrep(rows)
     tpl = prep.template()
+    st["prep"] = time.perf_counter() - t_html
     if tpl.count("__DATA__") != 1:                 # C07: 자리는 정확히 한 곳 — 치환한 큰 사본을 만들지 않고 앞·데이터·뒤를 차례로 쓴다
         raise RuntimeError(f"template.html 에 __DATA__ 자리가 {tpl.count('__DATA__')}곳입니다(정확히 1곳이어야 합니다)")
     cut = tpl.index("__DATA__")
@@ -3987,24 +4000,39 @@ def write_html(cfg: dict, rows: List[dict], dev_meta: List[dict], errors: List[d
         # 가진 데이터의 끝날부터 거꾸로 — 단, 수집한 날보다 늦지 않게(JS-01: 시계가 틀린 미래 날짜 행 하나가 기간을 통째로 미래로 밀었다)
         anchor = min(dt.date.fromisoformat(known_days[-1]), now.date()) if known_days else now.date()
         day_from = (anchor - dt.timedelta(days=keep_days - 1)).isoformat()
+    t_st = time.perf_counter()
     picked, r_from, r_to = _range_pick(all_rows, day_from or "", day_to or "", prep.days)
     rows = all_rows if picked is None else [all_rows[i] for i in picked]
+    st["range"] = time.perf_counter() - t_st
     if r_from:
         meta["range"] = {"from": r_from, "to": r_to, "explicit": explicit}
     if known_days:
         meta["data_from"], meta["data_to"] = known_days[0], known_days[-1]   # 가진 데이터 전체의 첫날 — 첫날은 수집 창이 도중에 시작해 '부분'
     pst = params_store if params_store is not None else (timing or {}).get("params_store")
+    t_st = time.perf_counter()
     if pst and pst.get("snaps") and not lot_only:
         meta["params"] = params_for_range(pst, r_from, r_to, memo=prep.params)
+    st["params"] = time.perf_counter() - t_st
+    if meta_extra:
+        meta.update(meta_extra)
     if lot_only:
         rows = [r for r in rows if not r.get("kind")]   # 합성 행(kind)은 LOT 추적이 건너뛴다 — 행 dict 는 복사하지 않고 쓰는 열만 접는다(LOT_ONLY_COLS)
     ekey = (lot_only, None if picked is None else tuple(picked))
     emb_json = prep.emb.get(ekey)
+    st["fold"] = st["json"] = 0.0
     if emb_json is None:                           # 접힌 dict 는 곧 문자열이 된다 — 큰 참조를 들지 않는다(C07)
-        emb_json = prep.emb[ekey] = _emb_json(_embed_rows(rows, LOT_ONLY_COLS if lot_only else OUT_COLS))
+        t_st = time.perf_counter()
+        emb = _embed_rows(rows, LOT_ONLY_COLS if lot_only else OUT_COLS)
+        st["fold"] = time.perf_counter() - t_st
+        t_st = time.perf_counter()
+        emb_json = prep.emb[ekey] = _emb_json(emb)
+        del emb
+        st["json"] = time.perf_counter() - t_st
     if meta["timing"]:
         meta["timing"]["html_ms"] = int((time.perf_counter() - t_html) * 1000)   # 템플릿 읽기 + 접기까지(쓰기 전)
+    t_st = time.perf_counter()
     data = _payload_join(emb_json, meta)
+    st["json"] += time.perf_counter() - t_st
     del emb_json
     zip_s = None
     if compress:
@@ -4044,12 +4072,15 @@ def write_html(cfg: dict, rows: List[dict], dev_meta: List[dict], errors: List[d
             except OSError:
                 pass
     del data
+    st["write"] = time.perf_counter() - t_write
     _say(log, f"HTML 저장: {target} ({size // 1024} KB · 기간 {r_from or '-'} ~ {r_to or '-'} · 행 {len(rows)}/{len(all_rows)}"
               f" · 만들기 {build_s:.1f}초{'' if zip_s is None else f'(압축 {zip_s:.1f}초)'} · 쓰기 {time.perf_counter() - t_write:.1f}초)")
     if cfg.get("write_csv") and not lot_only:
         csv_path = os.path.splitext(target)[0] + ".csv"
+        t_st = time.perf_counter()
         try:
             _write_csv(cfg, csv_path, rows, log)
+            st["csv"] = time.perf_counter() - t_st
         except OSError as ex:                     # NasWriteRefused 는 RuntimeError 라 여기 걸리지 않는다(그대로 올라간다)
             warn = {"kind": WARN_CSV, "path": csv_path, "error": f"{type(ex).__name__}: {ex}", "html": target}
             _say(log, f"CSV 저장 실패(HTML 은 정상 저장됨): {csv_path} — {warn['error']}. "

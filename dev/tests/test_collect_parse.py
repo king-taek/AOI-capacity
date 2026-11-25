@@ -602,6 +602,45 @@ def test_two_wafers_that_never_scanned_stay_not_found_when_their_siblings_are_ex
     assert by["54265662EWE7"]["ini_match"] == "EXACT" and by["54265684EWA2"]["ini_match"] == "NOT_FOUND"
 
 
+def _ini_at(base, *parts, wafer="54265662EWE7"):
+    d = base.joinpath(*parts, wafer)
+    d.mkdir(parents=True, exist_ok=True)
+    (d / "WaferInfo.ini").write_text(WAFER_INI.replace("UseLot=KLK-3D", "UseLot=FUK-RDL2")
+                                     .replace("UseWaferID=K625407-01B0", f"UseWaferID={wafer}")
+                                     .replace("WaferStartTime=13-Sep-26 05:31:04 PM", "WaferStartTime=15-Sep-26 07:30:00 PM")
+                                     .replace("WaferEndTime=13-Sep-26 05:32:02 PM", "WaferEndTime=15-Sep-26 07:44:00 PM"), encoding="utf-8")
+
+
+@pytest.mark.parametrize("job_setup", ["TB500_RDL2 - Multi", "TB500_RDL2 - Multi/"])
+def test_job_setup_without_setup_keeps_the_file_name_setup(tmp_path, job_setup):
+    """CORE-14: Report 의 Job/Setup 에 Setup 이 없으면('/' 없음 · 'Job/') 파일 이름 규칙의 4자리 Setup 을 그대로 쓴다 —
+    예전엔 빈 Setup 으로 덮어 {Scanresult}/{Job}/{Lot}/{Wafer} 를 찾았다(Lot 자리를 Setup 폴더로 봄)."""
+    name = "TB500_RDL2 - Multi_0614_FUK-RDL2_26-Sep-16_(09.18.00)_BatchReport.htm"
+    rep = collect.parse_report(name, LIVE_HTML.replace("TB500_RDL2 - Multi/Setup1", job_setup))
+    assert (rep["equipment"], rep["process_code"]) == ("TB500_RDL2 - Multi", "0614")
+    scan = tmp_path / "Scanresult"
+    _ini_at(scan, "TB500_RDL2 - Multi", "0614", "FUK-RDL2")
+    rows = collect.rows_for_report("AOI-25", rep, str(scan))
+    by = {r["wafer_id"]: r for r in rows}
+    assert by["54265662EWE7"]["ini_match"] == "EXACT" and by["54265662EWE7"]["setup"] == "0614"
+
+
+def test_unknown_setup_builds_no_ini_path(tmp_path, monkeypatch):
+    """CORE-14: 파일 이름 규칙으로도 Setup 을 모르면 Job 을 모를 때처럼 경로를 만들지 않는다(NOT_FOUND + SETUP_UNKNOWN) —
+    빈 칸이 사라진 {Job}/{Lot}/{Wafer} 자리의 남의 INI 를 열면 안 된다(규칙 4). 실데이터(7/1~11/25)에는 이 모양이 0건이었다."""
+    rep = collect.parse_report(LIVE_NAME, LIVE_HTML.replace("TB500_RDL2 - Multi/Setup1", "TB500_RDL2 - Multi/"))
+    assert (rep["equipment"], rep["process_code"]) == ("TB500_RDL2 - Multi", "")
+    scan = tmp_path / "Scanresult"
+    _ini_at(scan, "TB500_RDL2 - Multi", "FUK-RDL2")                    # 칸 하나가 빠진 자리의 미끼 — 열면 안 된다
+    opened = []
+    real = collect.nas_guard.read_text
+    monkeypatch.setattr(collect.nas_guard, "read_text", lambda p, *a, **k: opened.append(str(p)) or real(p, *a, **k))
+    rows = collect.rows_for_report("AOI-25", rep, str(scan))
+    assert rows and all(r["ini_match"] == "NOT_FOUND" and r["issue_codes"] == "SETUP_UNKNOWN" for r in rows)
+    assert all(r["wafer_start_time"] == "" for r in rows) and not any("WaferInfo" in p for p in opened)
+    assert "Setup" in collect.issue_text(rows[0]["issue_codes"])
+
+
 def test_report_without_any_job_keeps_its_rows_and_builds_no_ini_path(tmp_path):
     """Job/Setup 도 없고 파일명 규칙에도 표-Lot 규칙에도 안 맞는 Report — 예전엔 jobs_try[0] 에서 IndexError 로 Report 통째로 '읽기 실패'."""
     from aoi_capacity import collect
