@@ -158,10 +158,10 @@ COLLECT_LOG_TITLE = "로그"
 COLLECT_RUNNING = "수집 중…"
 COLLECT_IDLE = ""
 COLLECT_DONE_TOAST_FMT = "수집 완료 · 장비 {devices}대 · {elapsed}"
-COLLECT_DONE_TOAST_PUBLISHED = " · '스캔을 어디에 했니?' 배포됨"
-COLLECT_DONE_PUBLISH_FAILED_FMT = ("'스캔을 어디에 했니?' 배포는 올리지 못했습니다(수집 결과는 정상 저장됨): {path}\n{error}\n"
+COLLECT_DONE_TOAST_PUBLISHED = " · AOI LOT 올림"   # 11/25(LOTE-14): 수집 창 문구는 팀원이 누르는 바로가기 이름 'AOI LOT' 으로
+COLLECT_DONE_PUBLISH_FAILED_FMT = ("AOI LOT 배포는 올리지 못했습니다(수집 결과는 정상 저장됨): {path}\n{error}\n"
                                    "공유 폴더 연결 · 경로를 확인하고 다시 수집하세요.")
-COLLECT_DONE_PUBLISH_LOCKED_FMT = ("'스캔을 어디에 했니?' 배포 파일은 올렸지만 안내 파일이 열려 있어 최신으로 바꾸지 못했습니다: {path}\n"
+COLLECT_DONE_PUBLISH_LOCKED_FMT = ("AOI LOT 배포 파일은 올렸지만 안내 파일이 열려 있어 최신으로 바꾸지 못했습니다: {path}\n"
                                    "다음 수집 때 다시 가리킵니다.")
 DUR_SEC_FMT = "{s}초"
 DUR_MIN_FMT = "{m}분 {s}초"
@@ -426,7 +426,7 @@ GAPS_TIP = ("수집기 업데이트 전에 모은 Report 에는 나중에 생긴
             "정확한 경로로 읽어 채웁니다(NAS 읽기 전용 · 수집 범위 밖 장비 접근 없음). 나중 검사로 폴더가 다시 쓰였으면 값을 지어내지 않고 빈 채로 둡니다. "
             "멈춰도 읽은 것은 저장되고, 다시 누르면 남은 것부터 합니다. 끝나면 결과 파일을 다시 만듭니다.")
 GAPS_ROW_SLOT = "슬롯 번호"
-GAPS_ROW_SLOT_TIP = "'스캔을 어디에 했니?' 의 Slot No · Wafer ID 지도 — Wafer 폴더의 WaferInfo.ini 한 장만 읽어 ActiveSlot 을 채웁니다"
+GAPS_ROW_SLOT_TIP = "결과 화면 '스캔을 어디에 했니?' 탭의 Slot No · Wafer ID 지도 — Wafer 폴더의 WaferInfo.ini 한 장만 읽어 ActiveSlot 을 채웁니다"
 GAPS_ROW_SEC = "스캔 비율"
 GAPS_ROW_SEC_TIP = "장비 팝업의 '그중 스캔 n%' — Wafer 폴더의 ScanLog.ini 로 잰 실제 촬영 시간"
 GAPS_ROW_PARAMS = "파라미터"
@@ -493,32 +493,7 @@ WAFER_LOGS_BUSY = "가동률 수집 중에는 로그를 모을 수 없습니다(
 
 FAIL_LOGS_SHORT = "수집 실패 원인 · 로그를 zip 한 장으로"
 WAFER_LOGS_SHORT = "개발자에게 보낼 30일 로그(암호화) · 몇 시간"
-SHARE_PROBE_SHORT = "LOT 추적 화면을 팀 공유 폴더에 올려도 되는지 미리 재기"
 
-# 공유 폴더 시험(10/24 — scripts/share_probe.py 를 수집 창에서, bat 없이)
-SHARE_PROBE_TITLE = "공유 폴더 시험"
-SHARE_PROBE_WHEN = ("LOT 추적 화면을 회사 공유 폴더에 올려 팀원이 열어 보게 하기 전에 조건을 잽니다 — 쓰기 권한 · 남은 용량 · 왕복 지연 · "
-                    "10/30/60MB 파일을 올리는 시간 · 누가 열고 있을 때 교체가 되는지. 시험 파일은 공유 폴더 안 _aoi_share_probe 폴더에만 만들고 "
-                    "(가짜 데이터, 회사 데이터 아님) 장비 NAS 와 같은 공유면 아무것도 쓰지 않고 멈춥니다.\n"
-                    "① '시험 시작' → ② 끝나면 나오는 '팀원에게 보낼 경로' 를 팀원에게 보내 시험_안내.html 을 열게 함 → "
-                    "③ (팀원과 함께) '교체 시험 5분' 을 누르고 그동안 팀원이 '교체 중 열기' → ④ 다 끝나면 '시험 파일 지우기'.")
-SHARE_PROBE_TARGET = "공유 폴더"
-SHARE_PROBE_RUN = "시험 시작"
-SHARE_PROBE_HAMMER = "교체 시험 5분"
-SHARE_PROBE_HAMMER_HINT = "팀원이 시험_안내.html 의 '교체 중 열기' 를 누르는 동안 15초마다 시험 파일을 바꿔 씁니다(5분)"
-SHARE_PROBE_STOP = "멈춤"
-SHARE_PROBE_CLEAN = "시험 파일 지우기"
-SHARE_PROBE_OPEN = "결과 폴더 열기"
-SHARE_PROBE_RUNNING = "재는 중… 1~3분 걸립니다"
-SHARE_PROBE_HAMMER_RUNNING = "교체 시험 중(5분) — 팀원에게 지금 '교체 중 열기' 를 눌러 달라고 하세요"
-SHARE_PROBE_CLEANING = "지우는 중…"
-SHARE_PROBE_DONE_FMT = "끝났습니다 — 팀원에게 보낼 경로: {guide}\n결과 파일: {saved}"
-SHARE_PROBE_HAMMER_DONE_FMT = "교체 시험 끝 — {rounds}번 교체 · 실패 {fail}번 · 재시도 {retried}번 · 결과 파일: {saved}"
-SHARE_PROBE_CLEAN_DONE_FMT = "시험 파일 {n}개를 지웠습니다"
-SHARE_PROBE_NO_TARGET = "공유 폴더 경로를 적어 주세요"
-SHARE_PROBE_NO_TOOL_FMT = "도구 파일이 없습니다: {path} (업데이트가 끝났는지 확인하세요)"
-SHARE_PROBE_OLD_TOOL_FMT = "도구 파일이 옛 판입니다: {path} (업데이트가 끝났는지 확인하세요)"
-SHARE_PROBE_NO_DEVICES_FMT = "장비 목록(devices.csv)이 없어 장비 NAS 와 같은 공유인지 확인할 수 없습니다: {path}"
 # LOT 추적 발행 시험(10/27) — 공유 폴더에 올리기 전, 이 PC 에서 LOT 추적만 담은 HTML 한 장을 만들어 본다(NAS 는 읽지 않음)
 LOT_PUB_TITLE = "'스캔을 어디에 했니?' 발행 시험"
 LOT_PUB_SHORT = "가진 데이터로 '스캔을 어디에 했니?' 만 담은 배포용 HTML 을 폴더에 올리기 · 장비 NAS 는 읽지 않음"
@@ -532,9 +507,9 @@ LOT_PUB_RUNNING = "만드는 중… 1~2분 걸릴 수 있습니다"
 LOT_PUB_DONE_FMT = "올렸습니다 — {size} · {sec}초 · {path}"
 LOT_PUB_POINTER_LOCKED = "바로가기용 안내 파일이 열려 있어 바꾸지 못했습니다. 데이터 파일은 올라갔고 다음에 다시 가리킵니다"
 LOT_PUB_BUSY = "수집이 끝난 뒤에 만드세요"
-SET_PUBLISH_DIR = "스캔을 어디에 했니? 배포 폴더"
+SET_PUBLISH_DIR = "AOI LOT 배포 폴더"
 SET_PUBLISH_PLACEHOLDER = "비우면 배포 안 함"
-SET_PUBLISH_HELP = ("팀 공유 폴더 경로를 적으면 수집이 끝날 때마다 '스캔을 어디에 했니?' 만 담은 HTML 을 조용히 올립니다(실패해도 수집은 성공, 로그에만 남음). "
+SET_PUBLISH_HELP = ("팀 공유 폴더 경로를 적으면 수집이 끝날 때마다 AOI LOT('스캔을 어디에 했니?' 화면만 담은 HTML)을 조용히 올립니다(실패해도 수집은 성공, 로그에만 남음). "
                     "폴더 안에 바로가기용 AOI_LOT.html · latest.js · data 폴더(최근 3개)가 생깁니다. 장비 NAS 아래 경로는 거부합니다.")
 PUBLISH_DIR_DEFAULT = "\\\\k5cifsn2\\k5tsvdata$\\Eng'r\\HT Lim\\LOT 추적"   # 11/4 사용자 확정(HT Lim 아래 LOT 추적 · 전체를 따로) — 팀 공유 폴더(장비 NAS 와 다른 공유)
 PUBLISH_FULL_DIR_DEFAULT = "\\\\k5cifsn2\\k5tsvdata$\\Eng'r\\HT Lim\\전체"   # 11/4 — 모든 탭을 담은 배포판(LOT 추적 폴더 안의 하위 폴더)
@@ -544,9 +519,9 @@ PUBLISH_FULL_DIR_PAST2 = "\\\\k5cifsn2\\k5tsvdata$\\1. Conder Scan\\0. 전산 X\
 PUBLISH_DIR_PAST = "\\\\10.142.80.167\\1.Engr\\0. 전산 X\\임현택 ENG'R\\LOT추적"   # 10/30 한나절 기본값(IP 공유) — prefs v11 이 이 값 그대로인 설정만 Conder Scan 으로 되돌린다
 PUBLISH_FULL_DIR_PAST = "\\\\10.142.80.167\\1.Engr\\0. 전산 X\\임현택 ENG'R\\전체"
 SET_PUBLISH_FULL_DIR = "전체 배포 폴더"
-SET_PUBLISH_FULL_HELP = ("팀 공유 폴더 경로를 적으면 수집이 끝날 때마다 모든 탭(최근 90일)을 담은 HTML 을 '스캔을 어디에 했니?' 배포 뒤에 조용히 올립니다(실패해도 수집은 성공, 로그에만 남음). "
-                         "폴더 안에 바로가기용 AOI_ALL.html · latest.js · data 폴더(최근 3개)가 생깁니다. '스캔을 어디에 했니?' 배포 폴더와 달라야 하고 장비 NAS 아래 경로는 거부합니다.")
-PUBLISH_FULL_SAME_DIR = "전체 배포 폴더가 '스캔을 어디에 했니?' 배포 폴더와 같아 올리지 않았습니다(서로 다른 폴더를 적어 주세요)"
+SET_PUBLISH_FULL_HELP = ("팀 공유 폴더 경로를 적으면 수집이 끝날 때마다 모든 탭(최근 90일)을 담은 HTML 을 AOI LOT 배포 뒤에 조용히 올립니다(실패해도 수집은 성공, 로그에만 남음). "
+                         "폴더 안에 바로가기용 AOI_ALL.html · latest.js · data 폴더(최근 3개)가 생깁니다. AOI LOT 배포 폴더와 달라야 하고 장비 NAS 아래 경로는 거부합니다.")
+PUBLISH_FULL_SAME_DIR = "전체 배포 폴더가 AOI LOT 배포 폴더와 같아 올리지 않았습니다(서로 다른 폴더를 적어 주세요)"
 PUBLISH_FULL_STUB_TITLE = "AOI Capacity 전체"
 PUBLISH_FULL_STUB_LOADING = "AOI Capacity 전체 화면을 여는 중…"
 PUBLISH_FULL_STUB_FALLBACK = "자동으로 열리지 않으면 data 폴더에서 가장 최근 all_ 로 시작하는 파일을 여세요."
@@ -556,7 +531,7 @@ COLLECT_DONE_PUBLISH_FULL_FAILED_FMT = ("전체 배포는 올리지 못했습니
 COLLECT_DONE_PUBLISH_FULL_LOCKED_FMT = ("전체 배포 파일은 올렸지만 안내 파일이 열려 있어 최신으로 바꾸지 못했습니다: {path}\n"
                                         "다음 수집 때 다시 가리킵니다.")
 PUBLISH_STUB_TITLE = "스캔을 어디에 했니?"
-PUBLISH_STUB_LOADING = "'스캔을 어디에 했니?' 화면을 여는 중…"
+PUBLISH_STUB_LOADING = "AOI LOT 을 여는 중…"
 PUBLISH_STUB_FALLBACK = "자동으로 열리지 않으면 data 폴더에서 가장 최근 lot_ 로 시작하는 파일을 여세요."
 PUBLISH_NOT_ABS_FMT = "배포 폴더는 전체 경로로 적어 주세요: {path}"
 PUBLISH_SHORTCUT_LOCKED = "바로가기 파일이 열려 있어 바꾸지 못했습니다"
@@ -564,8 +539,6 @@ LOT_PUB_SHORTCUT = "바탕화면에 바로가기"
 LOT_PUB_SHORTCUT_DONE_FMT = "바탕화면에 바로가기를 만들었습니다: {path}"
 PUBLISH_DIR_MISSING = "배포 폴더에 닿지 못했습니다(공유 연결 · 경로 확인)"
 PUBLISH_NO_DIR = "배포 폴더를 적어 주세요"
-SHARE_PROBE_REFUSED_FMT = "멈췄습니다: {error}"
-SHARE_PROBE_FAIL_FMT = "시험하지 못했습니다: {error}"
 PARAM_ZIP_SHORT = "받아 둔 30일 로그 zip 으로 옛 파라미터 채우기 · NAS 안 읽음"
 
 # ── 실패 로그 수집(10/20) ───────────────────────────────────────────────────
