@@ -143,6 +143,9 @@ class MainWindow(QMainWindow):
         self._wire()
         self._refresh_last_collect()
         p = prefs.load()
+        broken = prefs.take_load_warning()                  # 깨진 prefs.json 을 옮기고 기본값으로 시작했다(CORE-13) — 상단에 한 번
+        if broken:
+            QTimer.singleShot(0, lambda: self.flash_status(broken))
         start = p.last_view if p.last_view in self.nav.keys() else "collect"   # 옛 "settings" 는 수집으로
         self.nav.set_current(start)
         self._on_nav(start)

@@ -36,8 +36,23 @@ def test_patch_persists_and_rejects_unknown():
 
 
 def test_corrupt_file_falls_back_to_defaults():
+    """CORE-13: 깨진 파일은 기본값으로 시작하되 원본을 `prefs.json.bad-<시각>` 으로 남기고 한 번 알린다 —
+    예전엔 다음 patch() 가 기본값으로 덮어써 사용자가 고른 폴더 · 일수가 사라졌다."""
     paths.prefs_file().write_text("{not json", encoding="utf-8")
     assert prefs.load().backfill_days == 30
+    bad = [p for p in paths.data_root().iterdir() if p.name.startswith("prefs.json.bad-")]
+    assert len(bad) == 1 and bad[0].read_text(encoding="utf-8") == "{not json"
+    w = prefs.take_load_warning()
+    assert "기본값" in w and bad[0].name in w and prefs.take_load_warning() == ""
+
+
+def test_bom_written_by_notepad_is_read():
+    """CORE-13: 메모장이 붙인 UTF-8 BOM 때문에 설정 전체가 기본값으로 돌아가 덮어써졌다."""
+    paths.prefs_file().write_bytes(b"\xef\xbb\xbf" + json.dumps({"output_dir": "D:\\MyOut", "html_days": 90}).encode("utf-8"))
+    assert prefs.load().output_dir == "D:\\MyOut"
+    prefs.patch(window_maximized=True)
+    assert json.loads(paths.prefs_file().read_text(encoding="utf-8"))["output_dir"] == "D:\\MyOut"
+    assert prefs.take_load_warning() == ""
 
 
 def test_to_collect_cfg_fills_every_default_key(tmp_path):
