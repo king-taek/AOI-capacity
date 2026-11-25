@@ -827,7 +827,42 @@ def _cam_by_key(devs: List[dict]) -> Dict[str, dict]:
     return {str(d["key"]): d for d in devs if d.get("kind") != "kla"}
 
 
-def _fill_params_into(cfg: dict, cache: dict, devs: List[dict], fixed: float, log, progress, should_stop) -> Dict[str, int]:
+class _FillSaver:
+    """빈칸 채우기의 캐시 저장 규칙(PC-05) — 평소 수집의 중간 저장과 같다: 바뀐 것이 있고 마지막 저장 뒤 `CHECKPOINT_MIN_SEC`(60초)
+    또는 마지막 저장에 걸린 시간의 10배가 지났을 때만 중간에 저장한다(현장 캐시 저장 1번 33초 — 2,000장마다 저장하면 읽기보다 저장이 길었다).
+    `defer`(fill_gaps 가 다섯 단계를 이어 돌 때)면 단계가 끝나도 저장하지 않고 fill_gaps 가 마지막에 한 번 — 멈추거나 오류면 바로 저장한다."""
+
+    def __init__(self, cfg: dict, cache: dict, defer: bool = False):
+        self.cfg, self.cache, self.defer = cfg, cache, defer
+        self.pending = False
+        self.at = time.monotonic()
+        self.every = CHECKPOINT_MIN_SEC
+
+    def mark(self) -> None:
+        self.pending = True
+
+    def save(self) -> None:
+        t = time.monotonic()
+        _save_cache(self.cfg, self.cache)
+        took = time.monotonic() - t
+        self.pending = False
+        self.at = time.monotonic()
+        self.every = max(CHECKPOINT_MIN_SEC, took * 10)
+
+    def maybe(self) -> None:
+        """읽는 도중(메인 스레드) — 간격이 지났을 때만."""
+        if self.pending and time.monotonic() - self.at >= self.every:
+            self.save()
+
+    def end(self, stopped: bool = False) -> None:
+        """단계 끝 — 미루는 중이 아니거나 멈췄으면 바로 저장."""
+        if self.pending and (stopped or not self.defer):
+            self.save()
+
+
+def _fill_params_into(cfg: dict, cache: dict, devs: List[dict], fixed: float, log, progress, should_stop,
+                      saver: Optional[_FillSaver] = None) -> Dict[str, int]:
+    saver = saver or _FillSaver(cfg, cache)
     store = cache.setdefault("params", params_mod.empty_store())
     by_key = _cam_by_key(devs)
     tasks, no_dev = [], 0
@@ -861,8 +896,8 @@ def _fill_params_into(cfg: dict, cache: dict, devs: List[dict], fixed: float, lo
         return files, err
 
     st = {"targets": total, "added": 0, "empty": 0, "no_device": no_dev, "stopped": 0}
-    t1, n_done, dirty = time.perf_counter(), 0, _Dirty()
-    for lo in range(0, total, PARAMS_FILL_CHUNK):                  # 덩어리마다 저장 — 멈추거나 끊겨도 읽은 만큼은 남는다
+    t1, n_done = time.perf_counter(), 0
+    for lo in range(0, total, PARAMS_FILL_CHUNK):                  # 덩어리마다 넣고, 저장은 평소 수집과 같은 간격으로(PC-05) — 멈추면 읽은 만큼 저장
         chunk = tasks[lo:lo + PARAMS_FILL_CHUNK]
         try:
             results = _run(cfg, chunk, one, should_stop, group=lambda t: nas_group(t[3]))
@@ -873,21 +908,20 @@ def _fill_params_into(cfg: dict, cache: dict, devs: List[dict], fixed: float, lo
             bst = parse_dt(r.get("batch_start", ""))
             if params_mod.put(store, key, dev=name, job=r.get("job", ""), setup=r.get("setup", ""),
                               t=bst.strftime("%Y-%m-%d %H:%M") if bst else "", report=str(r.get("report") or ""), files=files):
-                dirty.add(DIRTY_PARAMS)
+                saver.mark()
             st["added" if files else "empty"] += 1
         n_done += len(chunk)
         if n_done >= total:
             record_eta(cache, "params_fill", n_done, time.perf_counter() - t1, fixed)
-            dirty.add(DIRTY_PARAMS)
-        if dirty:
-            _save_cache(cfg, cache)
-            dirty = _Dirty()
+            saver.mark()
+        else:
+            saver.maybe()
+    saver.end(bool(st["stopped"]))
     _say_unless_empty(log, int(st.get("targets", 0)), "파라미터 빈 구간 채우기: " + " · ".join(f"{k}={v}" for k, v in st.items()))
     return st
 
 
 # ----------------------------------------------------------------------------- 스캔 비율 빈칸(10/24)
-SEC_FILL_CHUNK = 2000                # 스캔 비율 채우기는 이만큼(장) 읽을 때마다 캐시를 저장한다
 
 
 def _needs_sec(r: dict) -> bool:
@@ -900,7 +934,8 @@ def _sec_targets(cache: dict) -> List[Tuple[str, dict]]:
             if not e.get("superseded_by") and not e.get("sec_checked") and any(_needs_sec(r) for r in e.get("rows") or ())]
 
 
-def _fill_scan_sec_into(cfg: dict, cache: dict, devs: List[dict], fixed: float, log, progress, should_stop) -> Dict[str, int]:
+def _fill_scan_sec_into(cfg: dict, cache: dict, devs: List[dict], fixed: float, log, progress, should_stop,
+                        saver: Optional[_FillSaver] = None) -> Dict[str, int]:
     """'옛 기간 빈칸 채우기' 의 스캔 비율 — 값이 빈 장마다 처음 INI 를 찾은 Wafer 폴더(행의 코드로 되짚음)에서 ScanLog.ini · RecipesInfo.ini
     (멀티면 둘째 레시피 ExtendedScanMetaData 하나)만 정확 경로로 연다. Report 나열 · 읽기 없음, 범위 밖 장비 · KLA 접근 0.
     ScanLog 의 시작이 그 장의 INI 시각 안에 있을 때만 값을 쓴다(`scan_seconds`) — 나중 검사로 폴더가 다시 쓰였으면 빈 채로 둔다(지어내지 않는다).
@@ -941,10 +976,13 @@ def _fill_scan_sec_into(cfg: dict, cache: dict, devs: List[dict], fixed: float, 
         return out
 
     st = {"targets": total, "filled": 0, "empty": 0, "no_device": no_dev, "stopped": 0}
-    t1, n_done, since_save = time.perf_counter(), 0, 0
+    t1, n_done = time.perf_counter(), 0
+    saver = saver or _FillSaver(cfg, cache)
+    if marked:
+        saver.mark()                                         # 되짚을 폴더가 없어 표시만 남긴 Report
 
     def apply(i, sec) -> None:                       # 메인 스레드가 끝나는 대로 — 도중에 멈춰도 끝낸 장은 남는다(덩어리째 버리지 않는다)
-        nonlocal n_done, since_save
+        nonlocal n_done
         e, r, _w, _n = tasks[i]
         if sec is not None:
             r["scan_sec"] = str(sec)
@@ -955,23 +993,14 @@ def _fill_scan_sec_into(cfg: dict, cache: dict, devs: List[dict], fixed: float, 
         if rep_left[id(e)] <= 0:
             e["sec_checked"] = True
         n_done += 1
-        since_save += 1
-
-    def checkpoint() -> None:
-        nonlocal since_save
-        if since_save >= SEC_FILL_CHUNK:
-            since_save = 0
-            _save_cache(cfg, cache)
+        saver.mark()
     try:
-        _run(cfg, tasks, one, should_stop, group=lambda t: nas_group(t[2]), on_result=apply, tick=checkpoint)
+        _run(cfg, tasks, one, should_stop, group=lambda t: nas_group(t[2]), on_result=apply, tick=saver.maybe)
     except CollectCancelled:
         st["stopped"] = 1
     if total and n_done >= total:
         record_eta(cache, "sec_fill", n_done, time.perf_counter() - t1, fixed)
-    if since_save or (n_done and n_done >= total):
-        _save_cache(cfg, cache)
-    if marked and n_done == 0 and not st["stopped"]:
-        _save_cache(cfg, cache)                              # 되짚을 폴더가 없어 표시만 남긴 Report
+    saver.end(bool(st["stopped"]))
     _say_unless_empty(log, total, "스캔 비율 채우기: " + " · ".join(f"{k}={v}" for k, v in st.items()))
     return st
 
@@ -987,7 +1016,8 @@ def _slot_targets(cache: dict) -> List[Tuple[str, dict]]:
             if not e.get("superseded_by") and not e.get("slot_checked") and any(_needs_slot(r) for r in e.get("rows") or ())]
 
 
-def _fill_slot_into(cfg: dict, cache: dict, devs: List[dict], fixed: float, log, progress, should_stop) -> Dict[str, int]:
+def _fill_slot_into(cfg: dict, cache: dict, devs: List[dict], fixed: float, log, progress, should_stop,
+                    saver: Optional[_FillSaver] = None) -> Dict[str, int]:
     """'옛 기간 빈칸 채우기' 의 슬롯 번호 — 값이 빈 장마다 처음 INI 를 찾은 Wafer 폴더(행의 코드로 되짚음)의 `WaferInfo.ini` 한 장만 정확 경로로 읽어
     `[AutoCycleInfo] ActiveSlot` 을 쓴다. 그 INI 의 WaferStartTime 이 행의 시각과 다르면(폴더가 그 뒤 다시 쓰였다) 쓰지 않는다 — 다른 검사의 슬롯을 붙이지 않는다.
     Report 나열 · 읽기 없음, 범위 밖 장비 · KLA 접근 0. 해 본 Report 에는 `slot_checked` 를 남겨 다시 열지 않는다."""
@@ -1028,12 +1058,15 @@ def _fill_slot_into(cfg: dict, cache: dict, devs: List[dict], fixed: float, log,
         return out, why
 
     st = {"targets": total, "filled": 0, "empty": 0, "no_device": no_dev, "stopped": 0}
-    t1, n_done, since_save = time.perf_counter(), 0, 0
+    t1, n_done = time.perf_counter(), 0
+    saver = saver or _FillSaver(cfg, cache)
+    if marked:
+        saver.mark()
 
     why_by: Dict[str, Dict[str, int]] = {}
 
     def apply(i, res) -> None:
-        nonlocal n_done, since_save
+        nonlocal n_done
         e, r, _w, _n = tasks[i]
         slot, why = res
         if slot is not None:
@@ -1047,21 +1080,14 @@ def _fill_slot_into(cfg: dict, cache: dict, devs: List[dict], fixed: float, log,
         if rep_left[id(e)] <= 0:
             e["slot_checked"] = True
         n_done += 1
-        since_save += 1
-
-    def checkpoint() -> None:
-        nonlocal since_save
-        if since_save >= SEC_FILL_CHUNK:
-            since_save = 0
-            _save_cache(cfg, cache)
+        saver.mark()
     try:
-        _run(cfg, tasks, one, should_stop, group=lambda t: nas_group(t[2]), on_result=apply, tick=checkpoint)
+        _run(cfg, tasks, one, should_stop, group=lambda t: nas_group(t[2]), on_result=apply, tick=saver.maybe)
     except CollectCancelled:
         st["stopped"] = 1
     if total and n_done >= total:
         record_eta(cache, "slot_fill", n_done, time.perf_counter() - t1, fixed)
-    if since_save or (n_done and n_done >= total) or (marked and n_done == 0 and not st["stopped"]):
-        _save_cache(cfg, cache)
+    saver.end(bool(st["stopped"]))
     _say_unless_empty(log, total, "슬롯 번호 채우기: " + " · ".join(f"{k}={v}" for k, v in st.items()))
     for why, label in (("no_active_slot", "INI 에 ActiveSlot 없음"), ("time_mismatch", "INI 시각이 행과 달라 쓰지 않음(폴더가 다시 쓰임)"),
                        ("ini_unreadable", "INI 를 읽지 못함")):
@@ -1084,7 +1110,8 @@ def _kla_img_targets(cache: dict) -> List[Tuple[str, str, str, dict]]:
     return out
 
 
-def _fill_kla_images_into(cfg: dict, cache: dict, devs: List[dict], fixed: float, log, progress, should_stop) -> Dict[str, int]:
+def _fill_kla_images_into(cfg: dict, cache: dict, devs: List[dict], fixed: float, log, progress, should_stop,
+                          saver: Optional[_FillSaver] = None) -> Dict[str, int]:
     """'옛 기간 빈칸 채우기' 의 KLA Defect 이미지 개수 — 기록이 가리키는 **결과 파일 한 장씩만** 정확 경로로 다시 읽어 IMAGECOUNT 합을 넣는다.
     날짜 폴더 · Lot 나열 없음, 범위 게이트를 지난 KLA 장비만. 못 읽으면(파일이 사라짐 등) 키를 넣지 않아 다음에 다시 시도한다."""
     by_key = {str(d["key"]): d for d in devs if d.get("kind") == "kla"}
@@ -1103,10 +1130,11 @@ def _fill_kla_images_into(cfg: dict, cache: dict, devs: List[dict], fixed: float
         return rec, ""
 
     st = {"targets": total, "filled": 0, "no_column": 0, "unreadable": 0, "stopped": 0}
-    done, n_done, since_save, t1 = _Counter(), 0, 0, time.perf_counter()
+    done, n_done, t1 = _Counter(), 0, time.perf_counter()
+    saver = saver or _FillSaver(cfg, cache)
 
     def apply(i, res) -> None:
-        nonlocal n_done, since_save
+        nonlocal n_done
         _k, _lot, _w, r, _d = tasks[i]
         rec, why = res
         if rec is None:
@@ -1115,26 +1143,19 @@ def _fill_kla_images_into(cfg: dict, cache: dict, devs: List[dict], fixed: float
             r["images"] = rec.get("images")                 # IMAGECOUNT 열이 없으면 None — 키는 남겨 다시 열지 않는다(화면은 레코드 수)
             st["filled" if rec.get("images") is not None else "no_column"] += 1
         n_done += 1
-        since_save += 1
-
-    def checkpoint() -> None:
-        nonlocal since_save
-        if since_save >= SEC_FILL_CHUNK:
-            since_save = 0
-            _save_cache(cfg, cache)
+        saver.mark()
 
     def wrapped(t):
         out = one(t)
         progress(done.bump(), total, i18n.KO.GAPS_PHASE_KLA_FMT.format(device=t[4]["name"]))
         return out
     try:
-        _run(cfg, tasks, wrapped, should_stop, group=lambda t: nas_group(str(t[4]["path"])), on_result=apply, tick=checkpoint)
+        _run(cfg, tasks, wrapped, should_stop, group=lambda t: nas_group(str(t[4]["path"])), on_result=apply, tick=saver.maybe)
     except CollectCancelled:
         st["stopped"] = 1
     if total and n_done >= total:
         record_eta(cache, "kla_fill", n_done, time.perf_counter() - t1, fixed)
-    if since_save or (n_done and n_done >= total):
-        _save_cache(cfg, cache)
+    saver.end(bool(st["stopped"]))
     _say_unless_empty(log, total, "KLA Defect 이미지 개수 채우기: " + " · ".join(f"{k}={v}" for k, v in st.items()))
     return st
 
@@ -1150,30 +1171,25 @@ def fill_gaps(cfg: dict, log: Optional[LogFn] = None, progress: Optional[Progres
     out: Dict[str, object] = {"stopped": 0}
     stats: Dict[str, int] = {}
     dirty = _Dirty()
+    saver = _FillSaver(cfg, cache, defer=True)         # PC-05: 다섯 단계를 마친 뒤 한 번 저장(중간은 평소 수집과 같은 간격, 멈추거나 오류면 바로)
     try:
-        _patch_rdl_modes(cfg, cache, devs, should_stop, log, progress, stats, dirty)
-    except CollectCancelled:
-        out["stopped"] = 1
-    if dirty:
-        _save_cache(cfg, cache)
-    out["rdl"] = {"targets": int(stats.get("rdl_rows", 0)), "filled": int(stats.get("rdl_patched", 0))}
-    if out["stopped"]:
-        return out
-    out["slot"] = _fill_slot_into(cfg, cache, devs, fixed, log, progress, should_stop)
-    if out["slot"].get("stopped"):
-        out["stopped"] = 1
-        return out
-    out["kla"] = _fill_kla_images_into(cfg, cache, devs, fixed, log, progress, should_stop)
-    if out["kla"].get("stopped"):
-        out["stopped"] = 1
-        return out
-    out["sec"] = _fill_scan_sec_into(cfg, cache, devs, fixed, log, progress, should_stop)
-    if out["sec"].get("stopped"):
-        out["stopped"] = 1
-        return out
-    if bool(cfg.get("collect_params", True)):
-        out["params"] = _fill_params_into(cfg, cache, devs, fixed, log, progress, should_stop)
-        out["stopped"] = int(out["params"].get("stopped", 0))
+        try:
+            _patch_rdl_modes(cfg, cache, devs, should_stop, log, progress, stats, dirty, tick=lambda: (saver.mark() if dirty else None, saver.maybe()))
+        except CollectCancelled:
+            out["stopped"] = 1
+        if dirty:
+            saver.mark()
+        out["rdl"] = {"targets": int(stats.get("rdl_rows", 0)), "filled": int(stats.get("rdl_patched", 0))}
+        steps = [("slot", _fill_slot_into), ("kla", _fill_kla_images_into), ("sec", _fill_scan_sec_into)]
+        if bool(cfg.get("collect_params", True)):
+            steps.append(("params", _fill_params_into))
+        for name, fn in ([] if out["stopped"] else steps):
+            out[name] = fn(cfg, cache, devs, fixed, log, progress, should_stop, saver)
+            if out[name].get("stopped"):
+                out["stopped"] = 1
+                break
+    finally:
+        saver.end(stopped=True)                        # 남은 것을 저장 — 끝까지 갔든 멈췄든 오류든
     return out
 
 
