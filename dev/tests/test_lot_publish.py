@@ -511,3 +511,34 @@ def test_full_publish_is_skipped_when_the_same_server_was_unreachable(monkeypatc
     calls = _fake_runs(monkeypatch, fail_lot=PermissionError("x"))             # 권한 문제는 서버가 닿은 것 — 건너뛰지 않는다
     publish.publish_after_collect({"publish_dir": r"\\srvA\share\lot", "publish_full_dir": r"\\srvA\other\all"}, [], [], status={})
     assert calls == [publish.LOT, publish.FULL]
+
+
+def test_publish_files_are_compressed_but_names_and_pointer_stay_the_same(tmp_path, sample):
+    """LOTD-04 · PP-06(11/25): 배포판 데이터는 gzip+base64(풀면 압축 안 한 판과 같은 행) — 현택 조건: 이미 배포된 바로가기가 그대로 새 파일을 열도록
+    안내 파일 · latest.js · data 폴더 · 데이터 파일 이름 규칙은 하나도 바뀌지 않는다. 로컬 결과 HTML 은 압축하지 않는다."""
+    cfg, rows, devs = _publish_cfg(tmp_path, sample)
+    cfg = dict(cfg, publish_full_days=0)
+    assert (publish.STUB_NAME, publish.LATEST_NAME, publish.DATA_DIR, publish.LOT.var, publish.FULL.stub, publish.FULL.var) == \
+        ("AOI_LOT.html", "latest.js", "data", "AOI_LOT_LATEST", "AOI_ALL.html", "AOI_ALL_LATEST")
+    assert publish.latest_text("lot_20261125_0800.html") == 'window.AOI_LOT_LATEST="data/lot_20261125_0800.html";\n'
+    stub = publish.stub_text()
+    assert '<script src="latest.js"></script>' in stub and "var u=window.AOI_LOT_LATEST;if(u){location.replace(u)}" in stub
+    now = dt.datetime(2026, 11, 25, 8, 0)
+    for kind, share in ((publish.LOT, tmp_path / "share"), (publish.FULL, tmp_path / "share_all")):
+        got = publish._publish(kind, cfg, str(share), rows=rows[:3000], dev_meta=devs, now=now)
+        name = f"{kind.prefix}_20261125_0800.html"
+        assert Path(got["data"]) == share / "data" / name and kind.data_re.match(name)
+        assert (share / "latest.js").read_text(encoding="utf-8") == f'window.{kind.var}="data/{name}";\n'
+        assert (share / kind.stub).read_text(encoding="utf-8") == publish.stub_text(kind)
+        text = (share / "data" / name).read_text(encoding="utf-8")
+        body = text[text.index('id="embedded">') + len('id="embedded">'):]
+        assert body.startswith("H4sI")                                                # 압축본
+        plain = collect.write_html(cfg if kind is publish.LOT else dict(cfg, html_days=0, write_csv=False), rows[:3000], devs, [], 0.0,
+                                   mode="publish", lot_only=kind is publish.LOT, out_dir=str(tmp_path / "plain"), out_name=name)
+        ptext = Path(plain).read_text(encoding="utf-8")
+        assert ptext[ptext.index('id="embedded">') + len('id="embedded">'):].startswith("{")     # 기본(로컬)은 그대로 JSON
+        a, b = sample_rows.embedded(text), sample_rows.embedded(ptext)
+        assert all(a[k] == b[k] for k in ("cols", "pooled", "pool", "rows")) and a["rows"]                # 풀면 같은 행
+        size = lambda s: s.index("</script>", s.index('id="embedded">')) - s.index('id="embedded">')
+        assert size(text) * 4 < size(ptext)                                             # 데이터가 1/4 아래로
+        assert text[:text.index('id="embedded">')] == ptext[:ptext.index('id="embedded">')]   # 화면(앞부분)은 같다

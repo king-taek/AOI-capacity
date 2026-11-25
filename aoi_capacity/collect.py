@@ -38,9 +38,11 @@
 """
 from __future__ import annotations
 
+import base64
 import collections
 import csv
 import datetime as dt
+import gzip
 import hashlib
 import json
 import logging
@@ -3795,6 +3797,16 @@ def _payload_join(emb_json: str, meta: dict) -> str:
     return f'{emb_json[:-1]},"meta":{m}}}' if len(emb_json) > 2 else f'{{"meta":{m}}}'
 
 
+GZIP_LEVEL = 6
+
+
+def _gzip64(payload: str) -> str:
+    """배포판(LOTD-04 · PP-06)의 `#embedded` 내용 — JSON 을 gzip(6) 으로 접어 base64 글자로(실데이터 LOT 106 → 16MB). 화면 로더는
+    'H4sI'(gzip 머리의 base64)로 시작하면 브라우저 내장 DecompressionStream 으로 편다. base64 에는 `<` 가 없어 스크립트 태그 안전도 그대로.
+    mtime=0 — 같은 데이터면 같은 바이트."""
+    return base64.b64encode(gzip.compress(payload.encode("utf-8"), compresslevel=GZIP_LEVEL, mtime=0)).decode("ascii")
+
+
 def _wafer_key(r: dict) -> str:
     """같은 자재일 수 있는 행을 묶는 열쇠 — Wafer ID 의 영숫자만 대문자로. 화면의 자재 키(`matKey` = Job 묶음|Report 파일명의 Lot|Wafer)는
     이 값을 그대로 포함하므로 이 열쇠로 모은 행은 **항상 상위집합**이다(Lot 은 파일명에서 오므로 행의 Lot 으로 좁히면 놓친다 — 30일치 실측).
@@ -3911,8 +3923,12 @@ def write_html(cfg: dict, rows: List[dict], dev_meta: List[dict], errors: List[d
                mode: str = "auto", log: Optional[LogFn] = None, progress: Optional[ProgressFn] = None,
                timing: Optional[dict] = None, warnings: Optional[List[dict]] = None,
                day_from: str = "", day_to: str = "", params_store: Optional[dict] = None,
-               lot_only: bool = False, out_dir: str = "", out_name: str = "", prep: Optional["HtmlPrep"] = None) -> str:
+               lot_only: bool = False, out_dir: str = "", out_name: str = "", prep: Optional["HtmlPrep"] = None,
+               compress: bool = False) -> str:
     """template.html 에 데이터를 넣어 출력 폴더에 HTML 한 장을 쓴다(분할 없음).
+
+    `compress`(11/25 LOTD-04 · PP-06): 데이터를 gzip+base64 로 접어 담는다(`_gzip64`) — 공유 폴더 배포판(publish.py)만 켠다.
+    로컬 결과 HTML 은 그대로 JSON(내 PC 에선 읽기가 빨라 이득이 없다). 화면 로더는 두 형식을 다 읽는다.
 
     `prep`(`HtmlPrep(rows)`, 같은 `rows` 객체로 만든 것)을 주면 수집 끝에 여러 장을 만들 때 같은 준비를 되풀이하지 않는다 — 결과 바이트는 같다.
 
@@ -3990,6 +4006,11 @@ def write_html(cfg: dict, rows: List[dict], dev_meta: List[dict], errors: List[d
         meta["timing"]["html_ms"] = int((time.perf_counter() - t_html) * 1000)   # 템플릿 읽기 + 접기까지(쓰기 전)
     data = _payload_join(emb_json, meta)
     del emb_json
+    zip_s = None
+    if compress:
+        t_zip = time.perf_counter()
+        data = _gzip64(data)
+        zip_s = time.perf_counter() - t_zip
     out_root = out_dir or cfg["output_dir"]
     if out_dir:
         nas_guard.assert_local(out_dir, nas_guard.roots_for_cfg(cfg))     # ★ 따로 준 폴더도 NAS 아래면 거부
@@ -4024,7 +4045,7 @@ def write_html(cfg: dict, rows: List[dict], dev_meta: List[dict], errors: List[d
                 pass
     del data
     _say(log, f"HTML 저장: {target} ({size // 1024} KB · 기간 {r_from or '-'} ~ {r_to or '-'} · 행 {len(rows)}/{len(all_rows)}"
-              f" · 만들기 {build_s:.1f}초 · 쓰기 {time.perf_counter() - t_write:.1f}초)")
+              f" · 만들기 {build_s:.1f}초{'' if zip_s is None else f'(압축 {zip_s:.1f}초)'} · 쓰기 {time.perf_counter() - t_write:.1f}초)")
     if cfg.get("write_csv") and not lot_only:
         csv_path = os.path.splitext(target)[0] + ".csv"
         try:
@@ -4074,7 +4095,7 @@ def _check_range(rows: List[dict], day_from: str, day_to: str) -> None:
 
 def html_from_cache(cfg: dict, day_from: str = "", day_to: str = "", *, log: Optional[LogFn] = None,
                     progress: Optional[ProgressFn] = None, warnings: Optional[List[dict]] = None,
-                    lot_only: bool = False, out_dir: str = "", out_name: str = "") -> str:
+                    lot_only: bool = False, out_dir: str = "", out_name: str = "", compress: bool = False) -> str:
     """**수집 없이** 가진 데이터(캐시)만으로 결과 HTML 을 다시 만든다(10/5 사용자 요청 — 기능이 늘 때마다 재수집하지 않게).
 
     NAS 는 한 번도 건드리지 않는다: 캐시 파일을 읽고(분류 규칙이 바뀌었으면 메모리에서만 재분류 — 캐시 파일은 그대로),
@@ -4101,7 +4122,7 @@ def html_from_cache(cfg: dict, day_from: str = "", day_to: str = "", *, log: Opt
     _say(log, f"가진 데이터로 HTML 만들기: 캐시 행 {len(rows)}개(범위 밖 {hidden}개 제외) · 기간 {day_from or '처음'} ~ {day_to or '끝'}")
     return write_html(cfg, render_issue_rows(rows), dev_meta, [], started, mode="html_only", log=log, progress=progress,
                       warnings=warnings, day_from=day_from, day_to=day_to, params_store=cache.get("params"),
-                      lot_only=lot_only, out_dir=out_dir, out_name=out_name)
+                      lot_only=lot_only, out_dir=out_dir, out_name=out_name, compress=compress)
 
 
 def import_param_zips(cfg: dict, folder: str, log: Optional[LogFn] = None, progress: Optional[ProgressFn] = None) -> Dict[str, int]:
