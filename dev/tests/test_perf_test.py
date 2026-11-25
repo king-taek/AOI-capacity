@@ -56,9 +56,11 @@ def test_run_builds_three_identical_pairs_from_the_cache_only(tmp_path, sample, 
     cfg = _cfg(tmp_path)
     _make_cache(cfg, rows, meta)
     before = _files(tmp_path)
+    real_scandir = os.scandir
     monkeypatch.setattr(collect.os, "scandir", lambda *a, **k: (_ for _ in ()).throw(AssertionError("NAS 를 나열하면 안 된다")))
     phases = []
     got = perf_test.run(cfg, str(tmp_path / "perf"), progress=lambda d, t, p: phases.append(p))
+    monkeypatch.setattr(collect.os, "scandir", real_scandir)                     # 시험 본체가 끝났다 — 아래 확인(rglob)은 진짜 scandir 로(3.11 pathlib 은 os.scandir 를 쓴다)
     assert got["same"] == {"base": True, "lot": True, "full": True} and not got["stopped"]
     out = Path(got["dir"])
     assert out.parent == tmp_path / "perf"
