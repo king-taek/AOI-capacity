@@ -2582,7 +2582,7 @@ def _list_new_reports(devs, cache, cfg, backfill, log, progress, on_device, shou
 
     ★ 나열 방식(9/23): 커서가 있는 장비의 **증분 수집**이면 폴더 전체 대신 이름의 날짜 패턴(`report_name_patterns`)으로
     NAS 가 거른 파일만 받는다(`PATTERN_LISTER`, Windows). 고르는 규칙은 위와 똑같다 — 받은 목록이 전체의 부분집합일 뿐이다.
-    처음 보는 장비 · backfill · rebuild · recover · refresh · 마지막 전체 나열이 `full_list_every_hours` 보다 오래됨 · 패턴이 너무 많음
+    처음 보는 장비 · backfill · rebuild · recover · 마지막 전체 나열이 `full_list_every_hours` 보다 오래됨 · 패턴이 너무 많음(refresh · 기간이 14일 넘게 거슬러 감)
     · 패턴 나열 실패는 전부 예전처럼 **전체 나열**. `dm["listing"]` 에 어느 쪽이었는지("full" · "pattern") 남긴다."""
     reports, last, failed = cache["reports"], cache["last_mtime"], cache.get("failed") or {}
     full_listed = cache.get("full_listed") if isinstance(cache.get("full_listed"), dict) else {}
@@ -2620,7 +2620,9 @@ def _list_new_reports(devs, cache, cfg, backfill, log, progress, on_device, shou
                 since = min(since, pending_since[dk] - 1)  # 재시도할 Report 까지는 훑는다
             files = None
             lister = PATTERN_LISTER
-            incremental = not (backfill or recover or refresh_since is not None or dk not in last)
+            # PC-06: '최근 며칠 · 기간 다시 읽기' 도 평소 수집과 같은 조건이면 이름 날짜 패턴으로(기간 첫날 하루 전 ~ 내일, PATTERN_MAX_DAYS 안만).
+            # 고르는 규칙(수정시각)은 그대로 — 이름 날짜 밖에 다시 쓰인 옛 Report 는 7일마다의 전체 나열이 잡는다(평소 수집과 같다)
+            incremental = not (backfill or recover or dk not in last)
             if lister is not None and incremental and now - float(full_listed.get(dk) or 0) < full_every:
                 pats = report_name_patterns(since, now)
                 if pats:
