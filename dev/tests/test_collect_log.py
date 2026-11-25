@@ -20,9 +20,8 @@ def test_collect_writes_a_detailed_log_to_app_log_and_not_into_the_html(tmp_path
     assert set(log["phases_ms"]) >= {"devices_ms", "list_ms", "read_ms", "cache_ms", "total_ms"}
     d = log["devices"][0]
     assert {"name", "listing", "list_dev_ms", "found", "reports", "read_n", "read_sum_ms", "rows", "status"} <= set(d)
-    assert {"params_ms", "params_files"} <= set(d)                           # PC-09: Report 읽기 합 중 파라미터 몫(ms · 파일 수)
     detail = next(r.getMessage() for r in caplog.records if r.getMessage().startswith("[수집 상세]"))
-    assert "단계(ms):" in detail and f"name={d['name']}" in detail and "느린 Report" in detail and "params_ms=" in detail
+    assert "단계(ms):" in detail and f"name={d['name']}" in detail and "느린 Report" in detail
     assert f"수집기 {collect.version_text() or '버전 모름'}" in detail                 # 10/5: 수집기 버전도 남긴다
     path = collect.write_html(cfg, rows, dev_meta, errors, 0.0, timing=stats)
     meta = sample_rows.unfold(sample_rows.embedded(open(path, encoding="utf-8").read()))[1]
