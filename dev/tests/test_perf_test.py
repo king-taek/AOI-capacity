@@ -57,10 +57,18 @@ def test_run_builds_three_identical_pairs_from_the_cache_only(tmp_path, sample, 
     _make_cache(cfg, rows, meta)
     before = _files(tmp_path)
     real_scandir = os.scandir
-    monkeypatch.setattr(collect.os, "scandir", lambda *a, **k: (_ for _ in ()).throw(AssertionError("NAS 를 나열하면 안 된다")))
+    nas = tuple(str(d.get("note") or "").rstrip("\\/") for d in meta["devices"] if d.get("note"))
+    assert nas                                                                    # 표본에 장비 경로가 있어야 이 검사가 뜻이 있다
+
+    def guard(path=".", *a, **k):                                                 # 장비 NAS 아래 나열만 막는다 — 로컬(레시피 묶음 찾기 등)은 그대로
+        p = os.fspath(path)
+        if any(p.startswith(r) for r in nas):
+            raise AssertionError(f"NAS 를 나열하면 안 된다: {p}")
+        return real_scandir(path, *a, **k)
+
+    monkeypatch.setattr(collect.os, "scandir", guard)
     phases = []
     got = perf_test.run(cfg, str(tmp_path / "perf"), progress=lambda d, t, p: phases.append(p))
-    monkeypatch.setattr(collect.os, "scandir", real_scandir)                     # 시험 본체가 끝났다 — 아래 확인(rglob)은 진짜 scandir 로(3.11 pathlib 은 os.scandir 를 쓴다)
     assert got["same"] == {"base": True, "lot": True, "full": True} and not got["stopped"]
     out = Path(got["dir"])
     assert out.parent == tmp_path / "perf"
