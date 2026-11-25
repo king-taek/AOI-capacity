@@ -383,3 +383,64 @@ def test_publish_removes_our_old_share_icon_only(tmp_path, sample):
     (share / publish.ICON_NAME).write_bytes(b"someone else's icon")
     publish.publish_lot(cfg, str(share), rows=rows[:50], dev_meta=devs, now=dt.datetime(2026, 11, 4, 9, 5))
     assert (share / publish.ICON_NAME).read_bytes() == b"someone else's icon"
+
+
+# ── 11/25: 배포 단계 알림 · 멈춤 · 같은 서버 건너뜀 · 이유 종류(PP-01 · PP-03 · CORE-06 · CORE-10) ──
+def test_publish_error_kind_names_the_reason():
+    class _Win(OSError):
+        def __init__(self, code):
+            super().__init__("x")
+            self.winerror = code
+    assert publish.error_kind(FileNotFoundError("x")) == publish.WHY_UNREACHABLE
+    assert publish.error_kind(_Win(53)) == publish.WHY_UNREACHABLE
+    assert publish.error_kind(PermissionError("x")) == publish.WHY_DENIED
+    assert publish.error_kind(_Win(32)) == publish.WHY_LOCKED
+    assert publish.error_kind(ValueError("x")) == publish.WHY_CONFIG
+    assert publish.error_kind(NasWriteRefused("x")) == publish.WHY_CONFIG
+    assert publish.error_kind(RuntimeError("x")) == publish.WHY_OTHER
+
+
+def _fake_runs(monkeypatch, fail_lot=None):
+    calls: list = []
+    monkeypatch.setattr(publish, "_enabled", lambda d: bool(d))
+
+    def run_one(kind, cfg, share_dir, rows, dev_meta, params_store, log, status, prefix):
+        calls.append(kind)
+        if kind is publish.LOT and fail_lot is not None:
+            status.update({"error": "x", "dir": share_dir, "why": publish.error_kind(fail_lot)})
+            return None
+        status.update({prefix + "dir": share_dir, prefix + "ok": True})
+        return {"pointer_ok": True}
+    monkeypatch.setattr(publish, "_run_one", run_one)
+    return calls
+
+
+def test_publish_after_collect_reports_each_step_and_stops_before_the_next(monkeypatch):
+    calls = _fake_runs(monkeypatch)
+    cfg = {"publish_dir": r"\\srvA\share\lot", "publish_full_dir": r"\\srvA\share\all"}
+    seen: list = []
+    publish.publish_after_collect(cfg, [], [], status={}, progress=lambda d, t, m: seen.append((d, t, m)))
+    assert calls == [publish.LOT, publish.FULL]
+    assert [m for _d, _t, m in seen] == [i18n.KO.COLLECT_PHASE_PUBLISH_FMT.format(i=1, n=2, what=i18n.KO.PUBLISH_WHAT_LOT),
+                                         i18n.KO.COLLECT_PHASE_PUBLISH_FMT.format(i=2, n=2, what=i18n.KO.PUBLISH_WHAT_FULL)]
+    assert all(d == 0 and t == 0 for d, t, _m in seen)                       # 총량 모름(busy)
+    calls.clear()
+    asked = iter([False, True])                                                # LOT 은 시작, 그 뒤 멈춤 → 전체는 시작 안 함
+    st: dict = {}
+    publish.publish_after_collect(cfg, [], [], status=st, should_stop=lambda: next(asked))
+    assert calls == [publish.LOT] and "full_ok" not in st and "full_error" not in st
+
+
+def test_full_publish_is_skipped_when_the_same_server_was_unreachable(monkeypatch):
+    calls = _fake_runs(monkeypatch, fail_lot=FileNotFoundError("x"))
+    st: dict = {}
+    publish.publish_after_collect({"publish_dir": r"\\srvA\share\lot", "publish_full_dir": r"\\SRVA\other\all"}, [], [], status=st)
+    assert calls == [publish.LOT]
+    assert st["why"] == publish.WHY_UNREACHABLE and st["full_why"] == publish.WHY_UNREACHABLE
+    assert st["full_error"] == i18n.KO.PUBLISH_SKIPPED_SAME_HOST
+    calls = _fake_runs(monkeypatch, fail_lot=FileNotFoundError("x"))           # 다른 서버면 전체는 따로 해 본다
+    publish.publish_after_collect({"publish_dir": r"\\srvA\share\lot", "publish_full_dir": r"\\srvB\share\all"}, [], [], status={})
+    assert calls == [publish.LOT, publish.FULL]
+    calls = _fake_runs(monkeypatch, fail_lot=PermissionError("x"))             # 권한 문제는 서버가 닿은 것 — 건너뛰지 않는다
+    publish.publish_after_collect({"publish_dir": r"\\srvA\share\lot", "publish_full_dir": r"\\srvA\other\all"}, [], [], status={})
+    assert calls == [publish.LOT, publish.FULL]

@@ -191,3 +191,21 @@ def test_full_publish_result_reaches_the_done_result(qapp, fake_nas, tmp_path):
     assert not got2["failed"] and res2.published == str(tmp_path / "lot2") and res2.published_full == ""
     assert [x["kind"] for x in res2.warnings] == ["publish_full"] and res2.state == "completed_with_warnings"
     assert res2.warning_lines[0].startswith(i18n.KO.COLLECT_DONE_PUBLISH_FULL_FAILED_FMT.split("{")[0])
+
+
+def test_outcome_items_group_publish_failures_by_reason_and_offer_the_next_step():
+    """11/25 QT-16 · PP-04: 알림 항목은 쉬운 문장 + 다음 행동. 두 배포가 같은 이유로 실패하면 한 항목, 원문은 툴팁·로그에만."""
+    from aoi_capacity import i18n, publish
+    from aoi_capacity.workers.collector import CollectResult
+
+    K = i18n.KO
+    r = CollectResult(rows=1, devices=2, dev_meta=[{"name": "AOI-1", "error": "x"}, {"name": "AOI-2", "read_errors": 3}],
+                      errors=[{}, {}, {}],
+                      warnings=[{"kind": "publish", "path": r"\\s\lot", "error": "FileNotFoundError: raw", "why": publish.WHY_UNREACHABLE},
+                                {"kind": "publish_full", "path": r"\\s\all", "error": "FileNotFoundError: raw", "why": publish.WHY_UNREACHABLE}])
+    items = r.outcome_items
+    pub = [i for i in items if i["action"] == "republish"]
+    assert len(pub) == 1 and pub[0]["kinds"] == ["lot", "full"]
+    assert pub[0]["desc"] == K.PUBLISH_WHY_UNREACHABLE and "raw" not in pub[0]["head"] + pub[0]["desc"]
+    assert r"\\s\lot" in pub[0]["tip"]
+    assert [i["action"] for i in items if i is not pub[0]] == ["devices", "log"]
