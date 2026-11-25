@@ -210,3 +210,16 @@ def test_jobs_differing_only_in_separators_or_case_merge_but_copy_does_not():
     byname = {J["j"]: J for J in m["jobs"]}
     assert set(byname) == {"TB500_RDL4-Multi", "TB500_RDL4 - Multi COPY"}   # 표시 이름 = 가장 최근 스캔의 원문
     assert byname["TB500_RDL4-Multi"]["n"] == 3
+
+
+def test_small_runs_do_not_inflate_the_per_report_estimate():
+    """PC-04: Report 2개짜리 평소 수집(개당 1초처럼 보임)이 쌓여도 큰 실행의 예상이 부풀지 않는다 — 개수로 가중 · 20개 미만은 뺀다."""
+    cache: dict = {}
+    for n, w in ((360, 32.2), (36, 4.8), (138, 11.1), (2, 1.9), (2, 2.0), (2, 1.9)):
+        collect.record_eta(cache, "incremental", n, w, 10.0)
+    sec, rough = collect.estimate_sec(cache["eta"], "rebuild", 402)
+    per = (4.8 + 11.1) / (36 + 138)                                         # 최근 5개(360개짜리는 밀려남) 중 20개 이상인 둘만
+    assert not rough and sec == int(round(10.0 + 402 * per)) and sec < 60     # 예전(중앙값)은 402 × 0.95 ≈ 380초
+    small = {}
+    collect.record_eta(small, "incremental", 3, 3.0, 1.0)
+    assert collect.estimate_sec(small["eta"], "refresh", 10) == (11, False)   # 작은 기록뿐이면 그것으로

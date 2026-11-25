@@ -750,6 +750,7 @@ ETA_DEFAULT_FIXED_SEC = 60.0          # 장비 확인 + 목록
 ETA_DEFAULT_PER_UNIT = {"read": 1.0, "rdl_patch": 0.3, "params_fill": 2.0, "sec_fill": 0.02, "slot_fill": 0.03, "kla_fill": 0.05}
 PARAMS_FILL_CHUNK = 500              # 파라미터 빈 구간 채우기는 이만큼 읽을 때마다 캐시를 저장한다
 ETA_KEEP = 5                          # 모드마다 최근 몇 번의 실측을 남길지
+ETA_MIN_UNITS = 20                    # 개수당 시간은 이만큼 이상 처리한 실측으로만 잰다(PC-04: Report 2개짜리 평소 수집이 '개당 1초' 로 부풀렸다) — 그런 기록이 없을 때만 작은 것도 쓴다
 
 
 def record_eta(cache: dict, mode: str, units: int, work_sec: float, fixed_sec: float) -> None:
@@ -768,13 +769,14 @@ def _median(xs) -> float:
 
 
 def estimate_sec(eta: dict, mode: str, units: int, kind: str = "read") -> Tuple[int, bool]:
-    """예상 걸리는 시간 → (초, 대략 여부). 고정 시간 + 개수 × 개수당 시간(최근 실측의 중앙값).
+    """예상 걸리는 시간 → (초, 대략 여부). 고정 시간 + 개수 × 개수당 시간(최근 실측의 일한 초 합 ÷ 개수 합 — 개수로 가중, PC-04).
     `kind` 가 read 인 모드(수집 계열)는 서로의 실측을 같이 쓴다 — Report 하나를 읽는 비용이 비슷하기 때문. 실측이 없으면 기본값이고 대략=True."""
     eta = eta if isinstance(eta, dict) else {}
     pool = ([x for k, v in eta.items() if k not in ("rdl_patch", "params_fill", "sec_fill", "slot_fill", "kla_fill") for x in v] if kind == "read" else list(eta.get(mode, [])))
     pool = [h for h in pool if isinstance(h, list) and len(h) == 3 and h[0] > 0]
     own = [h for h in eta.get(mode, []) if isinstance(h, list) and len(h) == 3]
-    per = _median([h[1] / h[0] for h in pool]) if pool else ETA_DEFAULT_PER_UNIT[kind]
+    big = [h for h in pool if h[0] >= ETA_MIN_UNITS] or pool
+    per = sum(h[1] for h in big) / sum(h[0] for h in big) if big else ETA_DEFAULT_PER_UNIT[kind]
     fixed = _median([h[2] for h in (own or pool)]) if (own or pool) else (0.0 if kind != "read" else ETA_DEFAULT_FIXED_SEC)
     return int(round(fixed + max(0, units) * per)), not pool
 
@@ -3109,10 +3111,13 @@ def _collect(cfg: dict, full: bool, backfill: bool, *, recover: bool, refresh_wi
         cache["last_devices"] = devinfo
         dirty.add(DIRTY_DEVICE_INFO)
     _units = int(stats.get("rdl_rows", 0)) if rdl_patch else n_new
-    _fixed = (stats.get("devices_ms", 0) + stats.get("list_ms", 0)) / 1000.0
+    _total = clock() - t0
+    _work = _total - (stats.get("devices_ms", 0) + stats.get("list_ms", 0)) / 1000.0
+    if not rdl_patch and stats.get("read_ms"):   # PC-04: 개수당 시간은 Report 읽기 단계만 — KLA · 보관 정리 · 저장 준비는 고정 몫으로(전체 = 일한 초 + 고정 초는 그대로)
+        _work = min(_work, stats["read_ms"] / 1000.0)
     if dirty and _units > 0 and not resume_after and not resumed_n:   # 예상 시간의 근거(10/11) — 이미 저장할 이유가 있는 실행에만, 이어하기로 끝낸 실행(일부만 읽음)은 빼고 남긴다
         record_eta(cache, "rebuild" if rebuild else "rdl_patch" if rdl_patch else "range" if rng else "refresh" if refresh_days > 0 else "recover" if recover
-                   else "backfill" if backfill else "incremental", _units, clock() - t0 - _fixed, _fixed)
+                   else "backfill" if backfill else "incremental", _units, _work, _total - _work)
     if cache.pop("resume", None) is not None:                    # 끝까지 갔다 — 이어하기 표시는 거둔다
         dirty.add(DIRTY_RESUME)
     stats["cache_dirty"] = dict(sorted(dirty.reasons.items()))
