@@ -551,7 +551,23 @@ def test_recipe_verdict_labels_both_comparison_scopes():
     assert re.search(r'같은 장비 <span class="muted">1대</span></span></div><div class="vv num win">10\.0<small>분/wafer</small></div><div class="vv num">12\.0<small>분/wafer</small></div><div class="vn"><span[^>]*>멀티 2\.0분/wafer 빠름', html)
     assert "낮을수록 좋음" not in html                                                   # 10/7: 설명 문구는 지웠다
     only_multi, = screen(rows[:3], meta("AOI-1"), [["rcpHtml"]])
-    assert "단일 값이 없어 비교할 수 없습니다" in only_multi and "비교할 값이 없습니다" in only_multi
+    # 11/25 RDL-09: 한 방식 기록이 아예 없으면 표 네 줄 대신 한 줄, 빈 타일도 '—분/wafer · 표본 0 / 0' 대신 한 줄
+    assert "단일 기록이 없어 비교할 수 없습니다 — 멀티 값만 있습니다" in only_multi and 'class="vtab"' not in only_multi
+    assert "이 기간 단일 기록 없음" in only_multi and "—<small>" not in only_multi
+
+
+def test_recipe_device_rows_show_unjudged_values_and_select_only_a_picked_device():
+    """11/25 RDL-10: 판정 못 한 wafer 만 있는 장비는 '값 없음' 이 아니라 옅은 회색 점(판정 못 함 값 — 멀티 · 단일에는 섞지 않음).
+    RDL-11: 아무도 고르지 않았으면 어느 장비 행도 '선택됨' 이 아니다 — 팝업을 연 장비만. RDL-13: wafer 수 앞에 방식 색 점."""
+    rows = [_rdl("AOI-1", f"M{i}", f"08:{i*10:02d}", f"08:{i*10+10:02d}", "A", "MULTI") for i in range(3)]
+    rows += [_rdl("AOI-3", f"U{i}", f"10:{i*12:02d}", f"10:{i*12+12:02d}", "B", "") for i in range(3)]
+    html, = screen(rows, meta("AOI-1", "AOI-3"), [["rcpHtml"]])
+    row3 = next(x for x in html.split('class="dbrow') if 'data-row="dev:AOI-3"' in x)
+    assert 'class="dlab U num"' in row3 and "판정 못 함만" in row3 and "값 없음" not in row3
+    assert 'class="sw"' in row3.split('class="r num dc"')[1]
+    assert re.findall(r'<button type="button" class="dbrow[^"]*"[^>]*aria-pressed="(\w+)"', html) == ["false", "false"]
+    picked, = screen(rows, meta("AOI-1", "AOI-3"), [["rcpHtml"]], state={"rcpDevSel": "AOI-3"})
+    assert 'class="dbrow on" data-key="slot:1" data-row="dev:AOI-3"' in picked
 
 
 def test_recipe_wording_distinguishes_ini_and_report_time():
@@ -591,14 +607,29 @@ def _lot_rows(n, rep="R1.htm", bs="08:00", be="10:00", dev="AOI-1"):
 
 def test_report_lot_time_is_scaled_to_25_wafers_only_for_20_to_24():
     """10/6 사용자: Report 1LOT당 = Batch Start→End. 20~24장이면 ×25÷장수(25장 기준), 25장 이상은 그대로, 19장 이하는 뺀다.
-    (120분짜리 Report 로) 26장 → 120.0 · 24장 → 125.0 · 20장 → 150.0 · 19장 → 계산 안 함."""
-    for n, want in ((26, "120.0"), (24, "125.0"), (20, "150.0")):
+    (120분짜리 Report 로) 26장 → 120.0 · 24장 → 125.0 · 20장 → 150.0 · 19장 → 계산 안 함.
+    11/25 RDL-12: LOT당 시간은 'n시간 m분'(TB500 · Kendall 탭과 같은 읽는 법) — 소수 분은 큰 숫자의 title 에."""
+    for n, want, big, raw in ((26, "2시간", "2<small>시간</small>", "120.0"), (24, "2시간 5분", "2<small>시간</small> 5<small>분</small>", "125.0"),
+                              (20, "2시간 30분", "2<small>시간</small> 30<small>분</small>", "150.0")):
         html, = screen(_lot_rows(n), meta("AOI-1"), [["rcpHtml"]])
-        assert f"LOT당 {want}분" in html, (n, want)
+        assert f"LOT당 {want} · Defect" in html, (n, want)
         lot, = screen(_lot_rows(n), meta("AOI-1"), [["rcpHtml"]], state={"rcpUnit": "lot"})     # LOT당 보기: 같은 값이 큰 숫자
-        assert f'<p class="v num">{want}<small>분/Lot</small></p>' in lot and '표본 <b class="num">1</b> / 1 Lot' in lot
+        assert f'<p class="v num" title="{raw}분">{big}<small>/Lot</small></p>' in lot and '표본 <b class="num">1</b> / 1 Lot' in lot
     html, = screen(_lot_rows(19), meta("AOI-1"), [["rcpHtml"]], state={"rcpHowAll": True})
-    assert "LOT당 —분" in html and "PASS 20장 미만 Lot 1개" in html
+    assert "LOT당 — · Defect" in html and "PASS 20장 미만 Lot 1개" in html
+    lot, = screen(_lot_rows(19), meta("AOI-1"), [["rcpHtml"]], state={"rcpUnit": "lot"})     # RDL-14: LOT 표본이 왜 적은지 타일에서 바로
+    assert '제외 1 ⓘ' in lot and "PASS 20장 미만 1" in lot and "LOT 표본 없음 — PASS 20장 미만 1" in lot
+
+
+def test_recipe_lot_unit_verdict_shows_per_day_throughput_and_hour_labels():
+    """10/24 하루당 처리량 · 11/25 RDL-12: LOT당 비교는 'n시간 m분' 과 하루당 Lot, 축은 시간 단위 눈금."""
+    rows = _lot_rows(26) + [dict(r, scan_mode="MULTI", wafer_id="M" + r["wafer_id"]) for r in _lot_rows(26, rep="R2.htm", bs="10:00", be="13:00")]
+    for r in rows[26:]:
+        r["batch_start"], r["batch_end"] = ts(DAY, "10:00"), ts(DAY, "13:00")
+    html, = screen(rows, meta("AOI-1"), [["rcpHtml"]], state={"rcpUnit": "lot"})
+    v = html[html.index('class="mtile verdict"'):]
+    assert "3시간" in v and "2시간" in v and "Lot/일" in v and "단일 1시간 빠름" in v
+    assert re.search(r'class="sax"><em[^>]*>0</em><em[^>]*>1시간</em>', html)
 
 
 def test_report_lot_time_skips_reports_with_an_error_but_keeps_abort_only_ones():
@@ -608,7 +639,7 @@ def test_report_lot_time_skips_reports_with_an_error_but_keeps_abort_only_ones()
     assert "Error 가 있는 Lot 1개" in html and "LOT당 120" not in html
     ab = _lot_rows(22, rep="A.htm") + [w("AOI-1", "A1", None, None, status="Aborted.", job="TB500_RDL4 - Multi", report="A.htm", bs="08:00", be="10:00")]
     html, = screen(ab, meta("AOI-1"), [["rcpHtml"]], state={"rcpHowAll": True})
-    assert "LOT당 136.4분" in html and "Error 가 있는 Lot" not in html            # 22장 · 120분 → 25장 기준 136.4(Aborted 만 있는 Report 는 포함)
+    assert "LOT당 2시간 16분" in html and "Error 가 있는 Lot" not in html            # 22장 · 120분 → 25장 기준 136.4분(Aborted 만 있는 Report 는 포함)
 
 
 def test_outliers_beyond_3_sigma_are_dropped_once_and_listed_but_not_for_tiny_samples():
