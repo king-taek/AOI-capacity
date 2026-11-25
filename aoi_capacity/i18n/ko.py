@@ -233,6 +233,7 @@ ISSUE_JOIN = "; "
 ISSUE_TEXTS = {
     "NO_WAFER_ID_ROW": "LoadPort/Slot 행이라 INI 경로를 만들 수 없음",
     "JOB_UNKNOWN": "Job 을 알 수 없어 INI 경로를 만들지 않음",
+    "SETUP_UNKNOWN": "Setup 을 알 수 없어 INI 경로를 만들지 않음",
     "MOVED_ONLY": "Wafer 폴더에 MoveResultFlag 만 있고 WaferInfo.ini 없음 — 이동만 되고 스캔 안 함",
     "INI_NOT_FOUND": "예상 경로에 WaferInfo.ini 없음",
     "INI_NOT_FOUND_BACKUPS": "예상 경로와 백업 폴더 {0}개 어디에도 WaferInfo.ini 없음",

@@ -199,6 +199,7 @@ BATCH_WINDOW_MARGIN_SEC = 600
 #: 코드는 안정된 식별자다 — 바꾸면 옛 캐시의 코드를 못 읽는다. 문장은 `i18n/ko.py` 의 `ISSUE_TEXTS[코드]`(위치 인자 {0},{1}).
 ISSUE_NO_WAFER_ID_ROW = "NO_WAFER_ID_ROW"                 # LoadPort/Slot 자리표시 행 — INI 경로 없음
 ISSUE_JOB_UNKNOWN = "JOB_UNKNOWN"                         # Job 을 몰라 INI 경로를 만들지 않음
+ISSUE_SETUP_UNKNOWN = "SETUP_UNKNOWN"                     # Setup 을 몰라 INI 경로를 만들지 않음(CORE-14)
 ISSUE_MOVED_ONLY = "MOVED_ONLY"                           # Wafer 폴더에 MoveResultFlag 만 있음
 ISSUE_INI_NOT_FOUND = "INI_NOT_FOUND"                     # 예상 경로에 없음(백업 없음)
 ISSUE_INI_NOT_FOUND_BACKUPS = "INI_NOT_FOUND_BACKUPS"     # {0}=백업 폴더 수 — 어디에도 없음
@@ -213,7 +214,7 @@ ISSUE_BATCH_NO_WAFER = "BATCH_NO_WAFER"                   # {0}=행 수, {1}=오
 ISSUE_SLOT_ERROR = "SLOT_ERROR"                           # {0}=영향 Slot 수 (kind=slot)
 ISSUE_MULTI_LOT = "MULTI_LOT"                             # {0}=Lot 수
 ISSUE_MULTI_JOB = "MULTI_JOB"                             # {0}=Job 수
-ISSUE_CODES = (ISSUE_NO_WAFER_ID_ROW, ISSUE_JOB_UNKNOWN, ISSUE_MOVED_ONLY, ISSUE_INI_NOT_FOUND, ISSUE_INI_NOT_FOUND_BACKUPS,
+ISSUE_CODES = (ISSUE_NO_WAFER_ID_ROW, ISSUE_JOB_UNKNOWN, ISSUE_SETUP_UNKNOWN, ISSUE_MOVED_ONLY, ISSUE_INI_NOT_FOUND, ISSUE_INI_NOT_FOUND_BACKUPS,
                ISSUE_INI_READ_ERROR, ISSUE_TIME_MISSING_OR_REVERSED, ISSUE_INI_STALE, ISSUE_LOT_MISMATCH, ISSUE_WAFER_ID_MISMATCH,
                ISSUE_FOUND_IN_BACKUP, ISSUE_JOB_FOLDER_DIFFERS, ISSUE_BATCH_NO_WAFER, ISSUE_SLOT_ERROR, ISSUE_MULTI_LOT, ISSUE_MULTI_JOB)
 _ISSUE_ESC = (("%", "%25"), (";", "%3B"), ("=", "%3D"), (",", "%2C"))
@@ -558,7 +559,11 @@ def parse_report(name: str, text: str) -> dict:
                         rep["summary"][k] = row[i + 1]
     job, setup = split_job_setup(rep["summary"].get("Job/Setup", ""))
     if job:
-        rep["equipment"], rep["process_code"] = job, setup
+        # CORE-14: `Job/Setup` 에 Setup 이 없으면('/' 없음 · 'Job/') 파일 이름 규칙의 Setup(4자리)을 그대로 둔다 — 빈 Setup 으로 덮으면
+        # 경로에서 그 칸이 사라져 Lot 자리를 Setup 폴더로 본다. 그래도 비면 rows_for_report 가 경로를 만들지 않는다(SETUP_UNKNOWN).
+        rep["equipment"] = job
+        if setup:
+            rep["process_code"] = setup
     elif not rep["equipment"]:
         # Job/Setup 도 없고 파일명 규칙(4자리 Setup)에도 안 맞는 옛 형식 — 표의 Lot 으로 되찾는다.
         rep["equipment"], rep["process_code"] = _job_setup_by_table_lot(name, rep["wafers"])
@@ -1677,6 +1682,9 @@ def rows_for_report(dev_name: str, rep: dict, scan_root: str, memo: Optional[_In
         elif not job_folder_variants(rep["equipment"]):
             # Job 을 끝내 못 읽은 옛 형식 — 빈 칸은 경로에서 사라져 남의 INI 를 가리키므로 경로를 만들지 않는다(규칙 4). 행은 남긴다.
             r["ini_match"], r["issue_codes"] = "NOT_FOUND", issue_field([ISSUE_JOB_UNKNOWN])
+        elif not str(rep.get("process_code") or "").strip():
+            # CORE-14: Setup 도 끝내 모르면 같은 이유로 경로를 만들지 않는다({Scanresult}/{Job}/{Lot}/… 는 남의 폴더다, 규칙 4).
+            r["ini_match"], r["issue_codes"] = "NOT_FOUND", issue_field([ISSUE_SETUP_UNKNOWN])
         else:
             jobs_try = job_folder_variants(rep["equipment"])
             rels = [os.path.join(j, rep["process_code"], w["lot"], w["wafer_id"]) for j in jobs_try]
