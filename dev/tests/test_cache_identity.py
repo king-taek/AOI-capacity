@@ -421,7 +421,7 @@ def test_write_html_streams_and_round_trips_script_tag_korean_and_u2028(tmp_path
     head = text.index('id="embedded">') + len('id="embedded">')
     tail = text.index("</script>", head)
     body = text[head:tail]
-    assert "</script>" not in body and "<\\/script>" in body and "\u2028" in body and "한글 상태" in body
+    assert "<" not in body and "\\u003c/script>" in body and "\u2028" in body and "한글 상태" in body   # JS-05: '<' 는 통째로 \u003c
     emb = json.loads(body)
     from sample_rows import unfold
     rows, meta = unfold(emb)

@@ -3044,7 +3044,7 @@ def _collect(cfg: dict, full: bool, backfill: bool, *, recover: bool, refresh_wi
     t1 = clock()
     window_days = (float(cfg["retention_days"]) or float(UNLIMITED_DAYS)) if rebuild else None   # 0 = 기한 없음 → 전부
     if rebuild:
-        _say(log, f"전체 재구축: 보관 기간 {cfg['retention_days']}일 안의 Report 를 전부 새 후보 캐시에 모읍니다"
+        _say(log, f"전체 다시 만들기: 보관 기간 {cfg['retention_days']}일 안의 Report 를 전부 새 후보 캐시에 모읍니다"
                   f"(검증을 통과할 때만 기존 캐시 {len(old_cache['reports'])}개 항목을 바꿉니다)")
     elif backfill:
         _say(log, f"초기 수집: 최근 {cfg['backfill_days']}일 안의 Report 를 전부 읽습니다")
@@ -3314,8 +3314,8 @@ def _collect(cfg: dict, full: bool, backfill: bool, *, recover: bool, refresh_wi
         carried = _carry_over(old_cache, cache, index, plan, cutoff)
         reasons = _validate_rebuild(old_cache, cache, plan, n_new + resumed_n)   # 이어하기: 앞서 읽어 둔 후보도 읽은 것으로 센다
         if reasons:
-            raise RebuildRejected("전체 재구축 후보를 버리고 기존 캐시를 그대로 둡니다 — " + " / ".join(reasons))
-        _say(log, f"전체 재구축: 새로 읽은 Report {n_new}개 · 이전 이력 이관 {carried['reports']}개"
+            raise RebuildRejected("전체 다시 만들기 후보를 버리고 기존 캐시를 그대로 둡니다 — " + " / ".join(reasons))
+        _say(log, f"전체 다시 만들기: 새로 읽은 Report {n_new}개 · 이전 이력 이관 {carried['reports']}개"
                   f"(미접근 장비 {carried['unreachable']}대 · 목록 밖 {carried['foreign']}개) · 읽기 실패 {len(errors)}건(이전 행 유지)")
     # 장비의 경로·Report 폴더를 캐시에 남긴다 — 'HTML 만 다시 만들기'(NAS 없이)가 Report 열기 경로를 그대로 쓰게. 바뀔 때만 저장 이유가 된다
     devinfo = [{k: dm.get(k, "") for k in ("name", "key", "note", "report_dir")} for dm in dev_meta if not dm.get("error")]
@@ -3588,19 +3588,20 @@ MB = 1024 * 1024
 
 
 def _payload(emb: dict, meta: dict) -> str:
-    """접힌 행 + meta → HTML 에 박을 JSON 문자열. `</` → `<\\/` 는 JSON 으로는 같은 문자열이면서 HTML 파서가 `</script>` 로 읽지 못하게 한다."""
+    """접힌 행 + meta → HTML 에 박을 JSON 문자열. `<` → `\\u003c` 는 JSON 으로는 같은 문자열이면서 HTML 파서가 `</script>` 도,
+    `<!--<script` 의 '이중 이스케이프' 상태(데이터 뒤 화면 스크립트까지 삼켜 파일이 열리지 않는다 — JS-05)도 보지 못하게 한다."""
     return _payload_join(_emb_json(emb), meta)
 
 
 def _emb_json(emb: dict) -> str:
     """접힌 행(meta 없이)의 JSON — 수집 끝 HTML 여러 장이 같은 행이면 한 번만 만든다(`HtmlPrep`)."""
-    return json.dumps(emb, ensure_ascii=False, separators=(",", ":")).replace("</", "<\\/")
+    return json.dumps(emb, ensure_ascii=False, separators=(",", ":")).replace("<", "\\u003c")
 
 
 def _payload_join(emb_json: str, meta: dict) -> str:
     """`json.dumps({**emb, "meta": meta})` 와 바이트까지 같다 — 키 순서(cols · pooled · pool · rows · meta)와 구분자가 같고,
-    `</` 는 두 조각의 경계(`]` · `,"meta":`)에 걸치지 않는다."""
-    m = json.dumps(meta, ensure_ascii=False, separators=(",", ":")).replace("</", "<\\/")
+    `<` 이스케이프(JS-05)는 글자 하나 단위라 두 조각으로 나눠도 같다."""
+    m = json.dumps(meta, ensure_ascii=False, separators=(",", ":")).replace("<", "\\u003c")
     return f'{emb_json[:-1]},"meta":{m}}}' if len(emb_json) > 2 else f'{{"meta":{m}}}'
 
 
@@ -3776,7 +3777,8 @@ def write_html(cfg: dict, rows: List[dict], dev_meta: List[dict], errors: List[d
     known_days = prep.known
     explicit = bool(day_from or day_to)
     if not explicit and not lot_only and int(cfg.get("html_days") or 0) > 0:
-        anchor = dt.date.fromisoformat(known_days[-1]) if known_days else now.date()   # 가진 데이터의 끝날부터 거꾸로
+        # 가진 데이터의 끝날부터 거꾸로 — 단, 수집한 날보다 늦지 않게(JS-01: 시계가 틀린 미래 날짜 행 하나가 기간을 통째로 미래로 밀었다)
+        anchor = min(dt.date.fromisoformat(known_days[-1]), now.date()) if known_days else now.date()
         day_from = (anchor - dt.timedelta(days=int(cfg["html_days"]) - 1)).isoformat()
     picked, r_from, r_to = _range_pick(all_rows, day_from or "", day_to or "", prep.days)
     rows = all_rows if picked is None else [all_rows[i] for i in picked]

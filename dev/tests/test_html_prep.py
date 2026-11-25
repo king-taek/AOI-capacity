@@ -116,7 +116,7 @@ def test_embed_and_payload_match_the_old_copy_then_fold_then_dump():
     assert collect._embed_rows(rows, blank) == _old_embed(copies)
     meta = {"generated": "x</y", "n": 1, "k": [1, "가"]}
     emb = _old_embed(rows)
-    old = json.dumps(dict(emb, meta=meta), ensure_ascii=False, separators=(",", ":")).replace("</", "<\\/")
+    old = json.dumps(dict(emb, meta=meta), ensure_ascii=False, separators=(",", ":")).replace("<", "\\u003c")
     assert collect._payload(_old_embed(rows), meta) == old == collect._payload_join(collect._emb_json(emb), meta)
 
 
