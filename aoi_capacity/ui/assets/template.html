@@ -2153,18 +2153,22 @@ function errHdrH(){try{const e=typeof document!=="undefined"&&document.querySele
 const OK_OV="#F2C26B",OK_SEV="#D9731F";
 let _okIx=null;
 function okIndex(){if(_okIx&&_okIx.rows===rows)return _okIx;
-  const ws=[],lots=new Map();let skip=0;
+  /* 11/25(ERR-04): 분모에서 뺀 장도 장비 · 날짜 · 이유를 달아 둔다 — 화면은 분모와 같은 범위(고른 날 · 층 · 장비 종류)만 센다.
+     예전엔 파일의 모든 행(기간 앞 맥락 행까지)을 한 번 센 수라 하루 · KLA 를 골라도 늘 같은 숫자였다 */
+  const ws=[],lots=new Map(),xs=[];
+  const xWhy=(st,pass)=>pass?"nov":causeOf(st)?"err":(normOutcome(st)==="SKIPPED"?"skip":/^USER_/.test(normOutcome(st))?"user":normOutcome(st)==="ABORTED"?"abort":"etc");
   for(const r of rows){if(r.kind)continue;const tt=P(r.wafer_start_time)||P(r.batch_start);if(!tt)continue;
-    if(/TEST/i.test(String(r.lot||""))||MONITOR_JOB_RE.test(String(r.job||""))){skip++;continue;}   /* 모델의 Test 판정과 같다(D64 · D87) */
+    if(/TEST/i.test(String(r.lot||""))||MONITOR_JOB_RE.test(String(r.job||""))){xs.push({dev:r.device,day:dk(tt),why:"test"});continue;}   /* 모델의 Test 판정과 같다(D64 · D87) */
     const st=String(r.status||"").trim(),mf=/max\s*fault/i.test(st),pass=/^pass$/i.test(st),f=parseInt(String(r.faults||"").replace(/,/g,""),10);
-    if(!mf&&!(pass&&Number.isFinite(f))){skip++;continue;}
+    if(!mf&&!(pass&&Number.isFinite(f))){xs.push({dev:r.device,day:dk(tt),why:xWhy(st,pass)});continue;}
     const lvl=mf||f>=1000?2:f>=400?1:0,t=tt.getTime();
     const lk=r.device+"\u0001"+(r.report||r.lot+"\u0001"+r.batch_start);let L=lots.get(lk);
     if(!L){L={k:lk,dev:r.device,job:String(r.job||""),jk:jobKey(r.job),lot:String(r.lot||"").trim(),rep:r.report||"",t,day:dk(tt),n:0,ov:0,sev:0,cap:0,mf:0,mx:0,resc:r.scan_type==="RESCAN",ids:[]};lots.set(lk,L);}
     if(t<L.t){L.t=t;L.day=dk(tt);}
     L.n++;if(lvl>=1)L.ov++;if(lvl>=2)L.sev++;if(mf)L.mf++;if(!mf&&f>L.mx)L.mx=f;L.ids.push(String(r.wafer_id||"").toUpperCase());
     ws.push({dev:r.device,day:dk(tt),t,f:mf?0:f,lvl,mf,L});}
-  return _okIx={rows,ws,lots:[...lots.values()],skip};}
+  return _okIx={rows,ws,lots:[...lots.values()],xs};}
+const OK_XWHY=[["skip","건너뜀"],["abort","중단"],["err","Error"],["user","사용자 중단"],["test","Test"],["nov","Defect 값 없음"],["etc","그 밖"]];
 /* 11/25(ERR-03): Wafer ID 를 읽지 못한 행만 있는 LOT 은 '스캔을 어디에 했니?' 가 묶지 않아 열 수 없다 — 미리 알아 줄에 표시하고, 눌러도 이유를 알린다 */
 let _okLk=null;
 function okLotKeys(){const X=lotIndex();if(_okLk&&_okLk.X===X)return _okLk.s;const s=new Set();for(const a of X.list)s.add(a.dev+"\u0001"+a.rep);_okLk={X,s};return s;}
@@ -2179,6 +2183,7 @@ function okHtml(){
   const devOk=new Set(D.devices.filter(n=>(state.floor==="all"||S.floorOf(n)===state.floor)&&(mk==="all"||(mk==="kla")===isKla(n))));   /* 다른 탭의 Gen5 는 물려받지 않는다 — 이 탭 단추가 범위 전부 */
   const day=S.dayStr(),daySet=new Set(mode==="day"?[day]:D.days);
   const W=X.ws.filter(w=>devOk.has(w.dev)&&daySet.has(w.day));
+  const XC={};let XN=0;for(const x of X.xs)if(devOk.has(x.dev)&&daySet.has(x.day)){XC[x.why]=(XC[x.why]||0)+1;XN++;}   /* ERR-04: 분모와 같은 범위에서 뺀 장 */
   const N=W.length,OV=W.filter(w=>w.lvl>=1).length,SV=W.filter(w=>w.lvl>=2).length,MF=W.filter(w=>w.mf).length;
   /* LOT 줄은 고른 날 · 기간 안의 장만으로 다시 센다 — 자정을 넘긴 Report 도 위 합계와 맞는다 */
   const scoped=list=>{const m=new Map();for(const w of list){let s=m.get(w.L);if(!s)m.set(w.L,s={...w.L,n:0,ov:0,sev:0,mf:0,mx:0,t:w.t,day:w.day});s.n++;if(w.lvl>=1)s.ov++;if(w.lvl>=2)s.sev++;if(w.mf)s.mf++;else if(w.f>s.mx)s.mx=w.f;if(w.t<s.t){s.t=w.t;s.day=w.day;}}return [...m.values()];};
@@ -2206,7 +2211,7 @@ function okHtml(){
   let search="";
   if(Q){const hit=X.lots.filter(L=>devOk.has(L.dev)&&(L.lot.toUpperCase().includes(Q)||(Q2.length>=4&&L.ids.some(id=>id.includes(Q2))))).sort((a,b)=>b.t-a.t).slice(0,30);
     search=`<section class="panel" style="margin-bottom:16px" data-key="ok:search"><div style="padding:13px 18px 6px"><h2>검색 결과 <span class="muted" style="font-weight:400;font-size:12.5px">'${esc(state.okQ)}' · 기간과 무관 · LOT ${hit.length}개 — 누르면 어디서 스캔했는지</span></h2></div>${hit.length?lotHead+hit.map(L=>lotRow(L,true)).join(""):`<p class="ok-empty">맞는 LOT 이 없습니다.</p>`}</section>`;}
-  const top=`<div class="ok-top"><input class="inp" type="search" data-in="okQ" data-fk="ok:q" placeholder="LOT 이름 · Wafer ID 검색" value="${esc(state.okQ||"")}"><span class="muted" style="font-size:12px">분모 = PASS 장 + 상한 초과 Error 장 · Test 제외${X.skip?` · 제외 ${X.skip.toLocaleString()}장`:""}</span></div>`;
+  const top=`<div class="ok-top"><input class="inp" type="search" data-in="okQ" data-fk="ok:q" placeholder="LOT 이름 · Wafer ID 검색" value="${esc(state.okQ||"")}"><span class="muted" style="font-size:12px">분모 ${W.length.toLocaleString()}장(PASS + 상한 초과 Error)${XN?` · <span data-key="ok:xn" tabindex="0" style="cursor:help" data-tip="${esc((mode==="day"?md(day)+" 하루":"기간 "+D.days.length+"일")+" · 이 장비 종류 · 층에서 분모에서 뺀 장 — Defect 를 셀 수 없는 장\n"+OK_XWHY.filter(([k])=>XC[k]).map(([k,l])=>l+" "+XC[k].toLocaleString()).join(" · "))}">제외 ${XN.toLocaleString()}장 ⓘ</span>`:""}</span></div>`;
   let body;
   if(mode==="day"){
     const devs=agg(w=>w.dev,W).filter(g=>hitOf(g)>0).sort((a,b)=>pr(hitOf(b),b.n)-pr(hitOf(a),a.n)||hitOf(b)-hitOf(a));

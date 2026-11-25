@@ -1195,6 +1195,27 @@ def test_overkill_day_counts_pass_and_max_fault_and_lists_only_devices_with_over
     assert ">50%<" in sev and "심한 오버킬 기준" in sev                  # 심한 단계: 목록 순위·비율이 심한 기준(AOI-1 2 / 4), 카드 1은 늘 400↑
 
 
+def test_overkill_excluded_count_follows_the_scope_and_tells_reasons():
+    """11/25 ERR-04: '제외 n장' 은 분모와 같은 범위(고른 날 · 층 · 장비 종류)에서 뺀 장만 센다 — 예전엔 파일의 모든 행을 센 한 숫자였다.
+    이유별 수(건너뜀 · 중단 · Error · Test · Defect 값 없음)는 툴팁."""
+    prev = (datetime.date.fromisoformat(DAY) - datetime.timedelta(days=1)).isoformat()
+    rows = [_okw("AOI-1", "W1", "08:00", "500"),
+            _okw("AOI-1", "W2", "08:10", "", status="Alignment Error."),
+            _okw("AOI-1", "W3", "08:20", "", status="Wafer Skipped."),
+            _okw("AOI-1", "W4", "08:30", ""),                                   # PASS 인데 Defect 값 없음
+            _okw("AOI-1", "T1", "09:00", "2000", lot="TEST-LOT"),
+            _okw("AOI-1", "P1", "09:00", "", day=prev, status="Wafer Skipped."),  # 전날 — 이 날 범위 밖
+            _okw("K1", "K1", "10:00", "", status="Wafer Skipped.")]               # KLA — Camtek 범위 밖
+    mt = meta("AOI-1", "K1")
+    (day, kla, span) = (screen(rows, mt, [["okHtml"]])[0], screen(rows, mt, [["okHtml"]], state={"okMk": "kla"})[0],
+                        screen(rows, mt, [["okHtml"]], state={"okMode": "span"})[0])
+    assert "분모 1장(PASS + 상한 초과 Error)" in day and "제외 4장 ⓘ" in day
+    tip = day[day.index('data-key="ok:xn"'):day.index("제외 4장 ⓘ")]
+    assert "건너뜀 1" in tip and "Error 1" in tip and "Test 1" in tip and "Defect 값 없음 1" in tip
+    assert "제외 1장 ⓘ" in kla                                                # KLA 는 K1 의 건너뜀 하나
+    assert "제외 5장 ⓘ" in span                                               # 기간: 전날 건너뜀까지(Camtek)
+
+
 def test_overkill_scope_follows_model_test_rule_own_maker_buttons_and_selected_day():
     """리뷰(PR #9): ① Lot 에 TEST 가 붙어 있으면(TEST_LOT 처럼 밑줄이어도) 모델처럼 Test 로 빼고 ② 다른 탭의 Gen5 를 물려받지 않으며
     ③ 자정을 넘긴 Report 도 고른 날의 장만으로 LOT 줄을 만든다(합계에 오버킬이 있는데 LOT 줄이 없던 것)."""
