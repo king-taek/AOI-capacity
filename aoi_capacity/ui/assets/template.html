@@ -198,7 +198,7 @@ main{max-width:1420px;margin:0 auto;padding:22px 24px 90px}
 .cards.xs .v{font-size:20px;letter-spacing:-.02em}
 .cards.xs>div{padding:12px 15px}
 .tbl-h .thsort{border:0;background:none;padding:0;font:inherit;color:inherit;text-align:left;cursor:pointer;text-decoration:underline dotted;text-underline-offset:3px}.tbl-h .thsort.on{color:var(--ink);font-weight:700}
-.cards.c4{grid-template-columns:repeat(4,minmax(0,1fr))}   /* 장비 팝업 카드 7~8칸을 4칸씩 고르게(6+2 로 접혀 오른쪽이 비던 것, UTIL-20) */
+.cards.c4{grid-template-columns:repeat(4,minmax(0,1fr))}.cards.c4>div:last-child:nth-child(4n+3){grid-column:span 2}   /* 장비 팝업 카드 7~8칸을 4칸씩 고르게(6+2 로 접혀 오른쪽이 비던 것, UTIL-20) */
 .pdaynav{display:inline-flex;align-items:center;gap:4px}.pdaynav .ib{width:26px;height:26px;font-size:14px}.pdaynav .sub{min-width:100px;text-align:center}
 .norec{margin:0 0 18px;padding:12px 15px;border:1px dashed var(--line);border-radius:12px;font-size:13px;color:var(--ink-3);background:#FBFCFD}
 .bar-h{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:12px}
@@ -316,10 +316,10 @@ main{max-width:1420px;margin:0 auto;padding:22px 24px 90px}
 .scanhero .hint,.rcplist .hint{margin:0;font-size:11.5px;color:#5A6673;word-break:keep-all}.scanhero .hint{padding:2px 18px 12px}
 .scanhero .unk{margin:0;padding:9px 18px;font-size:12px;color:#7A5B12;background:#FFF8E6;border-top:1px solid #F3E6C0;word-break:keep-all}
 .mdev{display:grid;grid-template-columns:96px 1fr 1fr 1.3fr 70px;gap:10px;align-items:center;padding:7px 18px;border-top:1px solid #F1F4F7;font-size:12.5px}
-.mdev .r{text-align:right;word-break:keep-all}.mdev .nn{font-size:11px;color:#8A96A3;margin-left:6px}.mdev.head{background:#FBFCFD;font-size:11.5px;font-weight:600;color:var(--ink-3)}
+.mdev .r{text-align:right;word-break:keep-all}.mdev .nn{font-size:11px;color:var(--ink-3);margin-left:6px}.mdev.head{background:#FBFCFD;font-size:11.5px;font-weight:600;color:var(--ink-3)}
 @media (max-width:600px){.mdev{grid-template-columns:62px 1fr 1fr 1.2fr;padding:7px 12px;gap:8px}.mdev>:nth-child(5){display:none}.mdev .nn{display:block;margin:0}}
 .rcprow{grid-template-columns:minmax(0,1fr) auto;grid-template-areas:"rn rw" "rb rb" "rc rl";row-gap:5px;column-gap:10px;padding:10px 12px}
-.rcprow .rc{grid-area:rc;display:flex;gap:10px;font-size:11px;color:#5A6673;white-space:nowrap;overflow:hidden}.rcprow .rc span{display:inline-flex;align-items:center;gap:4px}.rcprow .rc b{font-weight:600;color:var(--ink-2)}.rcprow .rl{grid-area:rl;text-align:right;font-size:11px;color:#7B8794}
+.rcprow .rc{grid-area:rc;display:flex;gap:10px;font-size:11px;color:#5A6673;white-space:nowrap;overflow:hidden}.rcprow .rc span{display:inline-flex;align-items:center;gap:4px}.rcprow .rc b{font-weight:600;color:var(--ink-2)}.rcprow .rl{grid-area:rl;text-align:right;font-size:11px;color:var(--ink-3)}
 .mbar.lbar{height:14px;border-radius:4px}.mbar.lbar i{display:flex;align-items:center;justify-content:center;overflow:hidden}.mbar.lbar b{font-size:10px;font-weight:700;font-style:normal;color:#fff;letter-spacing:.01em}.mbar.lbar b.dk{color:#3E4852}
 .rcprow .rn{grid-area:rn;font-size:12.5px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.rcprow .rw{grid-area:rw;text-align:right;font-size:12.5px}
 .rcprow .rb{grid-area:rb;align-self:center}.rcprow .rp{grid-area:rp;text-align:right;font-size:11px;color:#5A6673;min-width:58px}
@@ -360,7 +360,7 @@ main{max-width:1420px;margin:0 auto;padding:22px 24px 90px}
 .dbrow .dc small{margin-left:2px;color:var(--ink-3);font-size:10.5px}
 .jtog{cursor:pointer;font:inherit;font-size:12px;font-weight:600;transition:background-color .16s,border-color .16s,opacity .16s}.jtog:hover{background:#F7F9FB}.jtog .ck{width:12px;font-style:normal;font-size:11px;color:var(--nav-on);text-align:center}
 .jtog.off{opacity:.55;background:#F4F6F8;border-style:dashed}.jtog.off .sw{filter:grayscale(1)}.jtog.off b{text-decoration:line-through}
-.mtile .s.mt1{margin-top:6px}.mtile .s.mt2{margin-top:2px}.mtile .s .muted{color:#7B8794}.otag{color:#8A5A12;cursor:help;border-bottom:1px dotted #C9A05A;white-space:nowrap}
+.mtile .s.mt1{margin-top:6px}.mtile .s.mt2{margin-top:2px}.mtile .s .muted{color:var(--ink-3)}   /* 보조 글자 #7B8794 · #8A96A3(3:1 안팎) → --ink-3(5.9:1) 로 통일(COLOR-02) */.otag{color:#8A5A12;cursor:help;border-bottom:1px dotted #C9A05A;white-space:nowrap}
 .mtile.verdict .vtab{display:grid;grid-template-columns:auto 1fr 1fr;gap:3px 12px;margin-top:8px;align-items:baseline}.vtab .vh{font-size:11.5px;font-weight:700;color:var(--ink-2);text-align:right;display:flex;justify-content:flex-end;align-items:center;gap:5px}
 .vtab .sc{font-size:12.5px;font-weight:600;color:var(--ink);padding-top:7px}.vtab .vv{text-align:right;font-size:19px;font-weight:600;color:#5A6673;padding-top:5px}.vtab .vv small{font-size:11px;margin-left:2px;color:var(--ink-3);font-weight:500}.vtab .vv.win{color:var(--ink);font-weight:800}
 .vtab .vn{grid-column:1/-1;font-size:11.5px;text-align:right;padding-bottom:6px;border-bottom:1px solid #EDF1F5}.vtab .vn:last-of-type{border-bottom:0}.mtile.verdict .hint2{margin:6px 0 0;font-size:11px;color:var(--ink-3)}
@@ -435,14 +435,14 @@ button.hb{border:0;padding:0;background:transparent;cursor:pointer;outline-offse
 .bsrow{display:grid;grid-template-columns:70px minmax(0,1fr) 84px;gap:10px;align-items:center;margin-bottom:6px}.bsrow .sk{display:flex;align-items:center;gap:6px;font-size:12px;font-weight:600}
 .bsw{position:relative;height:64px;border-radius:8px;background:#FBFCFD;border:1px solid #EDF1F5}
 .bsw .bfb{position:absolute;top:8px;bottom:8px;background:#E4E9EF;border-radius:4px}.bsw .bfm{position:absolute;top:6px;bottom:6px;width:0;border-left:2px solid #9AA6B2}
-.bsw .bfl{position:absolute;bottom:0;transform:translateX(-50%);font-style:normal;font-size:10px;color:#7B8794;white-space:nowrap;pointer-events:none}
+.bsw .bfl{position:absolute;bottom:0;transform:translateX(-50%);font-style:normal;font-size:10px;color:var(--ink-3);white-space:nowrap;pointer-events:none}
 .bsw .bbx{position:absolute;top:14px;bottom:14px;border:1.5px solid;border-radius:4px;pointer-events:none}.bsw .bmd{position:absolute;top:10px;bottom:10px;width:3px;margin-left:-1.5px;border-radius:2px;pointer-events:none;z-index:2}
 .bsw .bml{position:absolute;top:-1px;transform:translateX(-50%);font-style:normal;font-size:11px;font-weight:800;background:#fff;padding:0 3px;border-radius:3px;line-height:1.2;pointer-events:none;z-index:3}
 button.bd{position:absolute;width:7px;height:7px;margin:-3.5px 0 0 -3.5px;border:0;padding:0;border-radius:50%;cursor:pointer;opacity:.78;transition:opacity .15s,transform .15s;z-index:1}button.bd:hover,button.bd:focus-visible{opacity:1;transform:scale(1.7);z-index:4;outline:none;box-shadow:0 0 0 2px #fff,0 0 0 3px #16202A}
 button.bd.out{background:transparent;border:1.5px solid var(--err,#C5453C);opacity:1}button.bd.clip{border-radius:1px;clip-path:polygon(0 0,100% 50%,0 100%)}button.bd.pick{opacity:1;transform:scale(1.6);box-shadow:0 0 0 2px #fff,0 0 0 3.5px #16202A;z-index:4}
 .dlg.lh button.bd:not(.hl){opacity:.18}.dlg.lh button.bd.hl{opacity:1;transform:scale(1.7);z-index:4;box-shadow:0 0 0 2px #fff,0 0 0 3px #16202A}.dlg.lh .rawrow.hl{background:var(--accent-soft)}
 .bsw .bnone{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-style:normal;font-size:12px;font-weight:700;color:var(--ink-2)}
-.bsum{text-align:right;font-size:12px;line-height:1.3}.bsum b{font-size:17px}.bsum small{color:var(--ink-3);margin-left:2px}.bsum i{display:block;font-style:normal;font-weight:700;font-size:11.5px}.bsum i.lo{color:#1F7A4D}.bsum i.hi{color:#B4402F}.bsum i.eq{color:#7B8794}
+.bsum{text-align:right;font-size:12px;line-height:1.3}.bsum b{font-size:17px}.bsum small{color:var(--ink-3);margin-left:2px}.bsum i{display:block;font-style:normal;font-weight:700;font-size:11.5px}.bsum i.lo{color:#1F7A4D}.bsum i.hi{color:#B4402F}.bsum i.eq{color:var(--ink-3)}
 .bax{display:flex;justify-content:space-between;font-size:11px;color:var(--ink-3);margin:0 94px 6px 80px}
 .tlg .lgb,.tlg .lgx,.tlg .lgd{display:inline-block;width:14px;height:9px;border-radius:3px;background:#E4E9EF}.tlg .lgx{background:rgba(46,107,168,.12);border:1.5px solid #2E6BA8}.tlg .lgd{width:7px;height:7px;border-radius:50%;background:#2E6BA8}
 .binchip{display:flex;align-items:center;gap:10px;justify-content:space-between;margin:2px 0 8px;padding:7px 12px;border-radius:8px;background:var(--accent-soft);font-size:12.5px}
@@ -1401,7 +1401,7 @@ const S={
    스캔 안 한 행(건너뜀 · 중단 — 0분)과 Wafers Scanned = Pass + 1(중단됐지만 스캔은 끝난 장 — 시각이 없어 0분)을 따로 적는다. 숫자는 바꾸지 않는다. */
 function iniNote(t){const v=t.iv||{},parts=[];
   if(t.ne){const why=[v.ov&&`다른 시도가 덮어씀 ${v.ov}장`,v.nf&&`INI 없음 ${v.nf}장`].filter(Boolean).join(" · ");
-    parts.push(`Wafer ${t.w}장 중 ${t.ne}장은 INI(시각 기록)가 없어 그 Report 배치 창의 빈 시간을 나눠 가졌습니다${why?` — ${why}, 추정 ${hm(Math.round(v.km||0))}`:""}`);}
+    parts.push(`Wafer ${t.w.toLocaleString("ko-KR")}장 중 ${t.ne.toLocaleString("ko-KR")}장은 INI(시각 기록)가 없어 그 Report 배치 창의 빈 시간을 나눠 가졌습니다${why?` — ${why}, 추정 ${hm(Math.round(v.km||0))}`:""}`);}
   if(v.sk)parts.push(`스캔 안 함 ${v.sk}장(건너뜀 · 중단 — 0분)`);
   if(v.s1)parts.push(`스캔 후 중단 ${v.s1}건(Wafers Scanned 가 Pass 보다 1장 많음 — 시각이 없어 0분)`);
   return parts.join(" · ")+(t.ne?` (시각 확인 ${t.cv}%)`:"")+".";}
@@ -1980,8 +1980,8 @@ function homeHtml(){
       <span class="chev" style="text-align:right;color:#5A6673;font-size:15px">›</span></button>`;}).join("");
   const fu=S.fleetUtil(day,devs),xM=items.reduce((a,b)=>a+(b.t?b.t.x:0),0),sM=items.reduce((a,b)=>a+(b.t?b.t.s:0),0);
   return `<section class="cards">
-      <div><p class="k">평균 가동률</p><p class="v num">${fu===null?"—":cnt(fu,1)+"<small>%</small>"}</p>${isToday?`<p class="s">수집한 날 · 00:00 ~ 모든 장비의 마지막 기록</p>`:""}${D.partialDays&&D.partialDays.includes(day)?`<p class="s" style="color:var(--warn)">보관 기간 첫날 — 수집 창이 도중에 시작해 하루 전체가 아닙니다</p>`:""}<p class="s">기록 있는 ${items.length-q.no}대 평균${q.no?` · 기록 없음 ${q.no}대 제외`:""}</p>${q.ne?`<p class="s" title="INI(시각 기록)가 없어 Report 배치 창의 빈 시간을 나눠 가진 Wafer">배치 창으로 추정 ${q.ne}장 / ${q.w}장</p>`:""}</div>
-      <div><p class="k" title="같은 Lot 에서 같은 유형이 여러 번 나도 1건으로 셉니다">Error</p><p class="v num">${cnt(items.reduce((a,b)=>a+(b.t?b.t.e:0),0))}<small>건</small></p><p class="s" title="Error 대기 = Error 시간 + 에러 후 대기 — Error 탭 · TB500 · Kendall 탭과 같은 이름 · 같은 숫자">Error 대기 ${hm(xM+sM)} (Error ${hm(xM)} + 에러 후 대기 ${hm(sM)})</p></div>
+      <div><p class="k">평균 가동률</p><p class="v num">${fu===null?"—":cnt(fu,1)+"<small>%</small>"}</p>${isToday?`<p class="s">수집한 날 · 00:00 ~ 모든 장비의 마지막 기록</p>`:""}${D.partialDays&&D.partialDays.includes(day)?`<p class="s" style="color:var(--warn)">보관 기간 첫날 — 수집 창이 도중에 시작해 하루 전체가 아닙니다</p>`:""}<p class="s">기록 있는 ${items.length-q.no}대 평균${q.no?` · 기록 없음 ${q.no}대 제외`:""}</p>${q.ne?`<p class="s" title="INI(시각 기록)가 없어 Report 배치 창의 빈 시간을 나눠 가진 Wafer">배치 창으로 추정 ${q.ne.toLocaleString("ko-KR")}장 / ${q.w.toLocaleString("ko-KR")}장</p>`:""}</div>
+      <div><p class="k" title="같은 Lot 에서 같은 유형이 여러 번 나도 1건으로 셉니다">Error</p><p class="v num">${cnt(items.reduce((a,b)=>a+(b.t?b.t.e:0),0))}<small>건</small></p><p class="s" title="Error 대기 = Error 시간 + 에러 후 대기 — Error 탭 · TB500 · Kendall 탭과 같은 이름 · 같은 숫자">Error 대기 ${hm(xM+sM)}${xM+sM?` (Error ${hm(xM)} + 에러 후 대기 ${hm(sM)})`:""}</p></div>
     </section>
     ${missedHtml()}
     <div class="bar-h"><h2>${isToday?"오늘의 가동률":dayName(day)+" 가동률"}</h2><span class="scope-badge" data-key="scope">${scopeBadge("home")}</span><div class="spacer"></div>${S.filterSegs()}${segHtml(sorts)}</div>
@@ -2270,8 +2270,8 @@ function devPopupHtml(){
     return{l:(la/1440*100).toFixed(2),w:Math.max(0.2,(lb-la)/1440*100).toFixed(2),on,title:(P.lot[L[1]]||"Lot")+" · "+clock(la)+"–"+clock(lb),pick:()=>setState({selLot:on?null:key(L)})};});
   const calloutH=Math.max(30,(levels.length||1)*ROW+14);
   const close=()=>setState(CLOSE.dev());
-  /* 카드: 큰 숫자는 짧게(잘리지 않게) — Error 시간은 아래 작은 줄로(UTIL-05). 시각 확인은 보통 글자색(경고가 아니다, UTIL-06). 4칸씩 고르게 줄 바꿈(UTIL-20) */
-  const stats=[{k:"가동률",v:u===null?"기록 없음":u.toFixed(1)+"%",h:u===null?null:cnt(u,1)+"%",ink:"#0F151C"},{k:"Scan",v:t?hm(t.r):"—",ink:"#0F151C",s:scLine(t),tip:scTip(t)},{k:"Rescan",v:t?hm(t.d):"—",ink:"#0F151C"},{k:"Test",v:t?hm(t.t):"—",ink:t&&t.t?"#7A5BA8":"#4B5866"},{k:"Error",v:t?t.e+"건":"—",ink:t&&t.e?"#B4402F":"#0F151C",s:t&&t.x?"Error "+hm(t.x):""},{k:"에러 후 대기",v:t?hm(t.s):"—",ink:t&&t.s?"#B4402F":"#4B5866"},{k:"대기",v:idle===null?"—":hm(idle),ink:"#4B5866"}].concat(S.hasEst(t)?[{k:"시각 확인",v:t.cv+"%",ink:"#0F151C"}]:[]);
+  /* 카드: 큰 숫자는 짧게(잘리지 않게) — Error 시간은 아래 작은 줄로(UTIL-05). 4칸씩 줄 바꿈, 마지막 '대기' 는 두 칸 폭이라 빈자리가 없다(UTIL-20) */
+  const stats=[{k:"가동률",v:u===null?"기록 없음":u.toFixed(1)+"%",h:u===null?null:cnt(u,1)+"%",ink:"#0F151C"},{k:"Scan",v:t?hm(t.r):"—",ink:"#0F151C",s:scLine(t),tip:scTip(t)},{k:"Rescan",v:t?hm(t.d):"—",ink:"#0F151C"},{k:"Test",v:t?hm(t.t):"—",ink:t&&t.t?"#7A5BA8":"#4B5866"},{k:"Error",v:t?t.e+"건":"—",ink:t&&t.e?"#B4402F":"#0F151C",s:t&&t.x?"Error "+hm(t.x):""},{k:"에러 후 대기",v:t?hm(t.s):"—",ink:t&&t.s?"#B4402F":"#4B5866"},{k:"대기",v:idle===null?"—":hm(idle),ink:"#4B5866"}];   /* '시각 확인 n%' 는 카드 아래 설명 줄(iniNote)에 이미 있어 카드에서는 뺐다 — 7칸(UTIL-06 · UTIL-20) */
   const lotFilters=S.segGroup([{k:"all",label:"전체"},{k:"err",label:"Error 있는 Lot"}],state.lotFilter,k=>setState({lotFilter:k,selLot:null}));
   const selH=sel?(()=>{const a=LA(sel),b=Math.max(LB(sel),a+1);const types=Object.entries(sel[9]).sort((x,y)=>y[1][1]-x[1][1]);const rep=P.rep[sel[8]]||"";
     return `<div class="sel animate__animated animate__fadeIn" data-key="sel"><div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:10px"><b style="font-size:14.5px">${esc(P.lot[sel[1]]||"(Lot 확인 불가)")}</b>

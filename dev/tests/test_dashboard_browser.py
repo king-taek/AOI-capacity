@@ -822,10 +822,19 @@ def test_date_controls_keep_day_inside_the_visible_period(page):
     pg.get_by_role("button", name="전체", exact=True).first.click()
     pg.wait_for_timeout(300)
     assert day() == "2026-09-18" and pg.locator(".daynote").count() == 0             # 안에 있으면 그대로 · 알림 없음
-    pg.locator('[data-fk="day:date"]').fill("2026-09-01")                            # 데이터 없는 날은 고르지 않는다
+    pg.locator('[data-fk="day:date"]').fill("2026-09-01")                            # 데이터 없는 날 → 되돌리지 않고 가장 가까운 데이터 날짜로(11/25 UTIL-02)
     pg.locator('[data-fk="day:date"]').dispatch_event("change")
     pg.wait_for_timeout(250)
-    assert day() == "2026-09-18"
+    assert day() == "2026-09-17"
+    pg.locator('button[data-fk="day:last"]').click()
+    pg.wait_for_timeout(200)
+    pg.locator('[data-fk="day:date"]').click()                                       # 키보드로 치는 동안은 적용하지 않고 Enter 에서 한 번(Chrome 은 숫자마다 change)
+    pg.keyboard.press("1")
+    pg.wait_for_timeout(150)
+    assert pg.evaluate("D.days[state.dayI]") == "2026-09-18"
+    pg.keyboard.press("Enter")
+    pg.wait_for_timeout(250)
+    assert day() == "2026-09-17"                                                     # 어느 칸에 '1' 을 쳐도(월 01 · 일 01 · 년 0001) 가장 가까운 데이터 날짜는 09/17
     pg.locator('button[data-fk="nav:recipe"]').click()
     pg.wait_for_selector('main[data-key="view:recipe"]')
     assert pg.locator(".daynav").count() == 0 and pg.locator(".date-controls .date-control-row").count() == 1     # 10/6: 하루가 기준이 아닌 탭은 하루 날짜 줄이 없다
