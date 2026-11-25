@@ -528,18 +528,24 @@ class MainWindow(QMainWindow):
 
     def closeEvent(self, ev) -> None:  # noqa: N802
         w = self._worker
-        if (w is not None and w.isRunning() and getattr(w, "phase", "") == "publish" and not self._close_when_done):
+        collecting = w is not None and w.isRunning() and getattr(w, "phase", "") == "publish"
+        manual = None if collecting else self.collect_page.publishing()  # 설정 '지금 올리기' · 알림 '다시 올리기'(11/25 리뷰)
+        if (collecting or manual is not None) and not self._close_when_done:
             # 11/25 PP-01: 배포 중 닫으면 3초 뒤 스레드를 버려 배포가 조용히 끊겼다 — 끝나면 닫을지 묻는다
-            ans = sheets.ask(self, i18n.KO.LOADING_CLOSE_BUSY_TITLE, i18n.KO.LOADING_CLOSE_BUSY_BODY,
-                             SB.Yes | SB.No | SB.Cancel, SB.Yes)
+            body = i18n.KO.LOADING_CLOSE_BUSY_BODY if collecting else i18n.KO.LOADING_CLOSE_BUSY_BODY_MANUAL
+            ans = sheets.ask(self, i18n.KO.LOADING_CLOSE_BUSY_TITLE, body, SB.Yes | SB.No | SB.Cancel, SB.Yes)
             if ans == SB.Yes:
                 self._close_when_done = True
+                if manual is not None:                                 # 수집 끝 경로는 수집 완료 처리가 닫는다
+                    manual.finished.connect(lambda: QTimer.singleShot(0, self.close))
                 self.flash_status(i18n.KO.LOADING_CLOSE_WAITING)
                 ev.ignore()
                 return
             if ans != SB.No:
                 ev.ignore()
                 return
+            if manual is not None:
+                self.hide()                                            # '바로 닫기' — 창부터 감추고 올리기는 뒤에서(shutdown · main 이 기다림)
         maximized = bool(self.windowState() & Qt.WindowState.WindowMaximized)
         g = self.normalGeometry() if maximized else self.geometry()
         prefs.patch(window_width=int(g.width()), window_height=int(g.height()), window_maximized=maximized)

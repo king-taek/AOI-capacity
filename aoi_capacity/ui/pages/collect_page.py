@@ -129,6 +129,26 @@ class _HtmlOnlyWorker(QThread):
             self.done.emit(None, f"{type(ex).__name__}: {ex}")
 
 
+# 창을 닫을 때 기다려도 끝나지 않은 배포 스레드 — 부모(페이지)와 함께 지워지면 '돌고 있는 QThread 파괴' 로 앱이 죽는다(11/25 리뷰).
+# 부모를 떼고 여기 붙잡아 두었다가 main 이 이벤트 루프가 끝난 뒤 `wait_orphan_threads` 로 마저 기다린다.
+_ORPHAN_THREADS: List[QThread] = []
+
+
+def wait_orphan_threads(ms: int) -> bool:
+    """붙잡아 둔 스레드가 모두 끝나기를 최대 `ms` 기다린다. → 모두 끝났으면 True."""
+    deadline = time.monotonic() + ms / 1000.0
+    for t in list(_ORPHAN_THREADS):
+        left = max(0, int((deadline - time.monotonic()) * 1000))
+        try:
+            if t.isRunning() and not t.wait(left):
+                return False
+        except RuntimeError:
+            pass
+        if t in _ORPHAN_THREADS:
+            _ORPHAN_THREADS.remove(t)
+    return True
+
+
 class _PublishWorker(QThread):
     """배포판을 지금 올린다(11/25 — 설정의 배포 폴더 줄 '지금 올리기' · 수집 알림의 '다시 올리기'). 캐시만 읽고 장비 NAS 는 건드리지 않는다.
     jobs = [(종류 "lot" | "full", 폴더)] 를 차례로 올리고 하나 끝날 때마다 one(종류, 결과 dict | None, 이유 종류) — 예외 원문은 로그에만."""
@@ -1059,6 +1079,14 @@ class CollectPage(QWidget):
                                                if n_recover and eta("recover") else (K.MODE_BADGE_TARGET_FMT.format(n=n_recover), "warn") if n_recover
                                                else (K.MODE_BADGE_NONE, "slow")])
 
+    def publishing(self) -> Optional[QThread]:
+        """'지금 올리기' 배포가 도는 중이면 그 스레드(창 닫기가 끝날 때까지 기다릴 수 있게), 아니면 None."""
+        w = self._pub_worker
+        try:
+            return w if w is not None and w.isRunning() else None
+        except RuntimeError:
+            return None
+
     def wafer_logs_running(self) -> bool:
         # 실패 로그 · 빈칸 채우기도 NAS 를 읽으니 가동률 수집과 겹치지 않게
         return self._fl_worker is not None or self._gap_worker is not None
@@ -1176,9 +1204,13 @@ class CollectPage(QWidget):
         w = self._pub_worker
         if w is not None:
             try:
-                w.wait(ms)
+                if not w.wait(ms):                                     # 아직 올리는 중 — 페이지와 함께 지워지지 않게 떼어 붙잡는다
+                    log.warning("publish still running at close — kept until it ends")
+                    w.setParent(None)
+                    _ORPHAN_THREADS.append(w)
             except RuntimeError:
-                self._pub_worker = None
+                pass
+            self._pub_worker = None
         for attr in ("_fl_worker", "_gap_worker"):
             w = getattr(self, attr, None)
             if w is None:

@@ -425,3 +425,38 @@ def test_device_check_does_not_mark_the_list_unsaved(window, styled_qapp):
         _pump(styled_qapp, 0.05)
     assert page._b_check.isEnabled() and not page._summary.isHidden()
     assert not page.is_dirty() and not page._b_save.isEnabled()
+
+
+def test_closing_during_manual_publish_asks_and_waits_for_it(window, styled_qapp, monkeypatch, tmp_path):
+    """11/25 리뷰: 설정 '지금 올리기' 로 도는 배포(_pub_worker)도 창을 닫을 때 묻고, '예' 면 올리기가 끝난 뒤 닫는다 —
+    예전엔 수집 끝 배포만 물어 shutdown 이 15초 뒤 돌고 있는 스레드를 페이지와 함께 지웠다."""
+    import threading
+
+    from aoi_capacity import publish
+    from aoi_capacity.ui import main_window
+    from aoi_capacity.utils import prefs
+
+    gate = threading.Event()
+
+    def slow_publish(cfg, out_dir, log=None):
+        gate.wait(10)
+        return {"bytes": 1, "sec": 0.0, "pointer_ok": True}
+
+    monkeypatch.setattr(publish, "publish_lot", slow_publish)
+    prefs.patch(publish_dir=str(tmp_path / "share"))
+    asked = []
+    monkeypatch.setattr(main_window.sheets, "ask", lambda _w, title, text, *a, **k: asked.append(text) or main_window.SB.Yes)
+    page = window.collect_page
+    page.publish_now("lot")
+    _pump(styled_qapp)
+    assert page.publishing() is not None
+    window.close()
+    _pump(styled_qapp)
+    assert asked == [main_window.i18n.KO.LOADING_CLOSE_BUSY_BODY_MANUAL]
+    assert window.isVisible()                                          # 올리는 중 — 아직 닫히지 않는다
+    gate.set()
+    end = time.time() + 5
+    while window.isVisible() and time.time() < end:
+        _pump(styled_qapp)
+    assert not window.isVisible()
+    assert page.publishing() is None

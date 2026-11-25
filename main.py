@@ -109,7 +109,11 @@ def _run_gui(logger: logging.Logger) -> int:
     win = MainWindow()
     install_excepthook(win)                                            # 11/25 QT-01: 버튼 처리 중 오류로 창이 통째로 꺼지지 않게
     win.show()
-    return int(app.exec())
+    rc = int(app.exec())
+    from aoi_capacity.ui.pages.collect_page import wait_orphan_threads
+    if not wait_orphan_threads(10 * 60 * 1000):                        # 창은 닫혔고 '지금 올리기' 가 아직 올리는 중이면 마저 끝낸다
+        logger.warning("publish thread still running after 10 min at exit")
+    return rc
 
 
 def main() -> int:
