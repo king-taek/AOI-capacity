@@ -854,41 +854,53 @@ def _fill_params_into(cfg: dict, cache: dict, devs: List[dict], fixed: float, lo
     days = sorted(x for x in (_first_day(t[1]) for t in tasks) if x)
     _say_unless_empty(log, len(tasks), f"파라미터 빈 구간 채우기: 대상 Report {len(tasks)}개 · 장비 {len({t[4] for t in tasks})}대"
               + (f" · {days[0]} ~ {days[-1]}" if days else "") + " — Report 는 다시 읽지 않습니다")
-    done, total = _Counter(), len(tasks)
+    memo, done, total = _IniMemo(), _Counter(), len(tasks)
 
     def one(t):
         _check(should_stop)
-        _key, _e, _r, w, name = t
-        try:
-            files = params_mod.snapshot(params_mod.read_wafer_files(w))
-            err = ""
-        except OSError as ex:
-            files, err = {}, f"{type(ex).__name__}: {ex}"
+        _key, _e, r, w, name = t
+        # CORE-05: 슬롯 · RDL · 스캔 비율 채우기처럼 폴더가 그 뒤 다시 쓰였는지(WaferStartTime) 먼저 본다 — 다른 검사의 레시피를 옛 Report 에 붙이지 않는다
+        kind, got = memo.get(os.path.join(w, "WaferInfo.ini"))
+        if kind == "ok" and got.get("AutoCycleInfo", {}).get("WaferStartTime", "") != r.get("wafer_start_time"):
+            files, err = {}, "time_mismatch"
+        else:
+            try:
+                files = params_mod.snapshot(params_mod.read_wafer_files(w))
+                err = ""
+            except OSError as ex:
+                files, err = {}, f"{type(ex).__name__}: {ex}"
         progress(done.bump(), total, i18n.KO.PARAMS_FILL_PHASE_FMT.format(device=name))
         return files, err
 
-    st = {"targets": total, "added": 0, "empty": 0, "no_device": no_dev, "stopped": 0}
-    t1, n_done, dirty = time.perf_counter(), 0, _Dirty()
-    for lo in range(0, total, PARAMS_FILL_CHUNK):                  # 덩어리마다 저장 — 멈추거나 끊겨도 읽은 만큼은 남는다
-        chunk = tasks[lo:lo + PARAMS_FILL_CHUNK]
-        try:
-            results = _run(cfg, chunk, one, should_stop, group=lambda t: nas_group(t[3]))
-        except CollectCancelled:
-            st["stopped"] = 1
-            break
-        for (key, e, r, _w, name), (files, err) in zip(chunk, results):
-            bst = parse_dt(r.get("batch_start", ""))
-            if params_mod.put(store, key, dev=name, job=r.get("job", ""), setup=r.get("setup", ""),
-                              t=bst.strftime("%Y-%m-%d %H:%M") if bst else "", report=str(r.get("report") or ""), files=files):
-                dirty.add(DIRTY_PARAMS)
-            st["added" if files else "empty"] += 1
-        n_done += len(chunk)
-        if n_done >= total:
-            record_eta(cache, "params_fill", n_done, time.perf_counter() - t1, fixed)
-            dirty.add(DIRTY_PARAMS)
-        if dirty:
+    st = {"targets": total, "added": 0, "empty": 0, "time_mismatch": 0, "no_device": no_dev, "stopped": 0}
+    t1, n_done, since_save = time.perf_counter(), 0, 0
+
+    def apply(i, res) -> None:                       # 메인 스레드가 끝나는 대로(CORE-11) — 도중에 멈춰도 끝낸 것은 남는다(덩어리째 버리지 않는다)
+        nonlocal n_done, since_save
+        key, _e, r, _w, name = tasks[i]
+        files, err = res
+        bst = parse_dt(r.get("batch_start", ""))
+        if params_mod.put(store, key, dev=name, job=r.get("job", ""), setup=r.get("setup", ""),
+                          t=bst.strftime("%Y-%m-%d %H:%M") if bst else "", report=str(r.get("report") or ""), files=files):
+            since_save += 1
+        st["added" if files else "empty"] += 1
+        if err == "time_mismatch":
+            st["time_mismatch"] += 1
+        n_done += 1
+
+    def checkpoint() -> None:
+        nonlocal since_save
+        if since_save >= PARAMS_FILL_CHUNK:
+            since_save = 0
             _save_cache(cfg, cache)
-            dirty = _Dirty()
+    try:
+        _run(cfg, tasks, one, should_stop, group=lambda t: nas_group(t[3]), on_result=apply, tick=checkpoint)
+    except CollectCancelled:
+        st["stopped"] = 1
+    if total and n_done >= total:
+        record_eta(cache, "params_fill", n_done, time.perf_counter() - t1, fixed)
+    if since_save or (total and n_done >= total):
+        _save_cache(cfg, cache)
     _say_unless_empty(log, int(st.get("targets", 0)), "파라미터 빈 구간 채우기: " + " · ".join(f"{k}={v}" for k, v in st.items()))
     return st
 
