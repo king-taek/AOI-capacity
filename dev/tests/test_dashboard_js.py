@@ -941,6 +941,36 @@ def test_report_tab_counts_a_batch_that_crosses_midnight_once():
     assert "제외 — PASS 5장 미만" not in popup                              # 조각(6장 · 6장)이 아니라 합친 12장으로 판단
 
 
+def _batch(dev, lot, bs, n, minutes, job="R_TB500_LIVE_PI3"):
+    rep = f"{job}_6321_{lot}_18-Sep-26_({bs.replace(':', '.')}.00)_BatchReport.htm"
+    return [w(dev, f"{lot}-{k}", _hhmm(bs, k + 1), _hhmm(bs, k + 2), lot=lot, job=job, report=rep, bs=bs, be=_hhmm(bs, minutes)) for k in range(n)]
+
+
+def test_report_popup_marks_slow_batches_by_time_per_wafer_not_by_batch_length():
+    """11/25 RDL-04: 빨간 시간은 배치 시간이 아니라 장당 시간(÷ PASS 장 수)을 이 장비 표본 중앙과 비교한다 —
+    25장 배치(135분, 장당 5.4분)는 길어도 빨강이 아니고, 6장 60분(장당 10분)은 빨강."""
+    rows = _clean_batches(5) + _batch("AOI-1", "LOT-BIG", "17:00", 25, 135) + _batch("AOI-1", "LOT-SLOW", "20:00", 6, 60)
+    (popup,) = screen(rows, meta("AOI-1"), [["rptDevPopupHtml"]], state={"view": "report", "rptAll": {"job": "TB500 PI3", "dev": "AOI-1"}})
+    row = lambda lot: next(x for x in popup.split('class="rcpdev"') if lot in x)
+    assert "font-weight:600;color:" not in row("LOT-BIG</span>")
+    assert "font-weight:600;color:" in row("LOT-SLOW</span>") and "장당 10.0분" in row("LOT-SLOW</span>")
+    assert "장당 시간 중앙" in popup
+
+
+def test_report_tab_leaves_test_lot_batches_out_and_lets_uncomputed_devices_open_all_batches():
+    """11/25 RDL-18(현택): 시험(Test) Lot 의 배치는 장비 비교 표본에서 뺀다(이유는 팝업에 그대로).
+    RDL-05: 계산 못 한 장비 이름은 단추 — 누르면 그 장비의 모든 배치 팝업, 괄호에 제외 내역."""
+    rows = _clean_batches(5) + _batch("AOI-1", "X1-TEST", "20:00", 6, 40) + _clean_batches(4)
+    for r in rows[-sum(5 + i for i in range(4)):]:
+        r["device"] = "AOI-2"
+    html, popup = screen(rows, meta("AOI-1", "AOI-2"), [["reportHtml"], ["rptDevPopupHtml"]],
+                         state={"view": "report", "rptDev": "AOI-1", "rptAll": {"job": "TB500 PI3", "dev": "AOI-1"}})
+    assert "5 / 6" in html and "시험(Test) 1" in html and "10.0 ± 0.0분" in html
+    assert "제외 — 시험(Test) Lot" in popup
+    bad = html[html.index("계산 못 한 장비 1대"):]
+    assert '<button type="button" class="link" data-h=' in bad[:400] and ">AOI-2</button>(표본 4개 · 5개 미만)" in bad
+
+
 def _okw(dev, wafer, s, faults, **kw):
     r = w(dev, wafer, s, s[:3] + "09", **kw)
     r["faults"] = faults
