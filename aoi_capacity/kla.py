@@ -452,6 +452,19 @@ def _runs(entry: dict):
             yield lot, rts, sorted(items)
 
 
+#: 1장짜리 실행의 장 시간을 빌려 올 때 보는 같은 Job 실행 수(시작 시각이 가까운 순, CORE-15).
+NEAR_RUNS = 5
+
+
+def _job_wafer_sec(runs: list, job: str, start: dt.datetime) -> float:
+    """간격이 없는 실행(1장 · 같은 시각 여러 장)의 장 시간 — 같은 장비 · 같은 Job(SetupID)에서 간격이 있는 실행 중
+    시작이 가까운 `NEAR_RUNS` 개의 중앙 간격들의 중앙. 없으면 0(끝 시각을 지어내지 않는다 — 예전처럼 빈 칸)."""
+    near = sorted(((abs((r_ts[0] - start).total_seconds()), r_ts[0].isoformat(), r_med)
+                   for _l, _rts, r_items, r_ts, r_med in runs
+                   if r_med and str(r_items[0][2].get("setup") or "") == job), key=lambda x: (x[0], x[1]))[:NEAR_RUNS]
+    return float(statistics.median([m for _d, _s, m in near])) if near else 0.0
+
+
 def _fmt(t: dt.datetime) -> str:
     return t.strftime(TIME_FMT)
 
@@ -463,10 +476,14 @@ def rows_from_store(store: dict, cfg: dict, scan_type: Callable[[str], str]) -> 
         name = str(e.get("name") or "")
         if not scope.is_allowed(cfg, name):
             continue
+        runs = []
         for lot, rts, items in _runs(e):
             ts = [dt.datetime.fromisoformat(t) for t, _w, _r in items]
             gaps = [(b - a).total_seconds() for a, b in zip(ts, ts[1:]) if b > a]
-            med = statistics.median(gaps) if gaps else 0.0
+            runs.append((lot, rts, items, ts, statistics.median(gaps) if gaps else 0.0))
+        for lot, rts, items, ts, med in runs:
+            if not med:                                           # 1장짜리 실행 — 같은 장비 · 같은 Job 의 가까운 실행 장 시간(CORE-15)
+                med = _job_wafer_sec(runs, str(items[0][2].get("setup") or ""), ts[0])
             ends = []
             for i, t in enumerate(ts):
                 nxt = ts[i + 1] if i + 1 < len(ts) else None

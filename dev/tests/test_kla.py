@@ -132,6 +132,22 @@ def test_each_kla_device_keeps_its_own_seen_to_and_quiet_run_saves_nothing(tmp_p
     assert "kla" not in stats["cache_dirty"] and not stats["cache_saved"], stats["cache_dirty"]
 
 
+def test_single_wafer_run_borrows_the_wafer_time_of_the_same_job():
+    """CORE-15: 장이 하나뿐인 실행은 간격이 없어 끝 시각이 비고 가동률에 0분으로 들어갔다 — 같은 장비 · 같은 Job 의
+    가까운 실행 중앙 장 시간을 쓴다. 같은 Job 실행이 없으면 예전처럼 빈 칸(지어내지 않는다)."""
+    def rec(t, setup, rts):
+        return {"t": t, "setup": setup, "step": "S", "rts": rts, "wafer": "W", "lot": ""}
+    store = {"dev:K1": {"name": "K1", "lots": {
+        "L1@1": {f"w{i}": rec(f"2026-11-20T09:{10 * i:02d}", "JOB-A", "r1") for i in range(3)},     # 10분 간격
+        "L2@1": {"w0": rec("2026-11-20T11:00", "JOB-A", "r2")},                                       # 1장 — JOB-A 에서 빌림
+        "L3@1": {"w0": rec("2026-11-20T12:00", "JOB-B", "r3")}}}}                                     # 1장 — 같은 Job 없음
+    rows = {r["lot"]: r for r in kla.rows_from_store(store, {"scope_devices": ["*"]}, lambda lot: "")}
+    p = collect.parse_dt
+    assert (p(rows["L2@1"]["wafer_end_time"]) - p(rows["L2@1"]["wafer_start_time"])).seconds == 600
+    assert p(rows["L2@1"]["batch_end"]) == dt.datetime(2026, 11, 20, 11, 10)
+    assert rows["L3@1"]["wafer_end_time"] == "" and rows["L3@1"]["batch_start"] == rows["L3@1"]["batch_end"]
+
+
 def test_kla_outside_scope_is_never_touched(tmp_path, kla_nas, monkeypatch):
     _nas, csv_path = kla_nas
     cfg = make_cfg(tmp_path, csv_path, scope_devices=["AOI-9"])
