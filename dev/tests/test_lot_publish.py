@@ -366,7 +366,7 @@ def test_share_shortcut_falls_back_to_url_without_windows_and_lnk_replaces_it(tm
     share = tmp_path / "share"
     publish.publish_lot(cfg, str(share), rows=rows[:10], dev_meta=devs)
     assert (share / publish.LOT.shortcut).is_file() and not (share / publish.LOT.lnk).exists()
-    monkeypatch.setattr(publish, "make_lnk", lambda target, icon: b"LNK:" + (icon or "").encode("utf-16-le"))
+    monkeypatch.setattr(publish, "make_lnk", lambda target, icon: b"LNK:" + target.encode("utf-16-le") + (icon or "").encode("utf-16-le"))
     publish.publish_lot(cfg, str(share), rows=rows[:10], dev_meta=devs)
     assert (share / publish.LOT.lnk).is_file()
     assert not (share / publish.LOT.shortcut).exists()           # 우리 .url 은 .lnk 가 생기면 지운다
@@ -383,6 +383,18 @@ def test_lnk_current_checks_the_icon_path():
     # 아이콘 없음(11/4): 옛 AOI.ico 를 가리키는 .lnk 는 다시 만들고, 안 가리키면 그대로
     assert not publish._lnk_current(b"x" + icon.encode("utf-16-le"), None)
     assert publish._lnk_current(b"x" + "AOI_LOT.html".encode("utf-16-le"), None)
+
+
+def test_lnk_current_checks_the_target_path():
+    """11/25(LOT-18): 배포 폴더 표기를 바꾸거나 폴더를 옮기면 옛 경로 바로가기는 다시 만든다 — 같은 경로면(대소문자 · UNC 가 서버\\공유 와 나머지로 나뉘어 적혀도) 그대로."""
+    tgt = "\\\\srv\\share\\LOT추적\\AOI_LOT.html"
+    assert publish._lnk_current(b"x" + tgt.encode("utf-16-le"), None, tgt)
+    assert publish._lnk_current(b"x" + tgt.upper().encode("utf-16-le"), None, tgt)
+    split = b"x" + "\\\\SRV\\SHARE".encode("cp949") + b"\0" + "LOT추적\\AOI_LOT.html".encode("cp949") + b"\0"
+    assert publish._lnk_current(split, None, tgt)                                   # LinkInfo: 서버\\공유 + 나머지 경로(ANSI)
+    assert not publish._lnk_current(b"x" + "Z:\\LOT추적\\AOI_LOT.html".replace("Z:", "\\\\old\\x").encode("utf-16-le"), None, tgt)
+    assert not publish._lnk_current(b"x" + tgt.encode("utf-16-le"), None, "\\\\srv\\other\\AOI_LOT.html")
+    assert publish._lnk_current(b"x" + "\\\\srv\\share\\LOT추적\\AOI_LOT.html".encode("utf-16-le"), None, "Z:\\LOT추적\\AOI_LOT.html")   # 연결 드라이브: 드라이브 뒤 경로
 
 
 def test_publish_removes_our_old_share_icon_only(tmp_path, sample):
