@@ -971,7 +971,10 @@ function fillModes(rs,pf){pf=pf||P;const reps=new Map();
     if(m)for(const r of R.rows)if(!ownMode(r))MODE_FILL.set(r,[m,by]);}}
 function scanMode(r){const o=ownMode(r);if(o)return o;const f=MODE_FILL.get(r);return f?f[0]:"";}
 const modeSrc=r=>ownMode(r)?"own":(MODE_FILL.get(r)||[,""])[1];   /* own · rep · near · "" */
-function modeJob(job,r){job=String(job||"");const m=scanMode(r),mj=HAS_MULTI.test(job);
+/* 11/25(RDL-02): TB500 PI Job 은 멀티/단일로 나누지 않는다 — PI 는 모두 멀티스캔으로 본다(D81). 수집기가 PI 에서 판정 파일을 읽지 않아 근거는 레시피 칸 '|' 뿐인데,
+   그것이 몇 행만 있어도 같은 장비 · Job 의 나머지가 D78 채우기로 전부 '-Multi' 가 되어 그 장비가 PI 비교에서 빠졌다(실데이터 PI 8.3만 행 중 '|' 3% → 26%). RDL 은 D76 그대로 */
+const PI_ONE_JOB=/R_TB500_LIVE_PI[234](?![0-9])/i;
+function modeJob(job,r){job=String(job||"");if(PI_ONE_JOB.test(job))return job;const m=scanMode(r),mj=HAS_MULTI.test(job);
   if(m==="M")return jobStem(job)+"-Multi";if(!mj)return job;return jobStem(job)+(m==="S"?"-Single":"-미구분");}
 const RT=new Set(['RE','RESCAN','REWORK','SRD','R']);
 /* 10/11(D87): Lot 이름이 바뀐 재검사도 Rescan — 두 번째 자재 키 = jobKey(Job) | 검사 단계 낱말(DIA · SRD · 3D …, 다른 단계는 다른 검사) | Wafer ID.

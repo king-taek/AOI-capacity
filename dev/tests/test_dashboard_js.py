@@ -476,12 +476,27 @@ def test_multi_and_single_scans_are_different_jobs_but_the_same_material():
             dict(w("AOI-1", "P1", "11:00", "11:05", lot="LOT-P", job="R_TB500_LIVE_PI2"), scan_mode="SINGLE"),
             dict(w("AOI-1", "P2", "12:00", "12:05", lot="LOT-Q", job="R_TB500_LIVE_PI2"), recipe="PI|PI_Bubble")]
     D = run(rows, meta("AOI-1", "AOI-2"))
-    assert set(D["pool"]["job"]) >= {"TB500_RDL4-Multi", "TB500_RDL4-Single", "TB500_RDL4-미구분", "R_TB500_LIVE_PI2", "R_TB500_LIVE_PI2-Multi"}
+    assert set(D["pool"]["job"]) >= {"TB500_RDL4-Multi", "TB500_RDL4-Single", "TB500_RDL4-미구분", "R_TB500_LIVE_PI2"}
     assert J not in D["pool"]["job"]
+    assert "R_TB500_LIVE_PI2-Multi" not in D["pool"]["job"]      # 11/25 RDL-02: PI 는 나누지 않는다(D81 — 모두 멀티로 본다)
     t = at(D, "AOI-1")
     assert t["d"] == 10                                         # 멀티 PASS 뒤 같은 Wafer 단일 = Rescan(자재 키는 원문 Job)
     rpt, = screen(rows, meta("AOI-1"), [["reportHtml"]])
-    assert "TB500 RDL4-Multi" in rpt and "TB500 RDL4-Single" in rpt and "TB500 PI2-Multi" in rpt
+    assert "TB500 RDL4-Multi" in rpt and "TB500 RDL4-Single" in rpt and "TB500 PI2" in rpt and "TB500 PI2-Multi" not in rpt
+
+
+def test_pi_jobs_are_not_split_by_a_few_pipe_rows():
+    """11/25 RDL-02: PI 는 멀티/단일로 나누지 않는다(D81). 레시피 칸 '|' 가 있는 Report 하나가 같은 장비의 다른 Report 까지
+    '-Multi' 로 채워(D78 near) 그 장비가 PI 비교에서 빠졌다 — 복사본 · Test_ 접두 Job 도 원문 그대로. RDL 은 D76 그대로."""
+    PI, CP = "R_TB500_LIVE_PI2", "R_TB500_LIVE_PI2 AOI-21 Copy _0614"
+    rows = [dict(w("AOI-17", "P1", "08:00", "08:05", lot="LOT-A", job=PI, report="a.htm"), recipe="PI|PI_Bubble"),
+            dict(w("AOI-17", "P2", "10:00", "10:05", lot="LOT-B", job=PI, report="b.htm")),
+            dict(w("AOI-20", "P3", "11:00", "11:05", lot="LOT-C", job=CP, report="c.htm"), recipe="PI|PI_Bubble"),
+            dict(w("AOI-1", "R1", "12:00", "12:10", lot="LOT-R", job="TB500_RDL4 - Multi", report="r.htm"), scan_mode="MULTI")]
+    D = run(rows, meta("AOI-17", "AOI-20", "AOI-1"))
+    jobs = set(D["pool"]["job"])
+    assert {PI, CP, "TB500_RDL4-Multi"} <= jobs
+    assert not any(j.startswith("R_TB500_LIVE_PI") and j.endswith(("-Multi", "-Single", "-미구분")) for j in jobs)
 
 
 def test_floor_and_maker_filters_combine():
