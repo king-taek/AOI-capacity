@@ -126,7 +126,7 @@ INI_KEYS = {
 #: 바꾸면 올린다. 캐시는 Report 의 수정시각만 보고 재파싱을 건너뛰므로, 이 번호가 다르면 캐시를 읽을 때
 #: `norm_status`·`scan_type` 을 원문(status·lot)에서 **NAS 접근 없이** 다시 계산한다(`_rederive_rows`).
 #: INI 경로가 바뀌는 수정(빈 job 되찾기 등)은 Report 를 다시 읽어야 하므로 '누락 복구'(`recover`)가 따로 있다.
-PARSER_VERSION = 5
+PARSER_VERSION = 6
 #: 누락 복구가 다시 읽는 대상 — INI 를 못 찾았거나 읽다 실패한 행이 있는 Report 만.
 #: STALE(다른 시도가 덮어쓴 INI)은 다시 읽어도 되돌아오지 않고, NO_WAFER_ID(자리표시)·BATCH_FAILED 는 경로 자체가 없다.
 #: MOVED_ONLY(폴더에 `MoveResultFlag` 만 있고 INI 가 없음 = 이동만 되고 아직 스캔 안 함, 실물 AOI-4 `XBL WBG\24`)는 뒤에 스캔되면 INI 가 생긴다.
@@ -667,12 +667,27 @@ def read_recipe_settings(path) -> dict:
     return out
 
 
+def rdl_mode_from(names, outcome) -> str:
+    """RDL 장의 멀티/단일(D74) — Wafer 폴더 `RecipesInfo.ini` 의 레시피 이름(`names`, 없으면 None)과 그 장의 결과(`outcome`)로.
+    레시피가 둘 이상이면 MULTI. 파일이 없거나 하나면 SINGLE 인데, **PASS 로 끝난 장만** 그렇게 본다(11/25): 멀티 스캔이 첫 레시피에서 멈춘 장
+    (`Scan 2D - Max Fault Exceeded.` · 중단)은 RecipesInfo.ini 를 남기지 않아 단일로 잘못 찍혔다 — 실데이터 7/1~11/25 RDL EXACT 중 PASS 가 아닌
+    SINGLE 장 75장이 PASS 가 전부 MULTI 인 Report 안에 있었다(PASS 장은 그런 섞임 0). 근거가 없으니 빈 값으로 두고 화면이 같은 Report 로 채운다(D78)."""
+    if names and len(names) > 1:
+        return "MULTI"
+    return "SINGLE" if outcome == "PASS" else ""
+
+
+def _rdl_unjudged(r: dict) -> bool:
+    """멀티/단일 판정이 빠진 RDL 장 — INI 를 찾은(EXACT) PASS 장만(PASS 가 아닌 장은 판정 근거가 없어 화면이 Report 로 채운다, `rdl_mode_from`)."""
+    return (r.get("ini_match") == "EXACT" and not r.get("scan_mode") and r.get("outcome", "PASS") == "PASS"
+            and is_rdl_job(r.get("job")))
+
+
 def _needs_rdl_patch(entry: dict) -> bool:
-    """'RDL 영역 INI 패치' 대상 — RDL Job 인데 INI 를 찾은(EXACT) 행에 멀티/단일 판정이 없는 Report(업데이트 전에 읽은 것). 밀려난 옛 판은 아니다."""
+    """'RDL 영역 INI 패치' 대상 — RDL Job 인데 INI 를 찾은(EXACT) PASS 행에 멀티/단일 판정이 없는 Report(업데이트 전에 읽은 것). 밀려난 옛 판은 아니다."""
     if entry.get("superseded_by") or entry.get("rdl_checked"):
         return False                                  # 이미 패치를 해 봤는데 INI 가 바뀌어 판정 못 한 Report 는 다시 대상이 아니다(다시 읽으면 플래그가 사라진다)
-    return any(r.get("ini_match") == "EXACT" and not r.get("scan_mode") and is_rdl_job(r.get("job"))
-               for r in entry.get("rows") or ())
+    return any(_rdl_unjudged(r) for r in entry.get("rows") or ())
 
 
 def _rdl_wafer_dir(r: dict, scan_root: str, backups) -> Optional[str]:
@@ -706,7 +721,7 @@ def _patch_rdl_modes(cfg, cache, devs, should_stop, log, progress, stats, dirty,
         scan_root = os.path.join(d["path"], str(d.get("scan_dir") or cfg["scan_dir"]))
         backups = _backup_roots(d, scan_root)
         for r in e.get("rows") or ():
-            if r.get("ini_match") == "EXACT" and not r.get("scan_mode") and is_rdl_job(r.get("job")):
+            if _rdl_unjudged(r):
                 w = _rdl_wafer_dir(r, scan_root, backups)
                 if w:
                     tasks.append((e, r, w, d["name"]))
@@ -722,9 +737,9 @@ def _patch_rdl_modes(cfg, cache, devs, should_stop, log, progress, stats, dirty,
         if kind == "ok" and (got.get("AutoCycleInfo", {}).get("WaferStartTime", "") == r.get("wafer_start_time")):
             rk, names = memo.recipes(os.path.join(w, "RecipesInfo.ini"))
             if rk == "ok" and names:
-                out = ("|".join(names), "MULTI" if len(names) > 1 else "SINGLE")
+                out = ("|".join(names), rdl_mode_from(names, r.get("outcome", "PASS")))
             elif rk == "missing":
-                out = (got.get("Recipe", {}).get("Name", "") or r.get("recipe", ""), "SINGLE")
+                out = (got.get("Recipe", {}).get("Name", "") or r.get("recipe", ""), rdl_mode_from(None, r.get("outcome", "PASS")))
         progress(done.bump(), total, i18n.KO.COLLECT_PHASE_RDL_FMT.format(device=name))
         return out
     n_ok = 0
@@ -1503,11 +1518,9 @@ def rows_for_report(dev_name: str, rep: dict, scan_root: str, memo: Optional[_In
                         # 멀티면 WaferInfo 의 [Recipe] Name 은 스캔 진행 창에 떠 있던 이름일 뿐이다(사용자 10/5) — 쓰지 않는다.
                         if names:
                             r["recipe"] = "|".join(names)
-                            r["scan_mode"] = "MULTI" if len(names) > 1 else "SINGLE"
-                        else:
-                            if one:
-                                r["recipe"] = one
-                            r["scan_mode"] = "SINGLE"
+                        elif one:
+                            r["recipe"] = one
+                        r["scan_mode"] = rdl_mode_from(names, r["outcome"])
                     if r["ini_match"] == "EXACT" and params_out is not None and "files" not in params_out:
                         # D89: Report(= Lot 한 번)마다 INI 를 찾은 첫 Wafer 폴더의 레시피 파라미터 — 그 폴더 안만(맨 위 + 하위 폴더 한 단계).
                         try:
@@ -1822,6 +1835,10 @@ def _rederive_rows(cache: dict) -> int:
                                             parse_dt(r.get("batch_start")), parse_dt(r.get("batch_end")))}
             if any(r.get(k) != v for k, v in new.items()):
                 r.update(new)
+                changed += 1
+            if (r.get("scan_mode") == "SINGLE" and new["outcome"] != "PASS" and "|" not in str(r.get("recipe") or "")
+                    and is_rdl_job(r.get("job"))):
+                r["scan_mode"] = ""                      # 11/25(`rdl_mode_from`): PASS 가 아닌 RDL 장의 '단일' 은 근거가 아니었다 — 화면이 Report 로 채운다
                 changed += 1
             r.setdefault("slots", "")
             for c in QUALITY_COLS:

@@ -136,6 +136,7 @@ def test_rdl_patch_reads_only_the_wafer_inis_of_rdl_rows_missing_the_mode(tmp_pa
     collect.collect(cfg)
     cache = json.loads(open(cfg["cache_file"], encoding="utf-8").read())    # 업데이트 전 캐시를 흉내 — 판정을 지운다
     for e in cache["reports"].values():
+        e.pop("rdl_checked", None)
         for r in e["rows"]:
             r.pop("scan_mode", None)
     collect._save_cache(cfg, cache)
@@ -158,3 +159,23 @@ def test_rdl_patch_reads_only_the_wafer_inis_of_rdl_rows_missing_the_mode(tmp_pa
     by = {r["wafer_id"]: r for r in rows if r["report"] in (name, name2)}
     assert (by["W01"]["scan_mode"], by["W01"]["recipe"]) == ("MULTI", "x20|x5") and not by["W02"].get("scan_mode")
     assert collect.plan_run(cfg).rdl_reports == 0                                  # 판정 못 한 것도 다시 대상이 되지 않는다
+
+
+def test_rdl_wafer_that_stopped_before_recipesinfo_is_not_called_single(tmp_path, fake_nas):
+    """11/25: 멀티 스캔이 첫 레시피에서 멈춘 장(`Scan 2D - Max Fault Exceeded.`)은 RecipesInfo.ini 가 없어 '단일' 로 찍혔다
+    (실데이터 7/1~11/25: PASS 가 전부 MULTI 인 RDL Report 안의 SINGLE 75장 — PASS 장은 섞임 0). PASS 가 아니면 판정을 비워 두고 화면이 Report 로 채운다(D78).
+    PASS 로 끝난 장은 예전처럼 파일이 없으면 SINGLE. 옛 캐시의 그런 '단일' 은 PARSER_VERSION 재분류가 NAS 없이 지운다."""
+    from aoi_capacity import nas_guard  # noqa: F401
+    nas, csv_path = fake_nas
+    name, d = _make_rdl(nas, multi=False)
+    rep = nas / "X" / "AOI-9" / "Report" / name
+    rep.write_text(rep.read_text(encoding="utf-8").replace("<td>Pass</td>", "<td>Scan 2D - Max Fault Exceeded.</td>", 1), encoding="utf-8")
+    name2, _d2 = _make_rdl(nas, lot="LHP-RDL3", wafer="W02", multi=False)
+    rows, _m, _e = collect.collect(make_cfg(tmp_path, csv_path))
+    by = {r["wafer_id"]: r for r in rows if r["report"] in (name, name2) and not r.get("kind")}
+    assert by["W01"]["ini_match"] == "EXACT" and by["W01"]["outcome"] != "PASS" and by["W01"]["scan_mode"] == "" and by["W01"]["recipe"] == "x20"
+    assert by["W02"]["scan_mode"] == "SINGLE"
+    assert collect.rdl_mode_from(["x20", "x5"], "UNKNOWN") == "MULTI" and collect.rdl_mode_from(None, "PASS") == "SINGLE"
+    old = {"reports": {"k": {"rows": [dict(by["W01"], scan_mode="SINGLE"), dict(by["W02"])]}}}
+    assert collect._rederive_rows(old) >= 1
+    assert [r["scan_mode"] for r in old["reports"]["k"]["rows"] if not r.get("kind")] == ["", "SINGLE"]
