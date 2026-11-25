@@ -376,7 +376,6 @@ BOOT_LOG_HINT_FMT = "[AOI] 자세한 내용은 로그 파일을 보세요: {path
 
 # ── 보관·HTML 기간·HTML 만 다시 만들기(10/5) ─────────────────────────────────
 HTML_ONLY_NO_CACHE = "가진 데이터가 없습니다 — 먼저 수집을 한 번 해 주세요"
-HTML_ONLY_REDERIVE = "규칙이 바뀌어 다시 분류 중 — 다음 수집 뒤엔 빨라집니다"      # PH-05: 업데이트 뒤 첫 'HTML 만 만들기'는 캐시 전체를 메모리에서 다시 분류한다
 SET_HTML_DAYS = "결과 HTML 기본 기간"
 SET_HTML_DAYS_SUFFIX = " 일"
 SET_HTML_DAYS_ALL = "전부"

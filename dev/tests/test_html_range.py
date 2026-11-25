@@ -118,22 +118,3 @@ def test_header_chip_shows_the_period():
     assert out.returncode == 0, out.stderr
     chip = json.loads(out.stdout)[0]
     assert "08/01 ~ 09/09" in chip and "2026-06-01" in chip and "분할" not in chip and "href" not in chip
-
-
-def test_html_only_tells_why_it_is_slow_when_rules_changed(tmp_path, sample):
-    """PH-05: 업데이트로 규칙 번호가 바뀐 뒤 'HTML 만 다시 만들기' 는 캐시를 메모리에서 다시 분류한다 — 단계 글자로 알린다(캐시는 저장하지 않는다)."""
-    rows, meta = sample
-    cfg = _cfg(tmp_path)
-    cache = collect._empty_cache()
-    cache["reports"]["dev:AOI-1|a.htm"] = {"rows": rows[:50], "mtime": 1}
-    collect._save_cache(cfg, cache)
-    phases = []
-    collect.html_from_cache(cfg, progress=lambda d, t, p: phases.append(p))
-    assert collect.i18n.KO.HTML_ONLY_REDERIVE not in phases
-    c = collect.read_cache_file(cfg["cache_file"])
-    c["parser_version"] = 0
-    Path(cfg["cache_file"]).write_text(json.dumps(c), encoding="utf-8")
-    before = Path(cfg["cache_file"]).read_bytes()
-    phases.clear()
-    collect.html_from_cache(cfg, progress=lambda d, t, p: phases.append(p))
-    assert collect.i18n.KO.HTML_ONLY_REDERIVE in phases and Path(cfg["cache_file"]).read_bytes() == before
