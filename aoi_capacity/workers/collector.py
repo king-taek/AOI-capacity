@@ -121,11 +121,12 @@ class CollectorWorker(QThread):
             )
             if self._stop.is_set():
                 raise collect.CollectCancelled()
-            path = collect.write_html(self.cfg, rows, dev_meta, errors, started, mode="gui", timing=stats, warnings=warnings,
+            prep = collect.HtmlPrep(rows)                  # 수집 HTML · 배포판이 같은 준비를 한 번만(PH-01)
+            path = collect.write_html(self.cfg, rows, dev_meta, errors, started, mode="gui", timing=stats, warnings=warnings, prep=prep,
                                       log=lambda m: self.signals.log.emit(tok, str(m)),
                                       progress=lambda d, t, p: self.signals.progress.emit(tok, int(d), int(t), str(p)))
             pub: dict = {}
-            publish.publish_after_collect(self.cfg, rows, dev_meta, log=lambda m: self.signals.log.emit(tok, str(m)), status=pub, params_store=stats.get("params_store"))   # 10/27: 조용히 — 실패해도 수집은 성공
+            publish.publish_after_collect(self.cfg, rows, dev_meta, log=lambda m: self.signals.log.emit(tok, str(m)), status=pub, params_store=stats.get("params_store"), prep=prep)   # 10/27: 조용히 — 실패해도 수집은 성공
             if pub.get("error"):                       # 10/30: 조용히 실패해도 수집이 끝났을 때 알림 카드에는 보인다
                 warnings.append({"kind": "publish", "path": pub.get("dir", ""), "error": pub["error"]})
             elif pub.get("locked"):

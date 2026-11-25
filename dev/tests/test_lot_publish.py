@@ -383,3 +383,46 @@ def test_publish_removes_our_old_share_icon_only(tmp_path, sample):
     (share / publish.ICON_NAME).write_bytes(b"someone else's icon")
     publish.publish_lot(cfg, str(share), rows=rows[:50], dev_meta=devs, now=dt.datetime(2026, 11, 4, 9, 5))
     assert (share / publish.ICON_NAME).read_bytes() == b"someone else's icon"
+
+
+def test_data_file_replace_retries_a_brief_lock_and_stale_tmp_goes_first(tmp_path, sample, monkeypatch):
+    """PP-11: 백신 · 동기화가 데이터 파일을 잠깐 잡아도 몇 번 기다려 올리고, 쓰다 끊긴 1시간 넘은 .tmp 는 배포 첫머리에 지운다
+    (예전엔 배포가 끝까지 가야만 정리돼 실패가 이어지면 쌓였다) — 나중에 배포가 실패해도 정리는 이미 됐다."""
+    cfg, rows, devs = _publish_cfg(tmp_path, sample)
+    share = tmp_path / "share"
+    (share / "data").mkdir(parents=True)
+    old_tmp, new_tmp = share / "data" / "lot_x.html.1-2-3.tmp", share / "data" / "lot_y.html.4-5-6.tmp"
+    old_tmp.write_bytes(b"x" * 10)
+    new_tmp.write_bytes(b"y")
+    os.utime(old_tmp, (0, 0))
+    real, hits = os.replace, []
+
+    def flaky(src, dst):
+        if str(dst).endswith(".html") and os.sep + "data" + os.sep in str(dst) and len(hits) < 2:
+            hits.append(dst)
+            raise PermissionError(13, "잠깐 잡힘")
+        return real(src, dst)
+    monkeypatch.setattr(publish.os, "replace", flaky)
+    monkeypatch.setattr(collect, "REPLACE_WAIT_SEC", 0)
+    got = publish.publish_lot(cfg, str(share), rows=rows[:300], dev_meta=devs, now=dt.datetime(2026, 10, 27, 8, 15))
+    assert len(hits) == 2 and Path(got["data"]).is_file()
+    assert not old_tmp.exists() and new_tmp.exists()                              # 1시간 안 된 것은 남긴다(다른 실행이 쓰는 중일 수 있다)
+    monkeypatch.setattr(publish.collect, "write_html", lambda *a, **k: (_ for _ in ()).throw(OSError("끊김")))
+    os.utime(new_tmp, (0, 0))
+    with pytest.raises(OSError):
+        publish.publish_lot(cfg, str(share), rows=rows[:300], dev_meta=devs, now=dt.datetime(2026, 10, 27, 8, 16))
+    assert not new_tmp.exists()
+
+
+def test_local_html_does_not_retry_a_lock(tmp_path, sample, monkeypatch):
+    """수집 창의 결과 HTML(out_dir 없음)은 예전처럼 한 번만 — 사용자가 연 브라우저 탭 때문에 6초를 기다리지 않는다."""
+    rows, meta = sample
+    calls = []
+
+    def locked(src, dst):
+        calls.append(dst)
+        raise PermissionError(13, "열려 있음")
+    monkeypatch.setattr(collect.os, "replace", locked)
+    with pytest.raises(PermissionError):
+        collect.write_html(_cfg(tmp_path / "o", write_csv=False), rows[:200], meta["devices"], [], 0.0)
+    assert len(calls) == 1 and not list((tmp_path / "o").glob("*.tmp"))

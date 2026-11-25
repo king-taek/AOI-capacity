@@ -357,13 +357,16 @@ def job_key(job: str) -> str:
     return "".join(t for t in _JOB_SEP_RE.split(str(job).upper()) if t)
 
 
-def build_meta(store: dict, sort_key=None, *, max_changes: int = 40) -> dict:
+def build_meta(store: dict, sort_key=None, *, max_changes: int = 40, job_memo: Optional[dict] = None) -> dict:
     """캐시 `params` → HTML `meta.params` = {"v": 2, "jobs": [{"j": Job, "n": 장비 수, "t": 가장 최근 스캔, "z": gzip+base64(JSON)}]}.
     Job 하나의 JSON(아래)은 **그 Job 만의 pool** 을 갖고 gzip 으로 접어 둔다 — 30일 516 Job 이 펼치면 21MB 라서, 화면이 고를 때만 푼다
     (브라우저 내장 DecompressionStream, 바깥 요청 없음).
 
     {"pool": [문자열], "jobs": [{"j": Job, "d": [장비], "l": [[시각, Report]…], "g": [[그룹 이름, 접힘, [[zone, alg, [[키, 단위, 주석, 다수값, {장비 번호: 값}, [빠진 장비], 동률]…]]…]]…],
-      "h": [[시각, 장비, Report, [[이름, 이전, 지금]…], 더 있음]…]}]} — 문자열은 전부 pool 번호."""
+      "h": [[시각, 장비, Report, [[이름, 이전, 지금]…], 더 있음]…]}]} — 문자열은 전부 pool 번호.
+
+    `job_memo`(PH-02): 한 수집 실행 동안 같은 dict 를 넘기면 Job 묶음을 (Job 키, 들어간 스냅숏 키들)로 기억해 다음 호출(수집 HTML → 전체 배포)이
+    같은 Job 을 다시 만들지 않는다 — 같은 스냅숏 · 같은 blobs 면 결과가 바이트까지 같다. 같은 store 에만 쓴다."""
     blobs = store.get("blobs", {})
     _memo: Dict[Tuple[str, Optional[str]], dict] = {}
 
@@ -377,11 +380,18 @@ def build_meta(store: dict, sort_key=None, *, max_changes: int = 40) -> dict:
 
     files_of = lambda s: {rel: blobs.get(h, "") for rel, h in s.get("f", {}).items()}
     by_job: Dict[str, Dict[str, list]] = collections.defaultdict(lambda: collections.defaultdict(list))
-    for s in store.get("snaps", {}).values():
+    job_snaps: Dict[str, list] = collections.defaultdict(list)
+    for sk, s in store.get("snaps", {}).items():
         if s.get("job") and s.get("f"):
-            by_job[job_key(s["job"])][s.get("dev", "")].append(s)
+            jk = job_key(s["job"])
+            by_job[jk][s.get("dev", "")].append(s)
+            job_snaps[jk].append(sk)
     jobs_out = []
     for jk in sorted(by_job):
+        mkey = (jk, tuple(job_snaps[jk]), id(blobs), sort_key, max_changes)
+        if job_memo is not None and mkey in job_memo:
+            jobs_out.append(dict(job_memo[mkey]))
+            continue
         pool: List[str] = []
         pidx: Dict[str, int] = {}
 
@@ -469,6 +479,8 @@ def build_meta(store: dict, sort_key=None, *, max_changes: int = 40) -> dict:
         job = max((s for d in devs for s in per_dev[d]), key=lambda s: s.get("t") or "")["job"]   # 표시 이름 = 가장 최근 스캔의 원문
         jobs_out.append({"j": job, "n": len(devs), "t": max((latest[d].get("t") or "") for d in devs),
                          "z": base64.b64encode(gzip.compress(raw, 6, mtime=0)).decode("ascii")})
+        if job_memo is not None:
+            job_memo[mkey] = jobs_out[-1]
     return {"v": 2, "jobs": jobs_out}
 
 

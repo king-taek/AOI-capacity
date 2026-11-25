@@ -1375,8 +1375,11 @@ def _is_placeholder(w: dict) -> bool:
     ★ Lot 이 비면 `os.path.join` 에서 그 칸이 통째로 사라져 **Setup 폴더의 엉뚱한 INI** 를 가리킨다.
       (실물: AOI-18 은 Report 1,397개 중 절반 이상이 파일명 규칙 밖이라 Lot 을 못 읽는 경우가 있다.)"""
     lot, wid = str(w.get("lot") or ""), str(w.get("wafer_id") or "")
-    return bool(re.match(r"^loadport", lot, re.I) or re.match(r"^slot\s*\d+", wid, re.I)
-                or not wid.strip() or not lot.strip())
+    return bool(_LOADPORT_RE.match(lot) or _SLOT_RE.match(wid) or not wid.strip() or not lot.strip())
+
+
+_LOADPORT_RE = re.compile(r"^loadport", re.I)
+_SLOT_RE = re.compile(r"^slot\s*\d+", re.I)
 
 
 ScanRoots = List[Tuple[str, Optional[dt.date]]]   # (백업 폴더 경로, 경계 날짜 또는 None) — 우선순위 순
@@ -3329,26 +3332,33 @@ def _version_info() -> dict:
         return {}
 
 
-def _embed_rows(rows: List[dict]) -> dict:
+def _embed_rows(rows: List[dict], blank: Tuple[str, ...] = ()) -> dict:
     """HTML 에 박을 형태로 접는다 — `POOLED_COLS` 는 문자열 풀의 번호로 바꾼다.
 
     장비 30대 × 보관 90일이면 행이 십수만 개다. 장비명·Job·Setup·Report 이름·상태 문구는 행마다
     같은 값이 되풀이되므로 그대로 두면 HTML 이 수십 MB 가 된다. 풀로 접으면 그 반복이 사라진다.
-    (CSV 는 사람이 읽는 파일이라 접지 않는다 — `_write_csv` 는 원래 문자열을 그대로 쓴다.)"""
+    (CSV 는 사람이 읽는 파일이라 접지 않는다 — `_write_csv` 는 원래 문자열을 그대로 쓴다.)
+
+    `blank` 의 열은 행 값과 상관없이 빈 값으로 접는다 — LOT 배포판이 행마다 사본을 만들지 않게(결과는 사본을 접은 것과 같다)."""
     pool: List[str] = []
     index: Dict[str, int] = {}
-
-    def put(v) -> int:
-        v = "" if v is None else str(v)
-        i = index.get(v)
-        if i is None:
-            i = index[v] = len(pool)
-            pool.append(v)
-        return i
-
-    pooled = [c in POOLED_COLS for c in OUT_COLS]
-    out = [[put(r.get(c, "")) if pooled[i] else str(r.get(c, "") or "")
-            for i, c in enumerate(OUT_COLS)] for r in rows]
+    cols = [(c, c in POOLED_COLS, c in blank) for c in OUT_COLS]
+    out = []
+    for r in rows:
+        g = r.get
+        row = []
+        for c, pooled, empty in cols:
+            v = "" if empty else g(c, "")
+            if pooled:
+                v = "" if v is None else (v if type(v) is str else str(v))
+                i = index.get(v)
+                if i is None:
+                    i = index[v] = len(pool)
+                    pool.append(v)
+                row.append(i)
+            else:
+                row.append(str(v or ""))
+        out.append(row)
     return {"cols": list(OUT_COLS), "pooled": [c for c in OUT_COLS if c in POOLED_COLS],
             "pool": pool, "rows": out}
 
@@ -3360,12 +3370,19 @@ MB = 1024 * 1024
 
 def _payload(emb: dict, meta: dict) -> str:
     """접힌 행 + meta → HTML 에 박을 JSON 문자열. `</` → `<\\/` 는 JSON 으로는 같은 문자열이면서 HTML 파서가 `</script>` 로 읽지 못하게 한다."""
-    emb["meta"] = meta
+    return _payload_join(_emb_json(emb), meta)
+
+
+def _emb_json(emb: dict) -> str:
+    """접힌 행(meta 없이)의 JSON — 수집 끝 HTML 여러 장이 같은 행이면 한 번만 만든다(`HtmlPrep`)."""
     return json.dumps(emb, ensure_ascii=False, separators=(",", ":")).replace("</", "<\\/")
 
 
-def _utf8_len(text: str) -> int:
-    return len(text.encode("utf-8"))
+def _payload_join(emb_json: str, meta: dict) -> str:
+    """`json.dumps({**emb, "meta": meta})` 와 바이트까지 같다 — 키 순서(cols · pooled · pool · rows · meta)와 구분자가 같고,
+    `</` 는 두 조각의 경계(`]` · `,"meta":`)에 걸치지 않는다."""
+    m = json.dumps(meta, ensure_ascii=False, separators=(",", ":")).replace("</", "<\\/")
+    return f'{emb_json[:-1]},"meta":{m}}}' if len(emb_json) > 2 else f'{{"meta":{m}}}'
 
 
 def _wafer_key(r: dict) -> str:
@@ -3374,7 +3391,10 @@ def _wafer_key(r: dict) -> str:
     합성 행 · LoadPort/Slot 자리표시는 자재가 아니다(전부 한 열쇠로 묶여 버린다)."""
     if r.get("kind") or _is_placeholder(r):
         return ""
-    return re.sub(r"[^A-Z0-9]", "", str(r.get("wafer_id") or "").upper())
+    return _NON_ALNUM_RE.sub("", str(r.get("wafer_id") or "").upper())
+
+
+_NON_ALNUM_RE = re.compile(r"[^A-Z0-9]")
 
 
 def _row_day(r: dict, memo: Dict[str, str]) -> str:
@@ -3385,7 +3405,8 @@ def _row_day(r: dict, memo: Dict[str, str]) -> str:
     return memo[raw]
 
 
-def rows_for_range(rows: List[dict], day_from: str = "", day_to: str = "") -> Tuple[List[dict], str, str]:
+def rows_for_range(rows: List[dict], day_from: str = "", day_to: str = "", *,
+                   days: Optional[List[str]] = None) -> Tuple[List[dict], str, str]:
     """결과 HTML 을 기간으로 만들 때(10/5) 넣을 행 → (행, 실제 첫날, 실제 끝날). 빈 값은 '처음부터' · '끝까지'.
 
     날짜는 행의 배치 시작일(없으면 Wafer 시작일) — 한 Report 의 행은 함께 들어간다. 기간 안 행에 더해 **맥락**을 넣는다:
@@ -3393,32 +3414,72 @@ def rows_for_range(rows: List[dict], day_from: str = "", day_to: str = "") -> Tu
     (Rescan 은 같은 자재의 앞선 시도가 PASS 였는지로 정한다 — D63, 기간 제한 없음). 화면은 `meta.range.from~to` 밖의 날을
     그리지 않으므로 맥락 행은 계산에만 쓰인다 → 각 날의 장비-일 값이 전부 담은 파일과 같다(가드 `test_html_range.py`).
     원래 행 순서를 지킨다 — 화면 모델의 동점 처리가 입력 순서를 따른다(9/23 실측). 날짜를 모르는 행은 끝을 정하지 않았을 때만 넣는다."""
+    picked, lo, hi = _range_pick(rows, day_from, day_to, days)
+    return (list(rows) if picked is None else [rows[i] for i in picked]), lo, hi
+
+
+def _row_days(rows: List[dict]) -> List[str]:
+    """행마다 날짜(`_row_day`) — 한 번만 계산해 기간 자르기 · 가진 날짜가 같이 쓴다(PH-03)."""
     memo: Dict[str, str] = {}
-    days = sorted({d for d in (_row_day(r, memo) for r in rows) if d})
-    if not days:
-        return list(rows), "", ""
-    lo = max(day_from or days[0], days[0])
-    hi = min(day_to or days[-1], days[-1])
+    return [_row_day(r, memo) for r in rows]
+
+
+def _range_pick(rows: List[dict], day_from: str, day_to: str,
+                days: Optional[List[str]] = None) -> Tuple[Optional[List[int]], str, str]:
+    """`rows_for_range` 의 본체 → (고른 행 번호(원래 순서) — None 이면 전부, 첫날, 끝날). `days` = `_row_days(rows)`(없으면 여기서)."""
+    rd = _row_days(rows) if days is None else days
+    known = sorted({d for d in rd if d})
+    if not known:
+        return None, "", ""
+    lo = max(day_from or known[0], known[0])
+    hi = min(day_to or known[-1], known[-1])
     if not day_from and not day_to:
-        return list(rows), days[0], days[-1]
+        return None, known[0], known[-1]
     if lo > hi:
         return [], lo, hi
     d0 = (dt.date.fromisoformat(lo) - dt.timedelta(days=1)).isoformat()
     d1 = (dt.date.fromisoformat(hi) + dt.timedelta(days=1)).isoformat()
-    pick = [r for r in rows if d0 <= _row_day(r, memo) <= d1 or (not _row_day(r, memo) and not day_to)]
-    have = {id(r) for r in pick}
-    reps = {(r.get("device"), r.get("report")) for r in pick}
-    keys = {k for k in (_wafer_key(r) for r in pick) if k}
-    for r in rows:
-        if id(r) in have:
-            continue
-        d = _row_day(r, memo)
-        if (r.get("device"), r.get("report")) in reps or (d and d < d0 and _wafer_key(r) in keys):
-            pick.append(r)
-            have.add(id(r))
-    order = {id(r): k for k, r in enumerate(rows)}
-    pick.sort(key=lambda r: order[id(r)])
-    return pick, lo, hi
+    open_end = not day_to
+    inn = [(d0 <= d <= d1) if d else open_end for d in rd]
+    if all(inn):
+        return None, lo, hi                         # 기간이 데이터 전부를 덮는다 — 맥락 찾기 없이 그대로(순서 같음)
+    reps = set()
+    keys = set()
+    for r, i in zip(rows, inn):
+        if i:
+            reps.add((r.get("device"), r.get("report")))
+            k = _wafer_key(r)
+            if k:
+                keys.add(k)
+    picked = []
+    for n, (r, d, i) in enumerate(zip(rows, rd, inn)):
+        if i or (r.get("device"), r.get("report")) in reps or (d and d < d0 and _wafer_key(r) in keys):
+            picked.append(n)
+    return picked, lo, hi
+
+
+class HtmlPrep:
+    """수집이 끝난 뒤 같은 행으로 HTML 을 여러 장(수집 HTML · LOT 배포 · 전체 배포) 만들 때 한 번만 하는 준비(PH-01 · PP-07):
+    템플릿 읽기 · 행마다 날짜 · 가진 날짜 · 같은 행 묶음의 접기와 JSON · 파라미터 Job 묶음(PH-02). **결과 바이트는 준비 없이 만든 것과 같다**
+    (가드 `test_html_prep.py`). 같은 `rows` 리스트(같은 객체)에만 쓴다 — 다른 리스트로 부르면 `write_html` 이 무시한다."""
+
+    def __init__(self, rows: List[dict]):
+        self.rows = rows
+        self.days = _row_days(rows)
+        self.known = sorted({d for d in self.days if d})
+        self.tpl: Optional[str] = None
+        self.emb: Dict[tuple, str] = {}             # (lot_only, 고른 행) → 접힌 행 JSON(meta 없이)
+        self.params: Dict[tuple, dict] = {}         # params.build_meta 의 Job 묶음 기억
+
+    def template(self) -> str:
+        if self.tpl is None:
+            from .utils import paths
+            self.tpl = nas_guard.read_text(paths.template_path())
+        return self.tpl
+
+
+REPLACE_TRIES = 6          # 공유 폴더(out_dir)에 쓸 때 교체를 몇 번 시도할지 — 백신 · 동기화 프로그램이 잠깐 잡은 파일(publish._write_text 와 같은 수)
+REPLACE_WAIT_SEC = 1.0
 
 
 def range_name(output_name: str, day_from: str, day_to: str) -> str:
@@ -3427,21 +3488,23 @@ def range_name(output_name: str, day_from: str, day_to: str) -> str:
     return f"{stem}_{day_from}~{day_to}{ext or '.html'}"
 
 
-def params_for_range(store: dict, r_from: str = "", r_to: str = "") -> dict:
+def params_for_range(store: dict, r_from: str = "", r_to: str = "", *, memo: Optional[dict] = None) -> dict:
     """파라미터 탭 묶음(D89) — 기간 끝날까지의 스냅숏으로(그날 기준 '가장 최근' 값), Job 은 기간 안에 한 번이라도 돈 것만(HTML 크기)."""
     snaps = {k: s for k, s in store.get("snaps", {}).items() if not r_to or (s.get("t") or "")[:10] <= r_to}
     if r_from:
         live = {s.get("job") for s in snaps.values() if (s.get("t") or "")[:10] >= r_from}
         snaps = {k: s for k, s in snaps.items() if s.get("job") in live}
-    return params_mod.build_meta({"blobs": store.get("blobs", {}), "snaps": snaps}, sort_key=devices_mod.sort_key)
+    return params_mod.build_meta({"blobs": store.get("blobs", {}), "snaps": snaps}, sort_key=devices_mod.sort_key, job_memo=memo)
 
 
 def write_html(cfg: dict, rows: List[dict], dev_meta: List[dict], errors: List[dict], started: float, *,
                mode: str = "auto", log: Optional[LogFn] = None, progress: Optional[ProgressFn] = None,
                timing: Optional[dict] = None, warnings: Optional[List[dict]] = None,
                day_from: str = "", day_to: str = "", params_store: Optional[dict] = None,
-               lot_only: bool = False, out_dir: str = "", out_name: str = "") -> str:
+               lot_only: bool = False, out_dir: str = "", out_name: str = "", prep: Optional["HtmlPrep"] = None) -> str:
     """template.html 에 데이터를 넣어 출력 폴더에 HTML 한 장을 쓴다(분할 없음).
+
+    `prep`(`HtmlPrep(rows)`, 같은 `rows` 객체로 만든 것)을 주면 수집 끝에 여러 장을 만들 때 같은 준비를 되풀이하지 않는다 — 결과 바이트는 같다.
 
     `lot_only`(10/27, 공유 발행 시험): LOT 추적 탭만 보이는 한 장 — 기간을 안 주면 가진 데이터 전부, 파라미터 · 레시피 묶음 · LOT 추적이 안 쓰는 열은 담지 않고
     CSV 도 쓰지 않는다. `out_dir`·`out_name` 을 주면 그 로컬 폴더·이름으로 쓴다(NAS 아래면 거부).
@@ -3457,15 +3520,15 @@ def write_html(cfg: dict, rows: List[dict], dev_meta: List[dict], errors: List[d
     nas_guard.check_cfg(cfg)  # ★ NAS 아래에는 절대 쓰지 않는다
     if progress:
         progress(0, 0, i18n.KO.COLLECT_PHASE_WRITE)
-    from .utils import paths
 
     t_html = time.perf_counter()
-    tpl = nas_guard.read_text(paths.template_path())
+    if prep is None or prep.rows is not rows:
+        prep = HtmlPrep(rows)
+    tpl = prep.template()
     if tpl.count("__DATA__") != 1:                 # C07: 자리는 정확히 한 곳 — 치환한 큰 사본을 만들지 않고 앞·데이터·뒤를 차례로 쓴다
         raise RuntimeError(f"template.html 에 __DATA__ 자리가 {tpl.count('__DATA__')}곳입니다(정확히 1곳이어야 합니다)")
     cut = tpl.index("__DATA__")
     prefix, suffix = tpl[:cut], tpl[cut + len("__DATA__"):]
-    del tpl
     ver = _version_info()
     now = dt.datetime.now()
     meta = {"generated": now.strftime("%Y-%m-%d %H:%M"), "generated_iso": now.isoformat(timespec="seconds"),
@@ -3492,27 +3555,30 @@ def write_html(cfg: dict, rows: List[dict], dev_meta: List[dict], errors: List[d
         meta["recipe_groups"] = rg                 # D67: 화면의 레시피 묶음 — 통계·표시에만, Rescan 판정에는 쓰지 않는다
     # 기간(10/5): 고른 기간이 있으면 그 기간, 없으면 cfg html_days(최근 N일, 0 = 전부). 분할은 없다 — 9/23 분할은 사용자 요청으로 롤백
     all_rows = rows
-    memo: Dict[str, str] = {}
-    known_days = sorted({d for d in (_row_day(r, memo) for r in all_rows) if d})
+    known_days = prep.known
     explicit = bool(day_from or day_to)
     if not explicit and not lot_only and int(cfg.get("html_days") or 0) > 0:
         anchor = dt.date.fromisoformat(known_days[-1]) if known_days else now.date()   # 가진 데이터의 끝날부터 거꾸로
         day_from = (anchor - dt.timedelta(days=int(cfg["html_days"]) - 1)).isoformat()
-    rows, r_from, r_to = rows_for_range(all_rows, day_from or "", day_to or "")
+    picked, r_from, r_to = _range_pick(all_rows, day_from or "", day_to or "", prep.days)
+    rows = all_rows if picked is None else [all_rows[i] for i in picked]
     if r_from:
         meta["range"] = {"from": r_from, "to": r_to, "explicit": explicit}
     if known_days:
         meta["data_from"], meta["data_to"] = known_days[0], known_days[-1]   # 가진 데이터 전체의 첫날 — 첫날은 수집 창이 도중에 시작해 '부분'
     pst = params_store if params_store is not None else (timing or {}).get("params_store")
     if pst and pst.get("snaps") and not lot_only:
-        meta["params"] = params_for_range(pst, r_from, r_to)
+        meta["params"] = params_for_range(pst, r_from, r_to, memo=prep.params)
     if lot_only:
-        rows = [{**r, **{c: "" for c in LOT_ONLY_BLANK_COLS}} for r in rows if not r.get("kind")]   # 합성 행(kind)은 LOT 추적이 건너뛴다
-    emb = _embed_rows(rows)
+        rows = [r for r in rows if not r.get("kind")]   # 합성 행(kind)은 LOT 추적이 건너뛴다 — 안 쓰는 열은 접을 때 비운다(LOT_ONLY_BLANK_COLS)
+    ekey = (lot_only, None if picked is None else tuple(picked))
+    emb_json = prep.emb.get(ekey)
+    if emb_json is None:                           # 접힌 dict 는 곧 문자열이 된다 — 큰 참조를 들지 않는다(C07)
+        emb_json = prep.emb[ekey] = _emb_json(_embed_rows(rows, LOT_ONLY_BLANK_COLS if lot_only else ()))
     if meta["timing"]:
         meta["timing"]["html_ms"] = int((time.perf_counter() - t_html) * 1000)   # 템플릿 읽기 + 접기까지(쓰기 전)
-    data = _payload(emb, meta)
-    del emb                                        # 접힌 dict 는 문자열이 됐다 — 큰 참조를 놓는다(C07)
+    data = _payload_join(emb_json, meta)
+    del emb_json
     out_root = out_dir or cfg["output_dir"]
     if out_dir:
         nas_guard.assert_local(out_dir, nas_guard.roots_for_cfg(cfg))     # ★ 따로 준 폴더도 NAS 아래면 거부
@@ -3520,7 +3586,6 @@ def write_html(cfg: dict, rows: List[dict], dev_meta: List[dict], errors: List[d
     name = out_name or (range_name(cfg["output_name"], r_from, r_to) if explicit and r_from else cfg["output_name"])
     target = os.path.join(out_root, name)
     tmp = _unique_tmp(target)
-    size = _utf8_len(prefix) + _utf8_len(data) + _utf8_len(suffix)
     build_s = time.perf_counter() - t_html                    # 템플릿 읽기 · 기간 자르기 · 접기 · JSON 만들기(쓰기 전)
     t_write = time.perf_counter()
     try:
@@ -3530,7 +3595,16 @@ def write_html(cfg: dict, rows: List[dict], dev_meta: List[dict], errors: List[d
             f.write(suffix)
             f.flush()
             os.fsync(f.fileno())
-        os.replace(tmp, target)
+        size = os.path.getsize(tmp)                 # 72MB 문자열을 크기 재려고 한 번 더 인코딩하지 않는다(PH-01)
+        tries = REPLACE_TRIES if out_dir else 1      # PP-11: 공유 폴더(out_dir)는 백신 · 동기화가 잠깐 잡아도 몇 번 기다려 다시
+        for i in range(tries):
+            try:
+                os.replace(tmp, target)
+                break
+            except PermissionError:
+                if i + 1 >= tries:
+                    raise
+                time.sleep(REPLACE_WAIT_SEC)
     finally:
         if os.path.isfile(tmp):                     # 자기가 만든 임시 파일만 지운다(원본에는 손대지 않는다)
             try:
