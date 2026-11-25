@@ -1677,7 +1677,7 @@ function enterView(root){if(!G()||reduced())return;
 const NAV_N=10,NAV_KC=4000,NAV_CC=115,NAV_KD=1000,NAV_CD=45,NAV_FMAX=45000,NAV_G=14,NAV_WQ=.5,NAV_HZ=3840,NAV_CAP=7,NAV_FPS=60;
 /* 탭 첫 진입 때 색인(LOT 추적 · RDL 단일스캔)을 만드느라 화면이 0.7초 멈추면 표시자 이동 시간이 그동안 흘러 한 번에 건너뛴다(10/19 실측) —
    화면이 뜬 뒤 한가할 때 미리 만들어 둔다(캐시되므로 첫 클릭엔 비용 0, 오류는 그 탭을 열 때 다시 난다). */
-function navWarm(now){if(typeof setTimeout!=="function")return;setTimeout(()=>{try{lotIndex();}catch(e){}setTimeout(()=>{try{rcpIndex();}catch(e){}setTimeout(()=>{try{okIndex();okLotKeys();}catch(e){}},now?0:150);},now?0:150);},now?0:500);}   /* now = 덮개 뒤(ANIM-05) — 기다릴 까닭이 없다 · 11/25(JS-08): Overkill 색인도 미리 — 첫 클릭 0.2초 멈칫 없앰 */
+function navWarm(now){if(typeof setTimeout!=="function")return;setTimeout(()=>{try{lotIndex();}catch(e){}setTimeout(()=>{try{rcpIndex();}catch(e){}},now?0:150);},now?0:500);}   /* now = 덮개 뒤(ANIM-05) — 기다릴 까닭이 없다 */
 function navParts(ind){if(!ind.__p)ind.__p={l:ind.querySelector(".l"),m:ind.querySelector(".m"),r:ind.querySelector(".r"),s:ind.querySelector(".s")};return ind.__p;}
 const navTf=(L,R,sy=1)=>{const w=Math.max(2*NAV_CAP,R-L),y=sy.toFixed(4);return {l:`translateX(${L.toFixed(2)}px) scaleY(${y})`,m:`translateX(${(L+NAV_CAP-1).toFixed(2)}px) scale(${Math.max(0,w-2*NAV_CAP+2).toFixed(2)},${y})`,r:`translateX(${(L+w-NAV_CAP).toFixed(2)}px) scaleY(${y})`};};
 function navSet(ind,L,R){const p=navParts(ind),t=navTf(L,R);for(const k of ["l","m","r"])if(p[k])p[k].style.transform=t[k];
