@@ -1,6 +1,6 @@
 """LOT 추적 발행 시험(10/27) — LOT 추적 탭만 담은 HTML 한 장을 이 PC 의 시험 폴더에 만든다(NAS 는 읽지 않고, 공유 폴더에는 쓰지 않는다).
 
-- `write_html(lot_only=True)`: `meta.lot_only` · 기간 전부 · 파라미터 · 레시피 묶음 · CSV 없음 · 안 쓰는 열은 값만 비운다(열 이름은 그대로).
+- `write_html(lot_only=True)`: `meta.lot_only` · 기간 전부 · 파라미터 · 레시피 묶음 · CSV 없음 · 안 쓰는 열은 담지 않는다(11/25 — 예전엔 값만 비웠다).
 - `out_dir` 은 NAS 아래면 거부한다. 화면(template)은 `meta.lot_only` 일 때 탭 줄에 LOT 추적만 둔다."""
 from __future__ import annotations
 
@@ -48,11 +48,13 @@ def test_lot_only_file_has_all_days_blank_columns_and_no_csv(tmp_path, sample):
     assert "<title>스캔을 어디에 했니?</title>" in Path(path).read_text(encoding="utf-8")[:2000]      # 11/4: 배포판 제목
     assert "params" not in m and "recipe_groups" not in m, [k for k in ("params", "recipe_groups") if k in m]
     assert (m["range"]["from"], m["range"]["to"]) == (m["data_from"], m["data_to"])      # html_days=7 이어도 가진 데이터 전부
-    back, _ = sample_rows.unfold(emb)
+    assert emb["cols"] == list(collect.LOT_ONLY_COLS) and set(emb["pooled"]) <= set(emb["cols"])   # 11/25: 안 쓰는 열은 담지 않는다(값만 비우던 것 — 90일 −32%)
+    pool, pooled = emb["pool"], set(emb["pooled"])
+    back = [{c: (pool[v] if c in pooled else v) for c, v in zip(emb["cols"], a)} for a in emb["rows"]]
     keep_rows = [r for r in rows if not r.get("kind")]
     assert len(back) == len(keep_rows) < len(rows)                                    # 합성 행(kind)은 담지 않는다
     for c in collect.LOT_ONLY_BLANK_COLS:
-        assert c in emb["cols"] and all(r.get(c) == "" for r in back)
+        assert c not in emb["cols"]
     assert set(collect.LOT_ONLY_BLANK_COLS) | set(collect.LOT_ONLY_KEEP_COLS) == set(collect.OUT_COLS)
     for c in ("wafer_id", "lot", "job", "device", "slot_no", "status", "recipe", "faults", "report", "batch_start", "wafer_start_time"):
         assert [r.get(c) or "" for r in back] == [r.get(c) or "" for r in keep_rows], c                   # LOT 추적이 쓰는 열은 그대로

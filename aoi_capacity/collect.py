@@ -53,7 +53,7 @@ import time
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from html.parser import HTMLParser
-from typing import Callable, Dict, List, Optional, Tuple
+from typing import Callable, Dict, List, Optional, Sequence, Tuple
 
 from . import devices as devices_mod
 from . import i18n, nas_guard, scope
@@ -176,10 +176,11 @@ POOLED_COLS = tuple(c for c in OUT_COLS if c not in ("wafer_start_time", "wafer_
 LOT_PUBLISH_NAME = "AOI_LOT_tracking.html"
 LOT_PUBLISH_DIR = "publish_test"
 PUBLISH_FULL_HIDDEN_TABS = ("recipe",)           # 전체 배포판이 탭 줄에서 숨겨 두는 탭(화면 `meta.hidden_tabs`)
-#: LOT 추적만 담는 파일(`write_html(lot_only=True)`)이 값을 남기는 열 — 나머지 열은 값만 비운다(열 이름은 그대로, 풀의 빈 문자열 하나로 접힌다).
+#: LOT 추적만 담는 파일(`write_html(lot_only=True)`)이 담는 열 — 나머지 열은 담지 않는다(11/25: 예전엔 값만 비우고 열은 남겨 90일치 행 JSON 의 약 1/3 이 빈 칸이었다 — 화면은 열 이름으로 읽어 없는 열은 빈 값).
 #: LOT 추적 화면(`lotIndex` · `lotFamily` · `lotHtml`)이 읽는 열이다(가드 `test_lot_publish.py` 가 템플릿 소스에서 확인).
 LOT_ONLY_KEEP_COLS = ("device", "kind", "job", "lot", "wafer_id", "status", "recipe", "slot_no", "wafer_start_time", "batch_start", "report", "faults")
 LOT_ONLY_BLANK_COLS = tuple(c for c in OUT_COLS if c not in LOT_ONLY_KEEP_COLS)
+LOT_ONLY_COLS = tuple(c for c in OUT_COLS if c in LOT_ONLY_KEEP_COLS)            # 배포판에 담는 순서(OUT_COLS 순)
 REPORT_RE = re.compile(r"^(.+?)_(\d{4})_(.+)_(\d{1,2}-[A-Za-z]{3}-\d{2})_\((\d{2}\.\d{2}\.\d{2})\)_BatchReport\.html?$", re.I)
 #: 장비마다 다르다 — AOI-8·25 는 `13-Sep-26 01:03:29 PM`, AOI-1 은 `9/16/2026 1:54:03 PM`,
 #: INI 의 BatchStartTime 은 `09/10/2026 18:50:08`(24시간제).
@@ -3329,12 +3330,13 @@ def _version_info() -> dict:
         return {}
 
 
-def _embed_rows(rows: List[dict]) -> dict:
+def _embed_rows(rows: List[dict], cols: Sequence[str] = OUT_COLS) -> dict:
     """HTML 에 박을 형태로 접는다 — `POOLED_COLS` 는 문자열 풀의 번호로 바꾼다.
 
     장비 30대 × 보관 90일이면 행이 십수만 개다. 장비명·Job·Setup·Report 이름·상태 문구는 행마다
     같은 값이 되풀이되므로 그대로 두면 HTML 이 수십 MB 가 된다. 풀로 접으면 그 반복이 사라진다.
-    (CSV 는 사람이 읽는 파일이라 접지 않는다 — `_write_csv` 는 원래 문자열을 그대로 쓴다.)"""
+    (CSV 는 사람이 읽는 파일이라 접지 않는다 — `_write_csv` 는 원래 문자열을 그대로 쓴다.)
+    `cols` 를 주면 그 열만 담는다(LOT 추적 배포판 — 행을 복사하지 않고 접을 때 고른다)."""
     pool: List[str] = []
     index: Dict[str, int] = {}
 
@@ -3346,10 +3348,10 @@ def _embed_rows(rows: List[dict]) -> dict:
             pool.append(v)
         return i
 
-    pooled = [c in POOLED_COLS for c in OUT_COLS]
+    pooled = [c in POOLED_COLS for c in cols]
     out = [[put(r.get(c, "")) if pooled[i] else str(r.get(c, "") or "")
-            for i, c in enumerate(OUT_COLS)] for r in rows]
-    return {"cols": list(OUT_COLS), "pooled": [c for c in OUT_COLS if c in POOLED_COLS],
+            for i, c in enumerate(cols)] for r in rows]
+    return {"cols": list(cols), "pooled": [c for c in cols if c in POOLED_COLS],
             "pool": pool, "rows": out}
 
 
@@ -3507,8 +3509,8 @@ def write_html(cfg: dict, rows: List[dict], dev_meta: List[dict], errors: List[d
     if pst and pst.get("snaps") and not lot_only:
         meta["params"] = params_for_range(pst, r_from, r_to)
     if lot_only:
-        rows = [{**r, **{c: "" for c in LOT_ONLY_BLANK_COLS}} for r in rows if not r.get("kind")]   # 합성 행(kind)은 LOT 추적이 건너뛴다
-    emb = _embed_rows(rows)
+        rows = [r for r in rows if not r.get("kind")]   # 합성 행(kind)은 LOT 추적이 건너뛴다 — 행 dict 는 복사하지 않는다(11/25: 90일치 46만 행 복사가 최고 메모리 532MB)
+    emb = _embed_rows(rows, LOT_ONLY_COLS if lot_only else OUT_COLS)
     if meta["timing"]:
         meta["timing"]["html_ms"] = int((time.perf_counter() - t_html) * 1000)   # 템플릿 읽기 + 접기까지(쓰기 전)
     data = _payload(emb, meta)
