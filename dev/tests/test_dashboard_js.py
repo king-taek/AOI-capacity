@@ -768,10 +768,10 @@ def test_lot_tab_groups_by_wafer_id_not_by_name_and_follows_devices():
     assert len(ks) == 2                                                    # 이름이 둘이어도 Lot 은 하나 + ZZZ-1
     lot = next(k for k in ks if "LPT-PIDS5" in lst.split(f'lp:lot:{k}"')[1].split("</button>")[0])
     out = _lot_screen(rows, lot)
-    assert out.count('class="lotatt"') == 2 and "ZZZ-1" not in out.split("검사 순서")[1]
+    assert out.count('class="lotatt"') == 2 and "ZZZ-1" not in out.split("스캔 순서")[1]
     assert "TYPO-RDL3" in out and "ALIGN_ERROR" in out and 'class="gap"' not in out and "+23일" not in out   # 10/25: 시작 밑 '+간격' 은 없앴다
     assert out.count('<b class="same">') == 0 and 'class="lotbox"' in out and "max-height" not in out.split('class="lotbox"')[1][:40]
-    assert 'class="ix num">1<' in out and 'class="ix num">2<' in out                       # 검사 # = 격자 열 번호
+    assert 'class="ix num">1<' in out and 'class="ix num">2<' in out                       # 스캔 번호 = 격자 열 번호
     assert "확인 필요" not in out and "lotconf" not in out
     (q,) = screen(rows, meta("AOI-1", "AOI-2"), [["lotHtml"]], state={"view": "lot", "lotQ": "ewb6"})
     assert "Wafer 38135F75EWB6" in q
@@ -791,7 +791,28 @@ def test_lot_tab_never_merges_past_25_wafers_and_shows_cross_rows():
     assert len(ks) == 2
     big = next(k for k in ks if "25 wafer" in _lot_screen(rows).split(f'lp:lot:{k}"')[1].split("</button>")[0])
     out = _lot_screen(rows, big)
-    assert "겹침" in out and "다른 LOT 이름" in out and 'class="lotatt xo"' in out   # 10/24: '.x'(닫기 단추 32px) 와 겹쳐 줄이 납작해지던 것 — 이름을 xo 로
+    assert "다른 LOT 과 겹침 1번" in out and ">다른 LOT</span>" in out and 'class="lotatt xo"' in out   # 10/24: '.x'(닫기 단추 32px) 와 겹쳐 줄이 납작해지던 것 — 이름을 xo 로
+    assert "다른 LOT 이름" not in out and "스캔 순서 <span" in out and "다른 LOT 1번(흐림)" in out           # 11/25(LOT-03 · LOTE-07 · LOTA-13): 한 낱말 줄기 · 표 제목 숫자
+
+
+def test_lot_tab_wafer_search_counts_before_cut_and_wafer_mode_shows_results():
+    """11/25 점검(LOTA-04 · LOTA-05 · LOTA-06 · LOTA-07 · LOTC-08): Wafer 검색은 자르기 전 개수를 적고 3글자 미만이면 찾지 않는다.
+    Wafer 한 장을 고르면 PASS 칸 대신 결과 글자 · 슬롯, 그 Wafer 가 든 LOT 전체로 가는 단추. 재스캔 칸 툴팁은 앞 PASS 스캔을 말하고, 상한 초과 칸은 'Max'."""
+    ids = [f"QWE{i:06d}X" for i in range(14)]
+    rows = [w("AOI-1", i, "00:10", "00:20", lot="QQ-1", report="a.htm") | {"recipe": "x20", "slot_no": str(n + 1)} for n, i in enumerate(ids)] + \
+           [w("AOI-2", i, "02:10", "02:20", lot="QQ-1", report="b.htm") | {"recipe": "x20"} for i in ids[:2]] + \
+           [w("AOI-2", ids[2], "02:10", "02:20", lot="QQ-1", report="b.htm", status="Scan 2D - Max Fault Exceeded.")]
+    lst = _lot_screen(rows, lotQ="qwe0")
+    assert "Wafer 14개 중 12개 표시" in lst and lst.count("Wafer QWE") == 12
+    assert "Wafer QWE" not in _lot_screen(rows, lotQ="qw")                       # 3글자 미만은 Wafer 를 찾지 않는다
+    assert "와 맞는 LOT · Wafer 가 없습니다" in _lot_screen(rows, lotQ="zzzqq")
+    (k,) = _lot_keys(_lot_screen(rows))
+    (out,) = screen(rows, meta("AOI-1", "AOI-2"), [["lotHtml"]], state={"view": "lot", "lotPick": {"k": "wid", "v": ids[0]}})
+    assert '<b class="rs ok">PASS</b> <small class="muted">#1</small>' in out and "결과 · 슬롯" in out
+    assert "LOT QQ-1 · 14 wafer 전체 보기" in out and "LOT 이름 1개" in out and "이 Wafer 스캔 시간" in out
+    full = _lot_screen(rows, k)
+    assert "재스캔 — 스캔 1(" in full and "AOI-1) PASS 뒤 다시" in full
+    assert ">Max</i>" in full and "건너뜀·중단" in full and "스캔 안 함" in full
 
 
 def test_lot_tab_ignores_slot_ids_and_parses_kla_names():
@@ -846,7 +867,7 @@ def test_lot_tab_merges_one_char_ocr_misreads_but_not_other_wafers():
     (k,) = _lot_keys(_lot_screen(rows))
     out = _lot_screen(rows, k)
     assert "ID 판독 차이 1" in out and "48135G04EWB7 → 38135G04EWB7" in out and "25 wafer" in out
-    assert out.split("Wafer × 검사")[1].count('class="lw mono') == 25                    # 한 장은 한 줄
+    assert out.split("Slot map &amp; 스캔 기록")[1].count('class="lw mono') == 25                    # 한 장은 한 줄
     other = ["99999X04EWB7" if x == "38135G04EWB7" else x for x in good]                  # 세 글자 넘게 다름 → 다른 Wafer
     rows2 = [w("K1", x, "00:10", "00:20", lot="TB500.INT795@6412", report="KLA:a") for x in other] + \
             [w("AOI-20", x, "02:10", "02:20", lot="LNF-PIDS3", report="b.htm") for x in good]
@@ -860,7 +881,7 @@ def test_lot_tab_matrix_cells_show_defect_counts():
             w("AOI-1", ids[1], "00:20", "00:30", lot="DEF-1", report="a.htm") | {"faults": "1,234"},
             w("AOI-1", ids[2], "00:30", "00:40", lot="DEF-1", report="a.htm")]
     (k,) = _lot_keys(_lot_screen(rows))
-    mx = _lot_screen(rows, k).split("Wafer × 검사")[1]
+    mx = _lot_screen(rows, k).split("Slot map &amp; 스캔 기록")[1]
     assert ">7</i>" in mx and ">1.2k</i>" in mx
 
 

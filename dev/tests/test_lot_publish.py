@@ -76,7 +76,7 @@ def test_template_keeps_only_the_lot_tab_when_lot_only():
     assert 'lotOnly?[["lot","스캔을 어디에 했니?"]]' in t
     assert "!lotOnly" in t                                       # 사본 저장 · 레시피 묶음 · 날짜 줄 · 설정 단추를 감춘다
     for piece in ('lotOnly?"":`<section class="cards sm lotcards"', '${lotOnly?"":slots}',
-                  '${lotOnly?"":\'<span class="r">배치 시간</span><span>구분</span><span></span>\'}'):
+                  '${lotOnly?"":\'<span class="r">배치 시간</span><span class="tg">구분</span><span></span>\'}'):
         assert piece in t, piece                                 # 카드 · 배치 시간 · 구분 · Slot 지도 없음
     assert "SLOT_WARN" not in t and 'const mx=lotOnly' not in t  # 10/29: Slot 세로 목록 · 경고 없앰, Wafer × 검사는 원본과 같다
 
