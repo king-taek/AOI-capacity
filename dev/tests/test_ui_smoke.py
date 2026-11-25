@@ -275,6 +275,10 @@ def test_gap_card_shows_missing_counts_and_fills_them(window, styled_qapp):
     t0 = time.time()
     while window.is_collecting() and time.time() - t0 < 20:
         _pump(styled_qapp)
+    from conftest import as_old_cache
+    from aoi_capacity.utils import prefs
+    as_old_cache(prefs.to_collect_cfg(prefs.load()))   # 새로 읽은 Report 는 '해 봄' 표시가 붙어 빈칸이 아니다(11/25) — 옛 캐시처럼
+    page.refresh_plan()
     page.wait_for_plan()
     _pump(styled_qapp, 0.3)
     assert not page._gaps.isHidden() and page._b_gaps.isEnabled()

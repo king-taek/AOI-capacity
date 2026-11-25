@@ -9,7 +9,7 @@ from pathlib import Path
 import pytest
 
 from aoi_capacity import collect, nas_guard
-from conftest import make_cfg
+from conftest import as_old_cache, make_cfg
 
 SCANLOG = "[General]\nStartScan=9/13/2026 5:31:10 PM\nDuration=30000\n"
 
@@ -30,6 +30,7 @@ def test_fill_gaps_fills_scan_ratio_from_wafer_folder_only_and_marks_reports(tmp
     nas, csv_path = fake_nas
     cfg = make_cfg(tmp_path, csv_path)
     collect.collect(dict(cfg, collect_params=False))                        # ScanLog 가 없던 때 — 옛 행처럼 scan_sec 이 빈다
+    as_old_cache(cfg)
     rows = _sec_rows(cfg)
     assert rows and all(not r.get("scan_sec") for r in rows)
     plan = collect.plan_run(cfg)
@@ -57,6 +58,7 @@ def test_fill_gaps_leaves_value_empty_when_folder_was_rewritten_later(tmp_path, 
     nas, csv_path = fake_nas
     cfg = make_cfg(tmp_path, csv_path, collect_params=False)
     collect.collect(cfg)
+    as_old_cache(cfg)
     for w in _wafer_dirs(nas):
         (w / "ScanLog.ini").write_text(SCANLOG.replace("9/13/2026", "9/20/2026"), encoding="utf-8")
     st = collect.fill_gaps(cfg)
@@ -72,6 +74,7 @@ def test_fill_gaps_stop_keeps_what_was_read(tmp_path, fake_nas, monkeypatch, eve
     nas, csv_path = fake_nas
     cfg = make_cfg(tmp_path, csv_path, read_workers=1, collect_params=False)
     collect.collect(cfg)
+    as_old_cache(cfg)
     for w in _wafer_dirs(nas):
         (w / "ScanLog.ini").write_text(SCANLOG, encoding="utf-8")
     total = collect.plan_run(cfg).sec_missing
@@ -90,6 +93,7 @@ def test_fill_gaps_saves_the_cache_once_at_the_end_not_per_step(tmp_path, fake_n
     nas, csv_path = fake_nas
     cfg = make_cfg(tmp_path, csv_path)
     collect.collect(dict(cfg, collect_params=False))
+    as_old_cache(cfg)                                    # 새로 읽은 Report 는 '해 봄' 표시가 붙는다(11/25) — 옛 캐시처럼
     for w in _wafer_dirs(nas):
         (w / "ScanLog.ini").write_text(SCANLOG, encoding="utf-8")
     saves = []
