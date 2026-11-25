@@ -460,3 +460,67 @@ def test_closing_during_manual_publish_asks_and_waits_for_it(window, styled_qapp
         _pump(styled_qapp)
     assert not window.isVisible()
     assert page.publishing() is None
+
+
+def test_perf_test_card_runs_off_the_ui_thread_and_blocks_other_jobs(window, styled_qapp, monkeypatch, tmp_path):
+    """11/25 속도 시험 카드(PH-01 · PH-03 · LOTD-01): 조사 도구 안에 있고, 도는 동안 수집 · 빈칸 채우기 · 배포 · 실패 로그 · HTML 만 다시
+    만들기를 막으며(이유는 실행 줄에), 다시 누르면 멈춘다. 끝나면 결과 폴더를 연다. 다른 일이 돌 때는 시작하지 않는다."""
+    import threading
+
+    from PyQt6.QtCore import QThread, pyqtSignal
+
+    from aoi_capacity import i18n
+    from aoi_capacity.ui import main_window
+    from aoi_capacity.ui.pages import collect_page as cp
+
+    K = i18n.KO
+    errors, opened = [], []
+    monkeypatch.setattr(main_window.sheets, "error", lambda _w, title, text: errors.append((title, text)))
+    monkeypatch.setattr(cp.QDesktopServices, "openUrl", lambda url: opened.append(url.toLocalFile()))
+
+    class FakeWorker(QThread):
+        log = pyqtSignal(str)
+        progress = pyqtSignal(int, int, str)
+        done = pyqtSignal(object, str)
+
+        def __init__(self, cfg, out_root="", parent=None):
+            super().__init__(parent)
+            self._stop = threading.Event()
+            self.ui_thread = None
+
+        def stop(self):
+            self._stop.set()
+
+        def run(self):
+            self.ui_thread = threading.current_thread() is threading.main_thread()
+            self.progress.emit(1, 9, "phase")
+            self._stop.wait(10)
+            self.done.emit({"dir": str(tmp_path / "perf" / "x"), "stopped": True}, "")
+
+    monkeypatch.setattr(cp.perf_worker, "PerfTestWorker", FakeWorker)
+    page = window.collect_page
+    assert page._b_perf_run.text() == K.PERF_RUN and page._b_perf_run.isEnabled()
+    assert page._sec_dev.isAncestorOf(page._b_perf_run)               # 접힌 '조사 도구' 구역 안
+    page._b_perf_run.click()
+    _pump(styled_qapp, 0.2)
+    w = page._perf_worker
+    assert w is not None and w.isRunning() and w.ui_thread is False
+    assert page._busy_reason() == K.COLLECT_BUSY_PERF and not page._b_run.isEnabled()
+    assert not page._b_fl_run.isEnabled() and not page._b_gaps.isEnabled() and not page._b_html.isEnabled()
+    assert page._b_perf_run.text() == K.PERF_STOP
+    page.publish_now("lot")
+    page._on_fail_logs()
+    assert page._pub_worker is None and page._fl_worker is None and errors      # 배포 · 실패 로그는 시작하지 않는다
+    page._b_perf_run.click()                                           # 다시 누르면 멈춤
+    end = time.time() + 5
+    while page._perf_worker is not None and time.time() < end:
+        _pump(styled_qapp)
+    assert page._perf_worker is None and page._busy_reason() == ""
+    assert opened == [str(tmp_path / "perf" / "x")] and page._b_perf_open.isVisibleTo(page)
+    assert page._b_perf_run.text() == K.PERF_RUN
+    # 다른 일이 돌 때는 시작하지 않는다
+    page._fl_worker = object()
+    errors.clear()
+    page._on_perf()
+    assert page._perf_worker is None and errors and errors[-1][1] == K.PERF_BUSY
+    page._fl_worker = None
