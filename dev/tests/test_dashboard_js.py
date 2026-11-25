@@ -808,6 +808,25 @@ def test_lot_tab_never_merges_past_25_wafers_and_shows_cross_rows():
     assert "다른 LOT 이름" not in out and "스캔 순서 <span" in out and "다른 LOT 1번(흐림)" in out           # 11/25(LOT-03 · LOTE-07 · LOTA-13): 한 낱말 줄기 · 표 제목 숫자
 
 
+def test_lot_tab_marks_other_lot_columns_with_a_band_and_keeps_rows_one_height():
+    """11/25(LOTC-01 · LOTC-16): 다른 LOT 으로 묶인 열은 흐리게 하지 않고(흐린 PASS 가 재스캔 색과 같아 보였다) 그 열 위 회색 '다른' 띠 + 툴팁에 그 LOT 이름.
+    검사 순서 표는 Job · Error 원인을 한 칸 두 줄로 — 칸 안 줄바꿈(overflow-wrap:anywhere)이 없어 줄 높이가 고르다."""
+    first = [w("AOI-1", f"AUG{i:06d}X", "00:10", "00:20", lot="TSX-1", report="a.htm") for i in range(25)]
+    err = [w("AOI-1", "AUG000000X", "01:10", "01:20", lot="TSX-1", report="b.htm", status="Alignment Error.")]
+    third = [w("AOI-1", f"AUG{i:06d}X", "04:10", "04:20", lot="TYPO-9", report="c.htm") for i in range(5)] + \
+            [w("AOI-1", "NEWW00000001", "04:10", "04:20", lot="TYPO-9", report="c.htm")]
+    out = _lot_pick(first + err + third, "TSX-1")
+    assert '<span class="ldl">LOT</span>' in out and 'class="lxb"' in out and ">다른</span>" in out
+    band = out.split('class="lxb"')[1].split("</span>")[0]
+    assert "TYPO-9 · 6 wafer" in band                                       # 띠 툴팁 = 그 열이 묶인 다른 LOT
+    assert "다른 LOT: TYPO-9" in out and "흐린 열" not in out and '<span class="lxk">다른</span> 띠' in out
+    assert 'class="ljc"' in out and 'class="lj2" title="ALIGN_ERROR 1"' in out and "<span>Job · Error 원인</span>" in out
+    assert "<span>Error 원인</span>" not in out and "--lotrh:38px" in out
+    tpl = (ROOT / "aoi_capacity" / "ui" / "assets" / "template.html").read_text(encoding="utf-8")
+    assert ".lotmx .lc.xc" not in tpl                                       # 칸을 흐리는 규칙 없음
+    ok = _lot_pick(first, "TSX-1")
+    assert "--lotrh:30px" in ok and 'class="ljc"' not in ok and 'class="lxb"' not in ok
+
 def test_lot_tab_wafer_search_counts_before_cut_and_wafer_mode_shows_results():
     """11/25 점검(LOTA-04 · LOTA-05 · LOTA-06 · LOTA-07 · LOTC-08): Wafer 검색은 자르기 전 개수를 적고 3글자 미만이면 찾지 않는다.
     Wafer 한 장을 고르면 PASS 칸 대신 결과 글자 · 슬롯, 그 Wafer 가 든 LOT 전체로 가는 단추. 재스캔 칸 툴팁은 앞 PASS 스캔을 말하고, 상한 초과 칸은 'Max'."""
