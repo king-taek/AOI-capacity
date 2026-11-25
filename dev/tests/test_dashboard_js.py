@@ -1143,6 +1143,20 @@ def test_report_popup_marks_slow_batches_by_time_per_wafer_not_by_batch_length()
     assert "장당 시간 중앙" in popup
 
 
+def test_report_tab_first_card_is_the_device_median_like_the_bars():
+    """11/25 RDL-01: 맨 위 첫 카드는 장비 막대 · 범례와 같은 '장비 중앙' — Job 전체 회귀(계산 못 한 장비의 느린 표본까지 섞인 선)는 작은 줄로."""
+    rows = _clean_batches(5)
+    for i in range(4):
+        rows += _batch("AOI-2", f"SLOW-{i}", f"{8 + 3 * i:02d}:00", 10 + i, 170)
+    (html,) = screen(rows, meta("AOI-1", "AOI-2"), [["reportHtml"]], state={"view": "report"})
+    card = html[html.index('<section class="cards sm"'):]
+    card = card[:card.index("</div>")]
+    assert "장비 중앙 (25장 환산)" in card and "2시간 15분" in card                     # AOI-1 하나 = 10 + 5×25
+    assert "Job 전체 회귀 " in card and "Job 전체 회귀 2시간 15분" not in card          # 느린 AOI-2 표본이 섞인 회귀는 다른 값
+    (one,) = screen(_clean_batches(4), meta("AOI-1"), [["reportHtml"]], state={"view": "report"})
+    assert "25장 환산 (Job 전체 회귀)" in one                                          # 장비 막대가 없으면 회귀값 카드 그대로
+
+
 def test_report_tab_leaves_test_lot_batches_out_and_lets_uncomputed_devices_open_all_batches():
     """11/25 RDL-18(현택): 시험(Test) Lot 의 배치는 장비 비교 표본에서 뺀다(이유는 팝업에 그대로).
     RDL-05: 계산 못 한 장비 이름은 단추 — 누르면 그 장비의 모든 배치 팝업, 괄호에 제외 내역."""

@@ -2677,12 +2677,16 @@ function reportHtml(){
   if(good.length>=2)sentence=`장비 <em>${good.length}대</em> 중 <em style="color:${lcol(slow)}">${esc(slow.n)}</em> 가 가장 느리고(${esc(hm(slow.f.conv))}, 중앙보다 <em style="color:${lcol(slow)}">${pc(dev(slow))}</em>), <em style="color:${lcol(fast)}">${esc(fast.n)}</em> 가 가장 빠릅니다(${esc(hm(fast.f.conv))}, ${pc(dev(fast))}). ${good.filter(d=>dev(d)>=RPT_SLOW).length?`중앙보다 20% 넘게 느린 장비 ${good.filter(d=>dev(d)>=RPT_SLOW).length}대.`:"20% 넘게 벗어난 장비는 없습니다."}`;
   else if(good.length===1)sentence=`계산할 수 있는 장비가 <em>${esc(good[0].n)}</em> 한 대뿐이라 장비끼리는 비교할 수 없습니다(${esc(hm(good[0].f.conv))}).`;
   else sentence=`배치 표본이 5개 이상인 장비가 없어 환산 시간을 내지 못합니다.`;
-  const cards=[{k:basis+"장 환산 중앙",h:jf.ok?esc(hm(jf.conv)):"—",s:jf.ok?"준비 "+Math.round(jf.a)+"분 + 장당 "+jf.b.toFixed(1)+"분":jf.why},
+  /* 11/25(RDL-01): 첫 카드는 장비 막대 · 범례 · 맨 위 문장과 같은 '장비 중앙'(장비별 환산의 중앙) — 예전엔 Job 의 모든 배치(계산 못 한 장비 표본까지)를 한 선으로 회귀한 값이라
+     이름은 같은 '중앙' 인데 숫자가 달랐고 모든 장비보다 느리게 나오기도 했다(실데이터 30일 TB500 BS UBM 8시간 10분 vs 장비 2:40 · 5:19 · 5:29). Job 전체 회귀는 작은 줄로, 장비 막대가 없으면 지금처럼 큰 숫자로 */
+  const jfTxt=jf.ok?"준비 "+Math.round(jf.a)+"분 + 장당 "+jf.b.toFixed(1)+"분":jf.why;
+  const cards=[med!=null?{k:"장비 중앙 ("+basis+"장 환산)",h:esc(hm(med)),s:jf.ok?"Job 전체 회귀 "+hm(jf.conv):"Job 전체 회귀 — "+jf.why,t:jf.ok?"Job 전체 회귀 = 이 Job 의 모든 표본 배치(계산 못 한 장비 포함)를 한 선으로 — "+jfTxt:""}
+      :{k:basis+"장 환산 (Job 전체 회귀)",h:jf.ok?esc(hm(jf.conv)):"—",s:jfTxt},
     {k:"장비 간 차이",h:good.length>=2?esc(hm(slow.f.conv-fast.f.conv)):"—",s:good.length>=2?"가장 느린 − 가장 빠른":"장비 2대 이상일 때"},
     {k:"Error",h:A.all.err?`<span style="color:${ERR}">${cnt(A.all.err)}건</span>`:"0건",s:`배치 ${A.all.n}개 중 · Lot 단위`},
     {k:"Error 대기",h:A.all.errMin?`<span style="color:${ERR}">${esc(hm(A.all.errMin))}</span>`:"—",s:"Error 구간 + 그 뒤 공백"},
     {k:"평균 Defect",h:A.all.fN?(A.all.fS/A.all.fN).toFixed(1):"—",s:A.all.fN?A.all.fN+"장 기준":"Defect 열 없음"}];
-  const cardsH=`<section class="cards sm" style="margin-bottom:14px">${cards.map(s=>`<div><p class="k">${esc(s.k)}</p><p class="v num" style="font-size:24px">${s.h}</p><p class="s">${esc(s.s)}</p></div>`).join("")}</section>`;
+  const cardsH=`<section class="cards sm" style="margin-bottom:14px">${cards.map(s=>`<div><p class="k">${esc(s.k)}</p><p class="v num" style="font-size:24px">${s.h}</p><p class="s"${s.t?` data-tip="${esc(s.t)}"`:""}>${esc(s.s)}</p></div>`).join("")}</section>`;
   /* 장비 줄 + 줄을 누르면 열리는 배치 점 그림 */
   const maxC=good.length?Math.max(...good.map(d=>d.f.conv))*1.08:1;
   const scatter=d=>{const pts=d.Sx.pts,W=560,H=210,L=44,R=12,T=10,B=26;
