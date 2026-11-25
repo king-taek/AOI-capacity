@@ -852,7 +852,11 @@ function lotName(rep,fb,tableFirst){ if(!rep) return fb||'';
   for(let i=1;i<sg.length;i+=2){const sp=sg[i],tk=sg[i+1]; if(tk===undefined)break; if(KEEP.has(tk.toUpperCase())) o+=sp+tk;}
   return o; }
 const JM={"RKENDALLPI4DG":"RKENDALLA0PI4"};
-function jobKey(s){ const tk=String(s||'').toUpperCase().split(/[\s_\-]+/).filter(Boolean); const o=[];
+/* 같은 글자는 같은 답(JS-07): 풀에서 온 문자열은 반복이 많아(30일치 Job 534종 · Report 1.3만 · 배치 시각 3.8만) 순수 함수의 결과를 글자마다 한 번만 계산한다 — 값은 그대로, 크기 상한 */
+function memo1(f,cap){cap=cap||200000;const m=new Map();return x=>{let v=m.get(x);if(v===undefined&&!m.has(x)){v=f(x);if(m.size>=cap)m.clear();m.set(x,v);}return v;};}
+const _jobKeyM=memo1(s=>jobKey0(s));
+function jobKey(s){return _jobKeyM(String(s||''));}
+function jobKey0(s){ const tk=String(s||'').toUpperCase().split(/[\s_\-]+/).filter(Boolean); const o=[];
   for(let i=0;i<tk.length;i++){ let t=tk[i];
     if(t==='TEST'&&i===0) continue; if(t==='LIVE'||t==='COPY') continue;
     if(/^\d{4}COPY$/.test(t)) continue;
@@ -866,17 +870,17 @@ function jobKey(s){ const tk=String(s||'').toUpperCase().split(/[\s_\-]+/).filte
    멀티면 늘 `<줄기>-Multi`, 단일은 원문에 Multi 가 있는 Job(RDL '… - Multi')만 `<줄기>-Single`, 그런 Job 인데 판정 근거가 없으면 `<줄기>-미구분`(멀티로 합치지 않는다).
    줄기 = 원문에서 ' - Multi' 를 뗀 것(`TB500_RDL4 - Multi` → `TB500_RDL4-Multi` · `TB500_RDL4-Single`). 자재 키(matKey · Rescan)는 원문으로 — 같은 Wafer 를 멀티 뒤 단일로 다시 보면 Rescan 이다. */
 const MULTI_RE=/(^|[\s_\-]+)multi(?=$|[\s_\-])/ig,HAS_MULTI=/(^|[\s_\-])multi($|[\s_\-])/i;   /* 낱말 'Multi' 만(`Multi_Final` 도) — 'Multiple' 같은 건 아니다 */
-const jobStem=j=>String(j||"").replace(MULTI_RE,"").replace(/^[\s_\-]+|[\s_\-]+$/g,"").trim();
+const jobStem=memo1(j=>String(j||"").replace(MULTI_RE,"").replace(/^[\s_\-]+|[\s_\-]+$/g,"").trim());
 function ownMode(r){const m=String(r.scan_mode||"").toUpperCase();if(m==="MULTI")return "M";if(m==="SINGLE")return "S";return String(r.recipe||"").includes("|")?"M":"";}
 /* 10/6(사용자): 판정 근거가 없는 행(INI 가 다른 검사로 덮어써짐 · INI 없음 · 업데이트 전 행)을 '미구분' 으로 두지 않고 Report 로 채운다 — 화면 규칙(수집기·캐시는 그대로).
    ① 같은 Report(장비 + Report 이름)의 다른 Wafer 판정 — 한 Report 는 한 방식으로 돈다(실데이터 RDL Report 중 멀티·단일이 섞인 것 0개) → 'rep'
    ② Report 전체가 판정 못 함이면 같은 장비 · 같은 Job 원문에서 배치 시작이 가장 가까운 판정된 Report(같은 거리면 앞선 것) → 'near'(추정 — 실데이터로 맞혀 보니 97.5%)
    그래도 근거가 없으면 '' 그대로(미구분). 결과는 행 → [방식, 출처] WeakMap(행 객체는 건드리지 않는다). */
 const MODE_FILL=new WeakMap();
-function fillModes(rs){const reps=new Map();
+function fillModes(rs,pf){pf=pf||P;const reps=new Map();
   for(const r of rs){if(!r||isKla(r.device))continue;const k=r.device+"\u0001"+(r.report||"");let R=reps.get(k);
     if(!R){R={dev:r.device,job:String(r.job||""),t:null,m:new Set(),rows:[]};reps.set(k,R);}R.rows.push(r);
-    const o=ownMode(r);if(o)R.m.add(o);if(R.t==null){const b=P(r.batch_start)||P(r.wafer_start_time);if(b)R.t=b.getTime();}}
+    const o=ownMode(r);if(o)R.m.add(o);if(R.t==null){const b=pf(r.batch_start)||P(r.wafer_start_time);if(b)R.t=b.getTime();}}
   const pool=new Map();for(const R of reps.values())if(R.m.size===1&&R.t!=null){const k=R.dev+"\u0001"+R.job;(pool.get(k)||pool.set(k,[]).get(k)).push(R);}
   for(const R of reps.values()){let m="",by="";
     if(R.m.size===1){m=[...R.m][0];by="rep";}
@@ -890,11 +894,13 @@ const RT=new Set(['RE','RESCAN','REWORK','SRD','R']);
 /* 10/11(D87): Lot 이름이 바뀐 재검사도 Rescan — 두 번째 자재 키 = jobKey(Job) | 검사 단계 낱말(DIA · SRD · 3D …, 다른 단계는 다른 검사) | Wafer ID.
    Wafer ID 가 짧은 숫자(슬롯 번호 따위)면 같은 실물이라 볼 수 없어 이 키를 만들지 않는다(그때는 matKey 만). 앞 시도가 PASS 이고 레시피가 같을 때만. */
 const STEP_TOK=new Set(['DIA','SRD','3D','EDGE','BUMP','CENTER','PCM','SPT','2D']);
+const _mk2St=memo1(l=>String(l||'').toUpperCase().split(/[-_ #+,'%.~]+/).filter(x=>STEP_TOK.has(x)).sort().join('+'));
 const matKey2=(j,l,w)=>{const id=String(w||'').toUpperCase().replace(/[^A-Z0-9]/g,'');if(id.length<6||/^\d+$/.test(id))return null;
-  const st=String(l||'').toUpperCase().split(/[-_ #+,'%.~]+/).filter(x=>STEP_TOK.has(x)).sort().join('+');return jobKey(j)+'|'+st+'|'+id;};
+  const st=_mk2St(l);return jobKey(j)+'|'+st+'|'+id;};
 /* 10/11(D87): 모니터 웨이퍼 Job — Lot 이름에 TEST 가 없어도 Test(D64 와 같이 가동에서 뺌). 'No Pattern' 이 무엇인지는 현장 확인 전이라 목록으로 둔다(확인되면 여기만 고친다). */
 const MONITOR_JOB_RE=/^\s*No\s*Pattern/i;
-const matKey=(j,l,w)=>jobKey(j)+'|'+String(l||'').toUpperCase().split(/[-_ #+,'%.~]+/).filter(x=>x&&!RT.has(x)).join('')+'|'+String(w||'').toUpperCase().replace(/[^A-Z0-9]/g,'');
+const _mkLot=memo1(l=>String(l||'').toUpperCase().split(/[-_ #+,'%.~]+/).filter(x=>x&&!RT.has(x)).join(''));
+const matKey=(j,l,w)=>jobKey(j)+'|'+_mkLot(l)+'|'+String(w||'').toUpperCase().replace(/[^A-Z0-9]/g,'');
 /* ── 레시피 묶음(D67) — 사용자가 묶은 Job 원문은 그 묶음 이름 하나로, 나머지는 jobKey 자동 묶음. 통계·표시에만 쓰고 자재 키(matKey · Rescan)에는 쓰지 않는다. ── */
 function recipeMap(rg){const m=new Map();if(!rg||!Array.isArray(rg.groups))return m;
   for(const g of rg.groups){if(!g||typeof g.name!=="string"||!g.name.trim()||!Array.isArray(g.jobs))continue;for(const j of g.jobs)if(typeof j==="string"&&!m.has(j))m.set(j,g.name.trim());}return m;}
@@ -926,17 +932,21 @@ const K_PRI={[K_ERR]:0,[K_SCAN]:1,[K_RESCAN]:2,[K_TEST]:3};
 const K_SEG={[K_SCAN]:0,[K_ERR]:1,[K_TEST]:2,[K_WAIT]:3,[K_RESCAN]:4};        /* 화면 seg 번호(0 Scan · 1 Error · 2 Test · 3 대기 · 4 Rescan) */
 function buildModelV3(rowsIn,metaIn,rules){
 const val=(r,c)=>r[c];
-fillModes(rowsIn);   /* 10/6: 판정 못 한 행의 멀티/단일을 Report 로 채운다 — modeJob 보다 먼저 */
+/* JS-07: 행마다 되풀이하던 같은 계산을 글자마다 한 번(이 계산 안에서만 — P 의 Date 는 읽기만 한다) */
+   /* 배치 시각 · 상태 · Report 는 풀에서 온 같은 글자가 되풀이된다(Wafer 시각은 장마다 달라 기억하지 않는다) */
+const Pc=memo1(P),coC=memo1(causeOf),lotM=new Map();
+const lotC=(rp,rl)=>{let m=lotM.get(rp);if(!m)lotM.set(rp,m=new Map());let v=m.get(rl);if(v===undefined){v=lotName(rp,rl,true);m.set(rl,v);}return v;};
+fillModes(rowsIn,Pc);   /* 10/6: 판정 못 한 행의 멀티/단일을 Report 로 채운다 — modeJob 보다 먼저 */
 const all=[]; let bad=0;
 for(let i=0;i<rowsIn.length;i++){const r=rowsIn[i];
-  const ws=P(val(r,'wafer_start_time')), we=P(val(r,'wafer_end_time')), bs=P(val(r,'batch_start')), be=P(val(r,'batch_end'));
+  const ws=P(val(r,'wafer_start_time')), we=P(val(r,'wafer_end_time')), bs=Pc(val(r,'batch_start')), be=Pc(val(r,'batch_end'));
   const an=ws||bs; if(!an){bad++;continue;}
   const st=String(val(r,'status')||'').trim(), rl=String(val(r,'lot')||''), wid=String(val(r,'wafer_id')||''), rp=String(val(r,'report')||'');
-  const job0=String(val(r,'job')||''), job=modeJob(job0,r), lot=lotName(rp,rl,true), test=/TEST/i.test(rl)||MONITOR_JOB_RE.test(job0);
+  const job0=String(val(r,'job')||''), job=modeJob(job0,r), lot=lotC(rp,rl), test=/TEST/i.test(rl)||MONITOR_JOB_RE.test(job0);
   const fv=String(val(r,'faults')??'').replace(/,/g,'').trim(), f=/^\d+$/.test(fv)?+fv:null;   /* Report 표 Faults 원문 — 숫자일 때만(옛 캐시 행은 빈 값) */
   all.push({idx:i,f,dev:val(r,'device'),t:an.getTime(),s:ws?ws.getTime():null,e:(ws&&we&&we.getTime()>ws.getTime())?we.getTime():null,timed:!!ws,
     bs:bs?bs.getTime():null, bend:be?be.getTime():(bs?bs.getTime():null),
-    c:test?null:causeOf(st),status:st,report:rp,job,lot,test,key:matKey(job0,lot,wid),key2:matKey2(job0,rl,wid),rcp:String(val(r,'recipe')||''),day:dk(an),pass:isPass(st),
+    c:test?null:coC(st),status:st,report:rp,job,lot,test,key:matKey(job0,lot,wid),key2:matKey2(job0,rl,wid),rcp:String(val(r,'recipe')||''),day:dk(an),pass:isPass(st),
     im:String(val(r,'ini_match')||''),wid,ik:job0+'\u0001'+rl+'\u0001'+wid,wsc:String(val(r,'wafers_scanned')??'').trim(),ast:String(val(r,'avg_scan_time')??'').trim(),
     sc:/^\d+$/.test(String(val(r,'scan_sec')??'').trim())?+val(r,'scan_sec'):null});   /* 10/11 실제 촬영 초(ScanLog — 옛 행은 null) */
 }
@@ -949,9 +959,12 @@ all.sort((a,b)=>a.t-b.t||a.idx-b.idx);
 {const seen=new Map(),seen2=new Map(); for(const w of all){const p=seen.get(w.key); w.rel=(p&&p.pass)?1:0;
   if(!w.rel&&w.key2){const q=seen2.get(w.key2); if(q&&q.pass&&q.key!==w.key&&q.rcp===w.rcp)w.rel=2;}   /* D87: Lot 이름이 바뀐 재검사(2 = 두 번째 키로 찾음) */
   seen.set(w.key,w); if(w.key2)seen2.set(w.key2,w);}}
-let obsEnd=0; for(const w of all){ obsEnd=Math.max(obsEnd,w.e||w.t,w.bend||0); }
 const genIso=metaIn&&metaIn.generated_iso?String(metaIn.generated_iso):"";
 const today=/^\d{4}-\d{2}-\d{2}/.test(genIso)?genIso.slice(0,10):null;
+/* JS-01: 장비 시계가 틀려 수집 시각 + 1일보다 늦은 시각의 행은 '오늘'(D40 — 수집 시각) 분모를 정하는 관측 종료에 넣지 않는다 — 행 하나가 모든 장비의 오늘 분모를 24시간으로 만들었다.
+   행은 지우지 않고(Error · 이력이 조용히 사라지지 않게) 수를 세어 바닥글에 알린다(futureRows). 하루 안쪽의 어긋남(장비 시계 몇 분 빠름)은 예전처럼 관측 종료에 든다. */
+const genMs=(()=>{const g=genIso?new Date(genIso.slice(0,19)).getTime():NaN;return isFinite(g)?g:null;})(),futCut=genMs!=null?genMs+86400000:Infinity;
+let obsEnd=0,fut=0; for(const w of all){ if(w.t>futCut){fut++;continue;} obsEnd=Math.max(obsEnd,Math.min(futCut,Math.max(w.e||w.t,w.bend||0))); }
 const SP={job:[],lot:[],rep:[],st:[]},SM={job:new Map(),lot:new Map(),rep:new Map(),st:new Map()};
 const put=(k,v)=>{v=v||'';const m=SM[k];if(m.has(v))return m.get(v);const i=SP[k].length;SP[k].push(v);m.set(v,i);return i;};
 const devMeta=(metaIn&&metaIn.devices)||[];
@@ -959,8 +972,27 @@ const dev=devMeta.filter(x=>x.scope!=="out").map(x=>x.name).sort(cmpDev);
 const detail={}; const daySet=new Set();
 if(all.length){
   const day0=all.reduce((m,w)=>w.day<m?w.day:m,all[0].day);
-  const base0=new Date(day0+'T00:00:00').getTime();
+  let base0=new Date(day0+'T00:00:00').getTime();
+  /* JS-06: 분 단위 시간축은 기간(meta.range) 첫날 − 1일 무렵부터(기간이 없으면 가장 이른 날부터). 그보다 이른 행(기한 없는 '앞선 시도' 맥락 · 시계가 틀린 옛 날짜)은
+     Rescan 판단(위 D63)에만 쓰고 칠하지 않는다 — 장비 30대가 수년치 배열을 만들던 것.
+     장비마다 그 시각 뒤까지 이어진 Report(장비 + Report)를 담고, 담긴 Report 의 가장 이른 시작보다 늦게 끝나는 Report 도 담을 때까지 넓힌다(고정점).
+     담기지 않은 Report 는 담긴 것과 시간이 겹치지 않고 그 시각 전에 끝나(에러 후 대기도 그 날 자정까지라) 기간 안의 어떤 분에도 닿지 않는다 — 화면 숫자 그대로. */
+  const oldG=new Set();
+  {const rg0=metaIn&&(metaIn.range||metaIn.part),f0=rg0&&rg0.from&&rg0.to&&/^\d{4}-\d{2}-\d{2}$/.test(rg0.from)?rg0.from:null;
+    const cut=f0?new Date(f0+'T00:00:00').getTime()-86400000:NaN;
+    if(cut>base0){const G=new Map();   /* 장비 → Report 키 → {a 시작, z 끝} */
+      for(const w of all){let D0=G.get(w.dev);if(!D0)G.set(w.dev,D0=new Map());const k=w.report||(w.job+'\u0001'+w.lot);let g=D0.get(k);if(!g)D0.set(k,g={a:Infinity,z:-Infinity});
+        g.a=Math.min(g.a,w.t,w.bs??Infinity);g.z=Math.max(g.z,w.e||0,w.bend||0,w.t);}
+      let lo=cut;
+      for(const [dv0,D0] of G){const L=[...D0].sort((x,y)=>y[1].z-x[1].z);let m=Infinity,i=0;   /* 끝이 늦은 순 — 담을 조건(끝 ≥ 그 시각, 또는 끝 > 담긴 것의 가장 이른 시작)이 끊기면 뒤는 모두 담기지 않는다 */
+        for(;i<L.length&&(L[i][1].z>=cut||L[i][1].z>m);i++)if(L[i][1].a<m)m=L[i][1].a;
+        for(;i<L.length;i++)oldG.add(dv0+'\u0001'+L[i][0]);
+        if(m<lo)lo=m;}
+      base0=Math.max(base0,new Date(dk(new Date(lo))+'T00:00:00').getTime());}}
+  const baseDay=dk(new Date(base0));
   let lastMs=obsEnd; for(const w of all){const v=Math.max(w.e||0,w.bend||0,w.t);if(v>lastMs)lastMs=v;}
+  /* JS-01 · JS-06: 기간이 있으면 축 끝도 기간 끝날 + 2일까지(그 뒤는 어차피 그리지 않는다 — 시계가 틀린 먼 미래 행 하나로 수년치 배열을 만들지 않게) */
+  {const rg1=metaIn&&(metaIn.range||metaIn.part);if(rg1&&rg1.from&&rg1.to&&/^\d{4}-\d{2}-\d{2}$/.test(rg1.to)){const capT=new Date(rg1.to+'T00:00:00').getTime()+3*86400000-60000;if(lastMs>capT)lastMs=Math.max(capT,obsEnd);}}
   const nDays=Math.max(1,Math.ceil((lastMs-base0)/86400000)+1);
   const N=nDays*1440;
   const M=ms=>Math.max(0,Math.min(N,Math.round((ms-base0)/60000)));
@@ -980,13 +1012,14 @@ if(all.length){
     const kindOf=w=>w.c?K_ERR:(w.test?K_TEST:(w.rel?K_RESCAN:K_SCAN));
     const paint=(a,b,k,o)=>{for(let i=a;i<b;i++){const cur=kind[i];if(cur===K_NONE||(cur!==K_WAIT&&K_PRI[k]<K_PRI[cur])){kind[i]=k;owner[i]=o;}}};
     /* ① 측정 구간 */
-    for(const w of ws){if(!w.timed||w.e==null)continue;w.a=M(w.s);w.b=M(w.e);if(w.b>w.a)paint(w.a,w.b,kindOf(w),w.R.i);}
+    const old=R=>oldG.size>0&&oldG.has(dv+'\u0001'+R.key);   /* JS-06: 축 시작 전에 끝난 Report — 칠하지 않는다 */
+    for(const w of ws){if(!w.timed||w.e==null||old(w.R))continue;w.a=M(w.s);w.b=M(w.e);if(w.b>w.a)paint(w.a,w.b,kindOf(w),w.R.i);}
     /* 같은 Report 같은 종류의 3분 이하 틈 잇기(빈 분만) */
-    for(const R of reps){const iv=R.rows.filter(w=>w.timed&&w.e!=null&&w.b>w.a).sort((x,y)=>x.a-y.a);
+    for(const R of reps){if(old(R))continue;const iv=R.rows.filter(w=>w.timed&&w.e!=null&&w.b>w.a).sort((x,y)=>x.a-y.a);
       for(let j=1;j<iv.length;j++){const p=iv[j-1],q=iv[j];if(kindOf(p)===kindOf(q)&&q.a>p.b&&q.a-p.b<=3){for(let i=p.b;i<q.a;i++)if(kind[i]===K_NONE){kind[i]=kindOf(p);owner[i]=R.i;}}}}
     /* ② 배치 창 나눠 갖기(D56-② · D58): INI 없는 Pass·Error 행이 창의 빈 분을 똑같이 */
     for(const R of reps.slice().sort((x,y)=>(x.ws??1e12)-(y.ws??1e12)||x.i-y.i)){
-      if(R.ws==null||R.we==null||R.we<=R.ws)continue;
+      if(R.ws==null||R.we==null||R.we<=R.ws||old(R))continue;
       const need=R.rows.filter(w=>!(w.timed&&w.e!=null)&&(w.pass||w.c)).sort((x,y)=>x.idx-y.idx);
       if(!need.length)continue;
       const free=[];for(let i=R.ws;i<R.we;i++)if(kind[i]===K_NONE)free.push(i);
@@ -1003,19 +1036,17 @@ if(all.length){
     /* ③ Error 를 담은 Report 가 끝난 뒤 다음 활동까지 대기(D56-③ · D44) */
     const repEnd=new Int32Array(reps.length).fill(-1);
     for(let i=0;i<N;i++){const o=owner[i];if(o>=0&&kind[i]!==K_WAIT)repEnd[o]=i+1;}
-    for(const R of reps){if(!R.hasErr)continue;
+    for(const R of reps){if(!R.hasErr||old(R))continue;
       let e=repEnd[R.i];if(e<0)e=(R.we!=null?R.we:(R.ws!=null?R.ws:Math.round((R.rows[0].t-base0)/60000)));
       const dayEndIdx=(Math.floor(Math.max(0,e-1)/1440)+1)*1440;
       const cap=Math.min(dayEndIdx,obsIdx,N);
       for(let i=e;i<cap&&kind[i]===K_NONE;i++){kind[i]=K_WAIT;owner[i]=R.i;}}
-    /* Report 별 분 합계(Error·대기) — 유형별 분배와 Lot 표시용 */
-    const rMin=reps.map(()=>({err:0,wait:0,first:-1,last:-1}));
-    for(let i=0;i<N;i++){const o=owner[i];if(o<0)continue;const m=rMin[o];if(m.first<0)m.first=i;m.last=i;if(kind[i]===K_ERR)m.err++;else if(kind[i]===K_WAIT)m.wait++;}
     /* 날짜별로 자르기(D04) */
     const rowsByDay={}; for(const w of ws)(rowsByDay[w.day]||(rowsByDay[w.day]=[])).push(w);
     const touched=new Set(Object.keys(rowsByDay));
     for(let i=0;i<N;i++)if(kind[i]!==K_NONE){touched.add(dayOf(i));i=(Math.floor(i/1440)+1)*1440-1;}
     for(const dy of touched){
+      if(dy<baseDay)continue;   /* JS-06: 축 시작 전 날(기간 밖 — 어차피 그리지 않는다) */
       const ds=M(new Date(dy+'T00:00:00').getTime()),de=Math.min(N,ds+1440);
       if(ds>=N)continue;
       let r=0,d=0,t=0,x=0,s=0;const seg=[];let cur=-1,ca=0;
@@ -1025,9 +1056,11 @@ if(all.length){
       const list=rowsByDay[dy]||[];
       const ct={}; const lots=[]; let dayE=0,ne=0,ov=0,nf=0,km=0,sk=0,s1=0;
       /* 이 날에 닿는 Report: 이 날 행이 있거나 이 날에 칠해진 분이 있는 것 */
-      const rset=new Set(list.map(w=>w.R.i)); for(let i=ds;i<de;i++)if(owner[i]>=0)rset.add(owner[i]);
-      for(const idx of rset){const R=reps[idx];const m=rMin[idx];
-        let a=1441,b=0,em=0,wm=0; for(let i=ds;i<de;i++){if(owner[i]!==idx)continue;const rel=i-ds;if(rel<a)a=rel;if(rel+1>b)b=rel+1;if(kind[i]===K_ERR)em++;else if(kind[i]===K_WAIT)wm++;}
+      const rset=new Set(list.map(w=>w.R.i));
+      /* JS-07: Report 마다 이 날 1440분을 다시 훑지 않고 한 번 훑어 Report 별 [첫 분, 끝 분, Error 분, 대기 분]을 모은다(값 · 순서 그대로) */
+      const rAt=new Map(); for(let i=ds;i<de;i++){const o=owner[i];if(o<0)continue;rset.add(o);let q=rAt.get(o);if(!q){q=[1441,0,0,0];rAt.set(o,q);}const rel=i-ds;if(rel<q[0])q[0]=rel;if(rel+1>q[1])q[1]=rel+1;if(kind[i]===K_ERR)q[2]++;else if(kind[i]===K_WAIT)q[3]++;}
+      for(const idx of rset){const R=reps[idx];
+        const q=rAt.get(idx)||[1441,0,0,0];let a=q[0],b=q[1];const em=q[2],wm=q[3];
         const rowsHere=R.rows.filter(w=>w.day===dy);
         const countDay=R.rows.length?R.rows.reduce((m0,w)=>w.day<m0?w.day:m0,R.rows[0].day):dy;   /* 건수는 시작일에 한 번 */
         const causes=[...R.causes]; const cs={};
@@ -1084,7 +1117,7 @@ if(metaIn&&metaIn.data_from){if(days.includes(metaIn.data_from))partialDays=[met
 else if(today&&_ret>0){const _cut=dk(new Date(new Date(today+'T00:00:00').getTime()-_ret*86400000));partialDays=days.filter(d=>d<=_cut);}
 return {day,today,generated:(metaIn&&metaIn.generated)||"",generated_iso:genIso,devices:dev,days,pool:SP,detail,jobG,jobGroups,partialDays,
   scope:devMeta.map(x=>({n:x.name,note:x.note,reports:x.reports,status:x.status||"",readErrors:x.read_errors||0,error:x.error||"",dir:x.report_dir||"Report",out:x.scope==="out",missed:!!x.missed})),
-  obsEnd,rules:{...rules},badRows:bad,modelVersion:MODEL_VERSION};
+  obsEnd,rules:{...rules},badRows:bad,futureRows:fut,modelVersion:MODEL_VERSION};
 }
 
 /* ===== legacy 프로필 — make_aoi_data.js [원본] 이식(디자인 동일성 가드 전용) =====
@@ -1847,7 +1880,7 @@ function trapTab(e){const top=topDlg();if(!top)return;
    모델은 가진 날 전부로 한 번 계산하고(D.allDays) 보이는 날(D.days)만 바꾼다 → 날마다의 값은 그대로, 모든 탭이 그 기간만 그린다.
    '최근' 은 열람 시계가 아니라 가진 데이터의 끝날 기준(D40). 탭마다 있던 7일 · 21일 버튼은 이것으로 대신한다. ── */
 const addDays=(d,n)=>{const x=new Date(d+"T00:00:00");x.setDate(x.getDate()+n);return dk(x);};
-function rangeOf(p){const A=D.allDays,last=A[A.length-1];if(p==="7")return [addDays(last,-6),last];if(p==="30")return [addDays(last,-29),last];return [A[0],last];}
+function rangeOf(p){const A=D.allDays,last=(D.today&&D.today>=A[0]&&D.today<A[A.length-1])?D.today:A[A.length-1];   /* JS-01: 시계가 틀린 미래 날짜가 '최근 7일 · 1달' 의 끝이 되지 않게 — 끝은 수집한 날 */if(p==="7")return [addDays(last,-6),last];if(p==="30")return [addDays(last,-29),last];return [A[0],last];}
 function setRange(f,t,p){const A=D.allDays;if(!A||!A.length)return;f=f||A[0];t=t||A[A.length-1];if(f>t)[f,t]=[t,f];
   const days=A.filter(d=>d>=f&&d<=t);if(!days.length){toast("그 기간에는 데이터가 없습니다");render();return;}
   const cur=D.days[state.dayI],same=D.days.length===days.length&&D.days[0]===days[0];D.days=days;const i=days.indexOf(cur);
@@ -1905,8 +1938,10 @@ function partChip(){const R=meta&&meta.range;if(!R||!R.from)return"";
   const all=meta.data_from?`가진 데이터 ${meta.data_from} ~ ${meta.data_to}`:"";
   return `<span class="partchip" title="이 파일에 담은 기간입니다${R.explicit?"(기간을 골라 만든 파일)":"(수집 뒤 기본 기간)"}. ${esc(all)}">${md(R.from)} ~ ${md(R.to)}</span>`;}
 function footHtml(){   /* 10/7(사용자): 수집 범위 목록 · 장비/일수/버전 줄 · 가동률 설명 문구는 지웠다 — 남는 것은 문제가 있을 때의 알림뿐 */
-  const outs=(D&&D.scope||[]).filter(s=>s.out).map(s=>s.n),bad=D&&D.badRows;
-  return `<div class="foot" data-key="foot">${outs.length?`<b>수집 안 함</b> ${esc(outs.join(", "))}`:""}${outs.length&&bad?"<br>":""}${bad?`<b style="color:#B4402F">읽지 못한 행 ${D.badRows}개</b> — 시각 형식이 맞지 않아 집계에서 뺐습니다(수집 로그 참조).`:""}</div>`;
+  const outs=(D&&D.scope||[]).filter(s=>s.out).map(s=>s.n),bad=D&&D.badRows,fut=D&&D.futureRows;
+  const ps=[outs.length?`<b>수집 안 함</b> ${esc(outs.join(", "))}`:"",bad?`<b style="color:#B4402F">읽지 못한 행 ${D.badRows}개</b> — 시각 형식이 맞지 않아 집계에서 뺐습니다(수집 로그 참조).`:"",
+    fut?`<b style="color:#B4402F">시각이 수집보다 늦은 행 ${fut}개</b> — 장비 시계가 틀렸을 수 있습니다. 오늘 분모 계산에는 넣지 않았습니다.`:""].filter(Boolean);
+  return `<div class="foot" data-key="foot">${ps.join("<br>")}</div>`;
 }
 
 /* Lot 선택 키 — 같은 Job·Lot 이 하루에 Report 두 장이면 Report 번호(L[8])로 갈린다(D16). 장비 팝업과 Error 팝업이 같이 쓴다. */

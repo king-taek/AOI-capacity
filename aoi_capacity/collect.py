@@ -3496,7 +3496,8 @@ def write_html(cfg: dict, rows: List[dict], dev_meta: List[dict], errors: List[d
     known_days = sorted({d for d in (_row_day(r, memo) for r in all_rows) if d})
     explicit = bool(day_from or day_to)
     if not explicit and not lot_only and int(cfg.get("html_days") or 0) > 0:
-        anchor = dt.date.fromisoformat(known_days[-1]) if known_days else now.date()   # 가진 데이터의 끝날부터 거꾸로
+        # 가진 데이터의 끝날부터 거꾸로 — 단, 수집한 날보다 늦지 않게(JS-01: 시계가 틀린 미래 날짜 행 하나가 기간을 통째로 미래로 밀었다)
+        anchor = min(dt.date.fromisoformat(known_days[-1]), now.date()) if known_days else now.date()
         day_from = (anchor - dt.timedelta(days=int(cfg["html_days"]) - 1)).isoformat()
     rows, r_from, r_to = rows_for_range(all_rows, day_from or "", day_to or "")
     if r_from:
