@@ -1540,10 +1540,14 @@ def rows_for_report(dev_name: str, rep: dict, scan_root: str, memo: Optional[_In
                             r["scan_mode"] = "SINGLE"
                     if r["ini_match"] == "EXACT" and params_out is not None and "files" not in params_out:
                         # D89: Report(= Lot 한 번)마다 INI 를 찾은 첫 Wafer 폴더의 레시피 파라미터 — 그 폴더 안만(맨 위 + 하위 폴더 한 단계).
+                        t_p = time.perf_counter()
                         try:
-                            params_out["files"] = params_mod.snapshot(params_mod.read_wafer_files(os.path.join(found_in, rel_found)))
+                            raw_p = params_mod.read_wafer_files(os.path.join(found_in, rel_found))
+                            params_out["files"] = params_mod.snapshot(raw_p)
+                            params_out["n"] = len(raw_p)                 # PC-09: 파라미터 몫을 [수집 상세] 에 — 읽은 파일 수 · 걸린 ms
                         except OSError as e:
                             params_out["files"], params_out["error"] = {}, f"{type(e).__name__}: {e}"
+                        params_out["ms"] = int((time.perf_counter() - t_p) * 1000)
                     if r["ini_match"] == "EXACT" and want_settings:
                         # 10/11: Clean reference · AutoFocus 설정은 Report 마다 한 번 — INI 를 찾은 첫 Wafer 폴더의 Recipe.ini(정확 경로 하나).
                         want_settings = False
@@ -3043,6 +3047,8 @@ def _collect(cfg: dict, full: bool, backfill: bool, *, recover: bool, refresh_wi
             by_dev[dk]["ok"].append(mtime)
             n_new += 1
             if pout is not None and "files" in pout:            # 파일이 없어도 빈 스냅숏으로 남겨 다시 열지 않는다
+                _dm["params_ms"] = _dm.get("params_ms", 0) + int(pout.get("ms") or 0)     # PC-09: Report 읽기 합 중 파라미터 몫
+                _dm["params_files"] = _dm.get("params_files", 0) + int(pout.get("n") or 0)
                 first = next((r for r in rows_of if not r.get("kind")), rows_of[0] if rows_of else {})
                 bst = parse_dt(first.get("batch_start", ""))
                 if params_mod.put(pstore, key, dev=d["name"], job=first.get("job", ""), setup=first.get("setup", ""),
@@ -3225,7 +3231,7 @@ def _collect_log(stats: dict, dev_meta: List[dict], slow: List[Tuple[int, str, s
         if dm.get("scope") == "out":
             continue
         devs.append({k: dm.get(k) for k in ("name", "listing", "pattern_days", "list_dev_ms", "found", "reports", "kept", "refreshed",
-                                             "recovered", "retried", "read_n", "read_sum_ms", "read_errors", "rows", "status", "error")
+                                             "recovered", "retried", "read_n", "read_sum_ms", "params_ms", "params_files", "read_errors", "rows", "status", "error")
                      if dm.get(k) not in (None, "")})
     slow = sorted(slow, reverse=True)
     ver = _version_info()
