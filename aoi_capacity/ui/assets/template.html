@@ -874,7 +874,7 @@ const bootPhase=i=>{try{if(BOOT)BOOT.phase(i);}catch(e){}};
 const afterPaint=f=>{if(BOOT&&typeof requestAnimationFrame==="function")requestAnimationFrame(()=>setTimeout(f,0));else setTimeout(f,0);};
 function loadDemo(){
   const fail=e=>{log("로더 오류: "+(e&&e.message||e));errorPanel(String(e&&e.message||e));};
-  const run=()=>{bootPhase(1);afterPaint(()=>{let emb;try{const el=$("#embedded");emb=JSON.parse(el.textContent);el.textContent="";}catch(e){errorPanel("embedded JSON 을 해석할 수 없습니다: "+(e&&e.message||e));return;}   /* PH-08: 해석한 원문(25~72MB)은 문서에서 비운다 — 사본 저장은 사본의 #embedded 를 새로 채운다 */
+  const run=()=>{bootPhase(1);afterPaint(()=>{let emb;try{emb=JSON.parse($("#embedded").textContent);}catch(e){errorPanel("embedded JSON 을 해석할 수 없습니다: "+(e&&e.message||e));return;}
     bootPhase(2);afterPaint(()=>{
     try{rows=emb.cols?unfold(emb):(emb.rows||[]);meta=emb.meta||{generated:"",mode:"saved"};if(meta.lot_only)state.view="lot";else if(Array.isArray(meta.only_tabs)&&meta.only_tabs.length)state.view=meta.only_tabs[0];}   /* 공유 발행 파일(10/27): LOT 추적 탭만 */
     catch(e){fail(e);return;}
