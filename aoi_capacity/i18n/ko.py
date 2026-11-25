@@ -426,6 +426,9 @@ GAPS_LEFT_FMT = " · 남은 {t}"
 GAPS_DONE_FMT = "채웠습니다 — 슬롯 번호 {slot:,}장 · 스캔 비율 {sec:,}장 · 파라미터 {params:,}개 · RDL {rdl:,}개 · KLA 이미지 개수 {kla:,}장 · 결과 파일을 새로 만들었습니다"
 GAPS_STOPPED = "멈췄습니다 — 읽은 것은 저장했고, 다시 누르면 이어서 합니다"
 GAPS_FAIL_FMT = "빈칸을 채우지 못했습니다: {error}"
+GAPS_AUTO_PHASE_FMT = "옛 빈칸 채우는 중(최대 {sec}초)"
+GAPS_AUTO_NOTE_FMT = "평소 수집 때 최근 것부터 {sec}초씩 저절로 채워집니다 — 한꺼번에 채우려면 '빈칸 채우기'"
+GAPS_AUTO_OFF = "평소 수집 때 저절로 채우기는 꺼져 있습니다(설정 gap_fill_sec = 0)"
 
 # 예상 시간(10/11) — 지난 실행의 실측으로 센다. 실측이 없으면 '대략'
 ETA_UNDER_MIN = "1분 안쪽"
