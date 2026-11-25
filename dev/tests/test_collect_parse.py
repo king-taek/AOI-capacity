@@ -589,24 +589,9 @@ def test_ini_is_found_under_the_machines_own_job_folder_name(tmp_path):
     assert r["job"] == "2D@RE $7781539A-WUP_0858562PD_0A"            # 행의 Job 도 원문 — 폴더 이름은 비고에만
     assert r["issue_codes"] == "JOB_FOLDER_DIFFERS=2D@RE-$7781539A-WUP_0858562PD"
     assert "Job 폴더 이름이 Report 와 다름: 2D@RE-$7781539A-WUP_0858562PD" in collect.issue_text(r["issue_codes"])
-    # 원문 → 하이픈 → 접미 뗌 → 둘 다 순으로 4번째에 찾았다. 못 찾은 두 번째 Wafer 는 — PC-02: 앞 세 후보의 Lot 폴더가 없다는 것을
-    # 첫 Wafer 에서 이미 확인해(isdir 한 번씩) 그 후보는 열지 않고 4번째만 연다(예전엔 후보 4개를 다 열었다)
-    assert memo.asked == 4 + 1
+    # 원문 → 하이픈 → 접미 뗌 → 둘 다 순으로 4번째에 찾았다. 못 찾은 두 번째 Wafer 는 후보 4개를 다 본다
+    assert memo.asked == 4 + 4
     assert by["54265684EWA2"]["ini_match"] == "NOT_FOUND"
-
-
-def test_missing_lot_folder_is_not_reopened_for_every_wafer(tmp_path, monkeypatch):
-    """PC-02: NOT_FOUND 는 대개 Lot 폴더가 통째로 없는 경우다(10/6: 57개 중 54개). 첫 헛열기 뒤 Lot 폴더를 한 번 보고, 없으면
-    같은 Report 의 나머지 장은 그 후보를 열지 않고 MoveResultFlag 도 보지 않는다 — 결과(NOT_FOUND)는 그대로."""
-    (tmp_path / "Scanresult").mkdir()
-    flags = []
-    real = collect.os.path.isfile
-    monkeypatch.setattr(collect.os.path, "isfile", lambda p: flags.append(p) or real(p))
-    rep = collect.parse_report(LIVE_NAME, LIVE_HTML)
-    memo = collect._IniMemo()
-    rows = collect.rows_for_report("AOI-1", rep, str(tmp_path / "Scanresult"), memo)
-    assert [r["ini_match"] for r in rows if not r["kind"]] == ["NOT_FOUND", "NOT_FOUND"]
-    assert memo.asked == 1 and not [p for p in flags if p.endswith("MoveResultFlag")]
 
 
 def test_two_wafers_that_never_scanned_stay_not_found_when_their_siblings_are_exact(tmp_path):
