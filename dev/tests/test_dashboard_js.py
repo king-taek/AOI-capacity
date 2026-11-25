@@ -786,7 +786,7 @@ def test_lot_tab_tags_retries_rescans_and_lists_every_wafer():
     lst = _lot_screen(rows)
     (k,) = _lot_keys(lst)
     out = _lot_screen(rows, k)
-    assert "재시도" in out and "재스캔(이름 바뀜)" in out and "재검사" not in out.split("LOT 추적")[-1]
+    assert "재시도" in out and "재스캔(이름 바뀜)" in out and "재검사" not in out.split("<h1>스캔을 어디에 했니?</h1>")[-1]
     assert "첫 검사" not in out and "다른 Job" not in out and "한 장 = 한 줄" not in out      # 10/25: 첫 검사 · 다른 Job 은 적지 않는다
     assert "같은 이력" not in out and out.count('class="lw mono') == 4
 

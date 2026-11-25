@@ -27,7 +27,7 @@ Camtek AOI 장비의 BatchReport/WaferInfo.ini 를 읽어 장비별 가동률을
    `AOI_capacity.html` 한 장을 사용자가 더블클릭해 브라우저에서 본다. QtWebEngine·로컬 서버·localhost 를 쓰지 않는다.
    그 HTML 은 데이터·CSS·JS 를 모두 품고 **바깥으로 요청을 한 건도 보내지 않는다**(가드: `test_template_contract.py`).
    브라우저가 NAS 를 직접 읽는 경로도 두지 않는다 — 수집은 Python 만 한다. 자동 주기 수집은 없다(수동 실행만, D50).
-   화면은 **재설계 구조**(D47, 9/20): 가동률 · Error · Overkill(D99, 10/30) · TB500 · Kendall(D59) · RDL 단일스캔(옛 레시피 D70, D80) · LOT 추적(D88) · 파라미터(D89) 7탭(10/5 — 추이 · KLA 탭 없앰, KLA 는 장비 종류 필터) + 장비/Error/유형·Job · 레시피 묶음 팝업, 라이트 단일. 모델은 아래 '레이아웃' 의 화면 절.
+   화면은 **재설계 구조**(D47, 9/20): 가동률 · Error · Overkill(D99, 10/30) · TB500 · Kendall(D59) · RDL 단일스캔(옛 레시피 D70, D80) · LOT 추적(D88, 화면 이름 '스캔을 어디에 했니?' D107) · 파라미터(D89) 7탭(10/5 — 추이 · KLA 탭 없앰, KLA 는 장비 종류 필터) + 장비/Error/유형·Job · 레시피 묶음 팝업, 라이트 단일. 모델은 아래 '레이아웃' 의 화면 절.
 4. **Scanresult 를 재귀 검색하지 않는다.** INI 경로는 `{scan}/{job}/{setup}/{lot}/{wafer}/WaferInfo.ini` 로 계산해 존재만 확인한다.
    `job`·`setup` 의 출처는 **Report 안의 `Job/Setup` 값**이다(파일명이 아니다 — 실장비 516개 중 옛 파일명 규칙에 맞는 건 6개뿐이었다).
    `Job/Setup` 이 없는 옛 형식만 파일명 규칙(`{job}_{4자리}_{lot}_…`)으로 되돌아가고, 그것도 안 맞으면

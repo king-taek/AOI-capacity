@@ -45,7 +45,7 @@ def test_lot_only_file_has_all_days_blank_columns_and_no_csv(tmp_path, sample):
     m = emb["meta"]
     assert m["lot_only"] is True
     assert '<html lang="ko" data-boot="lot" ' in Path(path).read_text(encoding="utf-8")[:200]   # 시작 화면 표식(D104 웨이퍼 장면 때 둔 것 — D105 부터는 같은 글자 장면이라 쓰지 않지만 표식은 그대로)
-    assert "<title>AOI LOT 추적</title>" in Path(path).read_text(encoding="utf-8")[:2000]      # 11/4: 배포판 제목
+    assert "<title>스캔을 어디에 했니?</title>" in Path(path).read_text(encoding="utf-8")[:2000]      # 11/4: 배포판 제목
     assert "params" not in m and "recipe_groups" not in m, [k for k in ("params", "recipe_groups") if k in m]
     assert (m["range"]["from"], m["range"]["to"]) == (m["data_from"], m["data_to"])      # html_days=7 이어도 가진 데이터 전부
     back, _ = sample_rows.unfold(emb)
@@ -73,7 +73,7 @@ def test_out_dir_under_a_nas_root_is_refused(tmp_path, sample):
 def test_template_keeps_only_the_lot_tab_when_lot_only():
     t = TEMPLATE.read_text(encoding="utf-8")
     assert 'if(meta.lot_only)state.view="lot"' in t
-    assert 'lotOnly?[["lot","LOT 추적"]]' in t
+    assert 'lotOnly?[["lot","스캔을 어디에 했니?"]]' in t
     assert "!lotOnly" in t                                       # 사본 저장 · 레시피 묶음 · 날짜 줄 · 설정 단추를 감춘다
     for piece in ('lotOnly?"":`<section class="cards sm lotcards"', '${lotOnly?"":slots}',
                   '${lotOnly?"":\'<span class="r">배치 시간</span><span>구분</span><span></span>\'}'):
