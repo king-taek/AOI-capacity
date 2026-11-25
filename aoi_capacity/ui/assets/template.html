@@ -794,8 +794,15 @@ function unfold(emb){
   if(!emb||!Array.isArray(emb.cols)||!Array.isArray(emb.rows))throw new Error("embedded 데이터 형식이 다릅니다(cols/rows 없음)");
   if(new Set(emb.cols).size!==emb.cols.length)throw new Error("embedded 열 이름이 중복됩니다");
   const P=emb.pool||null,F=new Set(emb.pooled||[]);embCols=emb.cols.slice();embPooled=[...F];
-  const out=emb.rows.map((a,ri)=>{if(!Array.isArray(a)||a.length!==emb.cols.length)throw new Error("행 "+ri+" 의 열 수가 다릅니다");
-    const o={};emb.cols.forEach((c,i)=>{if(P&&F.has(c)){const v=P[a[i]];if(v===undefined)throw new Error("행 "+ri+" 열 "+c+" 의 풀 번호가 범위 밖입니다");o[c]=v;}else o[c]=a[i];});return o;});
+  const C=emb.cols,n=C.length,pidx=[];C.forEach((c,i)=>{if(P&&F.has(c))pidx.push(i);});const isP=new Set(pidx);
+  /* PH-07: 행마다 빈 객체에 열을 하나씩 붙이면 느리다(46.9만 행 627ms) — 열 이름으로 객체 리터럴을 돌려주는 생성기를 한 번 만들어 부른다(결과 객체는 같다).
+     이름은 JSON.stringify 로 감싼다. 생성기를 만들 수 없는 환경(new Function 금지)이면 예전 방식 */
+  let mk=null;if(!C.some(c=>c==="__proto__"))try{mk=new Function("a","P","return {"+C.map((c,i)=>JSON.stringify(String(c))+":"+(isP.has(i)?"P[a["+i+"]]":"a["+i+"]")).join(",")+"};");}catch(e){mk=null;}
+  const R=emb.rows,out=new Array(R.length);
+  for(let ri=0;ri<R.length;ri++){const a=R[ri];if(!Array.isArray(a)||a.length!==n)throw new Error("행 "+ri+" 의 열 수가 다릅니다");
+    for(let k=0;k<pidx.length;k++)if(P[a[pidx[k]]]===undefined)throw new Error("행 "+ri+" 열 "+C[pidx[k]]+" 의 풀 번호가 범위 밖입니다");
+    if(mk){out[ri]=mk(a,P);continue;}
+    const o={};for(let i=0;i<n;i++)o[C[i]]=isP.has(i)?P[a[i]]:a[i];out[ri]=o;}
   embRowCount=out.length;return out;}
 function errorPanel(msg){try{if(BOOT)BOOT.abort();}catch(e){}_bootQuiet=false;const app=$("#app");if(app)app.innerHTML=`<main><div class="panel" style="padding:28px 24px"><h2>결과 파일을 읽지 못했습니다</h2><p class="muted" style="margin-top:6px">${esc(msg)}</p><p class="muted" style="margin-top:6px">수집 프로그램에서 '수집' 을 다시 실행해 파일을 새로 만드세요. 이 파일의 데이터는 바뀌지 않았습니다.</p></div></main>`;}
 /* 시작 화면(D104): 덮개 · 입자는 위의 boot 스크립트가 이미 띄웠다(별도 스레드라 아래 계산 중에도 돈다). 여기서는 단계만 알리고,
