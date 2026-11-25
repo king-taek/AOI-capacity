@@ -1223,3 +1223,24 @@ def test_overkill_tab_lists_devices_and_lot_row_opens_lot_tracking_with_colored_
         assert errors == [] and requests == []
     finally:
         ctx.close()
+
+
+def test_rapid_day_flips_never_leave_old_numbers_in_the_home_rows(page):
+    """11/25 UTIL-01: 하루 날짜 ‹ › 를 0.1초 간격으로 누르면 숫자(data-txn) ↔ '—'(data-tx) 로 바뀐 칸에서 옛 트윈이 옛 숫자를 다시 써 넣었다.
+    누른 뒤 모든 줄의 가동률 · Error 글자가 모델 값과 같아야 한다."""
+    pg, errors, _ = page
+    for k in ("prev", "next", "prev", "next", "prev"):
+        btn = pg.locator(f'button[data-fk="day:{k}"]')
+        if btn.is_enabled():
+            btn.click()
+        pg.wait_for_timeout(90)
+    pg.wait_for_timeout(1500)
+    bad = pg.evaluate("""(() => {const day = S.dayStr(), out = [];
+      for (const r of document.querySelectorAll('.homelist .rowbtn')) {const n = r.dataset.row.slice(4), t = S.at(day, n), u = S.util(t);
+        const sp = r.querySelectorAll(':scope>span.num'), ut = sp[0].textContent.trim(), et = sp[1].textContent.trim();
+        const eu = u === null ? '—' : Math.round(u) + '%', ee = t && t.e ? t.e + '건' : '—';
+        if (ut !== eu || et !== ee) out.push([n, ut, eu, et, ee]);}
+      return out;})()""")
+    assert bad == [], bad
+    assert pg.evaluate("[...document.querySelectorAll('[data-bar]')].every(e => !e.style.clipPath)")   # 연달아 눌러도 sweep 이 남지 않는다(ANIM-10)
+    assert errors == []
