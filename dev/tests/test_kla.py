@@ -113,6 +113,25 @@ def test_collect_reads_kla_once_per_wafer_folder_and_builds_rows(tmp_path, kla_n
            sorted(json.dumps(r, sort_keys=True) for r in emb_rows if r["device"] == "K1")
 
 
+def test_each_kla_device_keeps_its_own_seen_to_and_quiet_run_saves_nothing(tmp_path, kla_nas):
+    """CORE-03 · PC-11: '어디까지 봤나(seen_to)' 가 앞 반복문에 남은 키로 마지막 장비에만 · 남의 날짜로 저장돼
+    나머지 장비는 매번 처음처럼 전부 나열했고, 새 것 없는 수집도 캐시를 다시 썼다."""
+    import shutil
+    nas, csv_path = kla_nas
+    make_kla(nas / "W")
+    shutil.rmtree(nas / "W" / "2026-10-05")                                  # K2 는 10/4 까지만
+    with open(csv_path, "a", encoding="utf-8") as f:
+        f.write(f"K2,{nas / 'W'},,Y,KLA\n")
+    cfg = make_cfg(tmp_path, csv_path)
+    collect.collect(cfg)
+    cache = json.loads(Path(cfg["cache_file"]).read_text(encoding="utf-8"))
+    assert {k: e["seen_to"] for k, e in cache["kla"].items()} == {"dev:K1": "2026-10-05", "dev:K2": "2026-10-04"}
+    stats: dict = {}
+    _rows, meta, _ = collect.collect(cfg, stats=stats)
+    assert {d["name"]: d["listing"] for d in meta if d.get("kind") == "kla"} == {"K1": "recent", "K2": "recent"}
+    assert "kla" not in stats["cache_dirty"] and not stats["cache_saved"], stats["cache_dirty"]
+
+
 def test_kla_outside_scope_is_never_touched(tmp_path, kla_nas, monkeypatch):
     _nas, csv_path = kla_nas
     cfg = make_cfg(tmp_path, csv_path, scope_devices=["AOI-9"])

@@ -305,7 +305,7 @@ def collect_kla(cfg: dict, devs: List[dict], cache: dict, *, run: Callable, now:
         lo = (dt.date.fromisoformat(lo) - dt.timedelta(days=LIST_BACK_DAYS)).isoformat()
         jobs += [(d, dd) for dd in dates if dd >= lo]
         if dates and dates[-1] != e.get("seen_to"):
-            new_seen[k] = dates[-1]                           # 다 읽은 뒤에 옮긴다(아래)
+            new_seen[str(d["key"])] = dates[-1]               # 다 읽은 뒤에 옮긴다(아래) — 키는 이 장비 것(CORE-03: 앞 반복문의 k 를 쓰던 버그)
         m["listing"] = "full" if full else "recent"
         m["pattern_days"] = sum(1 for dd in dates if dd >= lo)
     progress(0, 0, phase)
@@ -414,8 +414,9 @@ def collect_kla(cfg: dict, devs: List[dict], cache: dict, *, run: Callable, now:
 
     run(want, p3p, lambda j: str(j[0]["path"]), on_result=merge, tick=tick)
     for k, v in new_seen.items():                              # 다 읽었다 — 이제 다음 증분 수집의 시작점을 옮긴다
-        store[k]["seen_to"] = v
-        changed = True
+        if store[k].get("seen_to") != v:                       # 값이 실제로 바뀔 때만 저장 이유(C04, PC-11)
+            store[k]["seen_to"] = v
+            changed = True
     retention = int(cfg.get("retention_days") or 0)
     if retention > 0:                                          # 0 = 기한 없음(기본, D69)
         cut = (now - dt.timedelta(days=retention)).isoformat(timespec="minutes")
