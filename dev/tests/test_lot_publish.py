@@ -1,6 +1,6 @@
 """LOT 추적 발행 시험(10/27) — LOT 추적 탭만 담은 HTML 한 장을 이 PC 의 시험 폴더에 만든다(NAS 는 읽지 않고, 공유 폴더에는 쓰지 않는다).
 
-- `write_html(lot_only=True)`: `meta.lot_only` · 기간 전부 · 파라미터 · 레시피 묶음 · CSV 없음 · 안 쓰는 열은 값만 비운다(열 이름은 그대로).
+- `write_html(lot_only=True)`: `meta.lot_only` · 기간 전부 · 파라미터 · 레시피 묶음 · CSV 없음 · 안 쓰는 열은 담지 않는다(11/25 — 예전엔 값만 비웠다).
 - `out_dir` 은 NAS 아래면 거부한다. 화면(template)은 `meta.lot_only` 일 때 탭 줄에 LOT 추적만 둔다."""
 from __future__ import annotations
 
@@ -48,14 +48,26 @@ def test_lot_only_file_has_all_days_blank_columns_and_no_csv(tmp_path, sample):
     assert "<title>스캔을 어디에 했니?</title>" in Path(path).read_text(encoding="utf-8")[:2000]      # 11/4: 배포판 제목
     assert "params" not in m and "recipe_groups" not in m, [k for k in ("params", "recipe_groups") if k in m]
     assert (m["range"]["from"], m["range"]["to"]) == (m["data_from"], m["data_to"])      # html_days=7 이어도 가진 데이터 전부
-    back, _ = sample_rows.unfold(emb)
+    assert emb["cols"] == list(collect.LOT_ONLY_COLS) and set(emb["pooled"]) <= set(emb["cols"])   # 11/25: 안 쓰는 열은 담지 않는다(값만 비우던 것 — 90일 −32%)
+    pool, pooled = emb["pool"], set(emb["pooled"])
+    back = [{c: (pool[v] if c in pooled else v) for c, v in zip(emb["cols"], a)} for a in emb["rows"]]
     keep_rows = [r for r in rows if not r.get("kind")]
     assert len(back) == len(keep_rows) < len(rows)                                    # 합성 행(kind)은 담지 않는다
     for c in collect.LOT_ONLY_BLANK_COLS:
-        assert c in emb["cols"] and all(r.get(c) == "" for r in back)
+        assert c not in emb["cols"]
     assert set(collect.LOT_ONLY_BLANK_COLS) | set(collect.LOT_ONLY_KEEP_COLS) == set(collect.OUT_COLS)
     for c in ("wafer_id", "lot", "job", "device", "slot_no", "status", "recipe", "faults", "report", "batch_start", "wafer_start_time"):
         assert [r.get(c) or "" for r in back] == [r.get(c) or "" for r in keep_rows], c                   # LOT 추적이 쓰는 열은 그대로
+
+
+def test_lot_only_file_can_be_limited_to_recent_days(tmp_path, sample):
+    """11/25(LOTD-05): cfg `publish_lot_days` 를 주면 LOT 추적 배포판도 최근 N일(+ 그 기간 Wafer 의 앞선 시도 맥락) — 기본 0 은 지금처럼 전부."""
+    rows, meta = sample
+    assert collect.DEFAULT_CONFIG["publish_lot_days"] == 0
+    path = collect.write_html(_cfg(tmp_path / "main", publish_lot_days=7), rows, meta["devices"], [], 0.0, lot_only=True,
+                              out_dir=str(tmp_path / "pub"), out_name="lot.html")
+    m = sample_rows.embedded(Path(path).read_text(encoding="utf-8"))["meta"]
+    assert m["lot_only"] is True and m["range"]["from"] > m["data_from"] and m["range"]["to"] == m["data_to"]
 
 
 def test_out_dir_under_a_nas_root_is_refused(tmp_path, sample):
@@ -354,7 +366,7 @@ def test_share_shortcut_falls_back_to_url_without_windows_and_lnk_replaces_it(tm
     share = tmp_path / "share"
     publish.publish_lot(cfg, str(share), rows=rows[:10], dev_meta=devs)
     assert (share / publish.LOT.shortcut).is_file() and not (share / publish.LOT.lnk).exists()
-    monkeypatch.setattr(publish, "make_lnk", lambda target, icon: b"LNK:" + (icon or "").encode("utf-16-le"))
+    monkeypatch.setattr(publish, "make_lnk", lambda target, icon: b"LNK:" + target.encode("utf-16-le") + (icon or "").encode("utf-16-le"))
     publish.publish_lot(cfg, str(share), rows=rows[:10], dev_meta=devs)
     assert (share / publish.LOT.lnk).is_file()
     assert not (share / publish.LOT.shortcut).exists()           # 우리 .url 은 .lnk 가 생기면 지운다
@@ -371,6 +383,18 @@ def test_lnk_current_checks_the_icon_path():
     # 아이콘 없음(11/4): 옛 AOI.ico 를 가리키는 .lnk 는 다시 만들고, 안 가리키면 그대로
     assert not publish._lnk_current(b"x" + icon.encode("utf-16-le"), None)
     assert publish._lnk_current(b"x" + "AOI_LOT.html".encode("utf-16-le"), None)
+
+
+def test_lnk_current_checks_the_target_path():
+    """11/25(LOT-18): 배포 폴더 표기를 바꾸거나 폴더를 옮기면 옛 경로 바로가기는 다시 만든다 — 같은 경로면(대소문자 · UNC 가 서버\\공유 와 나머지로 나뉘어 적혀도) 그대로."""
+    tgt = "\\\\srv\\share\\LOT추적\\AOI_LOT.html"
+    assert publish._lnk_current(b"x" + tgt.encode("utf-16-le"), None, tgt)
+    assert publish._lnk_current(b"x" + tgt.upper().encode("utf-16-le"), None, tgt)
+    split = b"x" + "\\\\SRV\\SHARE".encode("cp949") + b"\0" + "LOT추적\\AOI_LOT.html".encode("cp949") + b"\0"
+    assert publish._lnk_current(split, None, tgt)                                   # LinkInfo: 서버\\공유 + 나머지 경로(ANSI)
+    assert not publish._lnk_current(b"x" + "Z:\\LOT추적\\AOI_LOT.html".replace("Z:", "\\\\old\\x").encode("utf-16-le"), None, tgt)
+    assert not publish._lnk_current(b"x" + tgt.encode("utf-16-le"), None, "\\\\srv\\other\\AOI_LOT.html")
+    assert publish._lnk_current(b"x" + "\\\\srv\\share\\LOT추적\\AOI_LOT.html".encode("utf-16-le"), None, "Z:\\LOT추적\\AOI_LOT.html")   # 연결 드라이브: 드라이브 뒤 경로
 
 
 def test_publish_removes_our_old_share_icon_only(tmp_path, sample):
