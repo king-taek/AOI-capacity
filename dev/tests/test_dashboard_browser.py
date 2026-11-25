@@ -1229,6 +1229,13 @@ def test_rapid_day_flips_never_leave_old_numbers_in_the_home_rows(page):
     """11/25 UTIL-01: 하루 날짜 ‹ › 를 0.1초 간격으로 누르면 숫자(data-txn) ↔ '—'(data-tx) 로 바뀐 칸에서 옛 트윈이 옛 숫자를 다시 써 넣었다.
     누른 뒤 모든 줄의 가동률 · Error 글자가 모델 값과 같아야 한다."""
     pg, errors, _ = page
+    # 결정적 재현: 47 → 80 트윈이 도는 사이 같은 칸이 '—' 로 바뀌면 트윈을 끊어야 한다(고치기 전엔 0.5초 뒤 '80%' 가 다시 써졌다)
+    left = pg.evaluate("""(async () => {const box = document.createElement('div'); document.body.appendChild(box);
+      box.innerHTML = '<span data-txn="47" data-txf="pct">47%</span>'; const el = box.firstChild;
+      txAnim(box); el.setAttribute('data-txn', '80'); el.textContent = '80%'; txAnim(box);
+      el.removeAttribute('data-txn'); el.removeAttribute('data-txf'); el.setAttribute('data-tx', ''); el.textContent = '—'; txAnim(box);
+      await new Promise(r => setTimeout(r, 500)); const t = el.textContent; box.remove(); return t;})()""")
+    assert left == "—"
     for k in ("prev", "next", "prev", "next", "prev"):
         btn = pg.locator(f'button[data-fk="day:{k}"]')
         if btn.is_enabled():
