@@ -362,7 +362,7 @@ def test_popups_stack_behind_each_other_and_escape_closes_the_top(page):
     pg, errors, _ = page
     pg.locator('button.rowbtn[data-fk="dev:AOI-1"]').click()
     pg.wait_for_selector('.dlg[data-dlg="dev"]')
-    pg.locator('.dlg[data-dlg="dev"] button[data-fk="dev:err"]').click()   # 11/25: 단추 이름에 그날 건수('Error 3건 ›' · 'Error 없음 ›')
+    pg.locator('.dlg[data-dlg="dev"] button[data-fk="dev:err"]').click()
     pg.wait_for_selector('.dlg[data-dlg="err"]')
     st = pg.evaluate("[...document.querySelectorAll('.ov:not([data-leaving])')].map(o => o.dataset.key + ':' + (o.classList.contains('behind') ? 'behind' : 'top') + ':' + o.inert)")
     assert st == ["ov:dev:behind:true", "ov:err:top:false"]
@@ -447,7 +447,7 @@ def test_motion_hooks_lottie_countup_sweep_and_recede(page):
     pg.locator('button.rowbtn[data-fk="dev:AOI-2"]').click()                              # AOI-2 는 Error 가 없다
     pg.wait_for_selector('.dlg[data-dlg="dev"]')
     assert pg.evaluate("document.querySelector('#app>.stage').classList.contains('behind')")   # 팝업이 열리면 무대가 물러난다
-    pg.locator('.dlg[data-dlg="dev"] button[data-fk="dev:err"]').click()   # 11/25: 단추 이름에 그날 건수('Error 3건 ›' · 'Error 없음 ›')
+    pg.locator('.dlg[data-dlg="dev"] button[data-fk="dev:err"]').click()
     pg.wait_for_selector('.dlg[data-dlg="err"] .lt-empty .lt svg')                       # Lottie 체크
     pg.keyboard.press("Escape")
     pg.keyboard.press("Escape")
@@ -461,7 +461,7 @@ def test_popup_deck_click_behind_brings_it_to_front_and_stackbar_lists_them(page
     pg, errors, _ = page
     pg.locator('button.rowbtn[data-fk="dev:AOI-1"]').click()
     pg.wait_for_selector('.dlg[data-dlg="dev"]')
-    pg.locator('.dlg[data-dlg="dev"] button[data-fk="dev:err"]').click()   # 11/25: 단추 이름에 그날 건수('Error 3건 ›' · 'Error 없음 ›')
+    pg.locator('.dlg[data-dlg="dev"] button[data-fk="dev:err"]').click()
     pg.wait_for_selector('.dlg[data-dlg="err"]')
     pg.wait_for_timeout(500)
     # 뒤 카드(dev)는 앞 카드보다 왼쪽에 있다
@@ -497,7 +497,7 @@ def test_stackbar_stays_top_left_while_the_popup_scrolls_and_lot_panel_fades_in_
     pg.set_viewport_size({"width": 1280, "height": 420})
     pg.locator('button.rowbtn[data-fk="dev:AOI-1"]').click()
     pg.wait_for_selector('.dlg[data-dlg="dev"]')
-    pg.locator('.dlg[data-dlg="dev"] button[data-fk="dev:err"]').click()   # 11/25: 단추 이름에 그날 건수('Error 3건 ›' · 'Error 없음 ›')
+    pg.locator('.dlg[data-dlg="dev"] button[data-fk="dev:err"]').click()
     pg.wait_for_selector('.stackbar .sb')
     assert pg.evaluate("document.querySelector('.stackbar').parentElement.id") == "app"
     top0 = pg.evaluate("document.querySelector('.stackbar').getBoundingClientRect().top")
