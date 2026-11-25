@@ -366,7 +366,7 @@ main{max-width:1420px;margin:0 auto;padding:22px 24px 90px}
 .phist{display:grid;grid-template-columns:70px 90px minmax(0,1.2fr) minmax(0,2fr);gap:10px;padding:7px 0;border-bottom:1px solid #F0F3F6;font-size:12px;align-items:start}
 .cards.lotcards .v{font-size:18px}.cards.lotcards>div{padding-left:14px;padding-right:12px}
 .lotgrid{display:grid;grid-template-columns:300px minmax(0,1fr);gap:16px;align-items:start}.lotlist .lotscroll{max-height:70vh;overflow:auto}
-.rowbtn.lotpick{display:flex;flex-direction:column;align-items:flex-start;gap:2px;width:100%;padding:8px 12px;border:0;border-bottom:1px solid #F3F5F8;background:transparent;text-align:left;cursor:pointer;font:inherit;font-size:12.5px}.rowbtn.lotpick:hover{background:#F6F9FC}.rowbtn.lotpick.on{background:#EAF2FB;box-shadow:inset 3px 0 0 var(--nav-on)}.rowbtn.lotpick .muted{font-size:11px}
+.rowbtn.lotpick{display:flex;flex-direction:column;align-items:flex-start;gap:2px;width:100%;padding:8px 12px;border:0;border-bottom:1px solid #F3F5F8;background:transparent;text-align:left;cursor:pointer;font:inherit;font-size:12.5px}.rowbtn.lotpick:hover{background:#F6F9FC}.rowbtn.lotpick.lpnoid{cursor:default;background:#FAFBFC}.lpday{margin:0;padding:6px 12px 3px;font-size:11px;font-weight:600;color:var(--ink-2);background:#F6F9FC;border-bottom:1px solid #EDF1F5}.lpday.d{font-weight:500;color:var(--ink-3);background:transparent;padding-top:4px}.rowbtn.lotpick.on{background:#EAF2FB;box-shadow:inset 3px 0 0 var(--nav-on)}.rowbtn.lotpick .muted{font-size:11px}
 .lotatt{display:grid;grid-template-columns:var(--lotcols,84px 70px minmax(90px,1.1fr) minmax(120px,1.6fr) minmax(48px,.5fr) 64px minmax(100px,.9fr) 60px 70px minmax(120px,1.1fr) 48px);gap:6px;align-items:center;font-size:12px;padding:5px 0;border-bottom:1px solid #F3F5F8}.lotatt>span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.lotatt.head{font-weight:700;color:var(--ink-2);border-bottom:1px solid #EDF1F5}.lotatt .r{text-align:right}.lotatt>span.wrap{white-space:normal;overflow:visible;text-overflow:clip;overflow-wrap:anywhere;line-height:1.35}.lotatt small{font-size:11px}.lotatt .pill{margin-right:4px;display:inline-block;margin-bottom:2px;white-space:normal;max-width:100%}.lotatt.sm{grid-template-columns:84px 74px minmax(90px,1fr) 70px minmax(80px,1fr) 80px 78px minmax(90px,1fr)}.lotatt .ix{color:var(--ink-3);font-size:11px;text-align:right}.lotatt .same{color:var(--ink-3);font-weight:400}.lp1{display:flex;gap:6px;align-items:baseline;width:100%}.lp1 b{font-weight:600}.lp1 .e{margin-left:auto}.pill.warn{background:#FFE9A8;color:#6B4E00}.lothead .lt{font-size:17px}.lothead .alb{border:1px solid var(--line,#E3E8EE);background:#fff;border-radius:999px;font:inherit;font-size:12px;padding:2px 10px;cursor:pointer;color:var(--ink-2)}.lotal{display:flex;flex-wrap:wrap;gap:4px;margin:-6px 0 12px}.lotmx .ldv{font-size:10.5px;color:var(--ink-2);text-align:center;border-bottom:2px solid #C9D2DC;padding-bottom:1px;white-space:nowrap;overflow:hidden}.lotmx .ldl{font-size:10.5px;color:var(--ink-3)}.lotmx .sn{display:inline-block;min-width:30px;color:var(--ink-2);font-family:var(--sans);font-weight:600}.lotmx .sn.none{color:var(--ink-3);font-weight:400}.lotslots{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:4px 8px}.lsl{display:flex;gap:8px;align-items:baseline;border:0;background:transparent;text-align:left;font:inherit;font-size:12px;padding:3px 6px;border-radius:5px;cursor:pointer;min-width:0}.lsl:hover,.lsl.on{background:#EAF2FB}.lsl.empty{cursor:default;color:var(--ink-3)}.lsl.empty:hover{background:transparent}.lsd{display:inline-block;width:8px;height:8px;border-radius:2px;flex:none;align-self:center}.lsps{display:inline-flex;flex-wrap:wrap;gap:4px;font-weight:400}.lsp{border:1px solid var(--line,#E3E8EE);background:#fff;border-radius:999px;font:inherit;font-size:11.5px;padding:1px 8px;cursor:pointer;color:var(--ink-2)}.lsp.on{background:#EAF2FB;border-color:#9DBCE0;color:var(--ink);font-weight:600}.lsl b{min-width:28px;color:var(--ink-2)}.lsl.none b{color:var(--ink-3);font-weight:400}.lsl .mono{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.lsl small{color:var(--ink-3);font-size:10.5px;white-space:nowrap}.lotleg{display:inline-flex;gap:10px;flex-wrap:wrap;font-weight:400;font-size:12px;color:var(--ink-2)}.lotleg i{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:4px;vertical-align:-1px}
 .ok-top{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:14px}.ok-top .inp{width:240px}
 .okbar{display:flex;height:10px;border-radius:3px;background:#F0F3F7;overflow:hidden;min-width:60px}.okbar i{display:block;height:100%}.okbar i.o{background:#F2C26B}.okbar i.s{background:#D9731F}.okbar.sev i.o{opacity:.25}
@@ -2558,111 +2558,177 @@ function paramHtml(){
    이름 · 코드는 별칭일 뿐 묶는 근거가 아니다. 합치지 못한 쌍(다른 Lot 이름으로 같은 Wafer 를 검사)은 고른 Lot 의 검사 순서에 흐린 줄로 보여 준다. 이 파일에 담긴 기록 전부를 본다(헤더 기간과 무관). 원천 행에서 계산 — 모델과 따로.
    Wafer ID 로 쓰지 않는 것: 6자 미만 · 숫자만 · SLOT 번호 자리표시(SLOT10 은 길이가 6이라 예전엔 통과했다). */
 const lotIdOk=w=>{const id=String(w||"").toUpperCase().replace(/[^A-Z0-9]/g,"");return id.length>=6&&!/^\d+$/.test(id)&&!/^SLOT\d*$/.test(id)?id:null;};
-const LOT_MAX=25;
+const LOT_MAX=25,LOT_NEAR_DAYS=7;
 const LOT_PH=/^(TEST([-_\s].*)?|\d{1,2}|X|LOTID NOT CONFIGURED|NL_.*|LOADPORT.*)$/i;   /* 이름으로 쓰기엔 자리표시 — 표시 이름을 고를 때 뒤로 미룬다 */
 /* KLA 는 'Lot이름@공정코드 꼬리표'(TB500.INT764@6322) — @ 앞이 Lot 이름, 뒤 낱말이 공정 코드 */
 function lotParse(r){const n=String(r.lot||"").trim();if(isKla(r.device)){const m=/^(.*?)@([^\s@]+)(?:\s.*)?$/.exec(n);if(m&&m[1])return {name:m[1],proc:m[2]};}return {name:n,proc:""};}
 let _lotIx=null;
+/* 11/25 점검: Test 판정은 가동률 모델과 같은 하나(D64 · D87 — Lot 원문 어디든 TEST · No Pattern Job) */
+const lotTest=(lot,job)=>/TEST/i.test(String(lot||""))||MONITOR_JOB_RE.test(String(job||""));
+/* 검색 비교 — 띄어쓰기 · 하이픈 · 밑줄 같은 기호는 무시한다(영문 · 숫자 · 한글만, 대문자로) */
+const lotNorm=s=>String(s||"").toUpperCase().replace(/[^A-Z0-9가-힣]/g,"");
+/* 장비 이름 비교 — 기호와 숫자 앞 0 을 무시(AOI-7 = aoi7 = AOI-07, 4F-AOI-01 = 4faoi1) */
+const lotDevKey=s=>lotNorm(s).replace(/(^|[A-Z])0+(?=\d)/g,"$1");
 function lotIndex(){if(_lotIx&&_lotIx.rows===rows)return _lotIx;
-  const atts=new Map();
-  for(const r of rows){if(r.kind)continue;const id=lotIdOk(r.wafer_id);if(!id)continue;const tt=P(r.wafer_start_time)||P(r.batch_start);if(!tt)continue;const t=tt.getTime();
-    const k=r.device+"\u0001"+(r.report||r.lot+"\u0001"+r.batch_start);let a=atts.get(k);
-    if(!a){const p=lotParse(r),bs=P(r.batch_start),be=P(r.batch_end);
-      a={k,dev:r.device,lot:String(r.lot||"").trim(),name:p.name,proc:p.proc,job:String(r.job||""),rep:r.report||"",t,bmin:bs&&be&&be>bs?(be-bs)/60000:null,ids:new Set(),rows:[],cl:null,i:0};atts.set(k,a);}
-    if(t<a.t)a.t=t;a.ids.add(id);a.rows.push(r);}
+  /* 같은 시각 글자는 한 번만 푼다(행 수십만 개 — 서로 다른 시각은 그 1/5 쯤) */
+  const tm=new Map(),T=s=>{if(!s)return null;let v=tm.get(s);if(v===undefined){const d=P(s);v=d?d.getTime():null;tm.set(s,v);}return v;};
+  const cz=new Map(),CZ=s=>{let v=cz.get(s);if(v===undefined){v=causeOf(s);cz.set(s,v);}return v;};
+  const im=new Map(),ID=w=>{let v=im.get(w);if(v===undefined){v=lotIdOk(w);im.set(w,v);}return v;};   /* Wafer ID 도 장마다 여러 번 나온다 */
+  const atts=new Map(),lost=new Map(),byDR=new Map();
+  for(const r of rows){if(r.kind)continue;const bs=T(r.batch_start),t0=bs!=null?bs:T(r.wafer_start_time);if(t0==null)continue;   /* 배치 시작이 있으면 Wafer 시각은 풀지 않는다 */
+    /* 시도 열쇠 = 장비 + Report — 행마다 글자를 이어 붙이지 않게 장비 → Report 두 단계 Map 으로 찾는다 */
+    let dr=byDR.get(r.device);if(!dr)byDR.set(r.device,dr=new Map());const rk=r.report||r.lot+"\u0001"+r.batch_start;let k=dr.get(rk);if(k===undefined)dr.set(rk,k=r.device+"\u0001"+rk);
+    const id=ID(r.wafer_id);
+    /* Wafer ID 로 쓸 수 없는 행(자리표시 · 숫자만 · 짧음)은 묶지 않지만 PASS · 원인 Error 행은 시도마다 세어 둔다 — 빼는 것과 없었던 것은 다르다.
+       원인 없는 건너뜀 · 중단(빈 슬롯 'Slot n' 자리표시 — 실데이터 30일의 거의 전부)은 세지 않는다 */
+    if(!id){const c=CZ(r.status);if(!c&&!isPass(r.status))continue;let b=lost.get(k);if(!b)lost.set(k,b={n:0,e:0,r,t:bs!=null?bs:t0});b.n++;if(c)b.e++;continue;}
+    let a=atts.get(k);
+    if(!a){const p=lotParse(r),be=T(r.batch_end);
+      /* 시도의 시각 = Report 의 배치 시작(그 Report 자신의 값) — 없을 때만 Wafer 시각 중 이른 것. Wafer 시각은 다음 시도가 INI 를 덮어써 뒤로 밀릴 수 있다(D37) */
+      a={k,dev:r.device,lot:String(r.lot||"").trim(),name:p.name,proc:p.proc,job:String(r.job||""),rep:r.report||"",t:bs!=null?bs:t0,bs,bmin:bs!=null&&be!=null&&be>bs?(be-bs)/60000:null,
+        test:lotTest(r.lot,r.job),ids:new Set(),rows:[],cl:null,i:0,e:0,noId:0,noIdE:0};atts.set(k,a);}
+    if(a.bs==null&&t0<a.t)a.t=t0;a.ids.add(id);a.rows.push(r);if(!a.test&&CZ(r.status))a.e++;}
+  const noIds=[];
+  for(const [k,b] of lost){const a=atts.get(k);if(a){a.noId=b.n;a.noIdE=a.test?0:b.e;continue;}
+    const p=lotParse(b.r);noIds.push({k,dev:b.r.device,lot:String(b.r.lot||"").trim(),name:p.name,proc:p.proc,job:String(b.r.job||""),rep:b.r.report||"",t:b.t,n:b.n,e:lotTest(b.r.lot,b.r.job)?0:b.e,nq:lotNorm(b.r.lot)});}
   const list=[...atts.values()].sort((x,y)=>x.t-y.t||(x.k<y.k?-1:1));list.forEach((a,i)=>{a.i=i;});
-  /* 같은 Wafer ID 를 가진 시도를 이어 붙인다 — 합친 Wafer 가 LOT_MAX 를 넘으면 합치지 않는다(입력 순서 = 시간 순이라 결과가 결정적) */
-  const par=list.map((_,i)=>i),ids=list.map(a=>new Set(a.ids)),owner=new Map();
+  /* 같은 Wafer ID 를 가진 시도를 이어 붙인다 — 합친 Wafer 가 LOT_MAX 를 넘으면 합치지 않는다(입력 순서 = 시간 순이라 결과가 결정적).
+     11/25(D92 · D95 에 조건 추가): 그 Lot 의 마지막 스캔에서 **LOT_NEAR_DAYS(7일) 넘게 지난 시도는 작은 쪽 Wafer 의 절반 이상이 같은 Wafer 일 때만** 잇는다 —
+     ID 한두 장만 겹친 두 Lot(재생 · 더미 Wafer 로 몇 달 뒤 다시 쓰인 ID)은 잇지 않고 '겹침' 으로 남긴다. 가까운 시도에는 걸지 않는다:
+     한 Lot 을 나눠 스캔(12장 + 15장)하거나 DIA 몇 장만 뽑아 보는 일은 겹침이 적어도 같은 Lot 이다(실데이터 30일: 조건을 늘 걸면 77 Lot 이 갈리고 그중 56개는 같은 이름 · 하루 안). */
+  const par=list.map((_,i)=>i),ids=list.map(a=>new Set(a.ids)),owner=new Map(),lastT=list.map(a=>a.t);
   const find=x=>{while(par[x]!==x){par[x]=par[par[x]];x=par[x];}return x;};
   /* 10/24(LNF): Wafer ID 판독도 가끔 한 글자 틀린다(K1 이 38135G04EWB7 을 48135G04EWB7 로) — 그 한 장 때문에 합치면 26장이 되어 Lot 이 둘로 갈렸다.
-     합치면 LOT_MAX 를 넘을 때, 넘는 만큼(최대 LOT_OCR_MAX 장)이 양쪽에만 있는 ID 끼리 **같은 길이 · 한 글자만 다른** 쌍이면 같은 Wafer 로 보고 합친다.
-     대표 ID 는 더 많은 검사에 나온 쪽(`freq`), 다른 쪽은 별칭(`ali`) — 화면에 'ID 판독 차이' 로 남긴다(빼는 것과 없었던 것은 다르다). */
-  const freq=new Map();for(const a of list)for(const id of a.ids)freq.set(id,(freq.get(id)||0)+1);
-  const ali=new Map(),canon=id=>{let c=id,k=0;while(ali.has(c)&&k++<8)c=ali.get(c);return c;};
-  for(const a of list)for(const id of a.ids){const o=owner.get(id);if(o===undefined){owner.set(id,a.i);continue;}
-    const ra=find(a.i),rb=find(o);if(ra===rb)continue;
-    const A=ids[ra],B=ids[rb];let n=A.size;for(const x of B)if(!A.has(x))n++;
-    if(n>LOT_MAX){const pr=lotOcrPairs([...A].filter(x=>!B.has(x)),[...B].filter(x=>!A.has(x)));if(!pr||n-pr.length>LOT_MAX)continue;
-      for(const [p,q] of pr){const [c,o2]=(freq.get(p)||0)>=(freq.get(q)||0)?[p,q]:[q,p];ali.set(o2,c);A.delete(o2);B.delete(o2);A.add(c);}}
-    par[rb]=ra;for(const x of B)A.add(x);}
-  for(const r of new Set(list.map(a=>find(a.i))))ids[r]=new Set([...ids[r]].map(canon));
-  const byLot=new Map(),byRoot=new Map(),byW=new Map();
+     합치면 LOT_MAX 를 넘을 때, 넘는 만큼(최대 LOT_OCR_MAX 장)이 양쪽에만 있는 ID 끼리 **같은 길이 · 한 글자만 다른** 쌍이면 같은 Wafer 로 보고 합친다
+     (11/25: 짝은 서로의 유일한 후보일 때만, 그리고 정확히 겹친 장이 짝보다 많을 때만 — 형제 Wafer 끼리 짝짓지 않게).
+     대표 ID 는 더 많은 검사에 나온 쪽(`freq`), 같으면 Camtek 이 읽은 쪽, 그래도 같으면 앞 검사의 판독 — 다른 쪽은 별칭(`ali`), 화면에 'ID 판독 차이' 로 남긴다(빼는 것과 없었던 것은 다르다).
+     별칭은 대표 ID 끼리만 잇는다 — 판독이 장비마다 번갈아 달라도 고리가 생기지 않는다. */
+  const freq=new Map(),camRead=new Set();for(const a of list){const cam=!isKla(a.dev);for(const id of a.ids){freq.set(id,(freq.get(id)||0)+1);if(cam)camRead.add(id);}}
+  const ali=new Map(),canon=id=>{while(ali.has(id))id=ali.get(id);return id;},cset=s=>{const o=new Set();for(const x of s)o.add(canon(x));return o;};
+  const aliN=new Map(),forms=id=>{const f=aliN.get(id);return f?[id,...f]:[id];};   /* 대표 ID → 그 별칭들(판독 차이가 두 번 이어져도 원래 판독과 비교한다) */
+  for(const a of list){const tried=new Set();for(const id of a.ids){const o=owner.get(id);if(o===undefined){owner.set(id,a.i);continue;}
+    const ra=find(a.i),rb=find(o);if(ra===rb||tried.has(rb))continue;tried.add(rb);
+    const A=cset(ids[ra]),B=cset(ids[rb]);let sh=0;for(const x of A)if(B.has(x))sh++;
+    if(a.t-lastT[rb]>LOT_NEAR_DAYS*864e5&&sh*2<Math.min(A.size,B.size))continue;
+    const n=A.size+B.size-sh;
+    if(n>LOT_MAX){const pr=lotOcrPairs([...A].filter(x=>!B.has(x)),[...B].filter(x=>!A.has(x)),forms);if(!pr||n-pr.length>LOT_MAX||sh<=pr.length)continue;
+      for(const [p,q] of pr){const fp=freq.get(p)||0,fq=freq.get(q)||0,cp=camRead.has(p),cq=camRead.has(q);
+        const c=fp!==fq?(fp>fq?p:q):cp!==cq?(cp?p:q):q,o2=c===p?q:p;ali.set(o2,c);aliN.set(c,[...(aliN.get(c)||[]),...forms(o2)]);aliN.delete(o2);A.delete(o2);B.delete(o2);A.add(c);}}
+    par[rb]=ra;for(const x of B)A.add(x);ids[ra]=A;lastT[ra]=Math.max(lastT[ra],lastT[rb]);tried.clear();}}
+  for(const r of new Set(list.map(a=>find(a.i))))ids[r]=cset(ids[r]);
+  const byLot=new Map(),byRoot=new Map(),byW=new Map(),devs=new Map();
   for(const a of list){const r=find(a.i);let L=byRoot.get(r);
-    if(!L){L={lot:"c"+a.i,atts:[],ids:ids[r],names:new Map(),procs:new Set(),devs:new Set(),last:0,kla:isKla(a.dev),over:new Set(),title:"",ocr:[]};byRoot.set(r,L);byLot.set(L.lot,L);}
+    if(!L){L={lot:"c"+a.i,atts:[],ids:ids[r],names:new Map(),procs:new Set(),devs:new Set(),last:0,kla:false,kinds:new Set(),eA:0,over:new Set(),title:"",ocr:[],nq:""};byRoot.set(r,L);byLot.set(L.lot,L);}
     a.cl=L;L.atts.push(a);L.names.set(a.name,(L.names.get(a.name)||0)+1);if(a.proc)L.procs.add(a.proc);L.devs.add(a.dev);if(a.t>L.last)L.last=a.t;
+    L.kinds.add(isKla(a.dev)?"kla":"cam");if(a.e)L.eA++;
+    const dk0=lotDevKey(a.dev);let dv=devs.get(dk0);if(!dv)devs.set(dk0,dv={dev:a.dev,atts:[]});dv.atts.push(a);
     for(const id0 of a.ids){const id=canon(id0);let w=byW.get(id);if(!w)byW.set(id,w=[]);if(w[w.length-1]!==a)w.push(a);}}
+  for(const dv of devs.values())dv.atts.reverse();   /* 장비마다 최근 시도부터 */
   for(const [o,c0] of ali){const c=canon(c0);for(const L of byLot.values())if(L.ids.has(c))L.ocr.push([o,c]);}
-  for(const L of byLot.values()){const ns=[...L.names].sort((p,q)=>(LOT_PH.test(p[0])-LOT_PH.test(q[0]))||(q[1]-p[1])||(p[0]<q[0]?-1:1));L.title=ns.length?ns[0][0]:"";}
+  for(const L of byLot.values()){const ns=[...L.names].sort((p,q)=>(LOT_PH.test(p[0])-LOT_PH.test(q[0]))||(q[1]-p[1])||(p[0]<q[0]?-1:1));L.title=ns.length?ns[0][0]:"";
+    L.kla=!L.kinds.has("cam");L.nq=[...L.names.keys()].map(lotNorm).join("\u0001");}
   for(const w of byW.values()){const cs=new Set(w.map(a=>a.cl));if(cs.size>1)for(const c of cs)for(const d of cs)if(c!==d)c.over.add(d.lot);}
-  return _lotIx={rows,list,byLot,byW,canon};}
-/* 양쪽에만 있는 ID 끼리 같은 길이 · 한 글자만 다른 쌍(겹치지 않게, 최대 LOT_OCR_MAX 쌍). 없으면 null */
+  noIds.sort((x,y)=>y.t-x.t);
+  return _lotIx={rows,list,byLot,byW,canon,devs,noIds,T};}
+/* 양쪽에만 있는 ID 끼리 같은 길이 · 한 글자만 다른 쌍(서로의 유일한 후보일 때만, 최대 LOT_OCR_MAX 쌍). 없으면 null */
 const LOT_OCR_MAX=2;
-function lotOcrPairs(XA,XB){if(!XA.length||!XB.length||XA.length>LOT_MAX||XB.length>LOT_MAX)return null;const used=new Set(),out=[];
-  for(const p of XA){for(const q of XB){if(used.has(q)||p.length!==q.length)continue;let d=0;for(let i=0;i<p.length&&d<2;i++)if(p[i]!==q[i])d++;if(d===1){used.add(q);out.push([p,q]);break;}}if(out.length>=LOT_OCR_MAX)break;}
+function lotOcrPairs(XA,XB,forms){if(!XA.length||!XB.length||XA.length>LOT_MAX||XB.length>LOT_MAX)return null;
+  const d0=(p,q)=>{if(p.length!==q.length)return false;let d=0;for(let i=0;i<p.length&&d<2;i++)if(p[i]!==q[i])d++;return d===1;},
+    d1=forms?(p,q)=>forms(p).some(x=>forms(q).some(y=>d0(x,y))):d0,out=[];
+  for(const p of XA){const qs=XB.filter(q=>d1(p,q));if(qs.length!==1)continue;const q=qs[0];if(XA.filter(x=>d1(x,q)).length!==1)continue;out.push([p,q]);if(out.length>=LOT_OCR_MAX)break;}
   return out.length?out:null;}
-/* 구분 — Wafer 한 장의 한 검사가 그 Wafer 의 앞 이력에서 어떤 위치인지(재검사 = 모델의 Rescan 과 같은 조건: Job 묶음 · 단계 낱말 · 레시피가 같고 앞 시도가 PASS) */
+/* 검색(11/25) — 기호 없이 비교. 입력이 장비 이름과 같으면 '그 장비에서 스캔한 LOT'(최근 순, 최대 30개)를 맨 위에 얹고 그 아래 Lot · Wafer 결과는 그대로.
+   Wafer ID 가 없어 묶지 못한 Report 도 이름이 맞으면 따로(`noid`). → {list:[{k:"lot",v,L,dev?,dt?} · {k:"wid",v,n} · {k:"noid",b}], dev, devN, widN} */
+const LOT_DEV_MAX=30;
+function lotSearch(q,mk){const X=lotIndex(),okMk=L=>mk==="all"||L.kinds.has(mk),okDev=d=>mk==="all"||(mk==="kla")===isKla(d);
+  const qn=lotNorm(q),q2=qn.replace(/[^A-Z0-9]/g,"");
+  if(!qn)return {list:[...X.byLot.values()].filter(okMk).sort((a,b)=>b.last-a.last).slice(0,30).map(L=>({k:"lot",v:L.lot,L})),dev:null,devN:0,widN:0};
+  const out=[],seen=new Set(),dv=X.devs.get(lotDevKey(q));let devN=0;
+  if(dv&&okDev(dv.dev))for(const a of dv.atts){const L=a.cl;if(seen.has(L))continue;seen.add(L);devN++;if(devN<=LOT_DEV_MAX)out.push({k:"lot",v:L.lot,L,dev:dv.dev,dt:a.t});}
+  const lots=[];for(const L of X.byLot.values())if(!seen.has(L)&&okMk(L)&&L.nq.includes(qn))lots.push({k:"lot",v:L.lot,L});
+  lots.sort((a,b)=>b.L.last-a.L.last);out.push(...lots);
+  const wAll=q2.length>=2?[...X.byW.keys()].filter(id=>id.includes(q2)):[];for(const id of wAll.slice(0,12))out.push({k:"wid",v:id,n:X.byW.get(id).length});
+  for(const b of X.noIds)if(okDev(b.dev)&&b.nq.includes(qn)){out.push({k:"noid",v:b.k,b});if(out.length>400)break;}
+  return {list:out,dev:dv&&okDev(dv.dev)?dv.dev:null,devN,widN:wAll.length};}
+/* 구분 — Wafer 한 장의 한 검사가 그 Wafer 의 앞 이력에서 어떤 위치인지. 재스캔 = 가동률 모델의 Rescan 과 같은 조건(D63 · D76 · D87):
+   ① 자재 키(matKey — Job 묶음 | Report 파일명 Lot 토큰 | Wafer, 레시피 없음)의 바로 앞 시도가 PASS → 재스캔(Lot 이름이 다르면 '이름 바뀜')
+   ② 아니면 두 번째 키(matKey2 — Job | 단계 낱말 | Wafer)의 바로 앞 시도가 PASS · 레시피 같음 · 첫 키 다름 → 재스캔(이름 바뀜)
+   Wafer 자리에는 대표 ID(판독 차이로 합친 Wafer 는 같은 열쇠). Test 스캔은 'Test' 로만 적고 Error 수에는 넣지 않는다(D64) */
 const LOT_TAGS={first:["첫 검사","RUN"],retry:["재시도","ERR"],re:["재스캔","DUP"],ren:["재스캔(이름 바뀜)","DUP"],stage:["같은 Job 다른 단계",""],job:["다른 Job",""],test:["Test","TEST"]};
 const LOT_TAG_ORDER=["test","ren","re","retry","stage","job","first"];
 const lotTagBg=k=>{const c=LOT_TAGS[k][1];return c==="RUN"?RUN+"1F":c==="ERR"?ERR+"22":c==="DUP"?DUP+"55":c==="TEST"?TEST+"22":"#EDF1F5";};
-function lotFamily(pick){const X=lotIndex();let ids=new Set(),L=null,all=new Set();
+/* → {ids, atts, names, L, sum}. atts[i]: p · e(Test 제외) · te(Test 의 Error) · s · n(행 수 — 같은 Report 에 같은 ID 가 두 줄이면 둘 다) · dup · noId/noIdE(ID 를 못 읽어 묶지 않은 행 · 그중 Error) · kla
+   w: Map(대표 ID → {r,pass,c,tag,f,min,dups?}) — 같은 ID 의 앞 줄은 dups 에(칸은 마지막 줄).
+   sum(묶인 시도만, 다른 LOT 이름 줄 제외): eW · reW 서로 다른 wafer 수, eN · reN 스캔×wafer 건수, eA · reA 그런 스캔 수, fC · fK Camtek · KLA Defect 합 */
+function lotFamily(pick){const X=lotIndex(),T=X.T;let ids=new Set(),L=null,all=new Set();
   if(pick.k==="lot"){L=X.byLot.get(pick.v);if(L){ids=new Set(L.ids);for(const id of ids)for(const a of X.byW.get(id)||[])all.add(a);}}
   else{const id=X.canon(lotIdOk(pick.v)||"");if(lotIdOk(pick.v)){ids.add(id);for(const a of X.byW.get(id)||[])all.add(a);}}
   const seq=[...all].sort((a,b)=>a.t-b.t||(a.k<b.k?-1:1)),hist=new Map(),out=[],names=new Set();
+  const sum={eW:new Set(),eN:0,eA:0,reW:new Set(),reN:0,reA:0,fC:0,fK:0,fCN:0,fKN:0};
   for(const a of seq){const x=!!(L&&a.cl!==L);
-    const A={k:a.k,dev:a.dev,lot:a.lot,name:a.name,proc:a.proc,job:a.job,rep:a.rep,t:a.t,bmin:a.bmin,rcp:new Set(),w:new Map(),p:0,e:0,s:0,f:0,fN:0,scan:0,tags:{},dom:"first",mixed:0,x,
-      test:/(^|[^A-Z])TEST([^A-Z]|$)/i.test(a.lot)||MONITOR_JOB_RE.test(a.job)};
+    const A={k:a.k,dev:a.dev,lot:a.lot,name:a.name,proc:a.proc,job:a.job,rep:a.rep,t:a.t,bmin:a.bmin,rcp:new Set(),w:new Map(),p:0,e:0,te:0,s:0,n:0,dup:0,f:0,fN:0,scan:0,tags:{},dom:"first",mixed:0,x,
+      test:a.test,kla:isKla(a.dev),noId:a.noId,noIdE:a.noIdE};
     const upd=[];
     for(const r of a.rows){const id0=lotIdOk(r.wafer_id),id=id0&&X.canon(id0);if(!id||!ids.has(id))continue;
       if(r.recipe)A.rcp.add(String(r.recipe));
-      const pass=isPass(r.status),c=causeOf(r.status),ws=P(r.wafer_start_time),we=P(r.wafer_end_time);
-      const mk=(matKey2(r.job,r.lot,r.wafer_id)||id)+"|"+String(r.recipe||""),jk=jobKey(r.job||"");
-      const hs=hist.get(id)||[],same=hs.filter(q=>q.mk===mk),sp=same.filter(q=>q.pass);
+      const pass=isPass(r.status),c=causeOf(r.status),ws=T(r.wafer_start_time),we=T(r.wafer_end_time);
+      const k1=matKey(r.job,lotName(r.report,r.lot,true),id),k2=matKey2(r.job,r.lot,id),rcp=String(r.recipe||""),jk=jobKey(r.job||"");
+      const hs=hist.get(id)||[];let p1=null,p2=null;
+      for(let j=hs.length-1;j>=0&&!(p1&&(p2||!k2));j--){if(!p1&&hs[j].k1===k1)p1=hs[j];if(k2&&!p2&&hs[j].k2===k2)p2=hs[j];}
       let tag="first";
-      if(A.test)tag="test";else if(sp.length)tag=sp[sp.length-1].name===a.name?"re":"ren";else if(same.length)tag="retry";else if(hs.length)tag=hs.some(q=>q.jk===jk)?"stage":"job";
+      if(A.test)tag="test";else if(p1&&p1.pass)tag=p1.name===a.name?"re":"ren";else if(p2&&p2.pass&&p2.k1!==k1&&p2.rcp===rcp)tag="ren";
+      else if(p1||(p2&&p2.rcp===rcp))tag="retry";else if(hs.length)tag=hs.some(q=>q.jk===jk)?"stage":"job";
       const f=/^\d[\d,]*$/.test(String(r.faults??"").trim())?+String(r.faults).replace(/,/g,""):null;
-      A.w.set(id,{r,pass,c,tag,f,min:r.ini_match==="EXACT"&&ws&&we&&we>ws?(we-ws)/60000:null});
-      upd.push([id,{mk,jk,pass,name:a.name}]);}
+      const ent={r,pass,c,tag,f,min:r.ini_match==="EXACT"&&ws!=null&&we!=null&&we>ws?(we-ws)/60000:null};
+      const prev=A.w.get(id);if(prev){ent.dups=(prev.dups||[]).concat([{...prev,dups:undefined}]);A.dup++;}
+      A.w.set(id,ent);upd.push([id,{k1,k2,rcp,jk,pass,name:a.name}]);}
     if(!A.w.size)continue;
     for(const [id,q] of upd){let hs=hist.get(id);if(!hs)hist.set(id,hs=[]);hs.push(q);}
-    for(const x2 of A.w.values()){if(x2.pass){A.p++;if(x2.f!=null){A.f+=x2.f;A.fN++;}}else if(x2.c)A.e++;else A.s++;
-      if(x2.min!=null)A.scan+=x2.min;A.tags[x2.tag]=(A.tags[x2.tag]||0)+1;}
-    let best=0;for(const k of LOT_TAG_ORDER){const n=A.tags[k]||0;if(n>best){best=n;A.dom=k;}}A.mixed=A.w.size-best;
+    let he=false,hr=false;
+    for(const [id,x0] of A.w)for(const x2 of x0.dups?[...x0.dups,x0]:[x0]){A.n++;
+      if(x2.pass){A.p++;if(x2.f!=null){A.f+=x2.f;A.fN++;}}else if(x2.c){if(A.test)A.te++;else{A.e++;if(!x){sum.eW.add(id);sum.eN++;he=true;}}}else A.s++;
+      if(x2.min!=null)A.scan+=x2.min;A.tags[x2.tag]=(A.tags[x2.tag]||0)+1;
+      if(!x&&(x2.tag==="re"||x2.tag==="ren")){sum.reW.add(id);sum.reN++;hr=true;}}
+    if(he)sum.eA++;if(hr)sum.reA++;
+    if(!x&&A.fN){if(A.kla){sum.fK+=A.f;sum.fKN+=A.fN;}else{sum.fC+=A.f;sum.fCN+=A.fN;}}
+    let best=0;for(const k of LOT_TAG_ORDER){const n=A.tags[k]||0;if(n>best){best=n;A.dom=k;}}A.mixed=A.n-best;
     if(!x)names.add(a.name);out.push(A);}
-  return {ids:[...ids].sort(),atts:out,names,L};}
+  return {ids:[...ids].sort(),atts:out,names,L,sum:{...sum,eW:sum.eW.size,reW:sum.reW.size}};}
 /* 검사 순서 표의 Error 원인 칸(한 줄 — 유형 이름은 Error 탭과 같은 원인 코드) */
-function lotCauseHtml(a){const m=new Map();for(const x of a.w.values())if(x.c)m.set(x.c,(m.get(x.c)||0)+1);
+function lotCauseHtml(a){const m=new Map();for(const x0 of a.w.values())for(const x of x0.dups?[...x0.dups,x0]:[x0])if(x.c)m.set(x.c,(m.get(x.c)||0)+1);
   return m.size?[...m].sort((p,q)=>q[1]-p[1]).map(([c,n])=>`<b class="bad">${esc(c)}</b> ${n}`).join(" · "):`<span class="muted">—</span>`;}
 function lotHtml(){
   const lotOnly=!!meta.lot_only;   /* 배포판(10/27 · 10/29): 상단 카드 · 배치 시간 · 구분 · Report · Slot 지도 없음, Wafer × 검사는 원본과 같다 */
   const X=lotIndex(),Q=(state.lotQ||"").trim().toUpperCase(),pick=state.lotPick,mk=state.lotMk||"all";
   const fmtT=t=>{const d=new Date(t);return md(dk(d))+" "+hhmm(t);};
-  const okMk=L=>mk==="all"||(mk==="kla")===L.kla;
-  let list=[];
-  if(Q){for(const L of X.byLot.values())if(okMk(L)&&(L.title.toUpperCase().includes(Q)||[...L.names.keys()].some(n=>n.toUpperCase().includes(Q))))list.push({k:"lot",v:L.lot,L});
-    const q2=Q.replace(/[^A-Z0-9]/g,"");const wids=q2?[...X.byW.keys()].filter(id=>id.includes(q2)).slice(0,12):[];for(const id of wids)list.push({k:"wid",v:id,n:X.byW.get(id).length});}
-  else list=[...X.byLot.values()].filter(okMk).sort((a,b)=>b.last-a.last).slice(0,30).map(L=>({k:"lot",v:L.lot,L}));
-  list.sort((a,b)=>(a.k===b.k?0:a.k==="lot"?-1:1)||((b.L?b.L.last:0)-(a.L?a.L.last:0)));
+  const SR=lotSearch(state.lotQ||"",mk),list=SR.list;   /* 기호 무시 · 장비 이름 · ID 없는 Report(11/25) */
   const shown=list.slice(0,40);
-  const errN=L=>L._e!=null?L._e:(L._e=L.atts.reduce((n,a)=>n+(a.rows.some(r=>causeOf(r.status))?1:0),0));
-  const pickBtn=o=>{const L=o.L,on=pick&&pick.k===o.k&&pick.v===o.v;const at=`type="button" class="rowbtn lotpick${on?" on":""}" data-key="lp:${esc(o.k+":"+o.v)}" data-h="${h(()=>setState({lotPick:{k:o.k,v:o.v},lotWid:null,lotAl:false}))}"`;
+  const errN=L=>L.eA;   /* Error 난 스캔 수(Test 스캔 제외, D64) */
+  /* 장비로 찾으면 그 장비 묶음 머리 · 날짜 머리, 그 아래 이름 · Wafer 결과 머리 */
+  const lpHead=(o,i)=>{const pv=i?shown[i-1]:null;if(o.dt){const d=dk(new Date(o.dt));
+      if(!pv||!pv.dt)return `<p class="lpday">장비 ${esc(o.dev)} 에서 스캔한 LOT · 최근 순${SR.devN>LOT_DEV_MAX?` (${LOT_DEV_MAX}개 / ${SR.devN}개)`:""}</p><p class="lpday d">${md(d)}</p>`;
+      return dk(new Date(pv.dt))!==d?`<p class="lpday d">${md(d)}</p>`:"";}
+    return pv&&pv.dt?`<p class="lpday">이름 · Wafer ID 결과</p>`:"";};
+  const pickBtn=o=>{if(o.k==="noid"){const b=o.b;return `<div class="rowbtn lotpick lpnoid" data-key="lp:${esc("noid:"+o.v)}"><span class="lp1"><b class="mono">${esc(b.name||"(이름 없음)")}</b>${b.proc?`<small class="muted">@${esc(b.proc)}</small>`:""}<span class="pill" title="이 Report 의 Wafer ID 가 슬롯 번호 · 숫자뿐 · 6자 미만이라 다른 스캔과 묶지 않았습니다">Wafer ID 없음 — 묶지 않음</span></span><span class="muted">${b.n} wafer${b.e?` · <b class="bad">Error ${b.e}</b>`:""} · ${esc(b.dev)} · ${fmtT(b.t)}</span></div>`;}
+    const L=o.L,on=pick&&pick.k===o.k&&pick.v===o.v;const at=`type="button" class="rowbtn lotpick${on?" on":""}" data-key="lp:${esc(o.k+":"+o.v)}" data-h="${h(()=>setState({lotPick:{k:o.k,v:o.v},lotWid:null,lotAl:false}))}"`;
     if(!L)return `<button ${at}><span class="lp1"><b class="mono">Wafer ${esc(o.v)}</b></span><span class="muted">${o.n}번 검사</span></button>`;
-    const dv=[...L.devs],e=errN(L);
-    return `<button ${at}><span class="lp1"><b class="mono">${esc(L.title||"(이름 없음)")}</b>${L.procs.size?`<small class="muted">@${esc([...L.procs].slice(0,2).join(","))}</small>`:""}${L.names.size>1?`<small class="muted" title="${esc([...L.names.keys()].join(", "))}">+${L.names.size-1} 이름</small>`:""}${L.over.size?`<span class="pill warn" title="다른 LOT 이름으로도 검사된 Wafer 가 있습니다">겹침</span>`:""}${e?`<b class="bad e">E${e}</b>`:""}</span><span class="muted">${L.ids.size} wafer · 검사 ${L.atts.length}번 · ${esc(dv[0])}${dv.length>1?` 외 ${dv.length-1}대`:""} · ${fmtT(L.last)}</span></button>`;};
+    const dv=o.dev?[o.dev,...[...L.devs].filter(d=>d!==o.dev)]:[...L.devs],e=errN(L);
+    return `<button ${at}><span class="lp1"><b class="mono">${esc(L.title||"(이름 없음)")}</b>${L.procs.size?`<small class="muted">@${esc([...L.procs].slice(0,2).join(","))}</small>`:""}${L.names.size>1?`<small class="muted" title="${esc([...L.names.keys()].join(", "))}">+${L.names.size-1} 이름</small>`:""}${L.over.size?`<span class="pill warn" title="다른 LOT 이름으로도 검사된 Wafer 가 있습니다">겹침</span>`:""}${e?`<b class="bad e">E${e}</b>`:""}</span><span class="muted">${L.ids.size} wafer · 검사 ${L.atts.length}번 · ${esc(dv[0])}${dv.length>1?` 외 ${dv.length-1}대`:""} · ${fmtT(o.dt||L.last)}</span></button>`;};
   const left=`<div class="panel lotlist"><div style="padding:10px 12px;border-bottom:1px solid #EDF1F5"><input class="inp" type="search" data-in="lotQ" data-fk="lot:q" placeholder="Lot 이름 · Wafer ID 검색" value="${esc(state.lotQ||"")}" style="width:100%"></div>
     <div style="padding:8px 12px 0">${segHtml(S.segGroup([{k:"all",label:"전체"},{k:"cam",label:"Camtek"},{k:"kla",label:"KLA"}],mk,k=>setState({lotMk:k})))}</div>
-    <p class="muted" style="font-size:11.5px;margin:8px 12px 4px">${Q?`검색 결과 ${list.length}개${list.length>40?" · 40개 표시":""}`:"최근 Lot 30개"}</p><div class="lotscroll">${shown.map(pickBtn).join("")||`<p class="empty">없음</p>`}</div></div>`;
+    <p class="muted" style="font-size:11.5px;margin:8px 12px 4px">${Q?`검색 결과 ${list.length}개${list.length>40?" · 40개 표시":""}`:"최근 Lot 30개"}</p><div class="lotscroll">${shown.map((o,i)=>lpHead(o,i)+pickBtn(o)).join("")||`<p class="empty">없음</p>`}</div></div>`;
   let right=`<div class="panel" style="padding:28px;color:#5A6673;font-size:13px">왼쪽에서 Lot 이나 Wafer ID 를 고르세요.</div>`;
   if(pick){const F=lotFamily(pick);const A=F.atts,M=A.filter(a=>!a.x);
     if(!M.length)right=`<div class="panel" style="padding:24px">이 ${pick.k==="lot"?"Lot":"Wafer"} 에는 따라갈 Wafer ID 가 없습니다(슬롯 번호 같은 짧은 ID 뿐).</div>`;
-    else{const tot={e:0,re:0,f:0,b:0,scan:0,fN:0};for(const a of M){tot.e+=a.e;for(const x of a.w.values())if(x.tag==="re"||x.tag==="ren")tot.re++;tot.f+=a.f;tot.fN+=a.fN;tot.b+=a.bmin||0;tot.scan+=a.scan;}
+    else{const tot={f:0,b:0,scan:0,fN:0},SM=F.sum;for(const a of M){tot.f+=a.f;tot.fN+=a.fN;tot.b+=a.bmin||0;tot.scan+=a.scan;}
       const devs=new Set(M.map(a=>a.dev)),nX=A.length-M.length,al=[...F.names].filter(n=>n!==(F.L?F.L.title:""));
-      const cards=[{k:"검사",v:M.length+"번",s:`장비 ${devs.size}대`},{k:"재스캔",v:tot.re+" wafer",s:"앞이 PASS 였던 같은 검사"},{k:"Error",v:tot.e+" wafer",s:tot.e?"원인 있는 wafer":"없음"},{k:"배치 시간",v:hm(tot.b),s:`INI 스캔 ${hm(tot.scan)}`}];
-      if(tot.fN)cards.push({k:"Defect",v:tot.f.toLocaleString(),s:F.L&&F.L.kla?"결함 레코드 수 합":"PASS wafer 합"});
+      const cards=[{k:"검사",v:M.length+"번",s:`장비 ${devs.size}대`},{k:"재스캔",v:SM.reW+" wafer",s:SM.reN?`스캔 ${SM.reA}번에서 ${SM.reN}건`:"앞이 PASS 였던 같은 검사"},{k:"Error",v:SM.eW+" wafer",s:SM.eN?`스캔 ${SM.eA}번에서 ${SM.eN}건`:"없음"},{k:"배치 시간",v:hm(tot.b),s:`INI 스캔 ${hm(tot.scan)}`}];
+      if(tot.fN)cards.push(SM.fCN&&SM.fKN?{k:"Defect",v:`${SM.fC.toLocaleString()} · ${SM.fK.toLocaleString()}`,s:"Camtek PASS wafer 합 · KLA 이미지 수 합"}:{k:"Defect",v:tot.f.toLocaleString(),s:SM.fKN?"결함 레코드 수 합":"PASS wafer 합"});   /* Camtek Faults 와 KLA 이미지 개수는 다른 숫자 — 섞이면 나눠 적는다 */
       const anyE=M.some(a=>a.e),anyF=A.some(a=>a.fN);
       const cols=["28px","92px","64px","minmax(150px,1.3fr)","minmax(140px,1.5fr)","minmax(48px,.5fr)","58px"].concat(anyE?["minmax(90px,.9fr)"]:[],anyF?["60px"]:[],lotOnly?[]:["70px","minmax(100px,.9fr)","48px"]).join(" ");
       const attTag=a=>a.dom==="first"||a.dom==="job"?"":`<span class="pill" style="background:${lotTagBg(a.dom)}${a.dom==="test"?";color:#5B3F8F":""}">${esc(LOT_TAGS[a.dom][0])}${a.mixed?` 외 ${a.mixed}`:""}</span>`;
       const row=(a,i)=>{const pv=i?A[i-1]:null;return `<div class="lotatt${a.x?" xo":""}" data-key="la:${esc(a.k)}"><span class="ix num">${i+1}</span><span class="num">${fmtT(a.t)}</span><b class="${pv&&pv.dev===a.dev?"same":""}">${esc(a.dev)}</b><span class="mono lnm" title="${esc(a.lot)}"><span class="lnt">${esc(a.name||"(Lot 없음)")}${a.proc?` <small class="muted">@${esc(a.proc)}</small>`:""}</span>${lotOnly&&a.x?` <span class="pill" title="이 Lot 에 묶이지 않은 다른 Lot 이름 — 같은 Wafer 를 검사했습니다">다른 LOT 이름</span>`:""}</span><span class="mono muted wrap" title="${esc(a.job)}">${esc((isKla(a.dev)&&klaJobAlias(a.job))||a.job)}</span><span class="mono">${esc([...a.rcp].join(" · ")||"—")}</span>
-        <span class="num r">${a.p}<small class="muted">/${a.w.size}</small>${a.e?` <b class="bad">E${a.e}</b>`:""}</span>${anyE?`<span class="wrap">${a.e?lotCauseHtml(a):""}</span>`:""}${anyF?`<span class="num r">${a.fN?a.f.toLocaleString():"—"}</span>`:""}${lotOnly?"":`<span class="num r">${a.bmin!=null?hm(a.bmin):"—"}</span><span class="wrap">${a.x?`<span class="pill" title="이 Lot 에 묶이지 않은 다른 Lot 이름 — 같은 Wafer 를 검사했습니다">다른 LOT 이름</span>`:attTag(a)}</span>`}
+        <span class="num r">${a.p}<small class="muted">/${a.n}</small>${a.e?` <b class="bad">E${a.e}</b>`:""}${a.dup?` <small class="muted" title="같은 Report 에 같은 Wafer ID 가 두 줄 이상 — 결과를 모두 셉니다">같은 ID 중복 ${a.dup}</small>`:""}${a.noId?` <small class="${a.noIdE?"bad":"muted"}" title="Wafer ID 를 읽지 못해(슬롯 번호 · 숫자뿐 · 6자 미만) 묶지 않은 행">ID 없음 ${a.noId}${a.noIdE?`(Error ${a.noIdE})`:""}</small>`:""}</span>${anyE?`<span class="wrap">${a.e?lotCauseHtml(a):""}</span>`:""}${anyF?`<span class="num r">${a.fN?a.f.toLocaleString():"—"}</span>`:""}${lotOnly?"":`<span class="num r">${a.bmin!=null?hm(a.bmin):"—"}</span><span class="wrap">${a.x?`<span class="pill" title="이 Lot 에 묶이지 않은 다른 Lot 이름 — 같은 Wafer 를 검사했습니다">다른 LOT 이름</span>`:attTag(a)}</span>`}
         ${lotOnly?"":`<span>${a.rep&&reportUrl({device:a.dev,report:a.rep})?`<button class="link" data-h="${h(()=>openReport({device:a.dev,report:a.rep}))}">Report</button>`:""}</span>`}</div>`;};
       /* 공정 묶음(11/24, 시안 2 '구간 머리줄'): Job 이름의 RDL·PI 단계(KLA 별칭 포함)가 같은 검사가 이어지면 한 묶음 — 머리줄(단계 · 검사 n번 · 재스캔 n)과 왼쪽 색 띠. 중간에 다른 단계가 끼면 따로 묶고 단계 없는 Job 은 묶지 않는다 */
       const stageOf=a=>{const j=(isKla(a.dev)&&klaJobAlias(a.job))||a.job||"",m=/(?:^|[^A-Za-z0-9])(RDL\d?|PI\d?)(?![A-Za-z0-9])/i.exec(j);return m?m[1].toUpperCase():"";};
