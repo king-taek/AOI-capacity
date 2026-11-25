@@ -887,14 +887,53 @@ const bootPhase=i=>{try{if(BOOT)BOOT.phase(i);}catch(e){}};
 const afterPaint=f=>{if(BOOT&&typeof requestAnimationFrame==="function")requestAnimationFrame(()=>setTimeout(f,0));else setTimeout(f,0);};
 function loadDemo(){
   const fail=e=>{log("로더 오류: "+(e&&e.message||e));errorPanel(String(e&&e.message||e));};
-  const run=()=>{bootPhase(1);afterPaint(()=>{let emb;try{const el=$("#embedded");emb=JSON.parse(el.textContent);el.textContent="";}catch(e){errorPanel("embedded JSON 을 해석할 수 없습니다: "+(e&&e.message||e));return;}   /* PH-08: 해석한 원문(25~72MB)은 문서에서 비운다 — 사본 저장은 사본의 #embedded 를 새로 채운다 */
+  const run=()=>{bootPhase(1);afterPaint(()=>{let emb;try{const el=$("#embedded");stMark("parse0");emb=JSON.parse(el.textContent);el.textContent="";stMark("parsed");}catch(e){errorPanel("embedded JSON 을 해석할 수 없습니다: "+(e&&e.message||e));return;}   /* PH-08: 해석한 원문(25~72MB)은 문서에서 비운다 — 사본 저장은 사본의 #embedded 를 새로 채운다 */
     bootPhase(2);afterPaint(()=>{
-    try{rows=emb.cols?unfold(emb):(emb.rows||[]);meta=emb.meta||{generated:"",mode:"saved"};if(meta.lot_only)state.view="lot";else if(Array.isArray(meta.only_tabs)&&meta.only_tabs.length)state.view=meta.only_tabs[0];}   /* 공유 발행 파일(10/27): LOT 추적 탭만 */
+    try{rows=emb.cols?unfold(emb):(emb.rows||[]);stMark("unfolded");meta=emb.meta||{generated:"",mode:"saved"};if(meta.lot_only)state.view="lot";else if(Array.isArray(meta.only_tabs)&&meta.only_tabs.length)state.view=meta.only_tabs[0];}   /* 공유 발행 파일(10/27): LOT 추적 탭만 */
     catch(e){fail(e);return;}
     emb=null;bootPhase(3);
-    afterPaint(()=>{try{init();}catch(e){fail(e);return;}
-      let w=false;try{if(BOOT){BOOT.done($("#app"));BOOT.warm(navWarm);w=true;}}catch(e){}_bootQuiet=false;if(!w)navWarm(false);});});});};   /* ANIM-05: 미리 계산은 덮개 뒤 남는 시간에(없으면 걷힌 뒤) */
+    afterPaint(()=>{try{init();}catch(e){fail(e);return;}stMark("ready");
+      let w=false;try{if(BOOT){BOOT.done($("#app"));BOOT.warm(navWarm);w=true;}}catch(e){}_bootQuiet=false;if(!w)navWarm(false);if(meta.selftest)selfTest();});});});};   /* ANIM-05: 미리 계산은 덮개 뒤 남는 시간에(없으면 걷힌 뒤) */
   if(typeof requestAnimationFrame==="function")requestAnimationFrame(()=>setTimeout(run,0));else run();}
+
+/* 속도 시험(11/25 LOTD-01 · 수집 창 '속도 시험' 이 만든 파일에만 — meta.selftest): 열린 뒤 스스로 LOT 화면을 몇 가지 눌러 보고 맨 위 띠에
+   '열기 n.n초 · 자동 점검 m가지 · 오류 k개'(펼치면 단계 시간 · 오류 원문)를 적는다. 표식이 없는 파일(제품)에서는 아무것도 하지 않는다(시각 숫자만 적어 둠). 바깥 요청 없음 */
+const ST_T={};const stMark=k=>{try{ST_T[k]=performance.now();}catch(e){}};
+function liteModel(m){   /* LOTD-01 시험: LOT 추적만 있는 파일이 쓰지 않는 가동률 · Error 모델 대신 — 헤더 · '데이터 없음' 검사 · 로그가 읽는 값만 */
+  const g=String(m.generated_iso||""),today=/^\d{4}-\d{2}-\d{2}/.test(g)?g.slice(0,10):null,R=m.range||{},a=R.from||m.data_from,b=R.to||m.data_to,days=[];
+  if(a&&b&&a<=b)for(let d=a;d<=b&&days.length<4000;d=addDays(d,1))days.push(d);
+  else{const ds=new Set();for(const r of rows){const t=P(r.batch_start)||P(r.wafer_start_time);if(t)ds.add(dk(t));}days.push(...[...ds].sort());}   /* 기간 표식이 없는 옛 파일만 행에서 */
+  return {lite:true,days,allDays:days.slice(),day:(today&&days.includes(today))?today:(days[days.length-1]||null),today,
+    devices:(m.devices||[]).map(x=>x&&x.name).filter(Boolean),detail:{},partialDays:[],byDay:{},badRows:0,futureRows:0,scope:[]};}
+function selfTest(){if(!meta.selftest||typeof document==="undefined")return;
+  const errs=[],steps=[],now=()=>performance.now();
+  window.addEventListener("error",e=>errs.push("오류: "+(e&&e.message||e)));
+  window.addEventListener("unhandledrejection",e=>errs.push("Promise: "+String(e&&e.reason&&e.reason.message||e&&e.reason)));
+  const ce=console.error;console.error=function(){errs.push("console: "+[].map.call(arguments,String).join(" "));return ce.apply(console,arguments);};
+  const wait=ms=>new Promise(r=>setTimeout(r,ms)),paint=()=>new Promise(r=>requestAnimationFrame(()=>setTimeout(r,0)));
+  const q=s=>document.querySelector(s),qa=s=>[...document.querySelectorAll(s)],must=(c,m)=>{if(!c)throw new Error(m);};
+  const step=async(name,fn)=>{const a=now();let ok=true,note="";try{note=(await fn())||"";}catch(e){ok=false;note=String(e&&e.message||e);errs.push("점검 실패 — "+name+": "+note);}steps.push({name,ok,ms:Math.round(now()-a),note});};
+  const typeQ=async v=>{const inp=q('input[data-in="lotQ"]');must(inp,"검색 칸이 없습니다");inp.value=v;inp.dispatchEvent(new Event("input",{bubbles:true}));await wait(LOT_Q_MS+200);await paint();};
+  paint().then(async()=>{const open=now();   /* 목록을 그린 첫 프레임 — 탐색 시작(0)부터 */
+    await new Promise(r=>{try{if(BOOT){BOOT.later(r);return;}}catch(e){}r();});const lifted=now();   /* 덮개가 걷힌 뒤 누른다 */
+    if(state.view==="lot"){
+      await step("LOT 목록",()=>{const n=qa(".lotscroll .lotpick").length;must(n,"목록이 비었습니다");return n+"개";});
+      const keys=qa(".lotscroll button.lotpick").slice(0,3).map(b=>b.getAttribute("data-key"));
+      for(let i=0;i<keys.length;i++)await step("LOT 고르기 "+(i+1),async()=>{const b=qa(".lotscroll button.lotpick").find(x=>x.getAttribute("data-key")===keys[i]);must(b,"줄이 없습니다");
+        const nm=b.querySelector("b")?b.querySelector("b").textContent:"";b.click();await paint();must(q(".lotmxp"),"격자가 없습니다");return nm;});
+      await step("Wafer 이력 열기 · 닫기",async()=>{const w=q(".lotmx .lw");must(w,"Wafer 줄이 없습니다");w.click();await paint();const x=q(".wx");must(x,"이력이 열리지 않았습니다");x.click();await paint();must(!q(".wx"),"이력이 닫히지 않았습니다");});
+      await step("다른 이름 펼치기 · 접기",async()=>{const a=q(".lothead .alb");if(!a)return "없음(건너뜀)";a.click();await paint();const b=q(".lothead .alb");must(b,"단추가 사라졌습니다");b.click();await paint();});
+      await step("검색 입력",async()=>{const f=q(".lotscroll .lotpick b"),w=(f?f.textContent:"").replace(/[^A-Za-z0-9]/g,"").slice(0,4)||"A";await typeQ(w);const n=qa(".lotscroll .lotpick").length;await typeQ("");must(n,"'"+w+"' 결과가 없습니다");return "'"+w+"' → "+n+"개";});}
+    for(const m of (window._log||[]))if(/오류/.test(m))errs.push(m);
+    const T=ST_T,f=(a,b)=>T[a]!=null&&T[b]!=null?((T[b]-T[a])/1000).toFixed(2)+"초":"—";
+    const lines=["파일: "+(D&&D.lite?"LOT 계산 건너뜀(시험)":"지금과 같음")+" · 행 "+rows.length.toLocaleString("ko-KR")+"개",
+      "JSON 해석 "+f("parse0","parsed")+" · 펼치기 "+f("parsed","unfolded")+" · 모델 "+(D&&D.lite?"건너뜀 ":"")+f("model0","model1")+" · 첫 화면 "+f("model1","ready")+" · 덮개 걷힘 "+(lifted/1000).toFixed(1)+"초",""]
+      .concat(steps.map(s=>(s.ok?"✓ ":"✗ ")+s.name+" "+s.ms+"ms"+(s.note?" — "+s.note:"")),errs.length?["","오류 원문:"].concat(errs):[]);
+    const box=document.createElement("div");box.id="aoi-selftest";box.setAttribute("role","status");
+    box.style.cssText="position:fixed;left:0;right:0;top:0;z-index:2147483000;background:#FFF6D6;border-bottom:1px solid #E5D08A;color:#26323F;font:13px/1.5 system-ui,sans-serif;padding:6px 16px";
+    box.innerHTML=`<b>속도 시험</b> — 열기 <b class="st-open">${(open/1000).toFixed(1)}</b>초 · 자동 점검 <b class="st-n">${steps.length}</b>가지 · 오류 <b class="st-err" style="color:${errs.length?"#B4402F":"inherit"}">${errs.length}</b>개 <details style="display:inline-block;vertical-align:top;margin-left:8px"><summary style="cursor:pointer">자세히</summary><pre style="white-space:pre-wrap;margin:4px 0;font:12px/1.45 Consolas,monospace;max-height:60vh;overflow:auto">${esc(lines.join("\n"))}</pre></details>`;
+    document.body.appendChild(box);
+    window.__selftest={done:true,open:Math.round(open),lifted:Math.round(lifted),steps,errors:errs.slice(),lite:!!(D&&D.lite),marks:Object.assign({},T)};});}
 
 /* ---------- ③ 모델 ----------
    공통 도우미(P · lotName · jobKey · matKey)는 두 프로필이 같이 쓴다.
@@ -1374,8 +1413,8 @@ let H=[];const h=fn=>{H.push(fn);return H.length-1;};
 function setState(p){Object.assign(state,p);render();}
 function init(){
   for(const d of (meta.devices||[]))if(d.status)devStatus[d.name]={status:d.status,error:d.error||"",readErrors:d.read_errors||0};
-  D=buildModel(rows,meta);D.allDays=D.days.slice();   /* 화면 기간(10/5): 모델은 가진 날 전부, 보이는 날(D.days)만 헤더의 기간으로 좁힌다 */
-  rgLoad();if(!rgSame(RG,rgNorm(meta.recipe_groups)))rgApply();   /* 이 브라우저에서 더 늦게 고친 묶음이 있으면 그것으로(D67) */
+  stMark("model0");D=(meta.lot_only&&meta.lot_skip_model)?liteModel(meta):buildModel(rows,meta);D.allDays=D.days.slice();stMark("model1");   /* 화면 기간(10/5): 모델은 가진 날 전부, 보이는 날(D.days)만 헤더의 기간으로 좁힌다 · lot_skip_model 은 속도 시험 파일에만(LOTD-01) */
+  if(!D.lite){rgLoad();if(!rgSame(RG,rgNorm(meta.recipe_groups)))rgApply();}   /* 이 브라우저에서 더 늦게 고친 묶음이 있으면 그것으로(D67) */
   state.dayI=D.day?D.days.indexOf(D.day):-1;
   document.addEventListener("dblclick",e=>{const el=e.target.closest("[data-dh]");if(!el)return;const fn=H[+el.dataset.dh];if(fn){e.preventDefault();window.getSelection&&window.getSelection().removeAllRanges();fn(e);}});
   document.addEventListener("click",e=>{if(_drag&&_drag.moved){_drag=null;e.preventDefault();return;}_drag=null;const el=e.target.closest("[data-h]");if(!el)return;const fn=H[+el.dataset.h];if(fn){e.preventDefault();fn(e);}});
@@ -1693,7 +1732,7 @@ function enterView(root){if(!G()||reduced())return;
 const NAV_N=10,NAV_KC=4000,NAV_CC=115,NAV_KD=1000,NAV_CD=45,NAV_FMAX=45000,NAV_G=14,NAV_WQ=.5,NAV_HZ=3840,NAV_CAP=7,NAV_FPS=60;
 /* 탭 첫 진입 때 색인(LOT 추적 · RDL 단일스캔)을 만드느라 화면이 0.7초 멈추면 표시자 이동 시간이 그동안 흘러 한 번에 건너뛴다(10/19 실측) —
    화면이 뜬 뒤 한가할 때 미리 만들어 둔다(캐시되므로 첫 클릭엔 비용 0, 오류는 그 탭을 열 때 다시 난다). */
-function navWarm(now){if(typeof setTimeout!=="function")return;setTimeout(()=>{try{lotIndex();}catch(e){}setTimeout(()=>{try{rcpIndex();}catch(e){}setTimeout(()=>{try{okIndex();okLotKeys();}catch(e){}},now?0:150);},now?0:150);},now?0:500);}   /* now = 덮개 뒤(ANIM-05) — 기다릴 까닭이 없다 · 11/25(JS-08): Overkill 색인도 미리 — 첫 클릭 0.2초 멈칫 없앰 */
+function navWarm(now){if(typeof setTimeout!=="function")return;setTimeout(()=>{try{lotIndex();}catch(e){}setTimeout(()=>{try{if(!(D&&D.lite))rcpIndex();}catch(e){}setTimeout(()=>{try{if(!(D&&D.lite)){okIndex();okLotKeys();}}catch(e){}},now?0:150);},now?0:150);},now?0:500);}   /* now = 덮개 뒤(ANIM-05) — 기다릴 까닭이 없다 · 11/25(JS-08): Overkill 색인도 미리 — 첫 클릭 0.2초 멈칫 없앰 */
 function navParts(ind){if(!ind.__p)ind.__p={l:ind.querySelector(".l"),m:ind.querySelector(".m"),r:ind.querySelector(".r"),s:ind.querySelector(".s")};return ind.__p;}
 const navTf=(L,R,sy=1)=>{const w=Math.max(2*NAV_CAP,R-L),y=sy.toFixed(4);return {l:`translateX(${L.toFixed(2)}px) scaleY(${y})`,m:`translateX(${(L+NAV_CAP-1).toFixed(2)}px) scale(${Math.max(0,w-2*NAV_CAP+2).toFixed(2)},${y})`,r:`translateX(${(L+w-NAV_CAP).toFixed(2)}px) scaleY(${y})`};};
 function navSet(ind,L,R){const p=navParts(ind),t=navTf(L,R);for(const k of ["l","m","r"])if(p[k])p[k].style.transform=t[k];
