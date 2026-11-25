@@ -2,7 +2,7 @@
 
 문자열 검사(`test_template_contract.py`)와 Node 하네스(`test_dashboard_js.py`)는 화면이 **그려지는지**를 보지 못한다.
 여기서는 작은 fixture 행을 template 에 박아 파일로 열고(바깥 요청 0건 — file:// 만), 실제로 눌러 본다:
-가동률(장비 순서) → 장비 팝업(포커스 · inert · Tab 트랩 · ESC 복귀, D05) → Error 보기 → 유형 팝업 → 추이 → TB500 · Kendall(D59) → 사본 저장(내려받은 파일의 열·풀 구조).
+가동률(장비 순서) → 장비 팝업(포커스 · inert · Tab 트랩 · ESC 복귀, D05) → Error 단추 → 유형 팝업 → 추이 → TB500 · Kendall(D59) → 사본 저장(내려받은 파일의 열·풀 구조).
 데이터는 수집기의 `collect._embed_rows` 로 접어 넣는다 — 제품이 만드는 HTML 과 같은 계약이다.
 콘솔 오류·페이지 오류가 하나라도 있으면 실패.
 
@@ -362,7 +362,7 @@ def test_popups_stack_behind_each_other_and_escape_closes_the_top(page):
     pg, errors, _ = page
     pg.locator('button.rowbtn[data-fk="dev:AOI-1"]').click()
     pg.wait_for_selector('.dlg[data-dlg="dev"]')
-    pg.locator('.dlg[data-dlg="dev"] button', has_text="Error 보기").click()
+    pg.locator('.dlg[data-dlg="dev"] button[data-fk="dev:err"]').click()   # 11/25: 단추 이름에 그날 건수('Error 3건 ›' · 'Error 없음 ›')
     pg.wait_for_selector('.dlg[data-dlg="err"]')
     st = pg.evaluate("[...document.querySelectorAll('.ov:not([data-leaving])')].map(o => o.dataset.key + ':' + (o.classList.contains('behind') ? 'behind' : 'top') + ':' + o.inert)")
     assert st == ["ov:dev:behind:true", "ov:err:top:false"]
@@ -435,7 +435,7 @@ def test_motion_hooks_lottie_countup_sweep_and_recede(page):
     pg.locator('button.rowbtn[data-fk="dev:AOI-2"]').click()                              # AOI-2 는 Error 가 없다
     pg.wait_for_selector('.dlg[data-dlg="dev"]')
     assert pg.evaluate("document.querySelector('#app>.stage').classList.contains('behind')")   # 팝업이 열리면 무대가 물러난다
-    pg.locator('.dlg[data-dlg="dev"] button', has_text="Error 보기").click()
+    pg.locator('.dlg[data-dlg="dev"] button[data-fk="dev:err"]').click()   # 11/25: 단추 이름에 그날 건수('Error 3건 ›' · 'Error 없음 ›')
     pg.wait_for_selector('.dlg[data-dlg="err"] .lt-empty .lt svg')                       # Lottie 체크
     pg.keyboard.press("Escape")
     pg.keyboard.press("Escape")
@@ -449,7 +449,7 @@ def test_popup_deck_click_behind_brings_it_to_front_and_stackbar_lists_them(page
     pg, errors, _ = page
     pg.locator('button.rowbtn[data-fk="dev:AOI-1"]').click()
     pg.wait_for_selector('.dlg[data-dlg="dev"]')
-    pg.locator('.dlg[data-dlg="dev"] button', has_text="Error 보기").click()
+    pg.locator('.dlg[data-dlg="dev"] button[data-fk="dev:err"]').click()   # 11/25: 단추 이름에 그날 건수('Error 3건 ›' · 'Error 없음 ›')
     pg.wait_for_selector('.dlg[data-dlg="err"]')
     pg.wait_for_timeout(500)
     # 뒤 카드(dev)는 앞 카드보다 왼쪽에 있다
@@ -485,7 +485,7 @@ def test_stackbar_stays_top_left_while_the_popup_scrolls_and_lot_panel_fades_in_
     pg.set_viewport_size({"width": 1280, "height": 420})
     pg.locator('button.rowbtn[data-fk="dev:AOI-1"]').click()
     pg.wait_for_selector('.dlg[data-dlg="dev"]')
-    pg.locator('.dlg[data-dlg="dev"] button', has_text="Error 보기").click()
+    pg.locator('.dlg[data-dlg="dev"] button[data-fk="dev:err"]').click()   # 11/25: 단추 이름에 그날 건수('Error 3건 ›' · 'Error 없음 ›')
     pg.wait_for_selector('.stackbar .sb')
     assert pg.evaluate("document.querySelector('.stackbar').parentElement.id") == "app"
     top0 = pg.evaluate("document.querySelector('.stackbar').getBoundingClientRect().top")

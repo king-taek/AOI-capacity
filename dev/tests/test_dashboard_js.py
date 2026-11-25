@@ -304,12 +304,11 @@ def test_default_profile_is_product_with_the_four_rules_on_and_constants_match()
 
     D = run([w("AOI-1", "W1", "08:00", "08:10")])
     assert D["rules"] == {"profile": "product", "waitToObsEnd": True, "denomToday": True, "abortIsError": True, "estimateFromBatch": True}
-    g = globals_("RULES", "MODEL_VERSION", "JOB_ALIAS", "CAUSE_CODES", "PROPS")
+    g = globals_("RULES", "MODEL_VERSION", "JOB_ALIAS", "CAUSE_CODES")
     assert g["RULES"] == D["rules"] and D["modelVersion"] == g["MODEL_VERSION"] == template_facts.model_version()
     assert g["CAUSE_CODES"] == [c for c, _ in collect._CAUSE_RULES]
     design_alias = template_facts.job_alias((ROOT / "docs" / "design" / "dashboard-redesign" / "scripts" / "job_alias.js").read_text(encoding="utf-8"))
     assert g["JOB_ALIAS"] == template_facts.job_alias() == design_alias and len(g["JOB_ALIAS"]) == 21
-    assert g["PROPS"] == {"attentionUtil": 40, "attentionErr": 3}
 
 
 def test_home_lists_devices_in_device_order_with_collect_chips_and_the_no_record_count():
@@ -415,16 +414,13 @@ def test_lot_key_separates_two_reports_of_the_same_lot_on_the_same_day():
     assert k1 == k3 and k1 != k2
 
 
-def test_dashboard_settings_override_the_attention_thresholds():
-    """D14: meta.dashboard_settings 의 같은 이름 숫자만 PROPS 를 바꾼다 — 음수·문자열은 무시."""
+def test_attention_concept_is_gone_and_old_dashboard_settings_are_ignored():
+    """11/25(사용자): '살펴볼 장비' 개념을 없앴다 — 카드 · 점 · 빨간 숫자 문턱 없음. 옛 HTML 의 meta.dashboard_settings 가 있어도 무시."""
     rows = [w("AOI-1", "W1", "08:00", "08:10")]
     mt = meta("AOI-1")
     mt["dashboard_settings"] = {"attentionUtil": 60, "attentionErr": 1}
     (home,) = screen(rows, mt, [["homeHtml"]])
-    assert "가동률 60% 미만 또는 Error 1건 이상" in home
-    mt["dashboard_settings"] = {"attentionUtil": -5, "attentionErr": "x"}
-    (home2,) = screen(rows, mt, [["homeHtml"]])
-    assert "가동률 40% 미만 또는 Error 3건 이상" in home2
+    assert "살펴볼" not in home and 'class="dot' not in home and "평균 가동률" in home
 
 
 def test_unfold_rejects_out_of_range_pool_index_and_duplicate_columns():
@@ -804,7 +800,7 @@ def test_scan_share_counts_only_rows_with_scan_sec_and_keeps_utilization():
     (pop,) = screen(rows[:2], meta("AOI-1"), [["devPopupHtml"]], state={"modalDev": "AOI-1", "modalDayI": 0})
     assert "그중 스캔 63%<" in pop and "근거" not in pop                    # 다 채워지면 비율만
     (pop,) = screen(rows[2:], meta("AOI-1"), [["devPopupHtml"]], state={"modalDev": "AOI-1", "modalDayI": 0})
-    assert "스캔 비율 · 채우기 전" in pop
+    assert "스캔 비율 없음" in pop and "채우기 전" not in pop   # 11/25 UTIL-20: 문제가 아니라 값이 없을 뿐 — 회색 보통 글씨
     (line,) = screen(rows, meta("AOI-1"), [["scLine", {"sc": [0, 0, 1, 1]}]])   # INI 분이 반올림으로 0 — 'NaN%' 대신 비움(PR #3 리뷰)
     assert line == ""
 

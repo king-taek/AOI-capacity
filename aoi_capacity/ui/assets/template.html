@@ -77,8 +77,8 @@ button{font:inherit;color:inherit}
 .hbar i{transition:width .38s var(--ease)}
 .chart .f{transition:height .38s var(--ease),background-color .25s}
 .seg button,.nav button,.btn,.callout,.rowbtn,.link{transition:background-color .16s,color .16s,border-color .16s}
-.stage{position:relative;transition:filter .3s var(--ease);overflow-x:clip}   /* 탭 전환의 가로 미끄러짐이 가로 스크롤을 만들지 않게. 팝업 뒤에서 움직이지 않는다(9/21 — 물러남 scale 이 '뒷배경 재생성' 으로 보였다) */
-.stage.behind{filter:brightness(.97)}
+.stage{position:relative;overflow-x:clip}   /* 탭 전환의 가로 미끄러짐이 가로 스크롤을 만들지 않게. 팝업 뒤에서 움직이지 않는다(9/21 — 물러남 scale 이 '뒷배경 재생성' 으로 보였다) */
+/* .stage.behind 의 밝기 필터는 뺐다(11/25 ANIM-13) — 공유 덮개(deckscrim)가 이미 뒤를 어둡게 하고, 필터는 여는 순간 페이지 전체를 다시 그렸다 */
 .lt{display:block}.lt svg{display:block;width:100%;height:100%}
 /* 브랜드 표식(10/30 사용자 선택 '겹 링 · 정돈'): 고리 = 바깥 전체 · 안쪽 층(예시 길이), 끝에 Error 한 조각. 바로가기 아이콘(ui/assets/logo.ico)과 같은 그림.
    화면이 열릴 때 한 번(약 1.4초) 그려지고 멈춘다 — 마지막 장면 = 정지 그림. 마우스를 올리면 다시(init 의 mouseover). 끝없는 반복은 없다 */
@@ -99,6 +99,9 @@ button{font:inherit;color:inherit}
 .dlg{transition:transform .42s var(--ease),filter .42s var(--ease),opacity .3s;transform-origin:left center}
 .dlg.in{animation:dlgIn .26s var(--ease)}.dlg.out{animation:dlgOut .15s ease-in forwards}
 @keyframes dlgIn{from{opacity:0;transform:translateY(10px) scale(.985)}to{opacity:1;transform:none}}
+/* 팝업 위에 팝업(덱 2장 이상): 새 팝업은 빨리 불투명해지고(0.09s) 떠오름만 0.26s — 반투명한 동안 두 팝업 글자가 겹쳐 읽히던 것(ANIM-08) */
+.dlg.in2{animation:dlgFade .09s linear,dlgRise .26s var(--ease)}
+@keyframes dlgFade{from{opacity:0}to{opacity:1}}@keyframes dlgRise{from{transform:translateY(10px) scale(.985)}to{transform:none}}
 @keyframes dlgOut{to{opacity:0;transform:translateY(6px) scale(.985)}}
 .ov{perspective:1600px;perspective-origin:50% 30%}
 .ov.behind{background:transparent;backdrop-filter:none;pointer-events:none;overflow:hidden}
@@ -112,7 +115,7 @@ button{font:inherit;color:inherit}
 .ov:not(.behind) .dlg::after{transition:background-color .5s cubic-bezier(.33,1,.68,1)}
 .dlg.lifting,.dlg.lifting::after{transition:none!important}   /* C안 연출(WAAPI)이 도는 동안 CSS 전환은 쉰다 — 전환이 애니메이션보다 cascade 에서 이긴다 */.ov.behind.hover .dlg::after{background-color:rgba(15,21,28,.38)}
 @media (max-width:860px){.ov.behind .dlg,.ov.behind.hover .dlg{transform:translate3d(0,calc(var(--d,1)*-16px),calc(var(--d,1)*-120px)) scale(calc(1 - var(--d,1)*.05))}}
-.stackbar{position:fixed;left:16px;top:calc(12px + env(safe-area-inset-top,0px));z-index:95;display:flex;gap:6px;align-items:center;flex-wrap:wrap;max-width:60vw;--animate-duration:.24s}
+.stackbar{position:fixed;left:16px;top:calc(12px + env(safe-area-inset-top,0px));z-index:95;display:flex;gap:6px;align-items:center;flex-wrap:wrap;max-width:60vw;--animate-duration:.24s;padding:4px;border-radius:999px;background:rgba(15,21,28,.62);box-shadow:0 4px 14px rgba(15,21,28,.25)}   /* 칩 줄 뒤 어두운 띠 — 칩 사이로 머리 글자가 비치지 않게(UTIL-18) */
 .stackbar .sb{display:inline-flex;align-items:center;gap:6px;padding:5px 11px;border-radius:999px;border:1px solid rgba(255,255,255,.35);background:rgba(15,21,28,.55);color:#fff;font:inherit;font-size:12px;font-weight:600;cursor:pointer;backdrop-filter:blur(6px);white-space:nowrap;max-width:260px;transition:background .16s,transform .16s}
 .stackbar .sb span{overflow:hidden;text-overflow:ellipsis}.stackbar .sb:hover{background:rgba(15,21,28,.8);transform:translateY(-1px)}
 .stackbar .sb.cur{background:#fff;color:#0F151C;cursor:default;border-color:#fff}.stackbar .sb.cur:hover{transform:none}
@@ -139,7 +142,7 @@ button{font:inherit;color:inherit}
 .fbtn svg{width:13px;height:13px}
 .row2{display:grid;grid-template-columns:1fr 38px;align-items:center;border-top:1px solid #F1F4F7}
 .row2>.rowbtn{border:0}
-.partial{display:inline-block;margin-left:6px;padding:1px 7px;border-radius:999px;background:var(--warn-soft,#F6ECD6);color:var(--warn);font-size:11px;font-weight:600;vertical-align:1px}
+.partial{display:inline-block;margin-left:6px;padding:1px 7px;border-radius:999px;background:var(--warn-soft,#F6ECD6);color:#7A5200;font-size:11px;font-weight:600;vertical-align:1px}
 
 /* ── 5차(9/20 밤): 색의 깊이와 손맛. 막대는 색(background-color)은 그대로 두고 위가 밝고 아래가 살짝 어두운 한 겹(background-image)만 얹는다 —
    dataviz 규칙대로 데이터 색은 한 자리(RUN·ERR·HEAT 램프)에서 오고, 글자는 데이터 색을 입지 않는다. 막대 끝 4px 둥글게, 히트맵은 한 색조 6단 램프(OKLCH 밝기 단조) + 2px 표면 간격. ── */
@@ -156,13 +159,16 @@ button{font:inherit;color:inherit}
 .btn:active,.seg button:active,.nav button:active,.ib:active,.x:active,.fbtn:active{transform:scale(.96)}
 .callout{transition:background-color .16s,color .16s,border-color .16s,box-shadow .16s}.callout:hover{box-shadow:0 2px 6px rgba(15,21,28,.10)}
 .chev{display:inline-block;transition:transform .18s var(--ease),color .18s}.rowbtn:hover .chev{transform:translateX(3px);color:var(--ink)}
-.dot{width:5px;height:5px;border-radius:50%;flex:none}.dot.alert{animation:pulseDot .8s ease-out 1}
-@keyframes pulseDot{0%{box-shadow:0 0 0 0 rgba(197,69,60,.45)}100%{box-shadow:0 0 0 7px rgba(197,69,60,0)}}
+/* 24시간 막대: 기록 없는 날은 막대 대신 빗금 트랙 + '기록 없음'(쉰 것과 모르는 것을 모양으로 나눈다), 아직 오지 않은 시간은 흰 바탕 + 점선 테두리(UTIL-13) */
+.nobar{display:flex;align-items:center;justify-content:center;height:20px;border-radius:10px;background:repeating-linear-gradient(135deg,#F7F9FB 0 5px,#E9EDF2 5px 7px);font-size:11px;font-weight:600;color:var(--ink-3);letter-spacing:.02em}
+.fut{position:absolute;top:0;bottom:0;right:0;background:#fff;border:1px dashed #AEB9C5;border-top-right-radius:inherit;border-bottom-right-radius:inherit;pointer-events:none}
+.legend i.futsw{background:#fff;border:1px dashed #AEB9C5;width:9px;height:9px}.legend i.nosw{background:repeating-linear-gradient(135deg,#F7F9FB 0 3px,#C9D1DA 3px 4px)}
+.nosep{margin:0;padding:7px 18px 5px;font-size:11.5px;font-weight:600;color:var(--ink-3);border-top:1px dashed var(--line);background:#FBFCFD}
 .cards>div{transition:background-color .2s}.cards>div:hover{background:#FBFCFD}
 .legend i.gloss{background-image:linear-gradient(180deg,rgba(255,255,255,.30),rgba(255,255,255,0) 55%,rgba(15,21,28,.07))}
 
 /* ── 머리 ── */
-.hdr{position:sticky;top:0;z-index:10;display:flex;align-items:center;gap:16px;padding:0 24px;min-height:58px;background:rgba(255,255,255,.94);backdrop-filter:blur(10px);border-bottom:1px solid var(--line);flex-wrap:wrap}
+.hdr{position:sticky;top:0;z-index:10;display:flex;align-items:center;gap:16px;padding:0 max(24px,calc((100% - 1420px) / 2 + 24px));min-height:58px;background:rgba(255,255,255,.94);backdrop-filter:blur(10px);border-bottom:1px solid var(--line);flex-wrap:wrap}
 .brand{display:flex;align-items:center;gap:9px;font-weight:700;letter-spacing:-.01em;font-size:15px;white-space:nowrap}
 .brand i{width:9px;height:18px;border-radius:2px;background:var(--accent);display:block}
 .nav{display:flex;gap:2px}
@@ -175,8 +181,9 @@ button{font:inherit;color:inherit}
 .btn{padding:6px 11px;border:1px solid var(--line-2);background:#fff;border-radius:7px;font-size:12.5px;cursor:pointer;color:var(--ink-2);white-space:nowrap}
 .btn:hover{border-color:var(--accent-2)}
 .stamp{font-size:12px;color:var(--ink-3);white-space:nowrap;font-family:var(--mono)}
-.partchip{font-size:11.5px;font-weight:600;padding:2px 9px;border-radius:999px;background:var(--warn-soft);color:#7a5200;white-space:nowrap;margin-right:8px;cursor:help}
-.stamp.unfixed{color:var(--warn)}
+.partchip{font-size:11.5px;font-weight:600;padding:2px 9px;border-radius:999px;background:#EEF1F5;color:var(--ink-2);white-space:nowrap;margin-right:8px;cursor:help}.partchip b{font-weight:600;color:var(--ink-3);margin-right:2px}
+.hstamp{display:inline-flex;align-items:center;white-space:nowrap}
+.stamp.unfixed{color:#7A5200}
 main{max-width:1420px;margin:0 auto;padding:22px 24px 90px}
 .spacer{flex:1}
 
@@ -190,6 +197,10 @@ main{max-width:1420px;margin:0 auto;padding:22px 24px 90px}
 .cards.sm .v{font-size:22px;letter-spacing:-.02em}
 .cards.xs .v{font-size:20px;letter-spacing:-.02em}
 .cards.xs>div{padding:12px 15px}
+.tbl-h .thsort{border:0;background:none;padding:0;font:inherit;color:inherit;text-align:left;cursor:pointer;text-decoration:underline dotted;text-underline-offset:3px}.tbl-h .thsort.on{color:var(--ink);font-weight:700}
+.cards.c4{grid-template-columns:repeat(4,minmax(0,1fr))}   /* 장비 팝업 카드 7~8칸을 4칸씩 고르게(6+2 로 접혀 오른쪽이 비던 것, UTIL-20) */
+.pdaynav{display:inline-flex;align-items:center;gap:4px}.pdaynav .ib{width:26px;height:26px;font-size:14px}.pdaynav .sub{min-width:100px;text-align:center}
+.norec{margin:0 0 18px;padding:12px 15px;border:1px dashed var(--line);border-radius:12px;font-size:13px;color:var(--ink-3);background:#FBFCFD}
 .bar-h{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:12px}
 .bar-h h2{font-size:15px;font-weight:700;letter-spacing:-.01em}
 .bar-h h1{font-size:22px;font-weight:700;letter-spacing:-.02em}
@@ -232,7 +243,7 @@ main{max-width:1420px;margin:0 auto;padding:22px 24px 90px}
 
 /* ── 팝업 ── */
 .ov{position:fixed;inset:0;display:flex;align-items:flex-start;justify-content:center;padding:34px 20px;background:transparent;overflow:auto;--animate-duration:.16s}
-.deckscrim{position:fixed;inset:0;z-index:49;background:rgba(15,21,28,.42);pointer-events:none}
+.deckscrim{position:fixed;inset:0;z-index:49;background:rgba(15,21,28,.44);pointer-events:none}
 .ov .dlg{will-change:transform}
 .ov .dlg::after{content:"";position:absolute;inset:0;border-radius:inherit;background-color:rgba(15,21,28,0);pointer-events:none;z-index:10;transition:background-color .42s var(--ease)}
 .ov.z55{z-index:55;padding-top:44px}.ov.z50{z-index:50}.ov.z60{z-index:60}
@@ -255,13 +266,13 @@ main{max-width:1420px;margin:0 auto;padding:22px 24px 90px}
 .sel{margin-top:12px;padding:14px 16px;background:#FBFCFD;border:1px solid #E7ECF1;border-radius:11px}
 .kv{display:grid;grid-template-columns:max-content 1fr;gap:4px 14px;font-size:12.5px}
 .kv .k{color:var(--ink-3)}
-.link{border:0;background:none;font:inherit;font-size:12.5px;color:#2B5F97;cursor:pointer;padding:0;text-decoration:underline;text-underline-offset:3px}
+.link{border:0;background:none;font:inherit;font-size:12.5px;color:#2B5F97;cursor:pointer;padding:0;text-decoration:underline;text-underline-offset:3px}button.link,button.kbtn{min-height:24px}   /* 누르는 곳 24px 이상(COLOR-08) */
 .tline{position:relative;height:26px;border-radius:5px;background:#EEF2F6;overflow:hidden;margin-bottom:6px}
 .tline i{position:absolute;top:0;bottom:0;min-width:3px;border-radius:2px}
 .tbl-h{display:grid;gap:10px;padding:8px 14px;background:#FBFCFD;border-bottom:1px solid #EDF1F5;font-size:11.5px;font-weight:600;color:var(--ink-3)}
 .box{border:1px solid #E7ECF1;border-radius:11px;overflow:hidden}
 .inp{padding:6px 10px;border:1px solid var(--line-2);border-radius:7px;background:#fff;font:inherit;font-size:12.5px;color:var(--ink)}
-.inp:focus{outline:2px solid var(--accent-2);outline-offset:-1px}
+.inp:focus{outline:2px solid var(--accent);outline-offset:-1px}   /* 버튼의 :focus-visible 과 같은 진한 파랑(COLOR-07 — 연한 하늘색은 흰 바탕에서 2.1:1) */
 .btn:disabled{opacity:.45;cursor:default}.btn.primary{background:var(--nav-on);border-color:var(--nav-on);color:#fff}
 .rggrid{display:grid;grid-template-columns:minmax(0,1.35fr) minmax(0,1fr);gap:18px;padding:14px 22px 18px}
 @media (max-width:860px){.rggrid{grid-template-columns:1fr}}
@@ -393,6 +404,7 @@ main{max-width:1420px;margin:0 auto;padding:22px 24px 90px}
 .rowbtn.rpt-r{display:grid;grid-template-columns:76px minmax(120px,1fr) 96px 52px 150px 62px;gap:10px;align-items:center;width:100%;padding:7px 22px;border:0;background:transparent;font:inherit;text-align:left;cursor:pointer;min-height:40px}
 .rowbtn.rpt-r:hover{background:#F6F9FC}.rowbtn.rpt-r.on{background:#EAF2FB;box-shadow:inset 3px 0 0 var(--nav-on)}
 .rpt-r .rn{font-weight:600;font-size:13px}.rpt-r .rv{font-weight:700;text-align:right;font-size:13.5px}.rpt-r .rd{text-align:right;font-size:12.5px;font-weight:600}
+.rowbtn.rpt-r.on .re.hi{color:var(--crit-ink)}   /* 고른 줄(연파랑) 위 작은 빨강은 진한 빨강(COLOR-10) */
 .rpt-r .re{font-size:12.5px;color:var(--ink-2)}.rpt-r .re.hi{color:var(--err);font-weight:700}.rpt-r .re small{font-weight:400}.rpt-r .rb{font-size:11.5px;color:var(--ink-3);text-align:right}
 .rbar{position:relative;height:22px;background:#F1F4F7;border-radius:5px;display:block}.rbar i{display:block;height:100%;border-radius:5px;transition:width .3s var(--ease),background-color .2s;background-image:linear-gradient(rgba(255,255,255,.18),rgba(0,0,0,.06))}
 .rbar u{position:absolute;top:-4px;bottom:-4px;width:2px;background:var(--ink);text-decoration:none;transition:left .3s var(--ease)}
@@ -436,7 +448,7 @@ button.bd.out{background:transparent;border:1.5px solid var(--err,#C5453C);opaci
 .binchip{display:flex;align-items:center;gap:10px;justify-content:space-between;margin:2px 0 8px;padding:7px 12px;border-radius:8px;background:var(--accent-soft);font-size:12.5px}
 .tlg{margin-left:10px;font-weight:400;font-size:12px;display:inline-flex;gap:12px}.tlg span{display:inline-flex;align-items:center;gap:5px}
 .tfade{animation:tfade .28s var(--ease) both}@keyframes tfade{from{opacity:0}to{opacity:1}}
-.rangebar.dim{opacity:.55;filter:grayscale(1)}.rangebar.dim:hover,.rangebar.dim:focus-within{opacity:.85}.rangebar .dimnote{font-size:11.5px;color:var(--ink-3)}
+.rangebar.dim>:not(.dimnote){opacity:.7;filter:grayscale(1)}.rangebar.dim:hover>*,.rangebar.dim:focus-within>*{opacity:1}.rangebar .dimnote{font-size:11.5px;color:var(--ink-3)}   /* 줄 전체를 흐리지 않고 단추 · 칸만 — '왜 흐린지' 안내는 또렷하게(COLOR-01) */
 .hrow{display:grid;grid-template-columns:76px minmax(0,1fr);gap:10px;align-items:end;margin-bottom:10px}.hrow .sk{display:flex;align-items:center;gap:6px;font-size:12px;font-weight:600;padding-bottom:18px}
 .hwrap{position:relative}.hmed{position:absolute;top:0;bottom:0;border-left:2px dashed #1F2A36;opacity:.55;pointer-events:none}.dblock h4{margin:0 0 8px;font-size:12.5px}.dblock h4 .muted{font-weight:400;font-size:11px;margin-left:4px}
 .hist{display:flex;align-items:flex-end;gap:3px;height:84px}.hist .hb{flex:1;height:100%;display:flex;flex-direction:column;justify-content:flex-end;min-width:0}.hist .hb i{display:block;width:100%}.hist .hk{border-radius:2px 2px 0 0}.hist .ho{background-color:var(--err,#C0392B);border-radius:2px 2px 0 0}
@@ -1236,8 +1248,6 @@ function klaJobAlias(raw){const s=String(raw||"");if(!s.startsWith(KLA_TB_PRE))r
   return out.join(" ");}
 /* Job 묶음의 표시 이름: 레시피 묶음 이름(D67) → 표기명(JOB_ALIAS) → KLA TB500 표기 → 대표 원문. al = 원문이 아닌 이름(고정폭 글꼴을 쓰지 않는다) */
 function jobNm(G){if(!G)return{nm:"",al:false,raw:""};const raw=D.pool.job[G.l]||"(Job 없음)";if(G.nm)return{nm:G.nm,al:true,raw};const a=jobAlias(raw)||klaJobAlias(raw);return{nm:a||raw,al:!!a,raw};}
-const PROPS={attentionUtil:40,attentionErr:3};   /* 살펴볼 장비 문턱 — meta.dashboard_settings 의 같은 이름 숫자가 있으면 그것으로(D14) */
-function applySettings(m){const o=(m&&m.dashboard_settings)||{};for(const k of Object.keys(PROPS)){const v=Number(o[k]);if(o[k]!==undefined&&Number.isFinite(v)&&v>=0)PROPS[k]=v;}}
 let D=null;
 const VIEWS=["home","errors","overkill","report","recipe","lot","param"];   /* 10/5: KLA 탭 · 추이 탭은 없앴다(KLA 는 가동률의 구분 필터로) */
 const HIDDEN_TABS=[["param","파라미터"]];   /* 평소 탭 줄에서 숨기는 탭 — Ctrl+Shift+D 로 켠 ⚙ 설정에서 꺼내 쓴다(10/22) */
@@ -1258,7 +1268,6 @@ let H=[];const h=fn=>{H.push(fn);return H.length-1;};
 function setState(p){Object.assign(state,p);render();}
 function init(){
   for(const d of (meta.devices||[]))if(d.status)devStatus[d.name]={status:d.status,error:d.error||"",readErrors:d.read_errors||0};
-  applySettings(meta);
   D=buildModel(rows,meta);D.allDays=D.days.slice();   /* 화면 기간(10/5): 모델은 가진 날 전부, 보이는 날(D.days)만 헤더의 기간으로 좁힌다 */
   rgLoad();if(!rgSame(RG,rgNorm(meta.recipe_groups)))rgApply();   /* 이 브라우저에서 더 늦게 고친 묶음이 있으면 그것으로(D67) */
   state.dayI=D.day?D.days.indexOf(D.day):-1;
@@ -1291,8 +1300,11 @@ function init(){
     const show=(n,x,y)=>{const t=textOf(n,x);if(!t){hide();return;}el=n;lx=x;ly=y;if(!box){box=document.createElement("div");box.className="tip";box.setAttribute("role","tooltip");box.hidden=true;document.body.appendChild(box);}
       box.textContent="";const ls=String(t).split("\n");ls.forEach((l,i)=>{if(!l&&i)return;const d=document.createElement(i?"span":"b");d.textContent=l;box.appendChild(d);});box.hidden=false;place();};
     window.tipSync=()=>{if(el&&!el.isConnected)hide();else if(el&&box&&!box.hidden)show(el,lx,ly);};
-    document.addEventListener("mouseover",e=>{const n=e.target.closest?e.target.closest(TIP_SEL):null;if(n!==el){if(n)show(n,e.clientX,e.clientY);else hide();}});
-    document.addEventListener("mousemove",e=>{if(!el)return;lx=e.clientX;ly=e.clientY;if(el.hasAttribute("data-bar"))show(el,lx,ly);else place();},{passive:true});
+    /* 렌더 · 팝업 열림 직후 커서 밑으로 들어온 요소(마우스는 가만히)의 툴팁은 바로 띄우지 않고 기억만 했다가 실제로 마우스가 움직이면 띄운다(11/25 ANIM-12 —
+       가동률 줄을 눌러 팝업을 열면 이름표 툴팁이 저절로 떠 팝업 가운데를 가렸다). 키보드 포커스 툴팁은 그대로 */
+    let still=false,pend=null;window.tipHold=()=>{still=true;pend=null;};
+    document.addEventListener("mouseover",e=>{const n=e.target.closest?e.target.closest(TIP_SEL):null;if(still){pend=n;return;}if(n!==el){if(n)show(n,e.clientX,e.clientY);else hide();}});
+    document.addEventListener("mousemove",e=>{if(still){still=false;const p=pend;pend=null;if(p&&p!==el&&p.isConnected)show(p,e.clientX,e.clientY);}if(!el)return;lx=e.clientX;ly=e.clientY;if(el.hasAttribute("data-bar"))show(el,lx,ly);else place();},{passive:true});
     document.addEventListener("mouseout",e=>{if(el&&!(e.relatedTarget&&el.contains(e.relatedTarget)))hide();});
     document.addEventListener("focusin",e=>{const n=e.target.closest?e.target.closest(TIP_SEL):null;if(n&&n.matches&&n.matches(":focus-visible")){const r=n.getBoundingClientRect();show(n,r.left+r.width/2,r.bottom-4);}});
     document.addEventListener("focusout",hide);document.addEventListener("scroll",hide,true);document.addEventListener("keydown",e=>{if(e.key==="Escape")hide();});
@@ -1316,11 +1328,24 @@ function init(){
   document.addEventListener("input",e=>{const el=e.target;const k=el&&el.dataset?el.dataset.in:null;if(k&&INPUT_KEYS.has(k))setState({[k]:el.value});});
   document.addEventListener("change",e=>{const el=e.target;if(el&&el.id==="rgFile"&&el.files&&el.files[0])rgImportFile(el.files[0]);
     const k=el&&el.dataset?el.dataset.in:null;
-    if(k==="day"){const i=D.days.indexOf(el.value);if(i>=0)goDay(i);else{el.value=D.days[state.dayI]||"";toast("그 날짜에는 이 기간의 데이터가 없습니다");}return;}
-    if((k==="vf"||k==="vt")&&/^\d{4}-\d{2}-\d{2}$/.test(el.value)){const o=document.querySelector(`[data-in="${k==="vf"?"vt":"vf"}"]`);setRange(k==="vf"?el.value:o&&o.value,k==="vt"?el.value:o&&o.value,"custom");}});
+    if(DATE_IN.has(k)){if(!el.__typing)applyDate(el);return;}});
+  /* 날짜 칸(11/25 UTIL-02): Chrome · Edge 는 키보드로 숫자 한 자리마다 change 를 낸다 — '13' 을 치면 '1' 에서 01일로 적용돼 13일을 칠 수 없었다.
+     키보드로 치는 동안은 적용하지 않고 Enter 나 칸을 벗어날 때 한 번, 달력에서 고른 것(키 입력 없는 change)은 지금처럼 바로 */
+  document.addEventListener("keydown",e=>{const el=e.target;if(!el||!el.dataset||!DATE_IN.has(el.dataset.in))return;
+    if(e.key==="Enter"){if(el.__typing){el.__typing=false;applyDate(el);}}else if(e.key.length===1||/^(Backspace|Delete|ArrowUp|ArrowDown)$/.test(e.key))el.__typing=true;},true);
+  document.addEventListener("focusout",e=>{const el=e.target;if(el&&el.__typing&&el.dataset&&DATE_IN.has(el.dataset.in)){el.__typing=false;applyDate(el);}},true);
   if(document.fonts&&document.fonts.ready)document.fonts.ready.then(()=>layoutPairLabels(document));   /* 글꼴이 늦게 오면 숫자 폭이 바뀐다 */
   log(meta.mode==="demo"?"데모 데이터":"수집 결과를 불러왔습니다. 장비 "+D.devices.length+"대 · "+D.days.length+"일");
   bootPhase(4);render();}
+
+/* 날짜 칸 적용(UTIL-02) — 하루 날짜가 데이터 밖이면 되돌리지 않고 가장 가까운 데이터 날짜로 옮기고 짧게 알린다 */
+const DATE_IN=new Set(["day","vf","vt"]);
+function applyDate(el){const k=el.dataset.in,v=el.value,ok=/^\d{4}-\d{2}-\d{2}$/.test(v);
+  if(k==="day"){if(!ok){render();return;}let i=D.days.indexOf(v);
+    if(i<0){const ms=s=>Date.parse(s+"T00:00:00"),x=ms(v);i=0;for(let j=1;j<D.days.length;j++)if(Math.abs(ms(D.days[j])-x)<Math.abs(ms(D.days[i])-x))i=j;
+      toast(`${md(v)} 에는 데이터가 없어 가장 가까운 ${md(D.days[i])} 로 옮겼습니다`);}
+    goDay(i);return;}
+  if(!ok){render();return;}const o=document.querySelector(`[data-in="${k==="vf"?"vt":"vf"}"]`);setRange(k==="vf"?v:o&&o.value,k==="vt"?v:o&&o.value,"custom");}
 
 /* ── 계산 도우미(AOI-Dashboard.dc.html 의 메서드 그대로) ── */
 const S={
@@ -1342,9 +1367,11 @@ const S={
   hasEst(t){return !!t&&(t.ne||0)>0;},   /* D56②·D58: INI 없는 행이 배치 창의 빈 분을 나눠 가진 장비-일 */
   util(t){const den=S.den(t);if(!t||den<=0)return null;
     return S.measured(t)?Math.min(100,(t.r+t.d)/den*100):null;},
-  thU(){return PROPS.attentionUtil;},thE(){return PROPS.attentionErr;},
-  noRec(t){return S.util(t)===null;},   /* 기록 없음 — '살펴볼 장비' 와 다른 축(D06·D57) */
-  alert(t){const u=S.util(t);return u!==null&&(u<S.thU()||(t&&t.e||0)>=S.thE());},
+  noRec(t){return S.util(t)===null;},   /* 기록 없음 — 쉰 것과 모르는 것은 다르다(D06·D57) */
+  /* 가동률 목록과 장비 팝업 ‹ › 가 같은 순서(11/25 UTIL-08): 지금 걸린 층 · 장비 종류 필터 + 정렬. '가동률 낮은 순' 에서 기록 없는 장비는 맨 뒤(JS-10) */
+  order(day,devs){const it=(devs||S.devList()).map(n=>({n,t:S.at(day,n)}));
+    if(state.sort==="low")it.sort((a,b)=>{const x=S.util(a.t),y=S.util(b.t);return (x===null?Infinity:x)-(y===null?Infinity:y)||cmpDev(a.n,b.n);});
+    else it.sort((a,b)=>cmpDev(a.n,b.n));return it;},
   floorOf(n){return n.indexOf("4F")===0?"4":"2";},
   /* 10/28: Gen5(EagleG5) — 2층 AOI-17~28 · 4층 4F-AOI-03~05(사용자 지정). 장비 종류 줄의 네 번째 값(Camtek 의 부분집합, 10/29 층 줄에서 옮김) */
   isGen5(n){const m=/^(4F-)?AOI-(\d+)$/.exec(n);if(!m)return false;const k=+m[2];return m[1]?(k>=3&&k<=5):(k>=17&&k<=28);},
@@ -1354,12 +1381,13 @@ const S={
   filterSegs(floorOnly){return segHtml(S.segGroup([{k:"all",label:"전체 층"},{k:"2",label:"2층"},{k:"4",label:"4층"}],state.floor,k=>setState({floor:k})))
     +(floorOnly?segHtml(S.segGroup([{k:"all",label:"전체 장비"},{k:"g5",label:"Gen5"}],state.maker==="g5"?"g5":"all",k=>setState({maker:k})))
       :segHtml(S.segGroup([{k:"all",label:"전체 장비"},{k:"cam",label:"Camtek"},{k:"kla",label:"KLA"},{k:"g5",label:"Gen5"}],state.maker,k=>setState({maker:k}))));},
-  fleetUtil(day,devs){const v=devs.map(n=>S.util(S.at(day,n))).filter(x=>x!==null);return v.length?v.reduce((a,b)=>a+b,0)/v.length:0;},
+  fleetUtil(day,devs){const v=devs.map(n=>S.util(S.at(day,n))).filter(x=>x!==null);return v.length?v.reduce((a,b)=>a+b,0)/v.length:null;},   /* 값 있는 장비가 없으면 null('—') — 0% 는 '전부 멈춤' 으로 읽힌다(UTIL-14) */
   segGroup(items,cur,on){return items.map(it=>({label:it.label,on:cur===it.k,pick:()=>on(it.k)}));},
   go(view){return()=>{const apply=()=>{const o=VIEWS.indexOf(state.view),n=VIEWS.indexOf(view);state.viewDir=o<0||n<0||o===n?0:(n>o?1:-1);setState({view,modalType:null,modalJob:null,errDev:null,modalDev:null,selLot:null,stack:[]});window.scrollTo(0,0);};
     if(!canAnim()||reduced()||typeof requestAnimationFrame!=="function"){apply();return;}
     navNow(view);const tok=S._goTok=(S._goTok||0)+1;requestAnimationFrame(()=>requestAnimationFrame(()=>{if(S._goTok===tok)apply();}));};},   /* 누르는 즉시 표시자 출발, 새 화면은 두 프레임 뒤 — 연달아 누르면 마지막 것만 그린다 */
-  open(dev,dayI){return()=>setState({modalDev:dev,modalDayI:dayI===undefined?state.dayI:dayI,selLot:null,stack:pushTop("dev")});},
+  /* fresh: 가동률 목록에서 새로 열 때는 'Error 있는 Lot' 필터를 '전체' 로 되돌린다 — 팝업 안 ‹ › 이동은 그대로 둔다(UTIL-03) */
+  open(dev,dayI,fresh){return()=>setState({modalDev:dev,modalDayI:dayI===undefined?state.dayI:dayI,selLot:null,stack:pushTop("dev"),...(fresh?{lotFilter:"all"}:{})});},
   /* days: 여러 날을 함께 보는 Error 팝업(Error 탭에서 7일·21일·전체를 고른 채로 장비를 누르면 그 기간 그대로) */
   openErr(dev,dayI,f,days){return()=>setState({errWinEnd:null,errDev:dev,errDayI:dayI===undefined?state.dayI:dayI,errDays:days&&days.length>1?days.slice():null,errJob:f&&f.job!=null?f.job:null,errType:f&&f.type?f.type:null,stack:pushTop("err")});},
   ols(pts){const n=pts.length;if(n<3)return null;let mx=0,my=0;for(const [x,y] of pts){mx+=x;my+=y;}mx/=n;my/=n;
@@ -1453,6 +1481,9 @@ function morph(from,to){
       else{if(from.__tw){from.__tw.kill();from.__tw=null;}from.__tgt=undefined;from.nodeValue=to.nodeValue;}}
     else if(from.__tgt===undefined&&from.nodeValue!==to.nodeValue)from.nodeValue=to.nodeValue;
     return;}
+  /* 즉시 툴팁이 title 을 data-tip 으로 옮긴 요소는 다시 그려도 data-tip 으로 — title 을 되살리면 1초 뒤 브라우저 기본 툴팁이 번갈아 떴다(JS-12) */
+  if(from.hasAttribute("data-tip")&&to.hasAttribute("title")&&!to.hasAttribute("data-tip")){const t=to.getAttribute("title");to.setAttribute("data-tip",t);to.removeAttribute("title");
+    if(from.hasAttribute("aria-label")&&!to.hasAttribute("aria-label")&&!to.textContent.trim())to.setAttribute("aria-label",t.replace(/\n+/g," · "));}
   for(const a of [...from.attributes])if(!to.hasAttribute(a.name))from.removeAttribute(a.name);
   for(const a of [...to.attributes])if(from.getAttribute(a.name)!==a.value)from.setAttribute(a.name,a.value);
   if(from.hasAttribute("data-static"))return;      /* Lottie 가 그린 SVG 처럼 렌더가 만들지 않은 자식은 건드리지 않는다 */
@@ -1489,22 +1520,29 @@ function txMix(from,to,k,f){const a=[...from],b=[...to],L=Math.max(a.length,b.le
     else if(i<front){const set=x!==y&&txSet(y||x);out+=set?set[(i*7+f*3)%set.length]:y;}
     else out+=x;}
   return out;}
+/* 같은 칸이 숫자(data-txn) ↔ 글자(data-tx, '—') 로 바뀌면 돌던 트윈을 먼저 끊고 기억을 지운다 — 안 끊으면 옛 트윈의 onComplete 가
+   기록 없는 장비에 옛 숫자('47%' · '1건')를 다시 써 넣었다(11/25 UTIL-01, 날짜 ‹ 를 0.12초 간격으로 누를 때) */
+function txKind(el,k){if(el.__kind===k)return;if(el.__tw){el.__tw.kill();el.__tw=null;}el.__kind=k;el.__tv=el.__tc=el.__tt=el.__ts=undefined;}
 function txAnim(root){const on=!!G()&&!reduced();
-  for(const el of root.querySelectorAll("[data-txn]")){const v=+el.dataset.txn,f=TXF[el.dataset.txf],prev=el.__tv;el.__tv=v;
+  for(const el of root.querySelectorAll("[data-txn]")){txKind(el,"n");const v=+el.dataset.txn,f=TXF[el.dataset.txf],prev=el.__tv;el.__tv=v;
     if(prev===undefined||prev===v||!on||!f)continue;
     const from=el.__tc!==undefined?el.__tc:prev;if(el.__tw)el.__tw.kill();const o={v:from};el.textContent=f(from);
     el.__tw=gsap.to(o,{v,duration:.2,ease:"power1.out",onUpdate:()=>{el.__tc=o.v;el.textContent=f(o.v);},onComplete:()=>{el.__tc=undefined;el.__tw=null;el.textContent=f(v);}});}
-  for(const el of root.querySelectorAll("[data-tx]")){const t=el.textContent,prev=el.__tt;el.__tt=t;
+  for(const el of root.querySelectorAll("[data-tx]")){txKind(el,"t");const t=el.textContent,prev=el.__tt;el.__tt=t;
     if(prev===undefined||prev===t||!on)continue;
     const from=el.__ts!==undefined?el.__ts:prev;if(el.__tw)el.__tw.kill();const o={k:0};let fr=0;el.textContent=from;el.__tr=(el.__tr||0)+1;
     el.__tw=gsap.to(o,{k:1,duration:.24,ease:"none",onUpdate:()=>{el.__ts=txMix(from,t,o.k,fr++);el.textContent=el.__ts;},onComplete:()=>{el.__ts=undefined;el.__tw=null;el.textContent=t;}});}}
 /* 24시간 막대의 sweep: 막대가 새로 그려지거나 다른 날의 것으로 바뀌면 왼쪽에서 오른쪽으로 드러난다(시간이 흐르는 방향) */
-function listBars(root){for(const el of root.querySelectorAll("[data-listsig]")){const s=el.getAttribute("data-listsig"),prev=el.__ls;el.__ls=s;
-  if(prev===undefined||prev===s)continue;for(const b of el.querySelectorAll("[data-bar]")){gsap.killTweensOf(b);b.__bar=undefined;}}}   /* sweepBars 가 처음 그려지는 막대로 보고 sweep */
+/* 11/25 ANIM-10: __ls 는 연출이 꺼져 있어도(첫 렌더는 시작 화면 덮개 뒤) 늘 적는다 — 그래야 첫 ‹ 도 다음 것들과 같이 움직인다.
+   다시 그릴 때는 짧게(0.3s · 전체 지연 0.1s 이하), 앞 sweep 이 아직 돌고 있으면(연달아 누름) 새로 비우지 않고 바로 완성한다 */
+function listBars(root){const on=!!G()&&!reduced();for(const el of root.querySelectorAll("[data-listsig]")){const s=el.getAttribute("data-listsig"),prev=el.__ls;el.__ls=s;
+  if(!on||prev===undefined||prev===s)continue;for(const b of el.querySelectorAll("[data-bar]")){if(b.__sw&&b.__sw.isActive()){b.__sw.progress(1).kill();b.__sw=null;b.style.clipPath="";continue;}
+    gsap.killTweensOf(b);b.__bar=undefined;b.__redo=1;}}}   /* sweepBars 가 처음 그려지는 막대로 보고 sweep */
 function sweepBars(root){if(!G()||reduced()){for(const el of root.querySelectorAll("[data-bar]"))el.__bar=el.dataset.bar;return;}
   const fresh=[],changed=[];for(const el of root.querySelectorAll("[data-bar]")){if(el.__bar===undefined)fresh.push(el);else if(el.__bar!==el.dataset.bar)changed.push(el);el.__bar=el.dataset.bar;}
-  const each=Math.min(.02,.45/Math.max(1,fresh.length));
-  fresh.forEach((el,i)=>gsap.fromTo(el,{clipPath:"inset(0 100% 0 0 round 10px)"},{clipPath:"inset(0 0% 0 0 round 10px)",duration:.6,ease:"power2.out",delay:i*each,clearProps:"clipPath"}));
+  const each=Math.min(.02,.45/Math.max(1,fresh.length)),eachR=Math.min(.004,.1/Math.max(1,fresh.length));
+  fresh.forEach((el,i)=>{const re=el.__redo;el.__redo=0;el.__sw=gsap.fromTo(el,{clipPath:"inset(0 100% 0 0 round 10px)"},re?{clipPath:"inset(0 0% 0 0 round 10px)",duration:.3,ease:"expo.out",delay:i*eachR,clearProps:"clipPath"}
+    :{clipPath:"inset(0 0% 0 0 round 10px)",duration:.6,ease:"power2.out",delay:i*each,clearProps:"clipPath"});});
   void changed;}   /* 다른 날의 막대로 바뀔 때는 아무 연출도 없다(9/21 — 흐려졌다 돌아오는 것도 30개가 한꺼번에면 번쩍임으로 보인다) */
 /* 무엇이든 새로 들어올 때(뷰 · 키 바뀐 차트 · 팝업): 카드는 차례로 떠오르고, 막대 그래프는 바닥에서 자라고, 히트맵 칸은 차례로 켜진다 — 한 번의 '등장', 이후 값 변화는 CSS transition */
 function enterView(root){if(!G()||reduced())return;
@@ -1588,8 +1626,8 @@ if(typeof window!=="undefined"&&window.addEventListener)window.addEventListener(
 let _rvPrev=new Set();
 function reveals(root){const now=new Set();for(const el of root.querySelectorAll("[data-reveal]")){const k=el.getAttribute("data-reveal")||"";now.add(k);if(el.__rv)continue;el.__rv=1;if(_rvPrev.has(k)||!G()||reduced())continue;gsap.from(el,{height:0,opacity:0,duration:.32,ease:"power3.out",clearProps:"height,opacity"});}_rvPrev=now;}
 /* 장비 팝업 이름표(다른 장비·날짜가 되면 차례로 내려온다) · Error 팝업 타임라인 표식(차례로 선다) */
-function sigEnter(root){for(const el of root.querySelectorAll("[data-sig]")){const sg=el.dataset.sig;if(el.__sig!==undefined){el.__sig=sg;continue;}const first=true;el.__sig=sg;if(!G()||reduced())continue;
-  const co=el.querySelectorAll(".callout");if(co.length)gsap.from(co,{y:-10,opacity:0,duration:.3,ease:"power3.out",stagger:{each:Math.min(.02,.4/co.length)},clearProps:"transform,opacity",delay:first?.15:0});
+function sigEnter(root){for(const el of root.querySelectorAll("[data-sig]")){const sg=el.dataset.sig;if(el.__sig!==undefined){el.__sig=sg;continue;}el.__sig=sg;if(!G()||reduced())continue;
+  const co=el.querySelectorAll(".callout");if(co.length)gsap.from(co,{y:-6,opacity:0,duration:.22,ease:"expo.out",stagger:{each:Math.min(.02,.12/co.length)},clearProps:"transform,opacity"});   /* 하루에 수십 번 여는 창 — 전체 약 0.35초(ANIM-11) */
   const mk=el.querySelectorAll(":scope>i");if(mk.length)gsap.from(mk,{scaleY:.15,opacity:0,transformOrigin:"50% 100%",duration:.35,ease:"power3.out",stagger:{each:Math.min(.015,.4/mk.length)},clearProps:"transform,opacity"});}}
 let _prevDayI=null;
 function slideDay(root){const el=root.querySelector(".daylab");if(!el)return;const cur=state.dayI;
@@ -1625,7 +1663,10 @@ function onEnd(el,cls){const f=e=>{if(e.target!==el)return;el.removeEventListene
 function enterAnim(c,rm){
   if(c.classList.contains("stackbar"))return;   /* 스택 바는 등장 연출 없이 바로 */
   if(c.classList.contains("deckscrim")){c.classList.add("animate__animated","animate__fadeIn");c.style.setProperty("--animate-duration",rm?"1ms":".2s");onEnd(c,["animate__animated","animate__fadeIn"]);return;}
-  if(c.classList.contains("ov")){c.classList.add("animate__animated","animate__fadeIn");onEnd(c,["animate__animated","animate__fadeIn"]);const d=c.querySelector(".dlg");if(d&&!rm){d.classList.add("in");onEnd(d,["in"]);}if(d)enterView(d);}
+  if(c.classList.contains("ov")){const d=c.querySelector(".dlg");
+    if(state.stack.length>=2){if(d&&!rm){d.classList.add("in2");const f=e=>{if(e.target!==d||e.animationName!=="dlgRise")return;d.removeEventListener("animationend",f);d.classList.remove("in2");};d.addEventListener("animationend",f);}}   /* 겹친 팝업: 배경은 공유 덮개가 있어 .ov fadeIn 을 빼고 대화상자만(ANIM-08) */
+    else{c.classList.add("animate__animated","animate__fadeIn");onEnd(c,["animate__animated","animate__fadeIn"]);if(d&&!rm){d.classList.add("in");onEnd(d,["in"]);}}
+    if(d)enterView(d);}
   else{const dir=c.tagName==="MAIN"?(state.viewDir||0):0;gsap.fromTo(c,rm?{opacity:0}:{opacity:0,x:dir*28,y:dir?0:8},{opacity:1,x:0,y:0,duration:rm?.12:(dir?.3:.24),clearProps:"transform,opacity"});enterView(c);}}
 function flipAfter(p,before){
   const rm=reduced(),els=keyed(p);
@@ -1796,7 +1837,8 @@ function liftFront(app,snap){if(!canAnim()||reduced()||!snap.size)return;const n
     for(const a of dl.getAnimations())if(a.transitionProperty)a.cancel();
     dl.classList.add("lifting");
     const t=dl.animate([{transform:from,easing:LIFT.out},{transform:lift,offset:LIFT.split,easing:LIFT.io},{transform:end}],{duration:LIFT.T});
-    dl.animate([{backgroundColor:was.dim||"rgba(15,21,28,.58)",easing:LIFT.out},{backgroundColor:"rgba(15,21,28,.05)",offset:LIFT.split,easing:LIFT.io},{backgroundColor:"rgba(15,21,28,0)"}],{duration:LIFT.T,pseudoElement:"::after"});
+    const a0=Math.min(.28,parseFloat((/,\s*([\d.]+)\)\s*$/.exec(was.dim||"")||[0,".58"])[1])||.58);   /* 첫 프레임부터 맨 위로 오므로 어두운 판으로 덮지 않게 — 호버 때 .38 로 밝아지던 것과 이어지는 값에서(ANIM-09) */
+    dl.animate([{backgroundColor:`rgba(15,21,28,${a0})`,easing:LIFT.out},{backgroundColor:"rgba(15,21,28,.05)",offset:LIFT.split,easing:LIFT.io},{backgroundColor:"rgba(15,21,28,0)"}],{duration:LIFT.T,pseudoElement:"::after"});
     const done=()=>dl.classList.remove("lifting");t.onfinish=done;t.oncancel=done;}}
 /* 10/6 handoff C3: 장비별 점 그래프의 숫자 — 같은 높이, 실제 글자 폭으로 재서 10px 보다 가까우면 두 점의 가운데에서 좌우로 띄운다.
    점(.dd)은 건드리지 않는다. 렌더 직후 한 번(같은 프레임 — 퍼센트 위치가 그려지기 전에) + 레시피 칸 폭이 바뀔 때만 */
@@ -1824,12 +1866,12 @@ function render(){
   if(app.getAttribute("data-anim")!=="el")app.setAttribute("data-anim","el");
   morphChildren(app,tpl.content);
   layoutPairLabels(app);calloutFit(app);
-  for(const el of app.querySelectorAll("input[data-in]")){const v=el.getAttribute("value")||"";if(el.value!==v&&!(el.type==="date"&&document.activeElement===el))el.value=v;}   /* 입력값은 속성이 아니라 속성값(property)에 있다 — 렌더가 쓴 값을 따르게(입력 중인 날짜 칸만 그대로) */
+  for(const el of app.querySelectorAll("input[data-in]")){const v=el.getAttribute("value")||"";if(el.value!==v&&!(el.type==="date"&&el.__typing))el.value=v;}   /* 입력값은 속성이 아니라 속성값(property)에 있다 — 렌더가 쓴 값을 따르게(입력 중인 날짜 칸만 그대로) */
   const top=topDlg(),topK=top?top.dataset.dlg:null;
   for(const el of app.querySelectorAll(":scope>header,:scope>.stage,:scope>.foot"))el.inert=!!top;
   {const st=app.querySelector(":scope>.stage");if(st)st.classList.toggle("behind",!!top);}
   layoutDeck(app,top);liftFront(app,_snap);
-  mountLotties(app);countUp(app);txAnim(app);if(G()&&!reduced())listBars(app);runRolls();sweepBars(app);slideDay(app);navInd(app);reveals(app);sigEnter(app);
+  mountLotties(app);countUp(app);txAnim(app);listBars(app);runRolls();if(window.tipHold)tipHold();sweepBars(app);slideDay(app);navInd(app);reveals(app);sigEnter(app);
   for(const d of app.querySelectorAll(".dlg[data-dlg]")){const ov=d.parentElement;if(!leaving(ov))ov.inert=d!==top;}
   let target=null;
   if(topK&&topK!==prevTop){if(!prevTop&&fk&&!/^x:/.test(fk))_openerFk=fk;target=top.querySelector("h2[tabindex]");}
@@ -1856,7 +1898,7 @@ function setRange(f,t,p){const A=D.allDays;if(!A||!A.length)return;f=f||A[0];t=t
     stack:state.stack.filter(k=>k==="recipe")});}
 function rangeHtml(dim){if(!D||!D.allDays||!D.allDays.length)return"";const A=D.allDays,lo=A[0],hi=A[A.length-1];
   const segs=[["7","최근 7일"],["30","1달"],["all","전체"]].map(([k,l])=>({label:l,on:state.vp===k,pick:()=>{const [f,t]=rangeOf(k);setRange(f,t,k);}}));
-  return `<div class="rangebar${dim?" dim":""}" data-key="rangebar" title="${dim?"이 탭은 하루 날짜 기준입니다 — 기간 버튼은 회색(비활성처럼 보임). 누르면 조회 기간이 바뀝니다":"이 기간의 날만 모든 탭에 보입니다"}(가진 데이터 ${lo} ~ ${hi})">${segHtml(segs)}<input class="inp" type="date" data-in="vf" data-fk="range:vf" value="${esc(D.days[0])}" min="${lo}" max="${hi}" aria-label="보이는 기간 시작"><span class="muted">~</span><input class="inp" type="date" data-in="vt" data-fk="range:vt" value="${esc(D.days[D.days.length-1])}" min="${lo}" max="${hi}" aria-label="보이는 기간 끝"><span class="num rdays">${D.days.length}일</span>${dim?`<span class="dimnote">이 탭은 하루 날짜 기준</span>`:""}</div>`;}
+  return `<div class="rangebar${dim?" dim":""}" data-key="rangebar" title="${dim?"이 탭은 하루 날짜 기준입니다 · 기간 버튼은 회색(비활성처럼 보임) · 누르면 조회 기간이 바뀝니다":"이 기간의 날만 모든 탭에 보입니다"} · 가진 데이터 ${lo} ~ ${hi}">${segHtml(segs)}<input class="inp" type="date" data-in="vf" data-fk="range:vf" value="${esc(D.days[0])}" min="${lo}" max="${hi}" aria-label="보이는 기간 시작"><span class="muted">~</span><input class="inp" type="date" data-in="vt" data-fk="range:vt" value="${esc(D.days[D.days.length-1])}" min="${lo}" max="${hi}" aria-label="보이는 기간 끝"><span class="num rdays">${D.days.length}일</span>${dim?`<span class="dimnote">이 탭은 하루 날짜 기준</span>`:""}</div>`;}
 /* 10/6 handoff C8(재검토 A): 날짜 조작은 두 줄 — 위 '조회 기간'(모든 탭), 아래 '하루 날짜'(가동률 · Error 일자별).
    하루는 기간 안의 데이터 날짜만(D.days). 기간을 바꿔 하루가 밖으로 나가면 기간의 마지막 날로 옮기고 그때만 짧게 알린다(state.dayNote) */
 const goDay=i=>setState({dayI:i,pickDay:undefined,dayNote:""});
@@ -1879,7 +1921,9 @@ function headerHtml(V){
   const day=hasD?S.dayStr():null;
   const fixed=!!(D&&D.today);
   const gen=meta.generated||"";
-  let stampTxt=gen?gen+" 수집 기준":"";
+  /* 날짜 표기 하나로(COPY-06): 목록 · 칩처럼 MM/DD — 연도는 데이터의 해와 다를 때만 */
+  const gm=/^(\d{4})-(\d{2})-(\d{2})(.*)$/.exec(gen),lastY=hasD?String(D.days[D.days.length-1]||"").slice(0,4):"";
+  let stampTxt=gen?(gm&&gm[1]===lastY?gm[2]+"/"+gm[3]+gm[4]:gen)+" 수집 기준":"";
   if(meta.mode==="saved")stampTxt+=" · 사본";
   if(!fixed&&gen)stampTxt+=" · 수집 시각 정보 없음";
   const lotOnly=!!meta.lot_only;
@@ -1897,18 +1941,20 @@ function headerHtml(V){
     ${hasD&&!lotOnly?`<div class="hacts"><button class="btn" data-h="${h(saveHtml)}" title="지금 데이터를 담은 HTML 사본을 내려받습니다">사본 저장</button>
       <button class="btn" data-h="${h(()=>setState({stack:pushTop("recipe")}))}" data-fk="rg:open" title="같은 레시피인 Job 을 묶어 이름을 붙입니다">레시피 묶음</button></div>`:""}
     ${setBtn}
-    ${partChip()}<span class="stamp ${fixed?"":"unfixed"}" title="${(fixed?"집계 기준시각 = 수집 시각(며칠 뒤 열어도 같은 숫자)":"수집 시각 정보가 없어 모든 날의 분모를 24시간으로 둡니다(열람 시각은 쓰지 않습니다)")+(meta.version?" · 수집기 v"+esc(meta.version):"")}">${esc(stampTxt)}</span>
+    <span class="hstamp">${partChip()}<span class="stamp ${fixed?"":"unfixed"}" title="${(fixed?"집계 기준시각 = 수집 시각(며칠 뒤 열어도 같은 숫자)":"수집 시각 정보가 없어 모든 날의 분모를 24시간으로 둡니다(열람 시각은 쓰지 않습니다)")+(meta.version?" · 수집기 v"+esc(meta.version):"")}">${esc(stampTxt)}</span></span>
     ${hasD&&!lotOnly?dateControlsHtml(V,day):""}</header>`;
 }
 /* 기간 표시(10/5): 이 파일에 담은 기간 — 수집 뒤 기본(html_days)이거나 기간을 골라 만든 파일. 9/23 분할은 롤백 */
 function partChip(){const R=meta&&meta.range;if(!R||!R.from)return"";
   const all=meta.data_from?`가진 데이터 ${meta.data_from} ~ ${meta.data_to}`:"";
-  return `<span class="partchip" title="이 파일에 담은 기간입니다${R.explicit?"(기간을 골라 만든 파일)":"(수집 뒤 기본 기간)"}. ${esc(all)}">${md(R.from)} ~ ${md(R.to)}</span>`;}
+  return `<span class="partchip" title="이 파일에 담은 기간입니다${R.explicit?"(기간을 골라 만든 파일)":"(수집 뒤 기본 기간)"}${all?" · "+esc(all):""}"><b>파일</b> ${md(R.from)} ~ ${md(R.to)}</span>`;}   /* 회색 — 경고색은 '부분' · '수집 실패' 같은 진짜 주의에만(UTIL-22) */
 function footHtml(){   /* 10/7(사용자): 수집 범위 목록 · 장비/일수/버전 줄 · 가동률 설명 문구는 지웠다 — 남는 것은 문제가 있을 때의 알림뿐 */
   const outs=(D&&D.scope||[]).filter(s=>s.out).map(s=>s.n),bad=D&&D.badRows;
   return `<div class="foot" data-key="foot">${outs.length?`<b>수집 안 함</b> ${esc(outs.join(", "))}`:""}${outs.length&&bad?"<br>":""}${bad?`<b style="color:#B4402F">읽지 못한 행 ${D.badRows}개</b> — 시각 형식이 맞지 않아 집계에서 뺐습니다(수집 로그 참조).`:""}</div>`;
 }
 
+/* 24시간 막대의 '아직 오지 않은 시간'(수집한 날 · 분모 뒤): 대기(회색)와 색만으로 구분하지 않게 흰 바탕 + 점선 테두리 겹을 얹는다(UTIL-13) */
+const futHtml=t=>{const den=S.den(t);return t&&den<1440?`<i class="fut" style="left:${(den/14.4).toFixed(3)}%" aria-hidden="true"></i>`:"";};
 /* Lot 선택 키 — 같은 Job·Lot 이 하루에 Report 두 장이면 Report 번호(L[8])로 갈린다(D16). 장비 팝업과 Error 팝업이 같이 쓴다. */
 const lotKey=L=>L[0]+"|"+L[1]+"|"+L[2]+"|"+(L[11]||0)+"|"+(L[8]||0);
 
@@ -1921,30 +1967,28 @@ function missedHtml(){   /* 수집 범위 안인데 이번에 접근하지 못�
 function homeHtml(){
   const day=S.dayStr(), devs=S.devList();
   const sorts=S.segGroup([{k:"name",label:"번호순"},{k:"low",label:"가동률 낮은 순"}],state.sort,k=>setState({sort:k}));
-  const items=devs.map(n=>({n,t:S.at(day,n)}));
-  const sorted=[...items];
-  if(state.sort==="low")sorted.sort((a,b)=>{const x=S.util(a.t),y=S.util(b.t);return (x===null?-1:x)-(y===null?-1:y);});
-  else sorted.sort((a,b)=>cmpDev(a.n,b.n));
+  const sorted=S.order(day,devs),items=sorted;
   const q=items.reduce((a,x)=>{if(x.t){a.w+=x.t.w||0;a.ne+=x.t.ne||0;if(S.noRec(x.t))a.no++;}else a.no++;return a;},{w:0,ne:0,no:0});
   const isToday=D.today&&day===D.today;
-  const rowsH=sorted.map((x,i)=>{const u=S.util(x.t),al=S.alert(x.t),es=S.hasEst(x.t);
-    return `<button class="rowbtn" data-key="slot:${i}" data-row="dev:${esc(x.n)}" data-h="${h(S.open(x.n))}" data-fk="dev:${esc(x.n)}" title="${esc(x.n)} 하루 상세 팝업 열기${es?" · INI 가 없는 "+x.t.ne+"장은 Report 배치 창의 빈 시간으로 추정했습니다":""}" style="min-height:44px">
-      <span style="display:flex;align-items:center;gap:6px;font-weight:600;font-size:13.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis"><span class="dot${al?" alert":""}" style="background:${u===null?"#C9D1DA":(al?ERR:(u>=70?RUN:"#C9D1DA"))}"></span><span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis"><span data-tx>${esc(x.n)}</span>${collectChip(x.n)}</span></span>
-      <span class="num" style="text-align:right;font-size:14.5px;font-weight:600;color:${u===null?"#5A6673":(u<S.thU()?"#B4402F":"#0F151C")}">${u===null?`<span data-tx>—</span>`:`<span ${txn(u,"pct")}>${Math.round(u)}%</span>`}</span>
-      <span data-bar="${day}|${esc(x.n)}" style="display:block;height:20px;border-radius:10px;background:#E9EDF2;overflow:hidden;background-image:${S.bar(x.t)}"></span>
-      <span class="num" style="text-align:right;font-size:13px;color:${x.t&&x.t.e>=S.thE()?"#B4402F":"#4B5866"}">${x.t&&x.t.e?`<span ${txn(x.t.e,"n")}>${x.t.e}건</span>`:`<span data-tx>—</span>`}</span>
+  const nNo=state.sort==="low"?sorted.filter(x=>S.noRec(x.t)).length:0;   /* '가동률 낮은 순' 에서 기록 없는 장비는 맨 뒤 — 그 앞에 구분 한 줄(JS-10) */
+  const rowsH=sorted.map((x,i)=>{const u=S.util(x.t),es=S.hasEst(x.t),no=S.noRec(x.t);
+    return `${nNo&&no&&(i===0||!S.noRec(sorted[i-1].t))?`<p class="nosep" data-key="nosep">기록 없음 ${nNo}대</p>`:""}<button class="rowbtn" data-key="slot:${i}" data-row="dev:${esc(x.n)}" data-h="${h(S.open(x.n,undefined,true))}" data-fk="dev:${esc(x.n)}" title="${esc(x.n)} 하루 상세 팝업 열기${es?" · INI 가 없는 "+x.t.ne+"장은 Report 배치 창의 빈 시간으로 추정했습니다":""}" style="min-height:44px">
+      <span style="display:flex;align-items:center;gap:6px;font-weight:600;font-size:13.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis"><span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis"><span data-tx>${esc(x.n)}</span>${collectChip(x.n)}</span></span>
+      <span class="num" style="text-align:right;font-size:14.5px;font-weight:600;color:${u===null?"#5A6673":"#0F151C"}">${u===null?`<span data-tx>—</span>`:`<span ${txn(u,"pct")}>${Math.round(u)}%</span>`}</span>
+      ${no?`<span class="nobar" data-bar="${day}|${esc(x.n)}">기록 없음</span>`:`<span data-bar="${day}|${esc(x.n)}" style="display:block;position:relative;height:20px;border-radius:10px;background:#E9EDF2;overflow:hidden;background-image:${S.bar(x.t)}">${futHtml(x.t)}</span>`}
+      <span class="num" style="text-align:right;font-size:13px;color:#4B5866">${x.t&&x.t.e?`<span ${txn(x.t.e,"n")}>${x.t.e}건</span>`:`<span data-tx>—</span>`}</span>
       <span class="chev" style="text-align:right;color:#5A6673;font-size:15px">›</span></button>`;}).join("");
+  const fu=S.fleetUtil(day,devs),xM=items.reduce((a,b)=>a+(b.t?b.t.x:0),0),sM=items.reduce((a,b)=>a+(b.t?b.t.s:0),0);
   return `<section class="cards">
-      <div><p class="k">평균 가동률</p><p class="v num">${cnt(S.fleetUtil(day,devs),1)}<small>%</small></p>${isToday?`<p class="s">수집한 날 · 00:00 ~ 모든 장비의 마지막 기록</p>`:""}${D.partialDays&&D.partialDays.includes(day)?`<p class="s" style="color:var(--warn)">보관 기간 첫날 — 수집 창이 도중에 시작해 하루 전체가 아닙니다</p>`:""}<p class="s">기록 있는 ${items.length-q.no}대 평균${q.no?` · 기록 없음 ${q.no}대 제외`:""}</p>${q.ne?`<p class="s" title="INI(시각 기록)가 없어 Report 배치 창의 빈 시간을 나눠 가진 Wafer">배치 창으로 추정 ${q.ne}장 / ${q.w}장</p>`:""}</div>
-      <div><p class="k">살펴볼 장비</p><p class="v num" style="color:#B4402F">${cnt(items.filter(x=>S.alert(x.t)).length)}<small>대</small></p><p class="s">가동률 ${S.thU()}% 미만 또는 Error ${S.thE()}건 이상${q.no?` · 기록 없음 ${q.no}대는 따로`:""}</p></div>
-      <div><p class="k" title="같은 Lot 에서 같은 유형이 여러 번 나도 1건으로 셉니다">Error</p><p class="v num">${cnt(items.reduce((a,b)=>a+(b.t?b.t.e:0),0))}<small>건</small></p><p class="s">Error ${hm(items.reduce((a,b)=>a+(b.t?b.t.x:0),0))} · 에러 후 대기 ${hm(items.reduce((a,b)=>a+(b.t?b.t.s:0),0))}</p></div>
+      <div><p class="k">평균 가동률</p><p class="v num">${fu===null?"—":cnt(fu,1)+"<small>%</small>"}</p>${isToday?`<p class="s">수집한 날 · 00:00 ~ 모든 장비의 마지막 기록</p>`:""}${D.partialDays&&D.partialDays.includes(day)?`<p class="s" style="color:var(--warn)">보관 기간 첫날 — 수집 창이 도중에 시작해 하루 전체가 아닙니다</p>`:""}<p class="s">기록 있는 ${items.length-q.no}대 평균${q.no?` · 기록 없음 ${q.no}대 제외`:""}</p>${q.ne?`<p class="s" title="INI(시각 기록)가 없어 Report 배치 창의 빈 시간을 나눠 가진 Wafer">배치 창으로 추정 ${q.ne}장 / ${q.w}장</p>`:""}</div>
+      <div><p class="k" title="같은 Lot 에서 같은 유형이 여러 번 나도 1건으로 셉니다">Error</p><p class="v num">${cnt(items.reduce((a,b)=>a+(b.t?b.t.e:0),0))}<small>건</small></p><p class="s" title="Error 대기 = Error 시간 + 에러 후 대기 — Error 탭 · TB500 · Kendall 탭과 같은 이름 · 같은 숫자">Error 대기 ${hm(xM+sM)} (Error ${hm(xM)} + 에러 후 대기 ${hm(sM)})</p></div>
     </section>
     ${missedHtml()}
     <div class="bar-h"><h2>${isToday?"오늘의 가동률":dayName(day)+" 가동률"}</h2><span class="scope-badge" data-key="scope">${scopeBadge("home")}</span><div class="spacer"></div>${S.filterSegs()}${segHtml(sorts)}</div>
     <div class="panel homelist" data-listsig="${state.view}|${state.floor}|${state.maker}|${state.sort}|${day}">
-      <div class="legend"><span><i class="gloss" style="background-color:${RUN}"></i>Scan</span><span><i class="gloss" style="background-color:${DUP}"></i>Rescan</span><span><i class="gloss" style="background-color:${TEST}"></i>Test</span><span><i class="gloss" style="background-color:${ERR}"></i>Error</span><span><i class="gloss" style="background-color:${STOP}"></i>에러 후 대기</span><span><i class="gloss" style="background-color:${IDLE}"></i>대기</span>${isToday?`<span><i style="background:${FUTURE};box-shadow:inset 0 0 0 1px #DCE2E9"></i>아직 오지 않은 시간</span>`:""}</div>
+      <div class="legend"><span><i class="gloss" style="background-color:${RUN}"></i>Scan</span><span><i class="gloss" style="background-color:${DUP}"></i>Rescan</span><span><i class="gloss" style="background-color:${TEST}"></i>Test</span><span><i class="gloss" style="background-color:${ERR}"></i>Error</span><span><i class="gloss" style="background-color:${STOP}"></i>에러 후 대기</span><span><i class="gloss" style="background-color:${IDLE}"></i>대기</span>${isToday?`<span><i class="futsw"></i>아직 오지 않은 시간</span>`:""}${q.no?`<span><i class="nosw"></i>기록 없음</span>`:""}</div>
       <div class="thead"><span>장비</span><span style="text-align:right">가동률</span>${ticksHtml()}<span style="text-align:right">Error</span><span></span></div>
-      ${rowsH||`<p class="empty">이 날 기록이 있는 장비가 없습니다.</p>`}
+      ${rowsH||`<p class="empty">${state.floor==="all"&&state.maker==="all"?"이 파일에 장비가 없습니다.":"이 조건(층 · 장비 종류)에 맞는 장비가 이 파일에 없습니다."}</p>`}
     </div>`;
 }
 
@@ -2107,7 +2151,7 @@ function errorsHtml(){
   const nW=MET?"400":"700",nInk=MET?"#5A6673":"#0F151C",mW=MET?"700":"400",mInk=MET?"#0F151C":"#5A6673";
   const bars=spanDays.map((d,i)=>({label:(i%Math.ceil(spanDays.length/11)===0||i===spanDays.length-1)?md(d):"",
     vTxt:(spanDays.length<=22&&dayV(d))?fmtV(dayV(d)):(dayV(d)===maxDay?fmtV(dayV(d)):""),h:(dayV(d)/maxDay*100).toFixed(1),
-    color:pickDay?(pickDay===d?"#8C2A1F":"#E0A9A2"):ERR,   /* 기간 모드는 모두 같은 색(사용자 확정 9/20) — 일자별 모드만 고른 날 진하게·나머지 연하게 */title:PROB?md(d)+" · 발생 확률 "+pc(dayErr[d]||0,dayAtt[d]||0)+" ("+(dayErr[d]||0)+" / "+(dayAtt[d]||0)+" 시도)":md(d)+" · Error "+(byDay[d]||[0,0])[0]+"건 · 대기 시간 "+hm((byDay[d]||[0,0])[1]),
+    color:pickDay?(pickDay===d?ERR:"#C9D1DA"):ERR,   /* 기간 모드는 모두 같은 색(사용자 확정 9/20) — 일자별 모드만 고른 날 빨강 · 나머지 회색(11/25 UTIL-17: 연분홍은 '에러 후 대기' 색과 겹쳤다) */title:PROB?md(d)+" · 발생 확률 "+pc(dayErr[d]||0,dayAtt[d]||0)+" ("+(dayErr[d]||0)+" / "+(dayAtt[d]||0)+" 시도)":md(d)+" · Error "+(byDay[d]||[0,0])[0]+"건 · 대기 시간 "+hm((byDay[d]||[0,0])[1]),
     pick:()=>setState(pickDay===d?{pickDay:null}:{pickDay:undefined,dayI:D.days.indexOf(d),dayNote:""})}));   /* 날짜를 고르면 헤더의 하루 날짜도 그 날(handoff C8) */
   const fjName=FJ!=null?jobNm(D.jobGroups[FJ]).nm:"";
   const chips=(FT?`<button class="fchip animate__animated animate__fadeInDown" data-h="${h(()=>setState({errFType:null}))}" title="유형 필터 해제"><span class="mono">${esc(FT)}</span><span aria-hidden="true">✕</span></button>`:"")
@@ -2191,18 +2235,21 @@ function calloutFit(root){const box=root.querySelector("[data-callw]");if(!box)r
   for(const c of box.querySelectorAll(".callout")){const cw=c.offsetWidth,l=c.offsetLeft;if(l+cw>w)c.style.left=Math.max(0,w-cw)+"px";}   /* 글자 폭 어림이 모자라면 실제 폭으로 안에 넣는다 */if(w&&Math.abs(w-(+box.dataset.callw))>2){_calloutW=w;requestAnimationFrame(render);}}
 /* 10/24: 장비 팝업 Scan 카드 밑 한 줄 — 스캔 비율과 그 근거 장 수. 옛 행(수집기 업데이트 전)은 값이 없어 '채우기 전' 으로 적는다 */
 function scLine(t){const c=t&&t.sc;if(!c)return "";const [S,I,n,N]=c;
-  if(!n)return "스캔 비율 · 채우기 전";if(!(I>0))return "";const p="그중 스캔 "+Math.round(S/I*100)+"%";return n>=N?p:p+" · 근거 "+n+"/"+N+"장";}
+  if(!n)return "스캔 비율 없음 ⓘ";   /* 수집기 업데이트 전에 모은 장이라 값이 없을 뿐 — 문제가 아니라 회색 보통 글씨(UTIL-20) */if(!(I>0))return "";const p="그중 스캔 "+Math.round(S/I*100)+"%";return n>=N?p:p+" · 근거 "+n+"/"+N+"장";}
 function scTip(t){const c=t&&t.sc;if(!c)return "";const [S,I,n,N]=c;
   const miss=N-n,fill=miss>0?`\n${N}장 중 ${miss}장은 값이 없습니다(수집기 업데이트 전에 모은 장) — 수집 창 '옛 기간 빈칸 채우기' 로 채울 수 있습니다.`:"";
   return (n?`INI 로 시각을 잰 장의 시간 ${hm(I)} 중 실제 촬영(ScanLog Duration + 둘째 레시피) ${hm(S)} — 나머지는 로드 · 얼라인 · 레시피 전환 · 마무리. 가동률 값은 그대로입니다.`:"실제 촬영 시간(ScanLog)이 아직 없는 날입니다.")+fill;}
 function devPopupHtml(){
   const mDev=state.modalDev;if(!mDev)return"";
   const mDay=D.days[state.modalDayI],t=S.at(mDay,mDev),P=D.pool;
-  const sc=D.scope.find(s=>s.n===mDev)||{},i=D.devices.indexOf(mDev);
-  const sib=[{label:"Error 보기",title:"이 날 이 장비의 Error 상세",go:S.openErr(mDev,state.modalDayI)}];
-  if(D.devices[i-1])sib.push({label:"‹ "+D.devices[i-1],title:D.devices[i-1]+" 로 바꾸기",go:S.open(D.devices[i-1],state.modalDayI)});
-  if(D.devices[i+1])sib.push({label:D.devices[i+1]+" ›",title:D.devices[i+1]+" 로 바꾸기",go:S.open(D.devices[i+1],state.modalDayI)});
-  const den=S.den(t),u=S.util(t),idle=t?Math.max(0,den-t.r-t.d-t.x-t.t-t.s):den;
+  const sc=D.scope.find(s=>s.n===mDev)||{};
+  /* 앞뒤 장비는 가동률 목록과 같은 순서(지금 걸린 층 · 장비 종류 필터 + 정렬, UTIL-08) — 목록 밖 장비(다른 탭에서 연 것)면 번호 순 전체 */
+  const ord=S.order(mDay).map(x=>x.n),seq=ord.includes(mDev)?ord:D.devices,i=seq.indexOf(mDev);
+  const sib=[{label:t&&t.e?"Error "+t.e+"건 ›":"Error 없음 ›",title:"이 날 이 장비의 Error 상세(최근 21일 막대도 함께)",fk:"dev:err",go:S.openErr(mDev,state.modalDayI)}];
+  if(seq[i-1])sib.push({label:"‹ "+seq[i-1],title:seq[i-1]+" 로 바꾸기",go:S.open(seq[i-1],state.modalDayI)});
+  if(seq[i+1])sib.push({label:seq[i+1]+" ›",title:seq[i+1]+" 로 바꾸기",go:S.open(seq[i+1],state.modalDayI)});
+  const noRec=S.noRec(t);
+  const den=S.den(t),u=S.util(t),idle=t&&!noRec?Math.max(0,den-t.r-t.d-t.x-t.t-t.s):null;   /* 기록 없는 날은 대기도 '—'(쉰 것과 모르는 것은 다르다, UTIL-04) */
   const onlyErr=state.lotFilter==="err";const all=t?t.lots:[];const shown=(onlyErr?all.filter(L=>L[5]>0):all);
   const key=lotKey;
   const LA=L=>L[3]>L[2]?L[2]:(L[11]||0);
@@ -2212,7 +2259,7 @@ function devPopupHtml(){
   const textW=s=>{let w=0;for(const ch of s)w+=(ch.charCodeAt(0)>0x2000?11.6:6.4);return w;};
   /* D10: Lot 이 많으면(40개 초과) 이름표는 Error·Test·선택 Lot 만 — 막대의 클릭 영역(hits)은 전부 남는다 */
   const fold=shown.length>40;const labeled=fold?shown.filter(L=>L[5]||L[7]||key(L)===state.selLot):shown;
-  const callouts=labeled.map(L=>{const lot=P.lot[L[1]]||"(Lot 확인 불가)";const label=cut(lot,15)+" · "+L[4]+"장";const wPct=(textW(label)+36)/W*100;
+  const callouts=labeled.map(L=>{const lot=P.lot[L[1]]||"(Lot 확인 불가)";const label=cut(lot,15)+" · "+(L[4]?L[4]+"장":"전날부터");   /* 자정을 넘긴 배치의 둘째 날 조각은 장수를 첫날에 센다(UTIL-11) */const wPct=(textW(label)+36)/W*100;
     const la=LA(L),lb=Math.max(LB(L),LA(L)+1);let anchor=(la+lb)/2;
     if(L[5]){const eg=S.segsOf(t).find(g=>g.k===1&&g.b>la&&g.a<lb);if(eg)anchor=(Math.max(eg.a,la)+Math.min(eg.b,lb))/2;}
     const x=anchor/1440*100;let l=x-wPct/2;if(l<0)l=0;if(l+wPct>100)l=Math.max(0,100-wPct);const r=l+wPct;
@@ -2223,7 +2270,8 @@ function devPopupHtml(){
     return{l:(la/1440*100).toFixed(2),w:Math.max(0.2,(lb-la)/1440*100).toFixed(2),on,title:(P.lot[L[1]]||"Lot")+" · "+clock(la)+"–"+clock(lb),pick:()=>setState({selLot:on?null:key(L)})};});
   const calloutH=Math.max(30,(levels.length||1)*ROW+14);
   const close=()=>setState(CLOSE.dev());
-  const stats=[{k:"가동률",v:u===null?"기록 없음":u.toFixed(1)+"%",h:u===null?null:cnt(u,1)+"%",ink:u!==null&&u<S.thU()?"#B4402F":"#0F151C"},{k:"Scan",v:t?hm(t.r):"—",ink:"#0F151C",s:scLine(t),sw:!!(t&&t.sc&&t.sc[3]&&t.sc[2]*2<t.sc[3]),tip:scTip(t)},{k:"Rescan",v:t?hm(t.d):"—",ink:"#0F151C"},{k:"Test",v:t?hm(t.t):"—",ink:t&&t.t?"#7A5BA8":"#4B5866"},{k:"Error",v:t?(t.e+"건"+(t.x?" · "+hm(t.x):"")):"—",ink:t&&t.e>=S.thE()?"#B4402F":"#0F151C"},{k:"에러 후 대기",v:t?hm(t.s):"—",ink:t&&t.s?"#B4402F":"#4B5866"},{k:"대기",v:hm(idle),ink:"#4B5866"}].concat(S.hasEst(t)?[{k:"시각 확인",v:t.cv+"%",ink:"#B4402F"}]:[]);
+  /* 카드: 큰 숫자는 짧게(잘리지 않게) — Error 시간은 아래 작은 줄로(UTIL-05). 시각 확인은 보통 글자색(경고가 아니다, UTIL-06). 4칸씩 고르게 줄 바꿈(UTIL-20) */
+  const stats=[{k:"가동률",v:u===null?"기록 없음":u.toFixed(1)+"%",h:u===null?null:cnt(u,1)+"%",ink:"#0F151C"},{k:"Scan",v:t?hm(t.r):"—",ink:"#0F151C",s:scLine(t),tip:scTip(t)},{k:"Rescan",v:t?hm(t.d):"—",ink:"#0F151C"},{k:"Test",v:t?hm(t.t):"—",ink:t&&t.t?"#7A5BA8":"#4B5866"},{k:"Error",v:t?t.e+"건":"—",ink:t&&t.e?"#B4402F":"#0F151C",s:t&&t.x?"Error "+hm(t.x):""},{k:"에러 후 대기",v:t?hm(t.s):"—",ink:t&&t.s?"#B4402F":"#4B5866"},{k:"대기",v:idle===null?"—":hm(idle),ink:"#4B5866"}].concat(S.hasEst(t)?[{k:"시각 확인",v:t.cv+"%",ink:"#0F151C"}]:[]);
   const lotFilters=S.segGroup([{k:"all",label:"전체"},{k:"err",label:"Error 있는 Lot"}],state.lotFilter,k=>setState({lotFilter:k,selLot:null}));
   const selH=sel?(()=>{const a=LA(sel),b=Math.max(LB(sel),a+1);const types=Object.entries(sel[9]).sort((x,y)=>y[1][1]-x[1][1]);const rep=P.rep[sel[8]]||"";
     return `<div class="sel animate__animated animate__fadeIn" data-key="sel"><div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:10px"><b style="font-size:14.5px">${esc(P.lot[sel[1]]||"(Lot 확인 불가)")}</b>
@@ -2233,21 +2281,24 @@ function devPopupHtml(){
       <span class="k">Job</span><span class="mono" style="word-break:break-all" title="${esc(P.job[sel[0]]||"")}">${esc((isKla(mDev)&&klaJobAlias(P.job[sel[0]]))||P.job[sel[0]]||"(Job 없음)")}</span>${sel[17]>=0&&sel[17]!=null?`<span class="k">Report 요약</span><span class="mono" style="color:#4B5866" title="Wafers Scanned = 스캔이 끝난 장 수 · Avg. Scan Time = 첫 레시피 스캔 평균(로드 · 둘째 레시피 제외) — 시간 계산에는 쓰지 않습니다">${esc(P.st[sel[17]])}</span>`:""}${sel[10]>=0?`<span class="k">원문</span><span class="mono" style="color:#4B5866;word-break:break-all">${esc(P.st[sel[10]])}</span>`:""}
       <span class="k">Report</span><span class="mono" style="color:#4B5866;word-break:break-all">${esc(rep||"—")}${rep&&reportUrl({device:mDev,report:rep})?` <button class="link" data-h="${h(()=>openReport({device:mDev,report:rep}))}" title="이 BatchReport 를 새 탭으로 엽니다(NAS 경로)">Report 열기</button>`:""}</span></div></div>`;})():"";
   return `<div class="ov z50"><button class="scrim" data-h="${h(close)}" aria-label="닫기"></button><div class="dlg w1120" role="dialog" aria-modal="true" aria-labelledby="dlg-dev-title" data-dlg="dev">
-    <div class="dh"><h2 id="dlg-dev-title" tabindex="-1">${esc(mDev)}</h2><span class="sub num">${dayName(mDay)}</span><span class="note">${esc(sc.note||"")}</span><div class="spacer"></div>
-      ${sib.map(s=>`<button class="btn" data-h="${h(s.go)}" title="${esc(s.title)}">${esc(s.label)}</button>`).join("")}<button class="x" data-h="${h(close)}" data-fk="x:dev" title="닫기 (Esc)">✕</button></div>
+    <div class="dh"><h2 id="dlg-dev-title" tabindex="-1">${esc(mDev)}</h2>${(()=>{const di=state.modalDayI,go=j=>()=>setState({modalDayI:j,selLot:null});   /* 같은 장비의 어제 · 내일 — Error 팝업과 같은 ‹ 날짜 ›(UTIL-09) */
+        return `<span class="pdaynav"><button class="ib" data-h="${h(go(di-1))}" data-fk="dev:prevday" ${di>0?"":"disabled"} title="이전 날짜">‹</button><span class="sub num">${dayName(mDay)}</span><button class="ib" data-h="${h(go(di+1))}" data-fk="dev:nextday" ${di<D.days.length-1?"":"disabled"} title="다음 날짜">›</button></span>`;})()}<span class="note">${esc(sc.note||"")}</span><div class="spacer"></div>
+      ${sib.map(s=>`<button class="btn" data-h="${h(s.go)}" title="${esc(s.title)}"${s.fk?` data-fk="${s.fk}"`:""}>${esc(s.label)}</button>`).join("")}<button class="x" data-h="${h(close)}" data-fk="x:dev" title="닫기 (Esc)">✕</button></div>
     <div class="db">
-      <section class="cards xs" style="margin-bottom:18px">${stats.map(s=>`<div><p class="k">${s.k}</p><p class="v num" style="color:${s.ink}">${s.h||esc(s.v)}</p>${s.s?`<p class="s${s.sw?" warn":""}" data-tip="${esc(s.tip||"")}">${esc(s.s)}</p>`:""}</div>`).join("")}</section>
+      ${t&&!noRec?`<section class="cards xs c4" style="margin-bottom:18px">${stats.map(s=>`<div><p class="k">${s.k}</p><p class="v num" style="color:${s.ink}">${s.h||esc(s.v)}</p>${s.s?`<p class="s"${s.tip?` data-tip="${esc(s.tip)}"`:""}>${esc(s.s)}</p>`:""}</div>`).join("")}</section>`
+        :`<p class="norec" data-key="norec">이 날 기록이 없습니다 — 장비가 쉬었는지 수집이 안 됐는지 구분할 수 없습니다.</p>`}
       ${(S.hasEst(t)||(t&&t.iv))?`<p style="margin:0 0 12px;font-size:11.5px;color:#5A6673;word-break:keep-all">${iniNote(t)}</p>`:""}
       ${den<1440?`<p style="margin:0 0 12px;font-size:11.5px;color:#5A6673">수집한 날이라 00:00 ~ ${clock(den)}(모든 장비의 마지막 기록)까지를 분모로 씁니다.</p>`:""}
       <div class="bar-h" style="margin-bottom:10px"><h3 style="margin:0">Lot ${all.length}개</h3><span style="font-size:12.5px;color:#5A6673">${shown.length?(fold?"Lot 이 많아 이름표는 Error·Test·선택 Lot 만 — 막대를 누르면 어느 Lot 이든 봅니다":"막대나 이름표를 누르면 그 Lot 을 봅니다"):""}</span><div class="spacer"></div>${segHtml(lotFilters)}</div>
       <div style="position:relative;height:16px;margin-bottom:4px">${ticksHtml()}</div>
-      <div data-bar="${mDay}|${esc(mDev)}" style="position:relative;height:36px;border-radius:18px;background:#E9EDF2;overflow:hidden;background-image:${S.bar(t)}">
+      <div data-bar="${mDay}|${esc(mDev)}" style="position:relative;height:36px;border-radius:18px;background:#E9EDF2;overflow:hidden;background-image:${S.bar(t)}">${futHtml(t)}
         ${hits.map(Hh=>`<button class="hit" data-h="${h(Hh.pick)}" title="${esc(Hh.title)}" style="left:${Hh.l}%;width:${Hh.w}%;background:${Hh.on?"rgba(46,107,168,.22)":"transparent"};box-shadow:${Hh.on?"inset 0 0 0 2px #1D4E82":"none"}"></button>`).join("")}</div>
       <div data-sig="${esc(mDev)}|${mDay}|${state.lotFilter}" data-callw="${W}" style="position:relative;margin-top:0;height:${calloutH}px">
         ${callouts.map(c=>`<span style="position:absolute;left:${c.x}%;top:-18px;width:1px;height:18px;background:${c.on?"#0F151C":"rgba(255,255,255,.85)"};z-index:2"></span><span style="position:absolute;left:${c.x}%;top:-20px;width:6px;height:6px;margin-left:-3px;border-radius:50%;background:${c.dot};box-shadow:0 0 0 1.5px #fff;z-index:3"></span><span style="position:absolute;left:${c.x}%;top:0;width:1px;height:${c.h}px;background:${c.on?"#2E6BA8":"#D5DDE5"}"></span>
-          <button class="callout ${c.on?"on":""}" data-h="${h(c.pick)}" data-fk="lot:${esc(c.k)}" title="${esc(c.title)}" style="left:${c.lx}%;top:${c.ty}px"><span style="width:6px;height:6px;border-radius:50%;background:${c.dot};flex:none"></span>${esc(c.label)}</button>`).join("")}</div>
+          <button class="callout ${c.on?"on":""}" data-h="${h(c.pick)}" data-fk="lot:${esc(c.k)}" title="${esc(c.title)}" style="left:${c.lx}%;top:${c.ty}px;z-index:2"><span style="width:6px;height:6px;border-radius:50%;background:${c.dot};flex:none"></span>${esc(c.label)}</button>`).join("")}</div>
       ${selH}
-      ${shown.length===0?`<p style="margin:14px 0 0;font-size:13px;color:#5A6673">이 날 이 장비의 기록이 없습니다.</p>`:""}
+      ${shown.length===0&&all.length&&onlyErr?`<p style="margin:14px 0 0;font-size:13px;color:#5A6673">Error 난 Lot 이 없습니다 · <button class="link" data-h="${h(()=>setState({lotFilter:"all",selLot:null}))}">전체 Lot 보기</button></p>`
+        :(shown.length===0&&t&&!noRec?`<p style="margin:14px 0 0;font-size:13px;color:#5A6673">이 날 이 장비의 Lot 기록이 없습니다.</p>`:"")}
     </div></div></div>`;
 }
 
@@ -2280,7 +2331,8 @@ function errPopupHtml(){
   for(const {dy,L:Ls} of eLotsD)for(const L of Ls)for(const [c,v] of Object.entries(L[9])){if(ft&&c!==ft)continue;const key=lotKey(L),a=la(L),di=D.days.indexOf(dy);
     evts.push({at:a,dy,time:clock(a),lot:P.lot[L[1]]||"(Lot 확인 불가)",type:c,status:causeText(eDev,P.rep[L[8]]||"",c)||(L[10]>=0?P.st[L[10]]:"(원문 없음)"),min:hm(v[1]),m:v[1],rep:P.rep[L[8]]||"",
       go:()=>setState({modalDev:eDev,modalDayI:di,selLot:key,lotFilter:"all",stack:pushTop("dev")})});}
-  evts.sort((a,b)=>b.m-a.m||a.dy.localeCompare(b.dy)||a.at-b.at);
+  const byTime=state.errSort==="time";   /* 기본은 Error 대기가 긴 순(▼), '시각' 머리를 누르면 시간 순(UTIL-15) */
+  evts.sort(byTime?(a,b)=>a.dy.localeCompare(b.dy)||a.at-b.at||b.m-a.m:(a,b)=>b.m-a.m||a.dy.localeCompare(b.dy)||a.at-b.at);
   /* 21일 창(10/5): 처음엔 선택한 날로 끝나는 21일. 막대를 누르면 창은 그대로 두고 그 날만 고른다, 막대 위를 끌면 창이 좌우로(state.errWinEnd) */
   const wN=Math.min(21,D.days.length),endDef=Math.min(D.days.length,Math.max(eI+1,wN));
   const end=state.errWinEnd!=null?Math.min(D.days.length,Math.max(wN,state.errWinEnd)):endDef,start=Math.max(0,end-wN),win=D.days.slice(start,end);
@@ -2289,9 +2341,10 @@ function errPopupHtml(){
   const G=fj!=null?D.jobGroups[fj]:null,jraw=G?(P.job[G.l]||"(Job 없음)"):"";
   const filterTxt=ft?("유형 "+ft):("Job "+jobNm(G).nm),filterMono=(ft||(G&&!jobNm(G).al));
   const close=()=>setState(CLOSE.err());
-  const stats=[{k:"Error",v:totN+"건",ink:totN?"#B4402F":"#0F151C"},{k:"Error 대기",v:hm(totM),ink:totM?"#B4402F":"#0F151C"},{k:"유형",v:ct.length+"가지",ink:"#0F151C"},{k:"Error 난 Lot",v:eLots.length+" / "+lots.length+"개",ink:"#0F151C"},{k:"가장 많은 유형",v:ct.length?ct[0][0].replace("_ERROR",""):"—",ink:"#0F151C"}];
+  /* ct 는 Error 대기(분)가 긴 순 — 카드 이름도 Error 탭과 같은 '시간이 가장 긴 유형', 값은 목록과 같은 전체 코드(UTIL-16) */
+  const stats=[{k:"Error",v:totN+"건",ink:totN?"#B4402F":"#0F151C"},{k:"Error 대기",v:hm(totM),ink:totM?"#B4402F":"#0F151C"},{k:"유형",v:ct.length+"가지",ink:"#0F151C"},{k:"Error 난 Lot",v:eLots.length+" / "+lots.length+"개",ink:"#0F151C"},{k:"시간이 가장 긴 유형",v:ct.length?ct[0][0]:"—",ink:"#0F151C",mono:true,s:ct.length?ct[0][1][0]+"건 · "+hm(ct[0][1][1]):""}];
   const inSpan=new Set(days);
-  const trend=win.map((dy,i)=>({label:(i%4===0||i===win.length-1)?md(dy):"",vTxt:tr[i]||"",h:(tr[i]/tmax*100).toFixed(1),color:(multi?inSpan.has(dy):dy===eDay)?ERR:"#E0A9A2",title:md(dy)+" · Error "+tr[i]+"건 · 누르면 이 날로",pick:()=>setState({errDays:null,errDayI:D.days.indexOf(dy),errWinEnd:end}),maxW:9999}));
+  const trend=win.map((dy,i)=>({label:(i%4===0||i===win.length-1)?md(dy):"",vTxt:tr[i]||"",h:(tr[i]/tmax*100).toFixed(1),color:(multi?inSpan.has(dy):dy===eDay)?ERR:"#C9D1DA",title:md(dy)+" · Error "+tr[i]+"건 · 누르면 이 날로",pick:()=>setState({errDays:null,errDayI:D.days.indexOf(dy),errWinEnd:end}),maxW:9999}));
   /* 여러 날 모드: 24시간 타임라인 대신 날짜별 막대(누르면 그 하루로) */
   const dayAgg=perDay.map((x,i)=>{let n=0,m=0;if(!filtered){for(const [c,v] of Object.entries(x.t.ct||{})){n+=v[0];m+=v[1];}}else{for(const L of eLotsD[i].L)for(const [c,v] of Object.entries(L[9])){if(ft&&c!==ft)continue;n+=v[0];m+=v[1];}}return{dy:x.dy,n,m};});
   const dmx=Math.max(1,...dayAgg.map(a=>a.m));
@@ -2307,7 +2360,7 @@ function errPopupHtml(){
       ${filtered?`<button class="btn" data-h="${h(()=>setState({errJob:null,errType:null}))}" title="필터 해제 — 이 장비의 모든 Error 보기" style="display:inline-flex;align-items:center;gap:6px;max-width:320px;border-radius:999px;background:#F7F9FB;font-size:12px;color:#3D4854;${filterMono?"font-family:"+MONO:""}"><span style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(filterTxt)}</span><span style="color:#5A6673">✕</span></button>`:""}
       <div class="spacer"></div><button class="btn" data-h="${h(()=>setState({modalDev:eDev,modalDayI:eI,selLot:null,stack:pushTop("dev")}))}" title="${multi?"기간 마지막 날":"같은 날"} 이 장비의 가동률 팝업으로">가동률 보기</button><button class="x" data-h="${h(close)}" data-fk="x:err" title="닫기 (Esc)">✕</button></div>
     <div class="db">
-      <section class="cards xs" style="margin-bottom:18px">${stats.map(s=>`<div><p class="k">${s.k}</p><p class="v num" style="font-size:19px;color:${s.ink}">${esc(s.v)}</p></div>`).join("")}</section>
+      <section class="cards xs" style="margin-bottom:18px">${stats.map(s=>`<div><p class="k">${s.k}</p><p class="v ${s.mono?"mono":"num"}" style="font-size:${s.mono?15:19}px;color:${s.ink}" title="${esc(s.v)}">${esc(s.v)}</p>${s.s?`<p class="s">${esc(s.s)}</p>`:""}</div>`).join("")}</section>
       ${multi?`<h3 class="s">날짜별 <span style="font-weight:400;color:#5A6673;font-size:12px">막대를 누르면 그 하루의 타임라인으로</span></h3>${barsHtml(dayBars,84,true)}<div style="height:14px"></div>`
       :`<h3 class="s">언제 났나</h3>
       <div style="position:relative;height:15px;margin-bottom:3px">${ticksHtml()}</div>
@@ -2318,7 +2371,7 @@ function errPopupHtml(){
       <h3 class="s" style="margin-top:18px">${md(win[0])} ~ ${md(win[win.length-1])} 이 장비의 Error <span style="font-weight:400;color:#5A6673;font-size:12px">${multi?"진한 막대가 보고 있는 기간":win.length+"일"} · 막대를 누르면 그 날 · 끌면 기간 이동</span></h3>
       <div class="dragwin" data-drag="errwin" data-end="${end}" data-n="${win.length}" title="좌우로 끌면 21일 창이 움직입니다">${barsHtml(trend,74,true)}</div>
       <h3 class="s" style="margin-top:18px">Lot 별 Error${evts.length?" · "+evts.length+"건":""}</h3>
-      <div class="box"><div class="tbl-h" style="grid-template-columns:${cols}">${multi?"<span>날짜</span>":""}<span>시각</span><span>Lot</span><span>유형 · 원문</span><span style="text-align:right">Error 대기</span></div>
+      <div class="box"><div class="tbl-h" style="grid-template-columns:${cols}">${multi?"<span>날짜</span>":""}<button class="thsort${byTime?" on":""}" data-h="${h(()=>setState({errSort:byTime?null:"time"}))}" data-fk="err:sort" title="${byTime?"다시 누르면 Error 대기가 긴 순":"누르면 시간 순"}">시각${byTime?" ▲":""}</button><span>Lot</span><span>유형 · 원문</span><span style="text-align:right">Error 대기${byTime?"":" ▼"}</span></div>
         ${evts.map(e=>`<button class="rowbtn" data-h="${h(e.go)}" title="가동률 팝업에서 이 Lot 보기" style="grid-template-columns:${cols};gap:10px;align-items:start;padding:9px 14px">${multi?`<span class="num" style="font-size:12.5px;color:#4B5866">${md(e.dy)}</span>`:""}<span class="num" style="font-size:12.5px;color:#4B5866">${e.time}</span><span class="mono" title="${esc(e.lot)}" style="font-size:12.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(e.lot)}</span><span style="display:block;min-width:0"><span class="pill err mono">${esc(e.type)}</span><span class="mono" style="display:block;margin-top:3px;font-size:11.5px;color:#4B5866;word-break:break-all">${esc(e.status)}</span></span><span class="num" style="text-align:right;font-size:12.5px;font-weight:600;white-space:nowrap">${e.min}</span></button>`).join("")||`<p class="empty">기록 없음</p>`}
       </div></div></div></div>`;
 }

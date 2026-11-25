@@ -148,7 +148,8 @@ def test_removed_features_stay_removed():
     """옛 장비-일 추정(D15) · PyQt GUI 모드 · 옛 업데이트 상수 · '수집 예정' 자리표시(D08) · 열람 시각 문구(D11)는 돌아오지 않는다."""
     for gone in ("isEst(", "estBar(", "showRepeat", "mEst", "ABORT.test(",
                  "data-gui", 'Q.get("gui")', "btnRunTop", "UPDATE_BASE=",
-                 "수집 예정", "열람 시각 기준", "현재까지", "00:00 ~ 현재"):
+                 "수집 예정", "열람 시각 기준", "현재까지", "00:00 ~ 현재",
+                 "살펴볼", "PROPS", "applySettings", "attentionUtil", "S.alert("):   # 11/25: '살펴볼 장비' 개념을 없앴다(사용자)
         assert gone not in HTML, gone
 
 
