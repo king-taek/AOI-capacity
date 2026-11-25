@@ -2,7 +2,7 @@
 
 문자열 검사(`test_template_contract.py`)와 Node 하네스(`test_dashboard_js.py`)는 화면이 **그려지는지**를 보지 못한다.
 여기서는 작은 fixture 행을 template 에 박아 파일로 열고(바깥 요청 0건 — file:// 만), 실제로 눌러 본다:
-가동률(장비 순서) → 장비 팝업(포커스 · inert · Tab 트랩 · ESC 복귀, D05) → Error 보기 → 유형 팝업 → 추이 → TB500 · Kendall(D59) → 사본 저장(내려받은 파일의 열·풀 구조).
+가동률(장비 순서) → 장비 팝업(포커스 · inert · Tab 트랩 · ESC 복귀, D05) → Error 단추 → 유형 팝업 → 추이 → TB500 · Kendall(D59) → 사본 저장(내려받은 파일의 열·풀 구조).
 데이터는 수집기의 `collect._embed_rows` 로 접어 넣는다 — 제품이 만드는 HTML 과 같은 계약이다.
 콘솔 오류·페이지 오류가 하나라도 있으면 실패.
 
@@ -362,7 +362,7 @@ def test_popups_stack_behind_each_other_and_escape_closes_the_top(page):
     pg, errors, _ = page
     pg.locator('button.rowbtn[data-fk="dev:AOI-1"]').click()
     pg.wait_for_selector('.dlg[data-dlg="dev"]')
-    pg.locator('.dlg[data-dlg="dev"] button', has_text="Error 보기").click()
+    pg.locator('.dlg[data-dlg="dev"] button[data-fk="dev:err"]').click()   # 11/25: 단추 이름에 그날 건수('Error 3건 ›' · 'Error 없음 ›')
     pg.wait_for_selector('.dlg[data-dlg="err"]')
     st = pg.evaluate("[...document.querySelectorAll('.ov:not([data-leaving])')].map(o => o.dataset.key + ':' + (o.classList.contains('behind') ? 'behind' : 'top') + ':' + o.inert)")
     assert st == ["ov:dev:behind:true", "ov:err:top:false"]
@@ -435,7 +435,7 @@ def test_motion_hooks_lottie_countup_sweep_and_recede(page):
     pg.locator('button.rowbtn[data-fk="dev:AOI-2"]').click()                              # AOI-2 는 Error 가 없다
     pg.wait_for_selector('.dlg[data-dlg="dev"]')
     assert pg.evaluate("document.querySelector('#app>.stage').classList.contains('behind')")   # 팝업이 열리면 무대가 물러난다
-    pg.locator('.dlg[data-dlg="dev"] button', has_text="Error 보기").click()
+    pg.locator('.dlg[data-dlg="dev"] button[data-fk="dev:err"]').click()   # 11/25: 단추 이름에 그날 건수('Error 3건 ›' · 'Error 없음 ›')
     pg.wait_for_selector('.dlg[data-dlg="err"] .lt-empty .lt svg')                       # Lottie 체크
     pg.keyboard.press("Escape")
     pg.keyboard.press("Escape")
@@ -449,7 +449,7 @@ def test_popup_deck_click_behind_brings_it_to_front_and_stackbar_lists_them(page
     pg, errors, _ = page
     pg.locator('button.rowbtn[data-fk="dev:AOI-1"]').click()
     pg.wait_for_selector('.dlg[data-dlg="dev"]')
-    pg.locator('.dlg[data-dlg="dev"] button', has_text="Error 보기").click()
+    pg.locator('.dlg[data-dlg="dev"] button[data-fk="dev:err"]').click()   # 11/25: 단추 이름에 그날 건수('Error 3건 ›' · 'Error 없음 ›')
     pg.wait_for_selector('.dlg[data-dlg="err"]')
     pg.wait_for_timeout(500)
     # 뒤 카드(dev)는 앞 카드보다 왼쪽에 있다
@@ -485,7 +485,7 @@ def test_stackbar_stays_top_left_while_the_popup_scrolls_and_lot_panel_fades_in_
     pg.set_viewport_size({"width": 1280, "height": 420})
     pg.locator('button.rowbtn[data-fk="dev:AOI-1"]').click()
     pg.wait_for_selector('.dlg[data-dlg="dev"]')
-    pg.locator('.dlg[data-dlg="dev"] button', has_text="Error 보기").click()
+    pg.locator('.dlg[data-dlg="dev"] button[data-fk="dev:err"]').click()   # 11/25: 단추 이름에 그날 건수('Error 3건 ›' · 'Error 없음 ›')
     pg.wait_for_selector('.stackbar .sb')
     assert pg.evaluate("document.querySelector('.stackbar').parentElement.id") == "app"
     top0 = pg.evaluate("document.querySelector('.stackbar').getBoundingClientRect().top")
@@ -824,10 +824,19 @@ def test_date_controls_keep_day_inside_the_visible_period(page):
     pg.get_by_role("button", name="전체", exact=True).first.click()
     pg.wait_for_timeout(300)
     assert day() == "2026-09-18" and pg.locator(".daynote").count() == 0             # 안에 있으면 그대로 · 알림 없음
-    pg.locator('[data-fk="day:date"]').fill("2026-09-01")                            # 데이터 없는 날은 고르지 않는다
+    pg.locator('[data-fk="day:date"]').fill("2026-09-01")                            # 데이터 없는 날 → 되돌리지 않고 가장 가까운 데이터 날짜로(11/25 UTIL-02)
     pg.locator('[data-fk="day:date"]').dispatch_event("change")
     pg.wait_for_timeout(250)
-    assert day() == "2026-09-18"
+    assert day() == "2026-09-17"
+    pg.locator('button[data-fk="day:last"]').click()
+    pg.wait_for_timeout(200)
+    pg.locator('[data-fk="day:date"]').click()                                       # 키보드로 치는 동안은 적용하지 않고 Enter 에서 한 번(Chrome 은 숫자마다 change)
+    pg.keyboard.press("1")
+    pg.wait_for_timeout(150)
+    assert pg.evaluate("D.days[state.dayI]") == "2026-09-18"
+    pg.keyboard.press("Enter")
+    pg.wait_for_timeout(250)
+    assert day() == "2026-09-17"                                                     # 어느 칸에 '1' 을 쳐도(월 01 · 일 01 · 년 0001) 가장 가까운 데이터 날짜는 09/17
     pg.locator('button[data-fk="nav:recipe"]').click()
     pg.wait_for_selector('main[data-key="view:recipe"]')
     assert pg.locator(".daynav").count() == 0 and pg.locator(".date-controls .date-control-row").count() == 1     # 10/6: 하루가 기준이 아닌 탭은 하루 날짜 줄이 없다
@@ -1220,3 +1229,31 @@ def test_overkill_tab_lists_devices_and_lot_row_opens_lot_tracking_with_colored_
         assert errors == [] and requests == []
     finally:
         ctx.close()
+
+
+def test_rapid_day_flips_never_leave_old_numbers_in_the_home_rows(page):
+    """11/25 UTIL-01: 하루 날짜 ‹ › 를 0.1초 간격으로 누르면 숫자(data-txn) ↔ '—'(data-tx) 로 바뀐 칸에서 옛 트윈이 옛 숫자를 다시 써 넣었다.
+    누른 뒤 모든 줄의 가동률 · Error 글자가 모델 값과 같아야 한다."""
+    pg, errors, _ = page
+    # 결정적 재현: 47 → 80 트윈이 도는 사이 같은 칸이 '—' 로 바뀌면 트윈을 끊어야 한다(고치기 전엔 0.5초 뒤 '80%' 가 다시 써졌다)
+    left = pg.evaluate("""(async () => {const box = document.createElement('div'); document.body.appendChild(box);
+      box.innerHTML = '<span data-txn="47" data-txf="pct">47%</span>'; const el = box.firstChild;
+      txAnim(box); el.setAttribute('data-txn', '80'); el.textContent = '80%'; txAnim(box);
+      el.removeAttribute('data-txn'); el.removeAttribute('data-txf'); el.setAttribute('data-tx', ''); el.textContent = '—'; txAnim(box);
+      await new Promise(r => setTimeout(r, 500)); const t = el.textContent; box.remove(); return t;})()""")
+    assert left == "—"
+    for k in ("prev", "next", "prev", "next", "prev"):
+        btn = pg.locator(f'button[data-fk="day:{k}"]')
+        if btn.is_enabled():
+            btn.click()
+        pg.wait_for_timeout(90)
+    pg.wait_for_timeout(1500)
+    bad = pg.evaluate("""(() => {const day = S.dayStr(), out = [];
+      for (const r of document.querySelectorAll('.homelist .rowbtn')) {const n = r.dataset.row.slice(4), t = S.at(day, n), u = S.util(t);
+        const sp = r.querySelectorAll(':scope>span.num'), ut = sp[0].textContent.trim(), et = sp[1].textContent.trim();
+        const eu = u === null ? '—' : Math.round(u) + '%', ee = t && t.e ? t.e + '건' : '—';
+        if (ut !== eu || et !== ee) out.push([n, ut, eu, et, ee]);}
+      return out;})()""")
+    assert bad == [], bad
+    assert pg.evaluate("[...document.querySelectorAll('[data-bar]')].every(e => !e.style.clipPath)")   # 연달아 눌러도 sweep 이 남지 않는다(ANIM-10)
+    assert errors == []

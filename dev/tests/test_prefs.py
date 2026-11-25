@@ -87,7 +87,7 @@ def test_options_removed_on_10_30_are_fixed_and_old_saved_values_are_ignored():
         assert not hasattr(p, gone), gone
     cfg = prefs.to_collect_cfg(p)
     assert cfg["read_workers"] == 4 and cfg["retention_days"] == 0 and cfg["write_csv"] is True
-    assert (cfg["attention_util"], cfg["attention_err"]) == (40, 3)
+    assert "attention_util" not in cfg and "attention_err" not in cfg   # 11/25: '살펴볼 장비' 개념을 없앴다
     prefs.save(p)
     saved = json.loads(paths.prefs_file().read_text(encoding="utf-8"))
     assert not {"read_workers", "retention_days", "write_csv", "threshold_util", "threshold_err", "color_mode"} & set(saved)

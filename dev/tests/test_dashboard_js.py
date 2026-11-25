@@ -304,12 +304,11 @@ def test_default_profile_is_product_with_the_four_rules_on_and_constants_match()
 
     D = run([w("AOI-1", "W1", "08:00", "08:10")])
     assert D["rules"] == {"profile": "product", "waitToObsEnd": True, "denomToday": True, "abortIsError": True, "estimateFromBatch": True}
-    g = globals_("RULES", "MODEL_VERSION", "JOB_ALIAS", "CAUSE_CODES", "PROPS")
+    g = globals_("RULES", "MODEL_VERSION", "JOB_ALIAS", "CAUSE_CODES")
     assert g["RULES"] == D["rules"] and D["modelVersion"] == g["MODEL_VERSION"] == template_facts.model_version()
     assert g["CAUSE_CODES"] == [c for c, _ in collect._CAUSE_RULES]
     design_alias = template_facts.job_alias((ROOT / "docs" / "design" / "dashboard-redesign" / "scripts" / "job_alias.js").read_text(encoding="utf-8"))
     assert g["JOB_ALIAS"] == template_facts.job_alias() == design_alias and len(g["JOB_ALIAS"]) == 21
-    assert g["PROPS"] == {"attentionUtil": 40, "attentionErr": 3}
 
 
 def test_home_lists_devices_in_device_order_with_collect_chips_and_the_no_record_count():
@@ -415,16 +414,13 @@ def test_lot_key_separates_two_reports_of_the_same_lot_on_the_same_day():
     assert k1 == k3 and k1 != k2
 
 
-def test_dashboard_settings_override_the_attention_thresholds():
-    """D14: meta.dashboard_settings 의 같은 이름 숫자만 PROPS 를 바꾼다 — 음수·문자열은 무시."""
+def test_attention_concept_is_gone_and_old_dashboard_settings_are_ignored():
+    """11/25(사용자): '살펴볼 장비' 개념을 없앴다 — 카드 · 점 · 빨간 숫자 문턱 없음. 옛 HTML 의 meta.dashboard_settings 가 있어도 무시."""
     rows = [w("AOI-1", "W1", "08:00", "08:10")]
     mt = meta("AOI-1")
     mt["dashboard_settings"] = {"attentionUtil": 60, "attentionErr": 1}
     (home,) = screen(rows, mt, [["homeHtml"]])
-    assert "가동률 60% 미만 또는 Error 1건 이상" in home
-    mt["dashboard_settings"] = {"attentionUtil": -5, "attentionErr": "x"}
-    (home2,) = screen(rows, mt, [["homeHtml"]])
-    assert "가동률 40% 미만 또는 Error 3건 이상" in home2
+    assert "살펴볼" not in home and 'class="dot' not in home and "평균 가동률" in home
 
 
 def test_unfold_rejects_out_of_range_pool_index_and_duplicate_columns():
@@ -835,7 +831,7 @@ def test_scan_share_counts_only_rows_with_scan_sec_and_keeps_utilization():
     (pop,) = screen(rows[:2], meta("AOI-1"), [["devPopupHtml"]], state={"modalDev": "AOI-1", "modalDayI": 0})
     assert "그중 스캔 63%<" in pop and "근거" not in pop                    # 다 채워지면 비율만
     (pop,) = screen(rows[2:], meta("AOI-1"), [["devPopupHtml"]], state={"modalDev": "AOI-1", "modalDayI": 0})
-    assert "스캔 비율 · 채우기 전" in pop
+    assert "스캔 비율 없음" in pop and "채우기 전" not in pop   # 11/25 UTIL-20: 문제가 아니라 값이 없을 뿐 — 회색 보통 글씨
     (line,) = screen(rows, meta("AOI-1"), [["scLine", {"sc": [0, 0, 1, 1]}]])   # INI 분이 반올림으로 0 — 'NaN%' 대신 비움(PR #3 리뷰)
     assert line == ""
 
@@ -1051,3 +1047,30 @@ def test_overkill_period_ranks_jobs_and_defaults_to_camtek():
     assert "이 Job 을 돈 장비" in cam and "RDL3_K1" not in cam
     (k,) = screen(rows, mt, [["okHtml"]], state={"okMode": "span", "okMk": "kla"})
     assert "TB500 RDL3" in k                                              # KLA Job 은 화면 표기(D96)
+
+
+def test_device_popup_follows_the_list_order_and_separates_no_record_from_idle():
+    """11/25 점검(UTIL-03·04·05·08·11·14 · JS-10 · COPY-14): 팝업 ‹ › 는 목록과 같은 필터 · 정렬, 기록 없는 장비는 대기도 '—' 와 한 줄 설명,
+    Error 카드는 '건' 만 크게, 자정 넘긴 배치의 둘째 날 이름표는 '전날부터', 값 있는 장비가 없으면 평균 '—'(0% 아님)."""
+    rows = [w("AOI-1", "W1", "08:00", "10:00"), w("AOI-2", "W2", "09:00", "09:30", status="Alignment Error."),
+            w("4F-AOI-01", "W3", "10:00", "10:05"),
+            w("AOI-1", "N1", "23:00", "23:40", lot="LOT-N", day="2026-09-17"), w("AOI-1", "N2", "23:40", "00:30", lot="LOT-N", day="2026-09-17", eday=DAY)]
+    mt = meta("AOI-1", "AOI-2", "AOI-3", "4F-AOI-01")
+    st = {"modalDev": "AOI-2", "modalDayI": 1}
+    (pop,) = screen(rows, mt, [["devPopupHtml"]], state=st)
+    assert "‹ AOI-1" in pop and "AOI-3 ›" in pop and 'data-fk="dev:err"' in pop and "Error 1건 ›" in pop
+    assert ">1건<" in pop and "1건 · " not in pop                                    # Error 시간은 카드 아래 작은 줄
+    (pop,) = screen(rows, mt, [["devPopupHtml"]], state=st | {"sort": "low"})        # 가동률 낮은 순: 기록 없는 AOI-3 은 맨 뒤
+    assert "AOI-3 ›" not in pop
+    (pop,) = screen(rows, mt, [["devPopupHtml"]], state={"modalDev": "4F-AOI-01", "modalDayI": 1, "floor": "4"})
+    assert "‹ " not in pop and "Error 없음 ›" in pop                                  # 4층만 걸면 앞뒤 장비도 4층 안에서
+    (pop,) = screen(rows, mt, [["devPopupHtml"]], state={"modalDev": "AOI-3", "modalDayI": 1})
+    assert "이 날 기록이 없습니다 — 장비가 쉬었는지 수집이 안 됐는지" in pop and "24시간" not in pop
+    (pop,) = screen(rows, mt, [["devPopupHtml"]], state={"modalDev": "AOI-1", "modalDayI": 1})
+    assert "LOT-N · 전날부터" in pop and "· 0장" not in pop
+    (pop,) = screen(rows, mt, [["devPopupHtml"]], state={"modalDev": "AOI-1", "modalDayI": 1, "lotFilter": "err"})
+    assert "Error 난 Lot 이 없습니다" in pop and "전체 Lot 보기" in pop and "이 날 이 장비의 기록이 없습니다" not in pop
+    (home,) = screen(rows, mt, [["homeHtml"]], state={"maker": "kla", "dayI": 1})
+    assert "이 조건(층 · 장비 종류)에 맞는 장비가 이 파일에 없습니다" in home and "0.0" not in home
+    (home,) = screen(rows, mt, [["homeHtml"]], state={"sort": "low", "dayI": 1})
+    assert home.index("기록 없음 1대") < home.index('data-row="dev:AOI-3"') and 'class="nobar"' in home

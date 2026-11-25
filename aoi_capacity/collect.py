@@ -106,8 +106,6 @@ DEFAULT_CONFIG: Dict[str, object] = {
     # C03: 사용자가 **명시적으로 승인한** 같은 장비의 다른 경로 표기 묶음 — `{경로: [다른 표기, …]}` 또는 `[[표기, 표기, …], …]`.
     # 드라이브 문자의 UNC 동치는 OS 가 알려 주므로(devices.UNC_RESOLVER) 보통 비워 둔다. 폴더 이름·표시명만으로는 절대 합치지 않는다.
     devices_mod.PATH_ALIASES_CFG: {},
-    "attention_util": 40,                         # D14: 살펴볼 장비 = 가동률 이 값(%) 미만 — 결과 HTML 의 meta.dashboard_settings 로 나간다
-    "attention_err": 3,                           # D14: 또는 Error 건수 이 값 이상
     "html_days": 30,                              # 수집 뒤 결과 HTML 에 담을 최근 일수(0 = 가진 데이터 전부, 기본 1달 — 10/5 사용자). 분할은 없다(9/23 분할 롤백)
     "collect_params": True,                       # D89: Report 마다 INI 를 찾은 첫 Wafer 폴더의 레시피 파라미터 파일을 읽어 둔다(파라미터 탭). 끄면 읽지 않는다
     "publish_full_dir": config_mod.PUBLISH_FULL_DIR_DEFAULT,                  # 10/30: 모든 탭을 담은 전체 배포 폴더(LOT 추적 폴더 옆, 비우면 배포 안 함)
@@ -3534,8 +3532,7 @@ def write_html(cfg: dict, rows: List[dict], dev_meta: List[dict], errors: List[d
             "elapsed": int((time.time() - started) * 1000), "retention_days": cfg["retention_days"],
             "timing": {k: v for k, v in timing.items() if k not in ("log", "params_store")} if timing else {},   # 상세 로그는 app.log 에(HTML 에 넣지 않는다)
             "sha": ver.get("sha", ""), "branch": ver.get("branch", ""), "repo": ver.get("repo", ""),
-            "version": (str(ver.get("sha", ""))[:7]) if ver.get("sha") else "",
-            "dashboard_settings": config_mod.dashboard_settings(cfg)}      # D14: 살펴볼 장비 문턱(attentionUtil · attentionErr)
+            "version": (str(ver.get("sha", ""))[:7]) if ver.get("sha") else ""}   # 11/25: '살펴볼 장비' 개념을 없애 dashboard_settings 도 넣지 않는다
     rg, _rg_path = recipes_mod.load(cfg, log)
     if lot_only:
         rg = None
