@@ -1074,3 +1074,39 @@ def test_device_popup_follows_the_list_order_and_separates_no_record_from_idle()
     assert "이 조건(층 · 장비 종류)에 맞는 장비가 이 파일에 없습니다" in home and "0.0" not in home
     (home,) = screen(rows, mt, [["homeHtml"]], state={"sort": "low", "dayI": 1})
     assert home.index("기록 없음 1대") < home.index('data-row="dev:AOI-3"') and 'class="nobar"' in home
+
+
+def _card(html, key):
+    m = re.search(r'<p class="k"[^>]*>' + re.escape(key) + r'(?: <span class="ii"[^>]*>ⓘ</span>)?</p><p class="v num"[^>]*>(.*?)</p>', html)
+    return re.sub(r"<[^>]+>", "", m.group(1)) if m else None
+
+
+def test_error_filter_keeps_minutes_carried_past_midnight_and_job_denominator_is_the_same_for_every_metric():
+    """11/25 점검(ERR-01 · ERR-02 · ERR-10): ① 유형 필터를 켜도 전날 Error 가 자정을 넘어 이어진 분(그날 건수 0 인 Lot)을 센다 —
+    필터 없을 때와 같은 대기 시간 ② Job별 'Lot n개 중' 은 지표와 상관없이 전체 시도(Error 없던 장비-일 포함) ③ 건수 지표에도 Error 난 Job 만."""
+    prev = (datetime.date.fromisoformat(DAY) - datetime.timedelta(days=1)).isoformat()
+    rows = [w("AOI-1", "E1", "23:30", "00:20", lot="LOT-N", status="Alignment Error.", day=prev, eday=DAY),
+            w("AOI-1", "E2", "08:00", "08:10", lot="LOT-B", status="Alignment Error."),
+            w("AOI-2", "P1", "09:00", "09:10", lot="LOT-C"),
+            w("AOI-1", "Q1", "10:00", "10:10", lot="LOT-D", job="J2")]
+    st = {"view": "errors", "pickDay": None, "metric": "min"}
+    (plain,) = screen(rows, meta("AOI-1", "AOI-2"), [["errorsHtml"]], state=st)
+    (filt,) = screen(rows, meta("AOI-1", "AOI-2"), [["errorsHtml"]], state={**st, "errFType": "ALIGN_ERROR"})
+    (cnt_,) = screen(rows, meta("AOI-1", "AOI-2"), [["errorsHtml"]], state={**st, "metric": "n"})
+    (prob,) = screen(rows, meta("AOI-1", "AOI-2"), [["errorsHtml"]], state={**st, "metric": "prob"})
+    assert _card(plain, "Error 대기") == _card(filt, "Error 대기") == "10시간 30분"   # 예전엔 필터를 켜면 자정 넘은 분이 빠져 줄었다(자정 넘은 분이 빠짐)
+    assert 'class="errfbar"' in filt and "모두 해제" not in filt               # 필터 하나면 '모두 해제' 없이 칩만
+    for h in (cnt_, prob):
+        assert "Lot 4개 중 2개 Error" in h                                      # J1: 장비-일마다 한 시도 — AOI-2 의 PASS 시도도 분모에(예전 건수 지표는 3)
+    assert cnt_.count('data-row="job:') == 1                                  # J2(Error 0건, Error 난 장비-일에서 돎)는 건수 지표에도 없다
+
+
+def test_overkill_bar_draws_severe_first_and_lot_row_marks_rows_lot_tracking_cannot_open():
+    """11/25 점검(ERR-05 · ERR-03 · ERR-20): 막대는 심한 칸부터(1,000↑ 기준이면 400~999 칸 없음) · Wafer ID 가 없어 '스캔을 어디에 했니?' 가 묶지 못하는 LOT 은 '열 수 없음'."""
+    rows = [_okw("AOI-1", "WAFER0001", "08:00", "500"), _okw("AOI-1", "WAFER0002", "08:10", "1500"),
+            _okw("AOI-2", "", "09:00", "800", lot="NOID")]
+    (all_, sev) = (screen(rows, meta("AOI-1", "AOI-2"), [["okHtml"]])[0], screen(rows, meta("AOI-1", "AOI-2"), [["okHtml"]], state={"okTier": "sev"})[0])
+    assert re.search(r'<span class="okbar"><i class="s"[^>]*></i><i class="o"', all_)
+    assert re.search(r'<span class="okbar sev"><i class="s"[^>]*></i></span>', sev)
+    assert "심한 1 / 2장 · 오버킬 2" in sev and "오버킬 2 / 2장 · 심한 1" in all_
+    assert all_.count("열 수 없음") == 1 and 'class="rowbtn okl na"' in all_
