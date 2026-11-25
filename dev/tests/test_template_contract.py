@@ -74,7 +74,11 @@ def test_boot_screen_runs_before_the_data_and_moves_on_the_compositor_only():
     assert "BAR_G" in boot and '"#####"' in boot and "@keyframes txFill" in boot and "scaleX" in boot      # 5×7 비트맵 막대가 글자를 쓴다
     assert "@keyframes txGlow" in boot and ".tx.wait" in boot and 'barsListScene(ov,env,"glow")' in boot        # 4초 넘게 기다릴 땐 점등(현택 11/1 — '지금' 선 · 흔들림은 sway 에만)
     assert "prefers-reduced-motion" in boot and "animation:none!important" in boot
-    assert "BOOT.done(" in HTML and "BOOT.later(navWarm)" in HTML and "BOOT.abort()" in HTML
+    assert "BOOT.done(" in HTML and "BOOT.warm(navWarm)" in HTML and "BOOT.abort()" in HTML   # 11/25 ANIM-05: 미리 계산은 덮개 뒤 남는 시간에(없으면 걷힌 뒤)
+    # 11/25: 움직임 줄이기면 완성 그림(ANIM-01) · 걷힘 두 단계(ANIM-02) · 일찍 끝나면 색 앉히기를 미룸(ANIM-03) · 단계를 받는 즉시 글자(ANIM-04) · 잘린 파일 안내(JS-02)
+    assert "#aoi-boot .tx.red .tk>.f{transform:none}" in boot and "fadeDelayMs:100" in boot and "colorLeadMs:900" in boot
+    assert 'window.addEventListener("load",armStall' in boot and "결과 파일을 끝까지 읽지 못했습니다" in boot
+    assert "const afterPaint=" in HTML and "bootPhase(1);afterPaint(" in HTML
     assert "const G=()=>(!_bootQuiet&&" in HTML
     assert 'class="loader"' not in HTML and ".loader{" not in HTML    # 옛 Lottie 로더는 지웠다
 
