@@ -1243,6 +1243,20 @@ def test_overkill_period_ranks_jobs_and_defaults_to_camtek():
     assert "TB500 RDL3" in k                                              # KLA Job 은 화면 표기(D96)
 
 
+def test_overkill_period_bar_end_ignores_small_rows_and_cuts_them():
+    """11/25 ERR-06: 막대 끝(100%)은 뒤로 보낸 25장 미만 줄을 빼고 잰다 — 1위(40장 중 20장 = 50%)가 칸 끝까지,
+    5장 중 5장(100%)인 맨 아래 줄은 칸 끝에서 잘리고 ▸."""
+    rows = [_okw("AOI-1", f"A{k}", f"08:{k:02d}", "1500" if k < 20 else "10", job="JOB_BIG") for k in range(40)]
+    rows += [_okw("AOI-1", f"B{k}", f"10:{k:02d}", "1500", job="JOB_SMALL", lot="LOT-S") for k in range(5)]
+    (html,) = screen(rows, meta("AOI-1"), [["okHtml"]], state={"okMode": "span"})
+    big = html[html.index('data-row="JOBBIG"'):]
+    big = big[:big.index("</button>")]
+    small = html[html.index('data-row="JOBSMALL"'):]
+    small = small[:small.index("</button>")]
+    assert 'class="s" style="width:100.0%"' in big and "▸" not in big
+    assert 'class="s" style="width:100.0%"' in small and "▸" in small
+
+
 def test_device_popup_follows_the_list_order_and_separates_no_record_from_idle():
     """11/25 점검(UTIL-03·04·05·08·11·14 · JS-10 · COPY-14): 팝업 ‹ › 는 목록과 같은 필터 · 정렬, 기록 없는 장비는 대기도 '—' 와 한 줄 설명,
     Error 카드는 '건' 만 크게, 자정 넘긴 배치의 둘째 날 이름표는 '전날부터', 값 있는 장비가 없으면 평균 '—'(0% 아님)."""
@@ -1293,6 +1307,18 @@ def test_error_filter_keeps_minutes_carried_past_midnight_and_job_denominator_is
     for h in (cnt_, prob):
         assert "Lot 4개 중 2개 Error" in h                                      # J1: 장비-일마다 한 시도 — AOI-2 의 PASS 시도도 분모에(예전 건수 지표는 3)
     assert cnt_.count('data-row="job:') == 1                                  # J2(Error 0건, Error 난 장비-일에서 돎)는 건수 지표에도 없다
+
+
+def test_error_probability_bar_end_ignores_rows_with_under_five_attempts():
+    """11/25 ERR-06: 발생 확률 Job별 막대의 끝(100%)은 뒤로 보낸 줄(시도 5회 미만)을 빼고 잰다 — 넘는 작은 줄은 칸 끝에서 잘리고 ▸."""
+    rows = [w("AOI-1", f"W{k}", f"{8 + k:02d}:00", f"{8 + k:02d}:10", lot=f"LOT-{k}", job="JA", report=f"a{k}.htm",
+              status="Alignment Error." if k < 3 else "Pass") for k in range(6)]
+    rows.append(w("AOI-1", "X1", "20:00", "20:10", lot="LOT-X", job="JB", report="x.htm", status="Alignment Error."))
+    (html,) = screen(rows, meta("AOI-1"), [["errorsHtml"]], state={"view": "errors", "pickDay": None, "metric": "prob"})
+    rows_ = html[html.index("<h2>Job별"):]
+    first, second = rows_.split('data-row="job:')[1:3]
+    assert "width:100%" in first and "▸" not in first                           # JA 3/6 = 50% 가 칸 끝
+    assert "width:100%" in second and "▸" in second                             # JB 1/1 = 100% → 잘리고 ▸
 
 
 def test_overkill_bar_draws_severe_first_and_lot_row_marks_rows_lot_tracking_cannot_open():
