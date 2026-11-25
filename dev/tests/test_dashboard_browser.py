@@ -315,7 +315,7 @@ def test_error_tab_period_popup_filters_and_no_total_link(page):
     pg.locator('main .row2[data-row="dev:AOI-1"] .rowbtn').click()
     pg.wait_for_selector('.dlg[data-dlg="err"]')
     txt = pg.locator('.dlg[data-dlg="err"]').inner_text()
-    assert "· 2일" in txt and "하루씩 보기" in txt and "날짜별" in txt and "09/17" in txt      # 9/17 + 9/18 두 날
+    assert "· 2일" in txt and "하루씩 보기" in txt and "날짜별" not in txt and "09/17" in txt      # 9/17 + 9/18 두 날 — 여러 날이면 위 날짜별 막대 없이 아래 막대 하나(ERR-13)
     assert "SCAN_ERROR" in txt and "ALIGN_ERROR" in txt                                      # 두 날의 Error 가 함께
     pg.locator('.dlg[data-dlg="err"] button', has_text="하루씩 보기").click()
     pg.wait_for_selector('.dlg[data-dlg="err"] h3', state="attached")
@@ -974,7 +974,7 @@ def test_rdl_tab_lot_stat_outlier_x5_rule_and_wording(rdl_page):
     tiles = pg.locator(".scanhero .mtile").all_inner_texts()
     single = [t for t in tiles if t.startswith("단일")][0]
     assert "(x20)" in single
-    assert "LOT당 409.1분" in single.replace("\n", " ")                                    # 22장 → 360분 × 25 ÷ 22(20~24장은 25장 기준으로 환산) · Error/19장 Report 는 제외
+    assert "LOT당 6시간 49분" in single.replace("\n", " ")                                    # 22장 → 360분 × 25 ÷ 22(20~24장은 25장 기준으로 환산) · Error/19장 Report 는 제외 · 409.1분을 n시간 m분으로(RDL-12)
     assert "이상치 1개 제외" in single and "표본 60 / 61 wafer" in single                         # 한 줄로 짧게
     tip = pg.locator(".scanhero .otag").first.get_attribute("title")                          # 어떤 값이 왜 빠졌는지는 마우스를 올리면
     assert "150.0분" in tip and "3σ" in tip
