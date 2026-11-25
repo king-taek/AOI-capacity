@@ -24,9 +24,7 @@ const BARS_CSS=`
 `;
 /* 로딩 신호 처리는 셋이 같다 */
 function barsCtl(T,waitAt){const waitT=setTimeout(()=>{if(!T.root.classList.contains("ld"))T.root.classList.add("wait");},waitAt);
-  /* 걷힘 첫 단계(ANIM-02): 장면만 먼저 짧게 지운다 — 바탕(덮개)은 껍데기가 조금 뒤에 걷는다. opacity 만(합성 스레드) */
-  return{post(m){if(m.type==="loaded"){clearTimeout(waitT);T.root.classList.remove("wait");T.root.classList.add("ld");}},kill(){clearTimeout(waitT);},
-    reveal(){T.root.style.transition="opacity .16s ease-out";T.root.style.opacity="0";}};}
+  return{post(m){if(m.type==="loaded"){clearTimeout(waitT);T.root.classList.remove("wait");T.root.classList.add("ld");}},kill(){clearTimeout(waitT);},reveal(){}};}
 
 /* 대기 동작(4초를 넘겨도 로딩 중일 때, .tx.wait) — 전부 transform · opacity 키프레임. 현택 11/1 "'지금' 선은 구리다" → 대안 넷 */
 const BARS_IDLE={

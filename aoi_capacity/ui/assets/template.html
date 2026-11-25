@@ -585,7 +585,7 @@ button.dbrow:focus-visible{outline:2px solid var(--nav-on);outline-offset:-2px}
      합성 스레드에서 돈다 — 프레임마다 도는 JS 가 0 이어서 JSON 해석 · 모델 계산이 메인 스레드를 막아도 끊기지 않는다(옛 D104 입자 장면은 Worker 캔버스였는데도
      입자 16,000개 · dpr 2 · 걷힘 blur 때문에 현장에서 끊겼다 — dev/tools/boot_bench 계측, docs/proposals/boot_lag_2026-10-31).
    · 페이지를 연 때부터 4초(MIN) 안에는 걷히지 않는다. 로딩이 4초를 넘으면 구간이 읽는 순서로 차례로 밝아졌다 돌아오며(점등 — 회청색 겹의 opacity 만, 현택 11/1 "'지금' 선은 구리다")
-     기다린다. 로딩이 끝나면(AOI_BOOT.done) 제 색으로 앉고 0.5초 뒤 장면이 0.16초에, 바탕(덮개)이 0.1초 뒤부터 0.4초에 걷힌다(opacity 만 · blur · scale 없음).
+     기다린다. 로딩이 끝나면(AOI_BOOT.done) 제 색으로 앉고 0.4초 뒤 덮개가 opacity 만으로 0.6초에 걷힌다(blur · scale 없음).
      4초 전에 끝난 로딩은 걷히기 0.9초 전까지 점등을 잇다가 색이 앉는다(11/25 — 다 그리고 1~2초 멈춰 있던 것). 신호가 없으면 4초 + 2.5초 뒤 그냥 연다.
    · 단계 글자 · 진행선은 화면 스크립트의 단계(phase)를 받는 즉시 바뀐다. 로딩이 일찍 끝나면 LOT 추적 · RDL 미리 계산(warm)을 덮개 뒤 남는 시간에 한다.
    · 파일을 끝까지 읽은(load) 뒤 10초 안에 화면 스크립트 소식이 없으면(복사가 끊긴 파일) 덮개를 걷고 '끝까지 읽지 못했습니다' 안내를 그린다.
@@ -608,9 +608,8 @@ function bootShell(o){
     let red=false;try{red=!!(window.matchMedia&&window.matchMedia("(prefers-reduced-motion: reduce)").matches);}catch(e){}
     const bg=(getComputedStyle(document.documentElement).getPropertyValue("--bg")||"").trim()||"#F4F6F8";
     const ov=document.createElement("div");ov.id="aoi-boot";ov.setAttribute("aria-hidden","true");
-    const fade=o.fadeMs||600,fadeDelay=o.fadeDelayMs||0;
-    /* 걷힘(ANIM-02, 11/25): 장면은 scene.reveal 이 먼저(짧게) 지우고, 바탕은 fadeDelay 뒤 fade 동안 — 겹치는 동안 보이는 것은 빈 바탕뿐(막대 두 겹이 포개지지 않게) */
-    ov.style.cssText=`position:fixed;left:0;top:0;width:100vw;height:100vh;z-index:2147483000;background:${bg};pointer-events:none;overflow:hidden;opacity:1;transition:opacity ${fade}ms ${o.fadeEase||"cubic-bezier(.33,0,.15,1)"} ${fadeDelay}ms`;
+    const fade=o.fadeMs||600;
+    ov.style.cssText=`position:fixed;left:0;top:0;width:100vw;height:100vh;z-index:2147483000;background:${bg};pointer-events:none;overflow:hidden;opacity:1;transition:opacity ${fade}ms cubic-bezier(.33,0,.15,1)`;
     document.body.appendChild(ov);
     /* 단계 글자 + 진행선: DOM. 글자 교체는 WAAPI(transform · opacity), 진행선은 scaleX 전환 — 둘 다 합성 스레드 */
     const cfs=Math.max(10,Math.min(14,W*.0118)),cx=Math.max(16,W*.024),cy=Math.max(18,H*.05),lw=Math.max(60,W*.08);
@@ -633,7 +632,7 @@ function bootShell(o){
     let gone=false,loadedAt=0,fallback=0,revealed=false,heard=false;const after=[];let scene=null;
     const finish=()=>{if(gone)return;gone=true;clearTimeout(fallback);try{scene&&scene.kill&&scene.kill();}catch(e){}if(ov.parentNode)ov.parentNode.removeChild(ov);window.AOI_BOOT=null;
       for(const f of after.splice(0))setTimeout(()=>{try{f();}catch(e){}},0);};
-    const reveal=()=>{if(revealed||gone)return;revealed=true;cap.style.opacity="0";try{scene&&scene.reveal&&scene.reveal();}catch(e){}ov.style.opacity="0";setTimeout(finish,fadeDelay+fade+80);};
+    const reveal=()=>{if(revealed||gone)return;revealed=true;cap.style.opacity="0";try{scene&&scene.reveal&&scene.reveal();}catch(e){}ov.style.opacity="0";setTimeout(finish,fade+80);};
     /* 잘린 파일 감시(JS-02, 11/25): 브라우저가 파일을 끝까지 읽은(load) 뒤 STALL 안에 화면 스크립트가 한 번도 소식(phase · done · abort)을 주지 않으면
        — 복사가 끊겨 데이터 뒤의 화면 스크립트가 없거나 실행되지 못한 파일 — 덮개를 걷고 안내를 그린다. 다 읽은 뒤부터 재므로 느린 공유 폴더에서 잘못 울리지 않고,
        창이 가려져 있으면(그동안 화면 스크립트의 프레임이 돌지 않는다) 보일 때 다시 잰다 */
@@ -671,10 +670,7 @@ const TXT={INK:"#16202B",INK2:"#5A6673",INK3:"#AEB8C4",LINE:"#D3DAE2",ACC:"#2E6B
 function textStage(ov,env,css){
   const {W,H,red}=env,root=document.createElement("div");root.className="tx"+(red?" red":"");
   root.style.cssText=`position:absolute;left:0;top:0;width:${W}px;height:${H}px;overflow:hidden;font-family:${FONT}`;
-  /* 움직임 줄이기: 완성 그림을 바로(ANIM-01, 11/25) — '.tx.red *' 는 장면 규칙(.tk{opacity:0} · .f{scaleX(0)})과 선택자 힘이 같아 뒤에 오는 장면 규칙이 이겼다(4초 동안 빈 바탕).
-     같은 요소를 한 단계 더 긴 선택자로 다시 적는다 */
-  const st=document.createElement("style");st.textContent=`#aoi-boot .tx *{box-sizing:border-box}\n#aoi-boot .tx.red *{animation:none!important;transition:none!important;opacity:1}\n`+css+
-    `\n#aoi-boot .tx.red .tk,#aoi-boot .tx.red .nm,#aoi-boot .tx.red .num,#aoi-boot .tx.red .sep{opacity:1}\n#aoi-boot .tx.red .tk>.f{transform:none}\n`;root.appendChild(st);
+  const st=document.createElement("style");st.textContent=`#aoi-boot .tx *{box-sizing:border-box}\n#aoi-boot .tx.red *{animation:none!important;transition:none!important;opacity:1}\n`+css;root.appendChild(st);
   ov.insertBefore(root,ov.firstChild);
   const fs=Math.round(Math.max(96,Math.min(W*.19,H*.34)));   /* 글자 크기 */
   return{root,fs,cx:W/2,cy:H*.46};
@@ -706,9 +702,7 @@ const BARS_CSS=`
 `;
 /* 로딩 신호 처리는 셋이 같다 */
 function barsCtl(T,waitAt){const waitT=setTimeout(()=>{if(!T.root.classList.contains("ld"))T.root.classList.add("wait");},waitAt);
-  /* 걷힘 첫 단계(ANIM-02): 장면만 먼저 짧게 지운다 — 바탕(덮개)은 껍데기가 조금 뒤에 걷는다. opacity 만(합성 스레드) */
-  return{post(m){if(m.type==="loaded"){clearTimeout(waitT);T.root.classList.remove("wait");T.root.classList.add("ld");}},kill(){clearTimeout(waitT);},
-    reveal(){T.root.style.transition="opacity .16s ease-out";T.root.style.opacity="0";}};}
+  return{post(m){if(m.type==="loaded"){clearTimeout(waitT);T.root.classList.remove("wait");T.root.classList.add("ld");}},kill(){clearTimeout(waitT);},reveal(){}};}
 
 /* 대기 동작(4초를 넘겨도 로딩 중일 때, .tx.wait) — 전부 transform · opacity 키프레임. 현택 11/1 "'지금' 선은 구리다" → 대안 넷 */
 const BARS_IDLE={
@@ -761,8 +755,8 @@ function barsListScene(ov,env,idle){
 
 /* T2-B '장비 목록'(D105) — 가동률 화면의 줄 7개(장비 이름 자리 · 숫자 블록 · 24시간 트랙)가 먼저 깔리고, 트랙 안의 바쁜 구간이 자라 AOI 를 쓴다(쉬는 시간은 회색 트랙).
    장면은 _bars.js 의 barsListScene, 대기 동작은 BARS_IDLE 의 하나 — 현택 11/1 결정 "glow"(점등: 구간이 읽는 순서로 차례로 밝아짐).
-   걷힘(11/25 ANIM-02): 장면 0.16초 → 바탕은 0.1초 뒤부터 0.4초(곡선 .16,1,.3,1). 4초 전에 끝난 로딩은 걷히기 0.9초 전까지 점등을 잇다 색이 앉는다(ANIM-03) */
-bootShell({sceneReveals:false,settleMs:500,fadeMs:400,fadeDelayMs:100,fadeEase:"cubic-bezier(.16,1,.3,1)",colorLeadMs:900,make(ov,env,api){return barsListScene(ov,env,"glow");}});
+   4초 전에 끝난 로딩은 걷히기 0.9초 전까지 점등을 잇다 색이 앉는다(11/25 ANIM-03) */
+bootShell({sceneReveals:false,settleMs:500,fadeMs:600,colorLeadMs:900,make(ov,env,api){return barsListScene(ov,env,"glow");}});
 
 })();
 </script>

@@ -31,9 +31,8 @@ function bootShell(o){
     let red=false;try{red=!!(window.matchMedia&&window.matchMedia("(prefers-reduced-motion: reduce)").matches);}catch(e){}
     const bg=(getComputedStyle(document.documentElement).getPropertyValue("--bg")||"").trim()||"#F4F6F8";
     const ov=document.createElement("div");ov.id="aoi-boot";ov.setAttribute("aria-hidden","true");
-    const fade=o.fadeMs||600,fadeDelay=o.fadeDelayMs||0;
-    /* 걷힘(ANIM-02, 11/25): 장면은 scene.reveal 이 먼저(짧게) 지우고, 바탕은 fadeDelay 뒤 fade 동안 — 겹치는 동안 보이는 것은 빈 바탕뿐(막대 두 겹이 포개지지 않게) */
-    ov.style.cssText=`position:fixed;left:0;top:0;width:100vw;height:100vh;z-index:2147483000;background:${bg};pointer-events:none;overflow:hidden;opacity:1;transition:opacity ${fade}ms ${o.fadeEase||"cubic-bezier(.33,0,.15,1)"} ${fadeDelay}ms`;
+    const fade=o.fadeMs||600;
+    ov.style.cssText=`position:fixed;left:0;top:0;width:100vw;height:100vh;z-index:2147483000;background:${bg};pointer-events:none;overflow:hidden;opacity:1;transition:opacity ${fade}ms cubic-bezier(.33,0,.15,1)`;
     document.body.appendChild(ov);
     /* 단계 글자 + 진행선: DOM. 글자 교체는 WAAPI(transform · opacity), 진행선은 scaleX 전환 — 둘 다 합성 스레드 */
     const cfs=Math.max(10,Math.min(14,W*.0118)),cx=Math.max(16,W*.024),cy=Math.max(18,H*.05),lw=Math.max(60,W*.08);
@@ -56,7 +55,7 @@ function bootShell(o){
     let gone=false,loadedAt=0,fallback=0,revealed=false,heard=false;const after=[];let scene=null;
     const finish=()=>{if(gone)return;gone=true;clearTimeout(fallback);try{scene&&scene.kill&&scene.kill();}catch(e){}if(ov.parentNode)ov.parentNode.removeChild(ov);window.AOI_BOOT=null;
       for(const f of after.splice(0))setTimeout(()=>{try{f();}catch(e){}},0);};
-    const reveal=()=>{if(revealed||gone)return;revealed=true;cap.style.opacity="0";try{scene&&scene.reveal&&scene.reveal();}catch(e){}ov.style.opacity="0";setTimeout(finish,fadeDelay+fade+80);};
+    const reveal=()=>{if(revealed||gone)return;revealed=true;cap.style.opacity="0";try{scene&&scene.reveal&&scene.reveal();}catch(e){}ov.style.opacity="0";setTimeout(finish,fade+80);};
     /* 잘린 파일 감시(JS-02, 11/25): 브라우저가 파일을 끝까지 읽은(load) 뒤 STALL 안에 화면 스크립트가 한 번도 소식(phase · done · abort)을 주지 않으면
        — 복사가 끊겨 데이터 뒤의 화면 스크립트가 없거나 실행되지 못한 파일 — 덮개를 걷고 안내를 그린다. 다 읽은 뒤부터 재므로 느린 공유 폴더에서 잘못 울리지 않고,
        창이 가려져 있으면(그동안 화면 스크립트의 프레임이 돌지 않는다) 보일 때 다시 잰다 */
