@@ -97,7 +97,7 @@ def test_import_zips_resolves_references_and_skips_out_of_scope(tmp_path, fake_n
     folder = _zip(tmp_path)
     st = collect.import_param_zips(cfg, str(folder))
     assert st["added"] == 1
-    cache = json.loads(open(cfg["cache_file"], encoding="utf-8").read())
+    cache = collect.read_cache_file(cfg["cache_file"])
     [s] = cache["params"]["snaps"].values()
     assert s["dev"] == "AOI-9" and s["job"] and set(s["f"]) == {"Recipe.ini", "RTP.txt"}
     assert collect.import_param_zips(cfg, str(folder))["added"] == 0        # 두 번 넣지 않는다
@@ -146,7 +146,7 @@ def test_fill_params_reads_only_wafer_folders_of_reports_without_snapshots(tmp_p
     assert after.params_missing == 0 and after.params_have >= 1
     opened.clear()
     assert collect.fill_params(cfg)["targets"] == 0 and not [p for p in opened if str(nas) in p]
-    cache = json.loads(open(cfg["cache_file"], encoding="utf-8").read())
+    cache = collect.read_cache_file(cfg["cache_file"])
     assert cache["eta"]["params_fill"][0][0] == st["targets"]
 
 

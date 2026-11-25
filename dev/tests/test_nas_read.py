@@ -104,7 +104,7 @@ def test_os_open_in_nas_guard_is_read_only():
 
 # ── ② 전체 나열(대량 조회) ─────────────────────────────────────────────────
 def _cache(cfg):
-    return json.loads(open(cfg["cache_file"], encoding="utf-8").read())
+    return collect.read_cache_file(cfg["cache_file"])
 
 
 def _picked(cfg):

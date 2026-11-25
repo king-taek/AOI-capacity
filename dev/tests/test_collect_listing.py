@@ -100,7 +100,7 @@ def _add(nas, name, mtime):
 
 
 def _cache(cfg):
-    return json.loads(open(cfg["cache_file"], encoding="utf-8").read())
+    return collect.read_cache_file(cfg["cache_file"])
 
 
 def _reports(cfg):

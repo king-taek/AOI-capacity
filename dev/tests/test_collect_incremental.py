@@ -670,8 +670,10 @@ def test_parallel_refresh_is_deterministic(tmp_path, fake_nas):
 # ══════════════════════════════════════════════════════════════════════════════
 # C15 — 캐시 파일: strict UTF-8 · 손상본 보존(.bad-<시각>) · 고유 임시 파일 · 실패 시 정리
 # ══════════════════════════════════════════════════════════════════════════════
-@pytest.mark.parametrize("garbage", [b'{"reports": {"\xff\xfe": {}}, "last_mtime": {}}', b'{"reports": {', b"[]"],
-                         ids=["bad-utf8", "truncated", "not-object"])
+@pytest.mark.parametrize("garbage", [b'{"reports": {"\xff\xfe": {}}, "last_mtime": {}}', b'{"reports": {', b"[]",
+                                     b'{"reports": {"k": {"rows": [[0, 5]]}}, "last_mtime": {}, "rows_fold": {"v": 1, "cols": ["device", "lot"], "pool": ["x"]}}',
+                                     b'{"reports": {"k": {"rows": [[0]]}}, "last_mtime": {}, "rows_fold": 3}'],
+                         ids=["bad-utf8", "truncated", "not-object", "fold-index", "fold-table"])
 def test_corrupt_cache_is_preserved_as_bad_file_not_overwritten_silently(tmp_path, fake_nas, garbage):
     """★ 예전에는 errors='replace' 로 읽어 손상 바이트가 U+FFFD 로 바뀌거나, 못 읽으면 조용히 빈 캐시로 덮어썼다."""
     nas, csv_path = fake_nas
@@ -693,6 +695,31 @@ def test_corrupt_cache_is_preserved_as_bad_file_not_overwritten_silently(tmp_pat
     stats2 = {}
     collect.collect(cfg, stats=stats2)
     assert stats2["cache_status"] == collect.CACHE_OK and bad[0].read_bytes() == garbage
+
+
+def test_cache_rows_are_folded_on_disk_and_come_back_exactly(tmp_path):
+    """CORE-07: 캐시 파일의 행은 결과 HTML 처럼 접는다(열 이름 한 번 + 같은 값은 풀 번호) — 읽으면 원래 dict 그대로
+    (빠진 열 · 문자열이 아닌 값 · OUT_COLS 밖 열 · 옛 형식 섞임 포함). 저장 뒤 다시 읽어 검증하는 규칙(C15)은 그대로."""
+    cfg = {"cache_file": str(tmp_path / "c" / "cache.json"), "nas_roots": [], "output_dir": str(tmp_path)}
+    full = {c: f"v-{c}" for c in collect.OUT_COLS}
+    rows_a = [dict(full), dict(full, lot="L2"), {"device": "AOI-1", "lot": "L2", "slots": 3, "extra": None, "x": [1, "a"]}]
+    rows_b = [{"device": "AOI-1", "status": "Pass", "flag": True, "n": 1}, {"device": "AOI-1", "status": "1"}]
+    cache = {"reports": {"a": {"rows": rows_a, "mtime": 1}, "b": {"rows": rows_b, "mtime": 2}, "c": {"rows": [], "mtime": 3}},
+             "last_mtime": {}, "failed": {}, "kla": {"dev:K1": {"lots": {"L": {"W": {"t": "x"}}}}}}
+    want = json.loads(json.dumps(cache))
+    collect._save_cache(cfg, cache)
+    raw = json.loads((tmp_path / "c" / "cache.json").read_text(encoding="utf-8"))
+    assert raw[collect.ROWS_FOLD_KEY]["cols"][:len(collect.OUT_COLS)] == collect.OUT_COLS
+    assert all(isinstance(r, list) for e in raw["reports"].values() for r in e["rows"])
+    assert cache["reports"]["a"]["rows"] is rows_a and rows_a[0] == full          # 저장은 메모리의 캐시를 바꾸지 않는다
+    back = collect.read_cache_file(cfg["cache_file"])
+    assert back["reports"] == want["reports"] and back["kla"] == want["kla"] and collect.ROWS_FOLD_KEY not in back
+    assert back["reports"]["b"]["rows"][0]["n"] == 1 and back["reports"]["b"]["rows"][1]["status"] == "1"   # 1 과 "1" · True 는 다르다
+    loaded = collect._load_cache(dict(cfg, cache_file=cfg["cache_file"]), rederive=False)
+    assert loaded["reports"]["a"]["rows"] == rows_a and collect.cache_status(loaded) == collect.CACHE_OK
+    legacy = tmp_path / "old.json"                                                # 옛 형식(행이 dict)도 그대로 읽는다
+    legacy.write_text(json.dumps(want), encoding="utf-8")
+    assert collect.read_cache_file(str(legacy))["reports"] == want["reports"]
 
 
 def test_cache_load_is_strict_utf8_but_report_reading_stays_lenient(tmp_path):

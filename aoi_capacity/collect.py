@@ -1769,8 +1769,7 @@ def _load_resume(cfg: dict, sig: str) -> Optional[dict]:
     """멈춘 '전체 다시 만들기' 의 후보 캐시(`<캐시>.rebuild`)를 읽는다 — 같은 일(표식 · 파서 · 형식)일 때만, 아니면 None."""
     path = str(cfg["cache_file"]) + RESUME_SUFFIX
     try:
-        with open(path, encoding="utf-8") as f:
-            data = json.load(f)
+        data = read_cache_file(path)
     except (OSError, ValueError):
         return None
     rs = data.get("resume") if isinstance(data, dict) else None
@@ -1807,7 +1806,7 @@ def _load_cache(cfg: dict, full: bool = False, log: Optional[LogFn] = None, rede
         dirty.add(DIRTY_CREATED)
         return cache
     try:
-        loaded = json.loads(nas_guard.read_text(path, errors="strict"))
+        loaded = read_cache_file(path)
         if not isinstance(loaded, dict) or not isinstance(loaded.get("reports", {}), dict):
             raise ValueError("캐시 JSON 의 최상위가 객체가 아닙니다")
         cache.update(loaded)
@@ -2193,6 +2192,86 @@ def _rows_from_cache(cache: dict, index: _DeviceIndex, cfg: dict, stats: Optiona
     return rows, hidden
 
 
+ROWS_FOLD_KEY = "rows_fold"      # CORE-07: 캐시 파일 안 행을 결과 HTML 처럼 접어 둔 표(열 이름 한 번 + 같은 값은 풀 번호)
+_ABSENT = -1                      # 접은 행에서 그 열이 없던 칸(옛 행은 열이 모자랄 수 있다 — 빈 값과 구별해 그대로 되살린다)
+
+
+def _fold_rows(reports: Dict[str, dict]) -> Tuple[Dict[str, dict], dict]:
+    """캐시의 Report 들 → (행을 번호 목록으로 바꾼 사본, 접은 표 {"v", "cols", "pool"}). 원본은 건드리지 않는다.
+    열은 `OUT_COLS` 순서 + 그 밖의 열(옛 행)을 처음 본 순서로, 값은 같은 것끼리 풀 번호 하나 — 문자열이 아닌 값도 그대로 풀에 둔다."""
+    cols: List[str] = list(OUT_COLS)
+    cidx = {c: i for i, c in enumerate(cols)}
+    pool: list = []
+    pidx: Dict[object, int] = {}
+    out: Dict[str, dict] = {}
+    for k, e in reports.items():
+        rows = e.get("rows")
+        if not isinstance(rows, list) or not rows:
+            out[k] = e
+            continue
+        folded = []
+        for r in rows:
+            row = [_ABSENT] * len(cols)
+            for c, v in r.items():
+                ci = cidx.get(c)
+                if ci is None:
+                    ci = cidx[c] = len(cols)
+                    cols.append(c)
+                    row.append(_ABSENT)
+                key = v if type(v) is str else ("\0", json.dumps(v, ensure_ascii=False, sort_keys=True))
+                i = pidx.get(key)
+                if i is None:
+                    i = pidx[key] = len(pool)
+                    pool.append(v)
+                row[ci] = i
+            folded.append(row)
+        out[k] = dict(e, rows=folded)
+    return out, {"v": 1, "cols": cols, "pool": pool}
+
+
+def _unfold_rows(cache: dict) -> None:
+    """`_fold_rows` 를 되돌린다(제자리) — 접은 표가 없거나 행이 이미 dict(옛 형식 · 섞임)여도 된다. 표가 맞지 않으면 ValueError(= 손상).
+    PH-06: 옛 형식 행의 같은 글자는 한 객체로 합친다 — 접은 형식은 풀이 이미 그렇다(90일 캐시 메모리 910 → 476MB)."""
+    fold = cache.pop(ROWS_FOLD_KEY, None)
+    cols: list = []
+    pool: list = []
+    if fold is not None:
+        if not isinstance(fold, dict) or not isinstance(fold.get("cols"), list) or not isinstance(fold.get("pool"), list):
+            raise ValueError("캐시 JSON 의 접은 행 표가 깨졌습니다")
+        cols, pool = fold["cols"], fold["pool"]
+    n_cols = len(cols)
+    get = pool.__getitem__
+    memo: Dict[str, str] = {}
+    for e in (cache.get("reports") or {}).values():
+        rows = e.get("rows") if isinstance(e, dict) else None
+        if not isinstance(rows, list):
+            continue
+        for j, r in enumerate(rows):
+            if isinstance(r, dict):
+                for c, v in r.items():
+                    if type(v) is str:
+                        r[c] = memo.setdefault(v, v)
+                continue
+            if not isinstance(r, list) or len(r) > n_cols:
+                raise ValueError("캐시 JSON 의 접은 행 모양이 표와 다릅니다")
+            if _ABSENT in r:
+                rows[j] = {c: get(i) for c, i in zip(cols, r) if i != _ABSENT}
+            else:
+                rows[j] = dict(zip(cols, map(get, r)))      # 번호가 풀 밖이면 IndexError → read_cache_file 이 손상으로 바꾼다
+
+
+def read_cache_file(path: str) -> dict:
+    """캐시 파일을 strict UTF-8 로 읽어 행까지 편 dict(옛 형식 · 접은 형식 모두) — 규칙 재분류 · 보정은 하지 않는다(`_load_cache` 가 한다).
+    점검 도구 · 테스트도 이것으로 읽는다(파일 안 행은 접혀 있다, CORE-07). 깨졌으면 ValueError · UnicodeDecodeError · OSError."""
+    loaded = json.loads(nas_guard.read_text(path, errors="strict"))
+    if isinstance(loaded, dict):
+        try:
+            _unfold_rows(loaded)
+        except (IndexError, TypeError) as ex:
+            raise ValueError(f"캐시 JSON 의 접은 행이 표와 맞지 않습니다({type(ex).__name__})") from ex
+    return loaded
+
+
 def _unique_tmp(path: str) -> str:
     """실행별 고유 임시 이름 — 동시에 도는 GUI/CLI 가 서로의 임시 파일을 밟거나 지우지 않게."""
     return f"{path}.{os.getpid()}-{threading.get_ident()}-{time.time_ns()}.tmp"
@@ -2203,6 +2282,19 @@ def _validate_cache_file(tmp: str, cache: dict) -> None:
     check = json.loads(nas_guard.read_text(tmp, errors="strict"))
     if not isinstance(check, dict):
         raise ValueError("캐시 JSON 최상위가 객체가 아닙니다")
+    fold = check.get(ROWS_FOLD_KEY)
+    if not isinstance(fold, dict) or not isinstance(fold.get("cols"), list) or not isinstance(fold.get("pool"), list):
+        raise ValueError("캐시 JSON 의 접은 행 표가 없습니다")
+    n_cols, n_pool = len(fold["cols"]), len(fold["pool"])
+    n_rows = 0
+    for e in (check.get("reports") or {}).values():          # 행 수 · 모양 · 풀 번호 범위 — 펴지 않고 본다
+        for r in (e.get("rows") or ()) if isinstance(e, dict) else ():
+            if not isinstance(r, list) or len(r) > n_cols or (r and (max(r) >= n_pool or min(r) < _ABSENT)):
+                raise ValueError("캐시 JSON 의 접은 행이 표와 맞지 않습니다")
+            n_rows += 1
+    want = sum(len(e.get("rows") or ()) for e in cache["reports"].values() if isinstance(e, dict))
+    if n_rows != want:
+        raise ValueError(f"캐시 JSON 의 행 수가 다릅니다({n_rows} ≠ {want})")
     for k in ("reports", "last_mtime", "failed", "devices"):
         if not isinstance(check.get(k), dict):
             raise ValueError(f"캐시 JSON 에 '{k}' 객체가 없습니다")
@@ -2237,8 +2329,12 @@ def _save_cache(cfg: dict, cache: dict, *, resume_file: bool = False, drop_resum
     preserved = ""
     t_w = time.perf_counter()
     try:
+        reports, fold = _fold_rows(cache["reports"])          # CORE-07: 행은 접어서(열 이름 한 번 + 같은 값은 풀 번호) — 파일 · 저장 시간 · 읽은 뒤 메모리가 준다
+        text = json.dumps(dict(cache, reports=reports, **{ROWS_FOLD_KEY: fold}), ensure_ascii=False)   # 접으면 작아 한 번에(json.dump 로 흘려 쓰면 5배 느리다)
+        del reports, fold
         with open(tmp, "w", encoding="utf-8") as f:
-            json.dump(cache, f, ensure_ascii=False)
+            f.write(text)
+            del text
             f.flush()
             os.fsync(f.fileno())
         t_v = time.perf_counter()

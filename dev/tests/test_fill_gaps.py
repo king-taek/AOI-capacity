@@ -19,7 +19,7 @@ def _wafer_dirs(nas: Path):
 
 
 def _cache(cfg):
-    return json.loads(open(cfg["cache_file"], encoding="utf-8").read())
+    return collect.read_cache_file(cfg["cache_file"])
 
 
 def _sec_rows(cfg):

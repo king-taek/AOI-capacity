@@ -87,7 +87,7 @@ def test_fill_gaps_fills_slot_no_from_wafer_ini_only_when_folder_not_rewritten(t
     assert plan.slot_missing > 0 and plan.slot_have == 0 and plan.etas["slot"][0] is not None
     st = collect.fill_gaps(cfg)
     assert st["slot"]["filled"] == plan.slot_missing and st["slot"]["empty"] == 0
-    rows = [r for e in json.load(open(cfg["cache_file"], encoding="utf-8"))["reports"].values() for r in e["rows"] if r.get("ini_match") == "EXACT" and not r.get("kind")]
+    rows = [r for e in collect.read_cache_file(cfg["cache_file"])["reports"].values() for r in e["rows"] if r.get("ini_match") == "EXACT" and not r.get("kind")]
     assert rows and all(r["slot_no"] == "7" for r in rows)
     after = collect.plan_run(cfg)
     assert after.slot_missing == 0 and after.slot_have == len(rows)

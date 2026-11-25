@@ -134,7 +134,7 @@ def test_rdl_patch_reads_only_the_wafer_inis_of_rdl_rows_missing_the_mode(tmp_pa
     name2, d2 = _make_rdl(nas, lot="LHP-RDL3", wafer="W02", multi=False)
     cfg = make_cfg(tmp_path, csv_path)
     collect.collect(cfg)
-    cache = json.loads(open(cfg["cache_file"], encoding="utf-8").read())    # 업데이트 전 캐시를 흉내 — 판정을 지운다
+    cache = collect.read_cache_file(cfg["cache_file"])    # 업데이트 전 캐시를 흉내 — 판정을 지운다
     for e in cache["reports"].values():
         for r in e["rows"]:
             r.pop("scan_mode", None)

@@ -22,7 +22,7 @@ from conftest import REPORT_HTML, make_cfg, make_device
 
 
 def _cache_of(cfg):
-    return json.loads(open(cfg["cache_file"], encoding="utf-8").read())
+    return collect.read_cache_file(cfg["cache_file"])
 
 
 def _raw(cfg):
