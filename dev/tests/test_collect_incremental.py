@@ -924,6 +924,29 @@ def test_cli_flags_and_exit_codes(tmp_path, fake_nas, monkeypatch, capsys):
     assert "전체 재구축 거부" in capsys.readouterr().out
 
 
+def test_cli_config_typo_broken_json_and_empty_html_range_stop_with_a_message(tmp_path, fake_nas, capsys):
+    """CORE-12 · CORE-09: --config 오타면 GUI 설정으로 조용히 다른 폴더에 쓰고, JSON 쉼표 하나면 traceback, 가진 데이터 밖
+    --from/--to 면 행 0개 HTML 을 거꾸로 된 이름으로 만들었다. 이제 셋 다 문구 + 종료 코드 1, 파일은 만들지 않는다."""
+    from aoi_capacity import cli
+    nas, csv_path = fake_nas
+    assert cli.main(["--config", str(tmp_path / "confg.json")]) == cli.EXIT_FAILED
+    assert "설정 파일을 찾을 수 없습니다" in capsys.readouterr().out
+    bad = tmp_path / "bad.json"
+    bad.write_text('{"output_dir": "x",\n "backfill_days": 3,}', encoding="utf-8")
+    assert cli.main(["--config", str(bad)]) == cli.EXIT_FAILED
+    assert "2번째 줄" in capsys.readouterr().out
+    cfg_path = _cli_config(tmp_path, csv_path)
+    cfg_path.write_bytes(b"\xef\xbb\xbf" + cfg_path.read_bytes())         # 메모장이 붙인 BOM 도 읽는다
+    assert cli.main(["--config", str(cfg_path)]) == cli.EXIT_OK
+    out = tmp_path / "cli" / "out"
+    before = sorted(p.name for p in out.iterdir())
+    for a, b in (("2025-01-01", "2025-01-31"), ("2026-10-01", "2026-10-31"), ("2026-09-20", "2026-09-13")):
+        assert cli.main(["--config", str(cfg_path), "--html-only", "--from", a, "--to", b]) == cli.EXIT_FAILED
+        assert "가진 데이터" in capsys.readouterr().out or a > b
+    assert sorted(p.name for p in out.iterdir()) == before
+    assert cli.main(["--config", str(cfg_path), "--html-only", "--from", "2026-09-13", "--to", "2026-09-13"]) == cli.EXIT_OK
+
+
 def test_cli_help_describes_what_backfill_really_does(monkeypatch, capsys):
     """★ 옛 도움말·문구는 '전부 다시 읽습니다' 였지만 코드는 캐시된 파일을 건너뛰었다 — 문구가 코드와 같아야 한다."""
     import argparse

@@ -3615,6 +3615,21 @@ def cached_days(cfg: dict) -> Tuple[str, str, int]:
     return (min(days), max(days), n) if days else ("", "", n)
 
 
+def _check_range(rows: List[dict], day_from: str, day_to: str) -> None:
+    """'HTML 만 다시 만들기' 의 기간 확인(CORE-09) — 시작이 끝보다 늦거나 고른 기간에 행이 하나도 없으면 ValueError(사람 문장).
+    예전엔 행 0개 HTML 을 `…_2026-09-13~2025-01-31.html` 처럼 거꾸로 된 이름으로 만들어 수집이 망가진 것처럼 보였다. 기간을 안 주면 보지 않는다."""
+    if not (day_from or day_to):
+        return
+    if day_from and day_to and day_from > day_to:
+        raise ValueError(i18n.KO.HTML_RANGE_REVERSED_FMT.format(day_from=day_from, day_to=day_to))
+    memo: Dict[str, str] = {}
+    days = sorted({d for d in (_row_day(r, memo) for r in rows) if d})
+    if days and any((not day_from or d >= day_from) and (not day_to or d <= day_to) for d in days):
+        return
+    raise ValueError(i18n.KO.HTML_RANGE_EMPTY_FMT.format(day_from=day_from or "…", day_to=day_to or "…",
+                                                          first=days[0] if days else "—", last=days[-1] if days else "—"))
+
+
 def html_from_cache(cfg: dict, day_from: str = "", day_to: str = "", *, log: Optional[LogFn] = None,
                     progress: Optional[ProgressFn] = None, warnings: Optional[List[dict]] = None,
                     lot_only: bool = False, out_dir: str = "", out_name: str = "") -> str:
@@ -3631,6 +3646,7 @@ def html_from_cache(cfg: dict, day_from: str = "", day_to: str = "", *, log: Opt
     if not cache["reports"]:
         raise RuntimeError(i18n.KO.HTML_ONLY_NO_CACHE)
     rows, hidden = _rows_from_cache(cache, _DeviceIndex([]), cfg)
+    _check_range(rows, day_from, day_to)                   # 가진 데이터 밖 · 거꾸로 된 기간은 빈 파일 대신 오류(CORE-09)
     dev_meta = [dict(d) for d in (cache.get("last_devices") or [])]
     names = {str(d.get("name")) for d in dev_meta}
     for n in sorted({str(r.get("device")) for r in rows} - names):
