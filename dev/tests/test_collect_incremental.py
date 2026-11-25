@@ -53,6 +53,28 @@ def test_new_report_is_picked_up_by_cursor(tmp_path, fake_nas):
     assert len(rows) == 12
 
 
+def test_future_mtime_report_does_not_freeze_the_cursor(tmp_path, fake_nas):
+    """CORE-04: 시계가 틀린 설비의 수정시각 +30일 Report 하나로 커서가 미래로 뛰면 그 뒤 정상 Report 를 전부 건너뛰었다.
+    커서는 지금 시각 + 여유까지만 가고, 이미 미래에 가 있는 옛 커서도 지금으로 돌아온다."""
+    nas, csv_path = fake_nas
+    rep_dir = nas / "X" / "AOI-10" / "Report"
+    src = next(rep_dir.glob("*.htm"))
+    far = time.time() + 30 * 86400
+    os.utime(src, (far, far))
+    cfg = make_cfg(tmp_path, csv_path)
+    logs = []
+    collect.collect(cfg, log=logs.append)
+    assert any("미래" in m for m in logs)
+    cache = json.loads((tmp_path / "out" / "aoi_cache.json").read_text(encoding="utf-8"))
+    assert cache["last_mtime"]["dev:AOI-10"] <= time.time() + collect.CLOCK_SKEW_SEC
+    rep = rep_dir / "2D@R2-GA285AAB_0859840PD-0A_6321_NEW_26-Sep-13_(06.00.00)_BatchReport.htm"
+    rep.write_text(src.read_text(encoding="utf-8"), encoding="utf-8")       # 지금 시각의 정상 Report
+    rows, dev_meta, _, _ = _run(cfg)
+    assert {d["name"]: d["reports"] for d in dev_meta if not d.get("missed")}["AOI-10"] == 1
+    last = {"dev:X": far}                                                   # 옛 버전이 남긴 미래 커서도 되돌린다
+    assert collect._advance_cursor(last, "dev:X", [], [], now=1000.0) and last["dev:X"] == 1000.0 + collect.CLOCK_SKEW_SEC
+
+
 def test_backfill_window_limits_first_run(tmp_path, fake_nas):
     nas, csv_path = fake_nas
     old = time.time() - 40 * 86400

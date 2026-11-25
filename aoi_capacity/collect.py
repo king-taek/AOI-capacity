@@ -2644,6 +2644,7 @@ def _list_new_reports(devs, cache, cfg, backfill, log, progress, on_device, shou
                 else:
                     pick.append((e, key))
             dm["found"], dm["reports"] = len(files), len(pick)
+            dm["future"] = sum(1 for e in files if e.stat().st_mtime > now + CLOCK_SKEW_SEC)   # 시계가 틀린 설비(CORE-04) — 로그 한 줄
             dm["list_dev_ms"] = int((time.perf_counter() - t_list) * 1000)   # 숨긴 수집 로그(10/5) — 장비마다 나열에 걸린 시간
             out = (d, dm, pick, known)
         except OSError as ex:
@@ -2657,6 +2658,8 @@ def _list_new_reports(devs, cache, cfg, backfill, log, progress, on_device, shou
     plan = _run(cfg, devs, one, should_stop, group=lambda d: nas_group(d["path"]))
     tot_found = tot_pick = n_pick_dev = 0
     for d, dm, pick, _known in plan:              # 로그는 장비 순서대로 한 번에(스레드에서 섞이지 않게)
+        if dm.get("future"):
+            _say(log, f"[{d['name']}] 수정시각이 미래인 Report {dm['future']}개 — 설비 · NAS 시계를 확인하세요(커서는 지금 시각까지만 옮깁니다)")
         if dm["error"]:
             _say(log, f"[{d['name']}] {dm['error']}")
         elif pick:
@@ -2692,15 +2695,19 @@ def _decode_report(raw: bytes) -> str:
     return raw.decode("utf-8", errors="replace").replace("\r\n", "\n").replace("\r", "\n")
 
 
-def _advance_cursor(last: dict, did: str, ok_mtimes, blocked_mtimes) -> bool:
+def _advance_cursor(last: dict, did: str, ok_mtimes, blocked_mtimes, now: Optional[float] = None) -> bool:
     """커서는 **성공적으로 캐시에 들어간 파일까지만** 전진한다. 값이 실제로 바뀌었을 때만 True(저장 이유, C04).
 
     읽기에 실패해 아직 재시도가 남은 파일이 있으면 그 파일보다 앞에서 멈춘다 →
-    다음 증분 수집에서 그 Report 를 다시 만난다(영구 누락 방지)."""
+    다음 증분 수집에서 그 Report 를 다시 만난다(영구 누락 방지).
+    ★ 커서는 **지금 시각 + `CLOCK_SKEW_SEC`** 을 넘지 않는다(CORE-04) — 설비·NAS 시계가 틀려 수정시각이 미래인 Report 하나로
+    커서가 미래로 뛰면 그 뒤 생긴 정상 Report 를 전부 '커서보다 이전' 으로 건너뛴다. 이미 미래에 가 있는 옛 커서도 지금으로 되돌린다
+    (나열만 조금 더 할 뿐 — 이미 캐시에 있는 Report 는 수정시각이 같아 다시 읽지 않는다)."""
+    cap = (time.time() if now is None else float(now)) + CLOCK_SKEW_SEC
     cur = float(last.get(did, 0))
     limit = min(blocked_mtimes) if blocked_mtimes else None
     usable = [m for m in ok_mtimes if limit is None or m < limit]
-    new = max(cur, max(usable)) if usable else cur
+    new = min(max(cur, max(usable)) if usable else cur, cap)
     if did in last and float(last[did]) == new:
         return False
     if new or did in last:
