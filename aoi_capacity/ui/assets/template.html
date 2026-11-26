@@ -333,7 +333,7 @@ main{max-width:1420px;margin:0 auto;padding:22px 24px 90px}
 .jchip{display:inline-flex;align-items:center;gap:6px;padding:3px 10px;border-radius:999px;border:1px solid var(--line-2);background:#fff;font-size:12px;font-weight:600}.jchip b{font-weight:500;color:#5A6673}
 .jpick{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-bottom:12px}.jpick .btn{display:inline-flex;align-items:center;gap:6px}
 .dblegend{display:flex;flex-wrap:wrap;gap:14px;align-items:center;padding:0 18px 8px;font-size:11.5px}.dblegend span{display:inline-flex;align-items:center;gap:5px}
-.dbrow{display:grid;grid-template-columns:96px minmax(0,1fr) 104px 74px 70px;gap:12px;align-items:center;padding:6px 18px;border-top:1px solid #F1F4F7;font-size:12.5px}
+.dbrow{display:grid;grid-template-columns:96px minmax(0,1fr) 104px 100px 88px;gap:12px;align-items:center;padding:6px 18px;border-top:1px solid #F1F4F7;font-size:12.5px}
 .dbrow .dn{font-weight:600}.dbrow .r{text-align:right;white-space:nowrap}.dbrow .dc{font-size:11.5px;color:#5A6673}
 .dbrow.head{background:#FBFCFD;font-size:11.5px;font-weight:600;color:var(--ink-3);padding-top:5px;padding-bottom:5px}
 .dbrow.axis{border-top:0;padding-top:0}
@@ -378,7 +378,7 @@ main{max-width:1420px;margin:0 auto;padding:22px 24px 90px}
 .ptw{overflow:auto;max-height:72vh;border-top:1px solid #EDF1F5}.ptab{border-collapse:collapse;font-size:12px;width:max-content}.ptab th{position:sticky;top:0;background:#F6F8FA;z-index:1;font-weight:600;text-align:left;padding:6px 8px;border-bottom:1px solid #DCE3EA;white-space:nowrap}
 .ptab th.pdv small{display:block;font-weight:400;color:#7A8794;font-size:10.5px}.ptab td{padding:4px 8px;border-bottom:1px solid #F0F3F6;white-space:nowrap;max-width:220px;overflow:hidden;text-overflow:ellipsis}.ptab td.pk{position:sticky;left:0;background:#fff;max-width:260px}
 .ptab td.pu{color:#5A6673}.ptab td.pm{color:#2B3640;background:#FAFBFC}.ptab td.pc{color:#9AA5B1}.ptab td.dif{background:#FFF1B8;color:#5C4300;font-weight:600}.ptab td.mis{color:#C9D2DC;text-align:center}.ptab tr.pz td{background:#F2F5F8;font-weight:600;color:#2B3640;position:static}
-.mtile.none .only{margin:10px 0 2px;font-size:13px;font-weight:600;color:var(--ink-3)}.dtrack .dlab.U{color:#7A8591}.dtrack.hd .dflab.mg{display:none;color:var(--ink-2)}.dtrack.hd.mg .dflab{display:none}.dtrack.hd.mg .dflab.mg{display:block}.dtrack.hd .dflab .sw{width:7px;height:7px;margin:0 2px 0 3px;vertical-align:1px}
+.mtile.none .only{margin:10px 0 2px;font-size:13px;font-weight:600;color:var(--ink-3)}.dbrow .dc .sw{width:7px;height:7px;margin:0 2px 0 4px;vertical-align:1px}.dtrack .dlab.U{color:#7A8591}.dtrack.hd .dflab.mg{display:none;color:var(--ink-2)}.dtrack.hd.mg .dflab{display:none}.dtrack.hd.mg .dflab.mg{display:block}.dtrack.hd .dflab .sw{width:7px;height:7px;margin:0 2px 0 3px;vertical-align:1px}
 .ptall{padding:0;overflow:hidden;margin-bottom:10px}.ptall .ptw{max-height:calc(100vh - 230px);border-top:0}.ptab tr.pgr td{padding:0;background:#fff;border-top:1px solid #DCE3EA;border-bottom:1px solid #EDF1F5;max-width:none;overflow:visible}.ptab tbody:first-of-type tr.pgr td{border-top:0}.ptab tr.pgr .pgh{position:sticky;left:0;width:auto;max-width:min(100%,900px)}.ptab tr.pmore td{color:#5A6673;font-size:11.5px;background:#FBFCFD;white-space:normal}
 .phist{display:grid;grid-template-columns:70px 90px minmax(0,1.2fr) minmax(0,2fr);gap:10px;padding:7px 0;border-bottom:1px solid #F0F3F6;font-size:12px;align-items:start}
 .cards.lotcards .v{font-size:18px}.cards.lotcards>div{padding-left:14px;padding-right:12px}
@@ -3374,14 +3374,14 @@ function rcpHtml(){
   if(noMatch){const L=_rcpLast,there=L&&fam.has(L.k);
     const clr=lab=>`<button class="btn" data-fk="rcp:clear" data-h="${h(()=>{setState({rcpQ:""});const q=document.querySelector('[data-fk="rcp:q"]');if(q)q.focus();})}">${lab}</button>`;
     detail=`<div class="panel recipe-empty" data-key="rcp:empty-detail"><h3>검색 결과가 없습니다</h3>${L?(there?`<div class="recipe-retained"><span class="muted">이전 선택</span>
-      <p><b style="${L.al?"":"font-family:"+MONO}">${esc(L.name)}</b> · ${L.pi?"기존":"멀티"} <span class="num">${f1(L.mM)}</span> / ${L.pi?"Enhanced":"단일"} <span class="num">${f1(L.mS)}</span>분/장</p>${clr("검색 지우고 이전 상세로")}</div>`
+      <p><b style="${L.al?"":"font-family:"+MONO}">${esc(L.name)}</b> · ${U.tl} 중앙 ${L.pi?"기존":"멀티"} <span class="num">${U.ft(L.m[U.lot?"b":"s"].M)}</span> / ${L.pi?"Enhanced":"단일"} <span class="num">${U.ft(L.m[U.lot?"b":"s"].S)}</span>${U.lot?"":"분"} <span class="muted">(${U.cnt}당)</span></p>${clr("검색 지우고 이전 상세로")}</div>`
       :`<p class="muted">이 기간에는 이전 선택의 기록이 없습니다</p>${clr("검색 지우기")}`):clr("검색 지우기")}</div>`;}
   if(SF){
     const members=[...SF.gs.entries()].sort((x,y)=>y[1]-x[1]);
     const famGs=new Set(members.filter(([gi])=>!rcpOffOf(leadOf(gi))).map(([gi])=>gi));   /* 켜 둔 Job 만 통계에 */
     const A=rcpAgg(famGs,from,to),a=A.all,anyG=titleG(SF),FN=rcpFamName(anyG),al=rcpAl(anyG),PI=SF.pi;
     const NMK=k=>nmK(k,PI),W1=NMK("M"),W2=NMK("S");
-    _rcpLast={k:SF.k,name:FN,al,pi:PI,mM:qs(a.M.s,.5),mS:qs(a.S.s,.5)};
+    _rcpLast={k:SF.k,name:FN,al,pi:PI,m:{s:{M:qs(a.M.s,.5),S:qs(a.S.s,.5)},b:{M:qs(a.M.b,.5),S:qs(a.S.b,.5)}}};   /* 두 단위 다 — 검색 0개일 때 지금 단위로 요약(11/25 RDL-21) */
     let jobG=state.rcpJob!=null?[...rcpGroupsOf([state.rcpJob])][0]:undefined;if(jobG==null||!famGs.has(jobG))jobG=[...famGs][0]??members[0][0];
     const sfxC=gi=>{if(PI)return /enhanced/i.test(String(D.pool.job[D.jobGroups[gi].l]))?MODE_C.S:MODE_C.M;const s=rcpSuffix(gi);return s==="Multi"?MODE_C.M:s==="Single"?MODE_C.S:s==="미구분"?MODE_C.U:"#8A96A3";};
     /* Job 칩 = 통계에 넣을지 고르는 켜기/끄기 단추 */
@@ -3407,7 +3407,7 @@ function rcpHtml(){
     const tile=(k,o)=>{if(!o.n)return `<div class="mtile none"><p class="k"><i class="sw" style="background-color:${MODE_C[k]}"></i>${NMK(k)}${kNote(k)}</p><p class="only">이 기간 ${NMK(k)} 기록 없음</p></div>`;
       const T=U.T(o),F=U.F(o),m=qs(T,.5),fm=qs(F,.5),xT=U.XT(o),xF=U.XF(o),nT=xT?xT.out.length:0,nF=xF?xF.out.length:0,out=nT+nF;
       const tip=[outTip(xT,U.lot?labP:labQ,"분",f1,U.tl),outTip(xF,U.lot?labP:labQ,"개",fD,U.fl)].filter(Boolean).join("\n\n");
-      const other=U.lot?`Wafer당 스캔 ${vu(qs(o.s,.5),f1,"분")} ·Defect ${vu(qs(o.f,.5),fD,"개/wafer")}`:`LOT당 ${vu(qs(o.b,.5),hmT,"")} · Defect ${vu(qs(o.lf,.5),fD,"개/Lot")}`;
+      const other=U.lot?`Wafer당 스캔 ${vu(qs(o.s,.5),f1,"분")} · Defect ${vu(qs(o.f,.5),fD,"개/wafer")}`:`LOT당 ${vu(qs(o.b,.5),hmT,"")} · Defect ${vu(qs(o.lf,.5),fD,"개/Lot")}`;
       return `<div class="mtile"><p class="k"><i class="sw" style="background-color:${MODE_C[k]}"></i>${NMK(k)}${kNote(k)}</p>
       <div class="bigrow"><div><p class="v num"${m!=null&&U.lot?` title="${f1(m)}분"`:""}>${U.big(m)}</p><p class="vl">${U.tl} (중앙)</p></div><div><p class="v num">${fm==null?"—":fD(fm)+`<small>${U.fu}</small>`}</p><p class="vl">${U.fl} (중앙)</p></div></div>
       <p class="s mt1">표본 <b class="num">${f0(T.length)}</b> / ${f0(U.lot?o.lots.size:o.n)} ${U.cnt}${U.lot?"":` <span class="muted">· INI ${f0(o.sI.length)} · Report 보완 ${f0(o.rep)}</span>`}${exTag(o)}${out?` <span class="otag" title="${esc(tip)}">이상치 ${out}개 제외 ⓘ</span>`:""}</p>
@@ -3450,24 +3450,25 @@ function rcpHtml(){
     const flm={M:qs(sel(a.M),.5),S:qs(sel(a.S),.5)},flK=["M","S"].filter(k=>rcpShow(k)&&flm[k]!=null),flH=flK.map(k=>`<i class="dfl" style="left:${px(flm[k])}%;border-color:${MODE_C[k]}"></i>`).join("");
     /* 머리 줄 '전체' 이름표(11/25 RDL-08): 두 값이 가까우면 겹쳐 '전체13.43.9' 로 읽혔다 — 합친 이름표(.mg)를 함께 그려 두고 layoutPairLabels 가 실제 폭으로 겹침을 재 하나만 보인다 */
     const flLab=flK.map(k=>`<b class="dflab" data-nr style="left:${px(flm[k])}%;color:${MODE_C[k]}" title="전체 ${NMK(k)} 중앙">전체 ${mfm(flm[k])}</b>`).join("")+(flK.length===2?`<b class="dflab mg" data-nr style="left:${((+px(flm.M)+ +px(flm.S))/2).toFixed(2)}%" title="전체 ${W1} · ${W2} 중앙">전체 <i class="sw" style="background-color:${MODE_C.M}"></i>${mfm(flm.M)} · <i class="sw" style="background-color:${MODE_C.S}"></i>${mfm(flm.S)}</b>`:"");
-    const hasT=d=>sel(d.M).length||sel(d.S).length||sel(d.U).length;
-    const devSel=dv.some(([n])=>n===state.rcpDevSel)?state.rcpDevSel:((dv.find(([,d])=>hasT(d))||dv[0]||[])[0]||null);
+    /* 선택 표시는 사용자가 팝업을 연 장비에만(11/25 RDL-11 — 처음 열면 아무것도 고르지 않았는데 첫 장비가 '선택됨' 으로 보였다) */
+    const devSel=dv.some(([n])=>n===state.rcpDevSel)?state.rcpDevSel:null;
     /* 멀티 · 단일 값이 없는 장비의 이유(RDL-10) — 정말 기록이 없을 때만 '값 없음' */
     const noneWhy=d=>{if(U.lot){const L=bxL(d.bx);return d.lots.size?"LOT 표본 없음"+(L.length?" — "+L.join(" · "):""):"값 없음";}
       if(!d.w)return "값 없음";return (MET==="defect"?"Defect 값 없음":"스캔 시간 없음")+" · "+f0(d.w)+" wafer";};
+    const cnt3=(a,b,c)=>`<i class="sw" style="background-color:${MODE_C.M}"></i>${a} <i class="sw" style="background-color:${MODE_C.S}"></i>${b}${c?` <i class="sw" style="background-color:${MODE_C.U}"></i>${c}`:""}`;   /* RDL-13: 숫자 앞 방식 색 점 */
     const devH=dv.map(([n,d],i)=>{const x=qs(sel(d.M),.5),y=qs(sel(d.S),.5),df=x!=null&&y!=null?y-x:null,on=n===devSel,vx=rcpShow("M")?x:null,vy=rcpShow("S")?y:null;
       const line=vx!=null&&vy!=null?`<i class="dl" style="left:${px(Math.min(x,y))}%;width:${(Math.abs(y-x)/dmx*100).toFixed(2)}%"></i>`:"";
       const dot=(v,k,o)=>v==null?"":`<b class="dd" style="left:${px(v)}%;background-color:${MODE_C[k]}" title="${esc(n+" · "+NMK(k)+"\n"+MET_L+" "+mfm(v)+mu+"\n"+f0(o.n)+" wafer · "+o.lots.size+" Lot")}"></b><em class="dlab ${k} num" data-nr data-p="${px(v)}" style="left:${px(v)}%">${mfm(v)}</em>`;
       const lw=k=>d[k].lots.size,uv=x==null&&y==null?uOnly(d):null;
       return `<button type="button" class="dbrow${on?" on":""}" data-key="slot:${i}" data-row="dev:${esc(n)}" data-hm="${qs(U.T(d.M),.5)??""}" data-hs="${qs(U.T(d.S),.5)??""}" aria-pressed="${on}" data-h="${h(()=>rcpDevOpen(n,SF.k))}" title="${esc(n)} 상세"><span class="dn">${esc(n)}</span><span class="dtrack">${flH}${line}${dot(vx,"M",d.M)}${dot(vy,"S",d.S)}${uv!=null?dot(uv,"U",d.U):vx==null&&vy==null?`<em class="dnone">${x==null&&y==null?esc(noneWhy(d)):"숨김"}</em>`:""}</span>
         <span class="r num dx" style="color:${df==null?"#8A96A3":df<0?MODE_C.S:df>0?MODE_C.M:"#4B5866"}">${df==null?(x!=null?W1+"만":y!=null?W2+"만":uv!=null?"판정 못 함만":"—"):(Math.abs(df)<0.05?"차이 없음":(df<0?W2+" ":W1+" ")+mfm(Math.abs(df))+mpu+(MET==="defect"?"↓":"↓"))}</span>
-        <span class="r num dc" title="${W1} ${d.M.n} · ${W2} ${d.S.n}${d.U.n?" · 판정 못 함 "+d.U.n:""} wafer">${d.M.n}·${d.S.n}${d.U.n?"·"+d.U.n:""}<small>wafer</small></span><span class="r num dc" title="${W1} ${lw("M")} Lot · ${W2} ${lw("S")} Lot">${lw("M")}·${lw("S")}${d.U.n?"·"+lw("U"):""}<small>Lot</small></span></button>`;}).join("");
+        <span class="r num dc" title="${W1} ${d.M.n} · ${W2} ${d.S.n}${d.U.n?" · 판정 못 함 "+d.U.n:""} wafer">${cnt3(d.M.n,d.S.n,d.U.n)}</span><span class="r num dc" title="${W1} ${lw("M")} Lot · ${W2} ${lw("S")} Lot${d.U.n?" · 판정 못 함 "+lw("U")+" Lot":""}">${cnt3(lw("M"),lw("S"),d.U.n?lw("U"):0)}</span></button>`;}).join("");
     const daxis=`<div class="dbrow axis"><span></span><span class="dtrack ax">${AX2.ticks.map(t=>`<em style="left:${(t/dmx*100).toFixed(2)}%">${axLab(t,MET==="time"&&U.lot,MET==="defect"?"개":"분")}</em>`).join("")}</span><span></span><span></span><span></span></div>`;
     const metSeg=segHtml([{label:"시간",on:MET==="time",pick:()=>setState({rcpMetric:"time"})},{label:"Defect",on:MET==="defect",pick:()=>setState({rcpMetric:"defect"})}],'aria-label="장비별 그래프의 지표"');
     const sortSeg=segHtml([{label:"장비순",on:SORT==="name",pick:()=>setState({rcpDevSort:"name"})},{label:"큰 값 순",on:SORT==="big",pick:()=>setState({rcpDevSort:"big"})},{label:"작은 값 순",on:SORT==="small",pick:()=>setState({rcpDevSort:"small"})}],'aria-label="장비 정렬"');
     const devT=!famGs.size?"":`<div class="panel" data-key="rcp:mdev" style="margin-top:14px"><div class="ph"><h2>장비별 ${MET==="defect"?U.fl:U.tl}</h2><span class="muted" style="font-size:12px">중앙 · ${mu}</span><div class="spacer"></div>${sortSeg}${metSeg}</div>
       <div class="dblegend">${kbtn("M",W1)}${kbtn("S",W2)}</div>
-      <div class="dbrow head"><span>장비</span><span class="dtrack hd">${flLab}</span><span class="r">차이</span><span class="r" title="${W1}·${W2} 순">Wafer</span><span class="r" title="${W1}·${W2} 순">Lot</span></div><div class="dbrows" data-key="rcp:mdev:rows">${devH||`<p class="empty">기록 없음</p>`}</div>${dv.length?daxis:""}</div>`;
+      <div class="dbrow head"><span>장비</span><span class="dtrack hd">${flLab}</span><span class="r">차이</span><span class="r" title="점 색 = ${W1} · ${W2} · 판정 못 함">Wafer</span><span class="r" title="점 색 = ${W1} · ${W2} · 판정 못 함">Lot</span></div><div class="dbrows" data-key="rcp:mdev:rows">${devH||`<p class="empty">기록 없음</p>`}</div>${dv.length?daxis:""}</div>`;
     /* 어떻게 셌나 — 기본은 접어 둔다(사용자 10/6), 누르면 펼침(state.rcpHowAll). 안의 카드는 따로 펼친다(handoff C5) */
     const exT=o=>[o.ini&&`INI 를 못 찾음 ${o.ini}장`,o.stale&&`다른 스캔이 덮어쓴 INI ${o.stale}장`,o.range&&`시각이 거꾸로이거나 180분 넘음 ${o.range}장`].filter(Boolean).join(" · ")||"없음";
     const bxT=o=>[o.err&&`Error 가 있는 Lot ${o.err}개`,o.mixed&&`다른 레시피가 섞인 Lot ${o.mixed}개`,o.time&&`배치 시각 없음 ${o.time}개`,o.few&&`PASS ${LOT_MIN}장 미만 Lot ${o.few}개`].filter(Boolean).join(" · ")||"없음";
