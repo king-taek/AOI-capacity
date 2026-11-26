@@ -391,7 +391,7 @@ def test_report_tab_defect_is_the_per_wafer_median_with_the_mean_in_small_text()
     for i, r in enumerate(rows):
         r["faults"] = "5,000" if i in (3, 20) else "10"
     rows[7]["faults"] = ""                                                  # 값 없는 장은 세지 않는다
-    (html,) = screen(rows, meta("AOI-1"), [["reportHtml"]], state={"view": "report", "rptDev": "AOI-1"})
+    (html,) = screen(rows, meta("AOI-1"), [["reportHtml"]], state={"view": "report", "rptDev": "AOI-1", "rptHow": True})
     assert "평균 Defect" not in html
     assert '<p class="k">Defect (장당 중앙)</p><p class="v num" style="font-size:24px">10</p>' in html
     avg = round((32 * 10 + 2 * 5000) / 34)
