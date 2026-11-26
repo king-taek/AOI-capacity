@@ -199,7 +199,12 @@ def read_head(path, limit: int) -> bytes:
 
 def read_text(path, encoding: str = "utf-8", errors: str = "replace") -> str:
     """`open(path, "r", encoding=, errors=).read()` 와 같은 결과(보편 줄바꿈: \\r\\n · \\r → \\n) — 읽기는 `_read_all` 로 한 번(`read_bytes` 를 거치지 않아 호출 수를 세는 쪽이 두 번 세지 않는다)."""
-    return _read_all(path).decode(encoding, errors).replace("\r\n", "\n").replace("\r", "\n")
+    return decode_text(_read_all(path), encoding, errors)
+
+
+def decode_text(data: bytes, encoding: str = "utf-8", errors: str = "replace") -> str:
+    """이미 읽은 바이트를 `read_text` 와 같은 글로(보편 줄바꿈) — 같은 파일을 두 번 열지 않게(PC-08)."""
+    return data.decode(encoding, errors).replace("\r\n", "\n").replace("\r", "\n")
 
 
 def scandir(path):
