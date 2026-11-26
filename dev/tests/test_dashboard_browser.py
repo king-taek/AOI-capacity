@@ -248,6 +248,7 @@ def test_home_rows_follow_device_order_and_save_copy_refolds_the_same_columns(pa
     pg, errors, requests = page
     order = pg.evaluate("[...document.querySelectorAll('main button.rowbtn[data-fk^=\"dev:\"]')].map(b => b.dataset.fk)")
     assert order == ["dev:AOI-1", "dev:AOI-2", "dev:AOI-3", "dev:AOI-10"]   # 번호순 — 사전순이면 AOI-10 이 AOI-2 앞에 온다
+    assert pg.evaluate("document.getElementById('embedded').textContent") == ""   # PH-08: 읽은 원문은 문서에서 비운다 — 사본은 아래처럼 같다
     with pg.expect_download() as dl:
         pg.get_by_role("button", name="사본 저장").click()
     saved = Path(dl.value.path()).read_text(encoding="utf-8")
@@ -1295,6 +1296,7 @@ def test_compressed_publish_data_opens_and_save_copy_stays_compressed(page_facto
     ctx, pg, errors, requests = _open_quiet(page_factory, out)
     pg.wait_for_selector('main[data-key="view:home"]')
     assert pg.evaluate("rows.length") == len(emb["rows"]) and pg.evaluate("embEnc") == "gz"
+    assert pg.evaluate("document.getElementById('embedded').textContent") == ""   # PH-08: 압축 글도 읽은 뒤 비운다
     with pg.expect_download() as dl:
         pg.evaluate("saveHtml()")
     saved = Path(dl.value.path()).read_text(encoding="utf-8")
