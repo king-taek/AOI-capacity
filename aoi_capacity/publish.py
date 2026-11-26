@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import datetime as dt
 import html
+import logging
 import os
 import re
 import subprocess
@@ -29,6 +30,8 @@ from typing import Callable, Dict, List, NamedTuple, Optional
 
 from . import collect, i18n, nas_guard
 from .utils import paths
+
+_LOG = logging.getLogger("aoi.publish")
 
 STUB_NAME = "AOI_LOT.html"
 SHORTCUT_NAME = "AOI LOT.url"                      # 폴더 안에 두는 인터넷 바로가기 — 팀원은 이 파일을 더블클릭하거나 바탕화면으로 복사(10/30 사용자 요청 이름. 같은 이름의 옛 파일은 아이콘 캐시가 남을 수 있어 새 이름으로)
@@ -228,8 +231,11 @@ def _ensure_lnk(share_dir: str, kind: Kind, icon: Optional[str], roots: List[str
     target = lnk_target(share_dir, kind)
     if _lnk_current(cur, icon, target):
         return True
+    t0 = time.perf_counter()
     data = make_lnk(target, icon)
     if not data:
+        if os.name == "nt":                              # PP-08: 못 만드는 PC 는 수집마다 PowerShell 을 띄운다 — 얼마나 걸리는지 로그로 먼저 잰다
+            _LOG.info("바로가기 .lnk 못 만듦(%.1f초) → .url: %s", time.perf_counter() - t0, path)
         return cur is not None
     _write_text(path, data, roots, tries=2)
     return os.path.isfile(path)
