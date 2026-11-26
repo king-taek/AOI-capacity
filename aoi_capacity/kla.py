@@ -495,13 +495,18 @@ def rows_from_store(store: dict, cfg: dict, scan_type: Callable[[str], str]) -> 
             bs = ts[0]
             be = max([x for x in ends if x] or [ts[-1]])
             report = f"KLA:{lot}:{rts or items[0][0]}"
+            bs_s, be_s = _fmt(bs), _fmt(be)                     # PH-11: 실행마다 같은 글자는 한 번만
+            st_memo: Dict[str, str] = {}
             for (t_iso, w, r), t, end in zip(items, ts, ends):
                 lot_id = str(r.get("lot") or lot)
+                st = st_memo.get(lot_id)
+                if st is None:
+                    st = st_memo[lot_id] = scan_type(lot_id)
                 rows.append({"device": name, "kind": "", "job": str(r.get("setup") or ""), "setup": str(r.get("step") or ""),
                              "lot": lot_id, "wafer_id": str(r.get("wafer") or ""), "status": "Pass", "norm_status": "PASS",
-                             "cause": "", "outcome": "PASS", "scan_type": scan_type(lot_id), "recipe": str(r.get("step") or ""),
+                             "cause": "", "outcome": "PASS", "scan_type": st, "recipe": str(r.get("step") or ""),
                              "faults": str(r.get("defects", "") if r.get("images") is None else r.get("images")), "scanned_dice": "" if r.get("ndie") is None else str(r.get("ndie")),
                              "slot_no": _slot_no(r), "yield": "", "wafer_start_time": _fmt(t), "wafer_end_time": _fmt(end) if end else "",
-                             "batch_start": _fmt(bs), "batch_end": _fmt(be), "report": report, "ini_match": "EXACT",
+                             "batch_start": bs_s, "batch_end": be_s, "report": report, "ini_match": "EXACT",
                              "time_basis": "STRICT_IN_BATCH", "slots": "", "data_issue": "", "issue_codes": ""})
     return rows
