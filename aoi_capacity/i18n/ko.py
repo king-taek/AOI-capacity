@@ -181,7 +181,7 @@ COLLECT_PHASE_RETENTION = "오래된 이력 정리"
 COLLECT_PHASE_SAVE = "캐시 저장 중"
 COLLECT_PHASE_ROWS = "결과 정리 중"
 COLLECT_PHASE_PUBLISH_FMT = "공유 폴더에 올리는 중 {i}/{n} · {what}"
-PUBLISH_WHAT_LOT = "'스캔을 어디에 했니?'"
+PUBLISH_WHAT_LOT = "AOI LOT"   # 수집 창의 배포 이름은 바로가기 이름 'AOI LOT' 하나(LOTE-14 · COPY-11)
 PUBLISH_WHAT_FULL = "전체"
 COLLECT_PHASE_WRITE = "화면 만드는 중"
 COLLECT_PHASE_DONE = "완료"
@@ -212,7 +212,6 @@ LOADING_CLOSE_BUSY_BODY_MANUAL = ("배포 파일을 공유 폴더에 올리는 �
 LOADING_CLOSE_WAITING = "올리기가 끝나면 창을 닫습니다"
 
 # ── 설정 · 정보 ────────────────────────────────────────────────────────
-SET_COLLECT_RANGE = "수집 기간"
 SET_BACKFILL_DAYS = "처음 수집 기간"
 SET_BACKFILL_PREFIX = "최근 "
 SET_BACKFILL_SUFFIX = "일"
@@ -378,22 +377,22 @@ BOOT_LOG_HINT_FMT = "[AOI] 자세한 내용은 로그 파일을 보세요: {path
 # ── 보관·HTML 기간·HTML 만 다시 만들기(10/5) ─────────────────────────────────
 HTML_ONLY_NO_CACHE = "가진 데이터가 없습니다 — 먼저 수집을 한 번 해 주세요"
 HTML_ONLY_REDERIVE = "규칙이 바뀌어 다시 분류 중 — 다음 수집 뒤엔 빨라집니다"      # PH-05: 업데이트 뒤 첫 'HTML 만 만들기'는 캐시 전체를 메모리에서 다시 분류한다
-SET_HTML_DAYS = "결과 HTML 기본 기간"
+SET_HTML_DAYS = "결과 파일 기본 기간"
 SET_HTML_DAYS_SUFFIX = " 일"
 SET_HTML_DAYS_ALL = "전부"
 SET_HTML_DAYS_HELP = "수집이 끝나면 만드는 AOI_capacity.html 에 최근 며칠을 담을지(0 = 가진 데이터 전부). 파일은 나누지 않습니다. 다른 기간은 아래 '결과 파일만 다시 만들기' 로."
-HTML_ONLY_TITLE = "HTML 만 다시 만들기"
+HTML_ONLY_TITLE = "결과 파일만 다시 만들기"   # 수집 창 구역 이름(COLLECT_SEC_HTML) · 실패 안내(ACT_HTML_ONLY)와 같은 이름(COPY-11)
 HTML_ONLY_WHEN = "NAS 를 읽지 않고 가진 데이터로 결과 파일만 다시 만듭니다"
 HTML_ONLY_HAVE_FMT = "가진 데이터: {first} ~ {last} · {rows:,}행"
 HTML_ONLY_NONE = "가진 데이터가 없습니다 — 먼저 수집하세요"
 BACKFILL_FROM = "시작일"
 HTML_ONLY_RUN = "이 기간으로 만들기"
 HTML_ONLY_ALL = "전체 기간으로 만들기"
-HTML_ONLY_ALL_HELP = "수집 뒤 HTML 은 최근 1달(설정)만 담습니다 — 가진 데이터 전부를 한 장으로 보려면 이 버튼(파일이 커지고 열 때 느릴 수 있습니다)"
-HTML_ONLY_DONE_FMT = "HTML 을 만들었습니다: {path}"
+HTML_ONLY_ALL_HELP = "수집 뒤 결과 파일은 최근 1달(설정)만 담습니다 — 가진 데이터 전부를 한 장으로 보려면 이 버튼(파일이 커지고 열 때 느릴 수 있습니다)"
+HTML_ONLY_DONE_FMT = "결과 파일을 만들었습니다: {path}"
 HTML_ONLY_RUNNING = "만드는 중…"
 HTML_ONLY_DONE_SHORT_FMT = "만들고 열었습니다 · {name}"
-HTML_ONLY_FAIL_FMT = "HTML 을 만들지 못했습니다: {error}"
+HTML_ONLY_FAIL_FMT = "결과 파일을 만들지 못했습니다: {error}"
 
 # 파라미터 빈 구간 채우기(10/11) — 캐시에 Report 는 있는데 파라미터 값이 없는 곳을 NAS 의 Wafer 폴더에서 바로 채운다
 PARAMS_FILL_PHASE_FMT = "파라미터 읽는 중 · {device}"
@@ -513,7 +512,7 @@ PUBLISH_WHY_UNREACHABLE = "공유 폴더에 닿지 못했습니다(네트워크 
 PUBLISH_WHY_DENIED = "공유 폴더에 쓸 권한이 없습니다"
 PUBLISH_WHY_LOCKED = "누가 파일을 열고 있어 바꾸지 못했습니다"
 PUBLISH_WHY_OTHER = "올리는 중 오류가 났습니다(로그에 자세히)"
-PUBLISH_SKIPPED_SAME_HOST = "'스캔을 어디에 했니?' 배포가 같은 서버에 닿지 못해 전체 배포는 건너뛰었습니다"
+PUBLISH_SKIPPED_SAME_HOST = "AOI LOT 배포가 같은 서버에 닿지 못해 전체 배포는 건너뛰었습니다"
 
 # ── 수집 결과 알림(11/25 — 문제마다 한 항목: 굵은 머리 + 흐린 설명 + 그 문제에 맞는 단추) ─────────
 OUTCOME_CSV_HEAD = "CSV 를 저장하지 못함"
@@ -551,9 +550,9 @@ UNHANDLED_BODY = "예상하지 못한 오류로 방금 하던 일을 마치지 �
 # ── 실패 로그 수집(10/20) ───────────────────────────────────────────────────
 # 속도 시험(11/25 — PH-01 · PH-03 · LOTD-01, 현택 "테스트는 수집기에 테스트 버튼 만들어줘"). 결과 파일(요약.txt)의 글은 perf_test.py 에
 PERF_TITLE = "속도 시험"
-PERF_SHORT = "결과 파일 만들기 · LOT 배포판 열기 시간을 재서 폴더 하나로"
-PERF_WHEN = ("가진 데이터(캐시)만으로 결과 HTML 세 장(기본 · LOT 배포 · 전체 배포)을 예전 방식과 지금 방식으로 만들어 걸린 시간과 "
-             "두 방식의 결과가 바이트까지 같은지 적고, LOT 배포판 시험 파일 두 장을 만듭니다. 장비 NAS 는 읽지 않고 공유 폴더에도 올리지 않습니다. "
+PERF_SHORT = "결과 파일 만들기 · AOI LOT 배포판 열기 시간을 재서 폴더 하나로"
+PERF_WHEN = ("가진 데이터(캐시)만으로 결과 파일 세 장(기본 · AOI LOT 배포 · 전체 배포)을 예전 방식과 지금 방식으로 만들어 걸린 시간과 "
+             "두 방식의 결과가 바이트까지 같은지 적고, AOI LOT 배포판 시험 파일 두 장을 만듭니다. 장비 NAS 는 읽지 않고 공유 폴더에도 올리지 않습니다. "
              "끝나면 결과 폴더가 열립니다 — 요약.txt 를 읽고 폴더를 통째로 보내 주세요. 데이터가 많으면 몇 분 걸립니다.")
 PERF_RUN = "속도 시험 시작"
 PERF_STOP = "멈춤"
@@ -568,7 +567,7 @@ PERF_PHASE_FMT = "속도 시험 {i}/{n} · {what}"
 PERF_WHAT_LOAD = "가진 데이터 읽는 중"
 PERF_WHAT_A_FMT = "예전 방식 — {what}"
 PERF_WHAT_B_FMT = "지금 방식 — {what}"
-PERF_WHAT_LOT_FMT = "LOT 시험 파일 {name}"
+PERF_WHAT_LOT_FMT = "AOI LOT 시험 파일 {name}"
 PERF_WHAT_WRITE = "요약 쓰는 중"
 COLLECT_BUSY_PERF = "속도 시험 중이라 잠시 수집할 수 없습니다"
 FAIL_LOGS_TITLE = "실패 로그 수집"
