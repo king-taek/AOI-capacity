@@ -1420,7 +1420,7 @@ const state={devOn:false,setOpen:false,pickTabs:null,unhid:[],view:"home",dayI:n
   modalDev:null,modalDayI:null,modalType:null,modalJob:null,selLot:null,lotFilter:"all",showMembers:false,
   stack:[],                                  /* 열린 팝업의 순서(type · dev · err) — 마지막이 맨 위, 나머지는 뒤로 물러난다 */
   errDays:null,errFType:null,errFJob:null,   /* Error 팝업의 기간(여러 날) · Error 탭의 유형/Job 필터 */
-  rptSort:"conv",rptAll:null,rptAllF:"all",rptAllS:"date",rptGrp:null,rptJob:null,rptDev:null,rptStd:true,rptQ:"",
+  rptSort:"conv",rptAll:null,rptAllF:"all",rptAllS:"date",rptGrp:null,rptJob:null,rptDev:null,rptStd:true,rptQ:"",rptHow:false,
   errDev:null,errDayI:null,errJob:null,errType:null,
   rgQ:"",rgName:"",rgSel:[],rgFilter:"all",   /* 레시피 묶음 편집기(D67): 검색 · 새 이름 · 고른 Job 원문 · 목록 필터 */
   rcpSel:null,rcpJob:null,rcpPop:null,rcpUnit:"wafer",rcpMetric:"time",rcpOff:{},rcpHowAll:false,rcpPopOpen:{},rcpHide:{},rcpDevSort:"name",rcpBin:null,rcpQ:"",rcpMore:false,rcpDevSel:null,rcpExclOpen:false,rcpHowOpen:{},dayNote:"",                /* 레시피 탭(D70): 고른 레시피(그 묶음의 Job 원문 하나 — 다시 묶어도 따라간다) · 검색 · 기간 */
@@ -2718,7 +2718,7 @@ function reportHtml(){
   const cur=state.rptJob&&list.includes(state.rptJob)?state.rptJob:(list[0]||null);
   const pct=lotAll?Math.round(lotIn/lotAll*100):0;
   const head=`<div class="bar-h"><h1>TB500 · Kendall</h1>${segHtml([{label:"Kendall "+groups.Kendall.length,on:gk==="Kendall",pick:()=>setState({rptGrp:"Kendall",rptJob:null,rptDev:null})},{label:"TB500 "+groups.TB500.length,on:gk==="TB500",pick:()=>setState({rptGrp:"TB500",rptJob:null,rptDev:null})}])}<div class="spacer"></div><span class="scope-badge" data-key="scope">${scopeBadge("report")}</span></div>
-    <p style="margin:-6px 0 14px;font-size:12.5px;color:#5A6673;word-break:keep-all">이 탭은 TB500 · Kendall 을 위한 것입니다 — 표기명 ${Object.keys(JOB_ALIAS).length}개 Job 만 봅니다(이 기간 LOT ${lotAll}개 중 ${lotIn}개, ${pct}%). Job 을 고르면 장비마다 얼마나 다른지 보입니다. 나머지 Job 은 가동률·Error 탭에 있습니다.</p>`;
+    <p style="margin:-6px 0 14px;font-size:13px;color:var(--ink-2);word-break:keep-all"><b style="font-weight:600;color:var(--ink)">왼쪽에서 Job 을 고르면 장비마다 얼마나 다른지 보입니다.</b> <span style="font-size:12px;color:#5A6673">(표기명 ${Object.keys(JOB_ALIAS).length}개 Job 만 봅니다 · 이 기간 LOT ${lotIn.toLocaleString()}개, ${pct}% — 나머지는 가동률 · Error 탭)</span></p>`;   /* COPY-13: 할 일을 먼저, 범위는 짧은 괄호 */
   if(!names.length)return head+`<div class="panel" style="padding:24px;color:#5A6673;font-size:13px">이 기간에는 표기명이 있는 Job 의 기록이 없습니다.</div>`;
   /* 왼쪽: Job 목록(공정 묶음 · 검색) */
   let lf=null;const items=list.map(al=>{const A=byAlias[al],f=rptFam(al);const hd=f!==lf?`<div class="rpt-fam" data-key="rf:${esc(f)}">${f}</div>`:"";lf=f;
@@ -2789,7 +2789,7 @@ function reportHtml(){
     <div class="rpt-legend"><span><i style="background-color:${ERR}"></i>중앙보다 20% 넘게 느림</span><span><i style="background-color:${RUN}"></i>20% 넘게 빠름</span><span><i style="background-color:${RPT_MID}"></i>비슷함</span><span><u></u>중앙 ${med!=null?esc(hm(med)):"—"}</span></div>`;
   const right=`<div style="min-width:0"><div class="panel" style="margin-bottom:14px"><div style="padding:18px 22px 14px"><h2 style="margin:0 0 6px;font-size:20px">${esc(cur)}</h2><p style="margin:0;font-size:14.5px;line-height:1.55;word-break:keep-all" class="rpt-sent">${sentence}</p></div></div>
     ${cardsH}<div class="panel" style="padding-bottom:8px">${good.length?ctl+`<div class="rpt-scroll" style="overflow-x:auto"><div class="rpt-in"><div class="rpt-list">${good.map(rowH).join("")}</div></div></div>`:`<p class="empty" style="padding:18px 22px">${esc(sentence.replace(/<[^>]+>/g,""))}</p>`}${badH}
-      <p style="margin:8px 0 0;padding:11px 22px;background:#FBFCFD;font-size:12px;color:#5A6673;border-top:1px solid #EDF1F5">배치시간 = 준비 + 장당 × 장수 로 1차 회귀 — ± 는 회귀 표준오차. 표본 5개 미만이면 내지 않음. 표본은 PASS 5장 이상 · 원인 Error 없는 · 시험(Test) LOT 이 아닌 배치이고, 장당 시간이 같은 장비 · 같은 Job 의 중앙(DIA LOT 끼리 · 그 밖끼리)의 0.5배 미만인 배치는 뺍니다(느린 쪽은 느린 장비의 신호라 남깁니다). 배치시간은 Report 의 배치 시작~종료. 평균 Defect 는 Report 표 Faults 열이 있는 행만(옛 캐시 행은 다시 읽어야 채워짐).</p></div></div>`;
+      <div style="margin:8px 0 0;padding:9px 22px;background:#FBFCFD;font-size:12px;color:#5A6673;border-top:1px solid #EDF1F5"><button type="button" class="link" data-fk="rpt:how" aria-expanded="${!!state.rptHow}" data-h="${h(()=>setState({rptHow:!state.rptHow}))}">계산 방법 ${state.rptHow?"▴":"▾"}</button>${state.rptHow?`<p style="margin:6px 0 2px;line-height:1.6;word-break:keep-all">배치시간 = 준비 + 장당 × 장수 로 1차 회귀 — ± 는 회귀 표준오차. 표본 5개 미만이면 내지 않음. 표본은 PASS 5장 이상 · 원인 Error 없는 · 시험(Test) LOT 이 아닌 배치이고, 장당 시간이 같은 장비 · 같은 Job 의 중앙(DIA LOT 끼리 · 그 밖끼리)의 0.5배 미만인 배치는 뺍니다(느린 쪽은 느린 장비의 신호라 남깁니다). 배치시간은 Report 의 배치 시작~종료. 평균 Defect 는 Report 표 Faults 열이 있는 행만(옛 캐시 행은 다시 읽어야 채워짐).</p>`:""}</div></div></div>`;   /* COPY-13: 회귀 설명은 접어 둔다 */
   return head+`<div class="lotgrid">${left}${right}</div>`;
 }
 

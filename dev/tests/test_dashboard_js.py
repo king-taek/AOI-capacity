@@ -371,6 +371,11 @@ def test_report_tab_regresses_only_with_five_or_more_clean_batches_and_lists_exc
     rows.append(w("AOI-1", "E9", "18:20", "18:22", lot="LOT-E", job="R_TB500_LIVE_PI3", report=err_rep, bs="18:00", be="18:30", status="Alignment Error."))
     (html,) = screen(rows, meta("AOI-1"), [["reportHtml"]], state={"view": "report", "rptDev": "AOI-1"})
     assert "<h1>TB500 · Kendall</h1>" in html and "표기명 21개 Job 만 봅니다" in html
+    intro = re.search(r'</div>\s*<p[^>]*>(.*?)</p>', html.split("<h1>TB500 · Kendall</h1>")[1], re.S).group(1)
+    assert re.sub(r"<[^>]+>", "", intro).startswith("왼쪽에서 Job 을 고르면 장비마다 얼마나 다른지 보입니다.")      # COPY-13: 할 일 먼저, 범위는 괄호로
+    assert "계산 방법 ▾" in html and "회귀 표준오차" not in html                                  # 회귀 설명은 접어 둔다
+    (opened,) = screen(rows, meta("AOI-1"), [["reportHtml"]], state={"view": "report", "rptDev": "AOI-1", "rptHow": True})
+    assert "계산 방법 ▴" in opened and "회귀 표준오차" in opened
     assert ">PI3</b>" in html and "준비 10분 + 장당 5.0분" in html and "2시간 15분" in html          # 10 + 5×25 = 135분 (25장 환산)
     assert "10.0 ± 0.0분" in html and "5.00 ± 0.00분" in html                                      # 장비 상세의 회귀 값
     assert "5 / 6" in html and "제외 — Error 1 · PASS 5장 미만 0" in html
