@@ -2030,7 +2030,7 @@ def cache_status(cache: dict) -> str:
 
 
 def _load_cache(cfg: dict, full: bool = False, log: Optional[LogFn] = None, rederive: bool = True,
-                dirty: Optional[_Dirty] = None) -> dict:
+                dirty: Optional[_Dirty] = None, on_rederive: Optional[Callable[[], None]] = None) -> dict:
     """캐시 JSON 을 읽는다. `rederive=True`(수집 경로)면 규칙 번호가 다를 때 행을 지금 규칙으로 다시 계산한다 —
     15만 행이면 몇 초가 걸리므로 **UI 스레드에서 부르는 계획 조회(`plan_run`)는 이것을 끄고** 수집 워커에서만 켠다.
 
@@ -2068,6 +2068,8 @@ def _load_cache(cfg: dict, full: bool = False, log: Optional[LogFn] = None, rede
         _say(log, f"★ 캐시 파일을 읽을 수 없습니다({type(e).__name__}: {e}) — 빈 캐시로 시작하되 "
                   f"원본은 '{os.path.basename(path)}.bad-<시각>' 으로 보존합니다(덮어쓰지 않음)")
     if rederive and cache.get("parser_version") != PARSER_VERSION:
+        if on_rederive is not None:
+            on_rederive()                                        # PH-05: 오래 걸리는 이유를 화면 단계 글자로
         n = _rederive_rows(cache)
         dirty.add(DIRTY_PARSER)                                  # 번호만 달라도 저장한다 — 다음 실행이 또 재계산하지 않게
         if n:
@@ -4153,7 +4155,8 @@ def html_from_cache(cfg: dict, day_from: str = "", day_to: str = "", *, log: Opt
     nas_guard.check_cfg(cfg)
     if progress:
         progress(0, 0, i18n.KO.COLLECT_PHASE_WRITE)
-    cache = _load_cache(cfg, log=log, dirty=_Dirty())   # 이유가 쌓여도 저장하지 않는다(저장은 수집만)
+    cache = _load_cache(cfg, log=log, dirty=_Dirty(),   # 이유가 쌓여도 저장하지 않는다(저장은 수집만 — 현장 저장 33초라 여기서 저장해도 득이 없다)
+                        on_rederive=(lambda: progress(0, 0, i18n.KO.HTML_ONLY_REDERIVE)) if progress else None)
     if not cache["reports"]:
         raise RuntimeError(i18n.KO.HTML_ONLY_NO_CACHE)
     rows, hidden = _rows_from_cache(cache, _DeviceIndex([]), cfg)
