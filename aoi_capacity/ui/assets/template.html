@@ -949,7 +949,15 @@ function selfTest(){if(!meta.selftest||typeof document==="undefined")return;
     box.style.cssText="position:fixed;left:0;right:0;top:0;z-index:2147483000;background:#FFF6D6;border-bottom:1px solid #E5D08A;color:#26323F;font:13px/1.5 system-ui,sans-serif;padding:6px 16px";
     box.innerHTML=`<b>속도 시험</b> — 열기 <b class="st-open">${(open/1000).toFixed(1)}</b>초 · 자동 점검 <b class="st-n">${steps.length}</b>가지 · 오류 <b class="st-err" style="color:${errs.length?"#B4402F":"inherit"}">${errs.length}</b>개 <details style="display:inline-block;vertical-align:top;margin-left:8px"><summary style="cursor:pointer">자세히</summary><pre style="white-space:pre-wrap;margin:4px 0;font:12px/1.45 Consolas,monospace;max-height:60vh;overflow:auto">${esc(lines.join("\n"))}</pre></details>`;
     document.body.appendChild(box);
-    window.__selftest={done:true,open:Math.round(open),lifted:Math.round(lifted),steps,errors:errs.slice(),lite:!!(D&&D.lite),marks:Object.assign({},T)};});}
+    window.__selftest={done:true,open:Math.round(open),lifted:Math.round(lifted),steps,errors:errs.slice(),lite:!!(D&&D.lite),marks:Object.assign({},T)};
+    if(meta.selftest_token)try{   /* 11/26 단추 하나: 결과를 blob 으로 한 장 내려받는다(바깥 요청 아님) — 수집기가 다운로드 폴더에서 토큰 이름으로 찾아 요약에 적는다 */
+      const tk=String(meta.selftest_token).replace(/[^A-Za-z0-9]/g,""),nm=String(meta.selftest_name||"lot").replace(/[^A-Za-z0-9_-]/g,"")||"lot",ms=(a,b)=>T[a]!=null&&T[b]!=null?Math.round(T[b]-T[a]):null;
+      const out={v:1,token:tk,name:nm,open:Math.round(open),lifted:Math.round(lifted),lite:!!(D&&D.lite),rows:rows.length,
+        stages:{parse:ms("parse0","parsed"),unfold:ms("parsed","unfolded"),model:ms("model0","model1"),first:ms("model1","ready")},steps,errors:errs.slice(),ua:String(navigator.userAgent||"")};
+      const url=URL.createObjectURL(new Blob([JSON.stringify(out)],{type:"application/json"})),a=document.createElement("a");
+      a.href=url;a.download="aoi_perf_"+tk+"_"+nm+".json";document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),4000);
+      window.__selftest.downloaded=a.download;box.insertAdjacentHTML("beforeend",'<span class="st-dl" style="margin-left:8px;color:#5B6B7A">· 결과를 내려받았습니다 — 수집 창이 가져갑니다(이 탭은 닫아도 됩니다)</span>');
+    }catch(e){window.__selftest.download_error=String(e&&e.message||e);}});}
 
 /* ---------- ③ 모델 ----------
    공통 도우미(P · lotName · jobKey · matKey)는 두 프로필이 같이 쓴다.
