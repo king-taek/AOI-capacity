@@ -36,8 +36,8 @@ def test_issue_text_renders_known_codes_and_keeps_unknown_ones_raw():
     assert collect.issue_text("INI_NOT_FOUND_BACKUPS=2") == "예상 경로와 백업 폴더 2개 어디에도 WaferInfo.ini 없음"
     assert collect.issue_text("BATCH_NO_WAFER=24,3") == "검사된 Wafer 없음 — 배치 시각으로만 표시 (행 24개 중 오류 3개)"
     assert collect.issue_text("FOUND_IN_BACKUP=Scanresult_Back up_260918;LOT_MISMATCH") == \
-        "백업 폴더에서 찾음: Scanresult_Back up_260918; Lot 불일치"
-    assert collect.issue_text("SOME_FUTURE_CODE=7;LOT_MISMATCH") == "SOME_FUTURE_CODE=7; Lot 불일치"     # 모르는 코드는 버리지 않는다
+        "백업 폴더에서 찾음: Scanresult_Back up_260918; LOT 불일치"
+    assert collect.issue_text("SOME_FUTURE_CODE=7;LOT_MISMATCH") == "SOME_FUTURE_CODE=7; LOT 불일치"     # 모르는 코드는 버리지 않는다
     assert collect.issue_text("") == "" and collect.issue_text(None) == ""
     assert collect.issue_text("INI_NOT_FOUND_BACKUPS") == i18n.KO.ISSUE_TEXTS["INI_NOT_FOUND_BACKUPS"].replace("{0}", "?")   # 인자 없는 옛 캐시
 

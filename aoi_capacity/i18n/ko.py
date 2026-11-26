@@ -223,10 +223,10 @@ SET_VERSION = "버전"
 SET_VERSION_UNKNOWN = "미상 (개발 실행)"
 SET_NAS_NOTICE = "이 프로그램은 NAS 의 Report 와 WaferInfo.ini 를 읽기만 하며, NAS 에는 어떤 파일도 만들거나 바꾸지 않습니다."
 SET_UTIL_DEFINITION = ("가동률 = (Scan + Rescan 시간) ÷ 24시간. 수집한 날(오늘)만 00:00 부터 모든 장비의 마지막 기록까지로 나눕니다 "
-                       "('오늘' 은 수집 시각의 날짜 — 며칠 뒤 열어도 같은 숫자). Test Lot 은 전부 Test 로 분모에만 들어갑니다. "
-                       "Rescan 은 같은 자재(Job · Lot · Wafer ID)의 앞선 시도가 Pass 였을 때만이고, Error·Skipped 뒤의 재시도는 Scan 입니다. "
+                       "('오늘' 은 수집 시각의 날짜 — 며칠 뒤 열어도 같은 숫자). Test LOT 은 전부 Test 로 분모에만 들어갑니다. "
+                       "Rescan 은 같은 자재(Job · LOT · Wafer ID)의 앞선 시도가 Pass 였을 때만이고, Error·Skipped 뒤의 재시도는 Scan 입니다. "
                        "한 장비의 1분은 한 번만 셉니다 — INI 로 확실한 구간을 먼저 놓고, 배치 시작~종료의 남은 빈 시간을 INI 가 없는 Wafer 들이 나눠 갖습니다(팝업에 '배치 시각으로 추정' 표). "
-                       "Error 는 Lot 단위로 세고, Error 를 담은 배치가 끝난 뒤 다음 기록까지의 공백을 '에러 후 대기' 로 봅니다.")
+                       "Error 는 LOT 단위로 세고, Error 를 담은 배치가 끝난 뒤 다음 기록까지의 공백을 '에러 후 대기' 로 봅니다.")
 
 # ── 행 비고(data_issue) — 캐시의 `issue_codes` 를 출력 때 문장으로(C12 · collect.issue_text). 위치 인자 {0},{1} ──────────
 ISSUE_JOIN = "; "
@@ -240,13 +240,13 @@ ISSUE_TEXTS = {
     "INI_READ_ERROR": "{0}",
     "TIME_MISSING_OR_REVERSED": "Wafer 시작/종료 시각 누락 또는 역전",
     "INI_STALE": "이 배치 시각 밖의 INI(다시 검사하며 덮어써짐) — 시간 미사용",
-    "LOT_MISMATCH": "Lot 불일치",
+    "LOT_MISMATCH": "LOT 불일치",
     "WAFER_ID_MISMATCH": "Wafer ID 불일치",
     "FOUND_IN_BACKUP": "백업 폴더에서 찾음: {0}",
     "JOB_FOLDER_DIFFERS": "Job 폴더 이름이 Report 와 다름: {0}",
     "BATCH_NO_WAFER": "검사된 Wafer 없음 — 배치 시각으로만 표시 (행 {0}개 중 오류 {1}개)",
     "SLOT_ERROR": "자리표시 행 Error — Report 당 1건 · 영향 Slot {0}개 · 시간 미확인(Batch 범위 추정)",
-    "MULTI_LOT": "Lot 여러 개({0})",
+    "MULTI_LOT": "LOT 여러 개({0})",
     "MULTI_JOB": "Job 여러 개({0})",
 }
 
@@ -408,9 +408,9 @@ GAPS_ROW_SLOT_TIP = "결과 화면 '스캔을 어디에 했니?' 탭의 Slot No 
 GAPS_ROW_SEC = "스캔 비율"
 GAPS_ROW_SEC_TIP = "장비 팝업의 '그중 스캔 n%' — Wafer 폴더의 ScanLog.ini 로 잰 실제 촬영 시간"
 GAPS_ROW_PARAMS = "파라미터"
-GAPS_ROW_PARAMS_TIP = "파라미터 탭 — Lot 마다 첫 Wafer 의 레시피 값"
+GAPS_ROW_PARAMS_TIP = "파라미터 탭 — LOT 마다 첫 Wafer 의 레시피 값"
 GAPS_ROW_RDL = "RDL 멀티/단일"
-GAPS_ROW_RDL_TIP = "RDL 단일스캔 탭 — '-미구분' 으로 보이는 RDL Lot 의 멀티/단일 판정"
+GAPS_ROW_RDL_TIP = "RDL 단일스캔 탭 — '-미구분' 으로 보이는 RDL LOT 의 멀티/단일 판정"
 GAPS_ROW_KLA = "KLA 이미지 개수"
 GAPS_ROW_KLA_TIP = "KLA 장의 Defect 를 이미지 개수(결과 파일 IMAGECOUNT 합)로 — 결과 파일 한 장씩만 다시 읽습니다"
 GAPS_PHASE_KLA_FMT = "KLA 이미지 개수 읽는 중 · {device}"
@@ -574,7 +574,7 @@ COLLECT_BUSY_PERF = "속도 시험 중이라 잠시 수집할 수 없습니다"
 FAIL_LOGS_TITLE = "실패 로그 수집"
 FAIL_LOGS_WHEN = ("수집이 안 된 장비 · 읽지 못한 Report · Wafer · 데이터가 멈춘 장비 · INI 읽기 오류를 모아 zip 한 장으로 만듭니다. "
                   "이 PC 의 app.log 와 캐시를 먼저 보고, 실패한 파일만 NAS 에서 **읽기 전용**으로 가져옵니다(쓰기 · 이동 없음, 수집 범위 밖 장비는 보지 않습니다). "
-                  "zip 에는 원인 · 오류 문구 · 파일명 · 경로 · 파일 내용 · app.log 발췌 · 장비별 상태가 들어갑니다. 파일 내용에 Lot · Job 이름이 있으니 공유 범위는 직접 판단하세요.")
+                  "zip 에는 원인 · 오류 문구 · 파일명 · 경로 · 파일 내용 · app.log 발췌 · 장비별 상태가 들어갑니다. 파일 내용에 LOT · Job 이름이 있으니 공유 범위는 직접 판단하세요.")
 FAIL_LOGS_DAYS_PREFIX = "지난"
 FAIL_LOGS_DAYS_SUFFIX = "일"
 FAIL_LOGS_RUN = "실패 로그 수집"

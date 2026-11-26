@@ -624,7 +624,7 @@ def test_recipe_tab_shows_per_device_stats_and_compares_two_periods(page):
     pg.wait_for_timeout(450)                                                    # 바뀐 글자는 0.24초 동안 한 글자씩 넘어간다
     assert [x.split("\n")[0] for x in pg.locator(".rcprow").all_inner_texts()] == ["TB500 RDL2"]   # 10/6: 멀티 · 단일 Job(D76)은 한 레시피 줄로
     row0 = " ".join(pg.locator(".rcprow").first.inner_text().split())                                 # 10/7: 막대 안 % · 밑 줄 방식별 wafer 수 · Lot 수
-    assert "67%" in row0 and "33%" in row0 and "멀티 6" in row0 and "단일 3" in row0 and "Lot" in row0
+    assert "67%" in row0 and "33%" in row0 and "멀티 6" in row0 and "단일 3" in row0 and "LOT" in row0
     pg.locator(".rcprow").first.click()
     # 첫 화면(10/5): 장당 스캔 멀티 vs 단일 — 9/18 W 6장 멀티 4분, 9/17 Q 3장 단일 3분 → 단일 1분 빠름(같은 장비 AOI-1)
     tiles = pg.locator(".scanhero .mtile").all_inner_texts()
@@ -984,7 +984,7 @@ def test_rdl_tab_lot_stat_outlier_x5_rule_and_wording(rdl_page):
     pg.wait_for_timeout(300)
     how = pg.locator(".how").inner_text()
     assert "x5 · x10 단일 6장 제외" in how and "PASS 4" not in how                           # x5 만 쓴 단일은 통계에서 무시
-    assert "제외 Lot 2개" in how and "이상치" in how
+    assert "제외 LOT 2개" in how and "이상치" in how
     body = pg.locator("main").inner_text().lower()
     assert "fault" not in body and "배치 기준" not in body and "하루 평균" not in body and "날짜별 생산량" not in body
     pg.locator('[data-fk="rcp:more"]').click()
@@ -1055,7 +1055,7 @@ def test_graph_tooltips_appear_at_once_and_replace_native_titles(page):
     dot.hover()
     pg.wait_for_timeout(200)
     tip = pg.locator(".tip:not([hidden])").inner_text()
-    assert "AOI-1" in tip and "Wafer당 스캔" in tip and "Lot" in tip                         # 값 · 장 수 · Lot 수가 줄마다
+    assert "AOI-1" in tip and "Wafer당 스캔" in tip and "LOT" in tip                         # 값 · 장 수 · Lot 수가 줄마다
     assert dot.get_attribute("title") is None and dot.get_attribute("data-tip")            # 느린 기본 title 은 tip 으로 옮겨졌다
     assert errors == []
 
