@@ -643,7 +643,7 @@ def test_recipe_tab_shows_per_device_stats_and_compares_two_periods(page):
     pg.locator('[data-fk="how:all"]').click()
     pg.wait_for_timeout(250)
     how = pg.locator(".how").inner_text()                               # 누르면 펼침 — 실제 숫자로
-    assert "9장" in how and "WaferStartTime" in how and "Batch Start" in how
+    assert "9 wafer" in how and "WaferStartTime" in how and "Batch Start" in how
     assert pg.locator(".cmp").count() == 0 and "전후 비교" not in pg.locator("main").inner_text()   # 전후 비교는 없앴다(사용자 10/6)
     # 장당 | LOT당: 같은 레시피를 Lot(Report) 단위로 — fixture 의 Lot 은 20장 미만이라 값이 없다
     pg.locator(".scanhero .seg button", has_text="LOT당").click()
@@ -661,7 +661,7 @@ def test_recipe_tab_shows_per_device_stats_and_compares_two_periods(page):
     pg.locator('[data-fk="rcp:more"]').click()
     pg.wait_for_timeout(200)
     cards = pg.locator("main section.cards > div").all_inner_texts()
-    assert cards[0].split("\n")[0] == "생산량" and "3장" in cards[0]           # 상세는 켜 둔 Job 만
+    assert cards[0].split("\n")[0] == "생산량" and "3 wafer" in cards[0]           # 상세는 켜 둔 Job 만
     assert requests == [] and errors == []
 
 
@@ -787,7 +787,7 @@ def test_recipe_how_summary_and_details_are_accessible(page):
     pg.wait_for_timeout(300)
     assert items.count() == 7 and pg.locator(".how .how-item[open]").count() == 0
     how = pg.locator(".how").inner_text()
-    assert "PASS 9장" in how and "WaferStartTime → WaferEndTime" in how and "Batch Start → Batch End" in how
+    assert "PASS 9 wafer" in how and "WaferStartTime → WaferEndTime" in how and "Batch Start → Batch End" in how
     pg.locator('[data-fk="how:time"]').click()
     pg.locator('[data-fk="how:batch"]').focus()
     pg.keyboard.press("Enter")
@@ -983,7 +983,7 @@ def test_rdl_tab_lot_stat_outlier_x5_rule_and_wording(rdl_page):
     pg.locator('[data-fk="how:all"]').click()
     pg.wait_for_timeout(300)
     how = pg.locator(".how").inner_text()
-    assert "x5 · x10 단일 6장 제외" in how and "PASS 4" not in how                           # x5 만 쓴 단일은 통계에서 무시
+    assert "x5 · x10 단일 6 wafer 제외" in how and "PASS 4" not in how                           # x5 만 쓴 단일은 통계에서 무시
     assert "제외 LOT 2개" in how and "이상치" in how
     body = pg.locator("main").inner_text().lower()
     assert "fault" not in body and "배치 기준" not in body and "하루 평균" not in body and "날짜별 생산량" not in body
