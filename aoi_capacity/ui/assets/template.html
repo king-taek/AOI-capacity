@@ -74,8 +74,14 @@ button{font:inherit;color:inherit}
 /* ── /animate.css ── */
 @media (prefers-reduced-motion:reduce){*{animation:none!important;transition-property:opacity,color,background-color,border-color!important;transition-duration:.12s!important}.dlg.in{animation:fadeIn .12s ease-out!important}.dlg.out{animation:fadeOut .12s ease-in forwards!important}}
 /* 전환(impeccable animate 플레이북 · 9/20): 상태 변화는 150~300ms, 레이아웃·오버레이는 300~500ms, 감속은 cubic-bezier(.16,1,.3,1). 노드는 morph 로 유지되므로 CSS transition 이 실제로 이어진다. */
-.hbar i{transition:width .38s var(--ease)}
-.chart .f{transition:height .38s var(--ease),background-color .25s}
+/* 11/26 ANIM-14: 막대 값 변화는 폭 · 높이 전환이 아니라 transform(flipBars) — 배치는 한 번만 바뀌고 칠은 합성 스레드에서 옛 끝 → 새 끝으로 미끄러진다.
+   translate 라 둥근 끝이 찌그러지지 않는다: 늘 때 앞쪽은 틀 밖(.hbar overflow · 차트 칸 .flc 의 clip)으로 숨고, 줄 때 모자란 만큼은 같은 색 꼬리(.fl 의 ::before/::after, --fx)가 채운다 */
+.chart .f,.hbar>i,.jbar>i{position:relative}
+.chart .f{transition:background-color .25s}
+.chart .f.fl::after{content:"";position:absolute;left:0;right:0;top:100%;height:var(--fx,0px);background-color:inherit;background-image:linear-gradient(rgba(15,21,28,.07),rgba(15,21,28,.07))}
+.chart .flc{clip-path:inset(-100vh -100vw 0 -100vw)}
+.hbar>i.fl,.jbar>i.fl{border-top-left-radius:0;border-bottom-left-radius:0}
+.hbar>i.fl::before,.jbar>i.fl::before{content:"";position:absolute;top:0;bottom:0;right:100%;width:var(--fx,0px);background:inherit}
 .seg button,.nav button,.btn,.callout,.rowbtn,.link{transition:background-color .16s,color .16s,border-color .16s}
 .stage{position:relative;overflow-x:clip}   /* 탭 전환의 가로 미끄러짐이 가로 스크롤을 만들지 않게. 팝업 뒤에서 움직이지 않는다(9/21 — 물러남 scale 이 '뒷배경 재생성' 으로 보였다) */
 /* .stage.behind 의 밝기 필터는 뺐다(11/25 ANIM-13) — 공유 덮개(deckscrim)가 이미 뒤를 어둡게 하고, 필터는 여는 순간 페이지 전체를 다시 그렸다 */
@@ -152,12 +158,12 @@ button{font:inherit;color:inherit}
 /* ── 5차(9/20 밤): 색의 깊이와 손맛. 막대는 색(background-color)은 그대로 두고 위가 밝고 아래가 살짝 어두운 한 겹(background-image)만 얹는다 —
    dataviz 규칙대로 데이터 색은 한 자리(RUN·ERR·HEAT 램프)에서 오고, 글자는 데이터 색을 입지 않는다. 막대 끝 4px 둥글게, 히트맵은 한 색조 6단 램프(OKLCH 밝기 단조) + 2px 표면 간격. ── */
 .gloss,.chart .f,.hbar i,.tline i{background-image:linear-gradient(180deg,rgba(255,255,255,.30),rgba(255,255,255,0) 55%,rgba(15,21,28,.07))}
-.chart{gap:6px}.chart .f{border-radius:4px 4px 0 0;box-shadow:inset 0 1px 0 rgba(255,255,255,.35);transition:height .38s var(--ease),background-color .25s,filter .18s}
+.chart{gap:6px}.chart .f{border-radius:4px 4px 0 0;box-shadow:inset 0 1px 0 rgba(255,255,255,.35);transition:background-color .25s,filter .18s}
 .chart .v{transition:transform .18s var(--ease),color .18s}
 .chart button:hover .f{filter:brightness(1.07) saturate(1.06)}.chart button:hover .v{transform:translateY(-2px);color:var(--ink)}
-.hbar{background:var(--crit-soft)}.hbar i{transition:width .38s var(--ease),filter .18s}.rowbtn:hover .hbar i{filter:brightness(1.06)}
-/* Error 탭 목록: 줄은 제자리, 막대는 0.2초로 짧게, 바뀐 숫자·글자는 제자리에서 넘어간다(txAnim) */
-.errlist .hbar i,.errlist .jbar i{transition:width .2s ease-out,filter .18s}
+.hbar{background:var(--crit-soft)}.hbar i{transition:filter .18s}.rowbtn:hover .hbar i{filter:brightness(1.06)}
+/* Error 탭 목록: 줄은 제자리, 막대는 0.2초로 짧게(flipBars 가 .errlist 안이면 0.2초 ease-out), 바뀐 숫자·글자는 제자리에서 넘어간다(txAnim) */
+.errlist .hbar i,.errlist .jbar i{transition:filter .18s}
 .heat{display:flex;gap:3px}.heat button{flex:1;height:18px;border:0;border-radius:3px;padding:0;cursor:pointer;transition:transform .16s var(--ease),box-shadow .16s;position:relative}
 .heat button:hover{transform:scale(1.3);box-shadow:0 3px 10px rgba(15,21,28,.28),inset 0 0 0 1px rgba(255,255,255,.75);z-index:2}
 .btn,.seg button,.nav button,.ib,.x,.fbtn,.th{transition:background-color .16s,color .16s,border-color .16s,transform .1s var(--ease),box-shadow .16s}
@@ -241,7 +247,7 @@ main{max-width:1420px;margin:0 auto;padding:22px 24px 90px}
 .hbar i{display:block;height:100%;border-radius:5px;background:var(--err)}
 .foot{max-width:1420px;margin:0 auto;padding:0 24px 40px;font-size:12px;color:var(--ink-3);line-height:1.7}
 .foot b{color:var(--ink-2);font-weight:600}
-.toast{position:fixed;left:50%;bottom:28px;transform:translate(-50%,20px);background:#0F151C;color:#fff;padding:9px 14px;border-radius:9px;font-size:13px;opacity:0;pointer-events:none;transition:all .25s var(--ease);z-index:99}
+.toast{position:fixed;left:50%;bottom:28px;transform:translate(-50%,20px);background:#0F151C;color:#fff;padding:9px 14px;border-radius:9px;font-size:13px;opacity:0;pointer-events:none;transition:opacity .25s var(--ease),transform .25s var(--ease);z-index:99}
 .toast.on{opacity:1;transform:translate(-50%,0)}
 .toast.animate__animated{transition:none;--animate-duration:.28s}
 
@@ -1702,6 +1708,27 @@ function txAnim(root){const on=!!G()&&!reduced();
 function listBars(root){const on=!!G()&&!reduced();for(const el of root.querySelectorAll("[data-listsig]")){const s=el.getAttribute("data-listsig"),prev=el.__ls;el.__ls=s;
   if(!on||prev===undefined||prev===s)continue;for(const b of el.querySelectorAll("[data-bar]")){if(b.__sw&&b.__sw.isActive()){b.__sw.progress(1).kill();b.__sw=null;b.style.clipPath="";continue;}
     gsap.killTweensOf(b);b.__bar=undefined;b.__redo=1;}}}   /* sweepBars 가 처음 그려지는 막대로 보고 sweep */
+/* 11/26 ANIM-14: 막대(.chart .f · .hbar>i · .jbar>i)의 값이 바뀌면 inline 폭 · 높이는 새 값으로 두고 칠만 옛 끝에서 translate 로 되감는다(WAAPI · 합성 스레드).
+   차트는 값 글자(.v)도 같은 거리를 함께 움직인다. 도는 중에 또 바뀌면 지금 보이는 끝에서 다시. Error 목록(.errlist)은 0.2초 ease-out(9/23), 나머지 0.38초 --ease.
+   처음 그려지는 막대 · 동작 줄이기 · 연출 꺼짐(시작 화면 뒤 첫 렌더)은 값만 적어 둔다. 읽기(배치)를 다 한 뒤에 쓴다 — 배치 계산은 한 번 */
+function flipBars(root){const on=!!G()&&!reduced(),todo=[];
+  for(const el of root.querySelectorAll(".chart .f,.hbar>i,.jbar>i")){const ch=el.classList.contains("f"),cur=ch?el.style.height:el.style.width,prev=el.__fb;el.__fb=cur;
+    if(prev===cur&&el.__fa&&el.__fa.playState==="running"){el.style.setProperty("--fx",el.__fx+"px");el.classList.add("fl");if(ch)el.parentElement.classList.add("flc");continue;}   /* 도는 중 다른 일로 다시 그려지면 morph 가 지운 꼬리 · clip 을 되살린다 */
+    if(!on||prev===undefined||prev===cur||typeof el.animate!=="function")continue;const p0=parseFloat(prev);if(!Number.isFinite(p0))continue;todo.push([el,ch,p0]);}
+  const go=[];
+  for(const [el,ch,p0] of todo){const box=el.parentElement,full=ch?box.clientHeight:box.clientWidth;if(!full)continue;
+    let vis=ch?Math.max(2,p0/100*full):p0/100*full;   /* 옛 끝(배치 기준) — 도는 중이면 지금 보이는 끝 */
+    if(el.__fa&&el.__fa.playState==="running"){const tf=getComputedStyle(el).transform,m=tf&&tf!=="none"?new DOMMatrixReadOnly(tf):{m41:0,m42:0};vis=(el.__fv!=null?el.__fv:vis)+(ch?-m.m42:m.m41);}
+    const now=ch?el.offsetHeight:el.offsetWidth,d=now-vis;el.__fv=now;
+    if(Math.abs(d)<.5){for(const x of [el,ch?el.previousElementSibling:null])if(x&&x.__fa)x.__fa.cancel();continue;}   /* 이미 새 끝에 보이면 도는 것을 멈추기만 */
+    go.push([el,ch,d,box]);}
+  for(const [el,ch,d,box] of go){const lab=ch?el.previousElementSibling:null,err=!!el.closest(".errlist");
+    const opt={duration:err?200:380,easing:err?"ease-out":"cubic-bezier(.16,1,.3,1)"},kf=ch?[{transform:`translateY(${d}px)`},{transform:"translateY(0)"}]:[{transform:`translateX(${-d}px)`},{transform:"translateX(0)"}];
+    for(const x of [el,lab])if(x&&x.__fa){const o=x.__fa;x.__fa=null;o.cancel();}
+    el.__fx=Math.max(0,-d);el.style.setProperty("--fx",el.__fx+"px");el.classList.add("fl");if(ch)box.classList.add("flc");
+    const a=el.animate(kf,opt);el.__fa=a;
+    const done=()=>{if(el.__fa!==a)return;el.__fa=null;el.classList.remove("fl");el.style.removeProperty("--fx");if(ch)box.classList.remove("flc");};a.onfinish=done;a.oncancel=done;
+    if(lab&&lab.classList.contains("v")){const b=lab.animate(kf,opt);lab.__fa=b;b.onfinish=b.oncancel=()=>{if(lab.__fa===b)lab.__fa=null;};}}}
 function sweepBars(root){if(!G()||reduced()){for(const el of root.querySelectorAll("[data-bar]"))el.__bar=el.dataset.bar;return;}
   const fresh=[],changed=[];for(const el of root.querySelectorAll("[data-bar]")){if(el.__bar===undefined)fresh.push(el);else if(el.__bar!==el.dataset.bar)changed.push(el);el.__bar=el.dataset.bar;}
   const each=Math.min(.02,.45/Math.max(1,fresh.length)),eachR=Math.min(.004,.1/Math.max(1,fresh.length));
@@ -2037,7 +2064,7 @@ function render(){
   for(const el of app.querySelectorAll(":scope>header,:scope>.stage,:scope>.foot"))el.inert=!!top;
   {const st=app.querySelector(":scope>.stage");if(st)st.classList.toggle("behind",!!top);}
   layoutDeck(app,top);liftFront(app,_snap);
-  mountLotties(app);countUp(app);txAnim(app);listBars(app);runRolls();if(window.tipHold)tipHold();sweepBars(app);slideDay(app);navInd(app);reveals(app);sigEnter(app);if(state.view==="lot")lotAfter(app);
+  flipBars(app);mountLotties(app);countUp(app);txAnim(app);listBars(app);runRolls();if(window.tipHold)tipHold();sweepBars(app);slideDay(app);navInd(app);reveals(app);sigEnter(app);if(state.view==="lot")lotAfter(app);
   for(const d of app.querySelectorAll(".dlg[data-dlg]")){const ov=d.parentElement;if(!leaving(ov))ov.inert=d!==top;}
   let target=null;
   if(topK&&topK!==prevTop){if(!prevTop&&fk&&!/^x:/.test(fk))_openerFk=fk;target=top.querySelector("h2[tabindex]");}
