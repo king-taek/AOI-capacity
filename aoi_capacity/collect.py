@@ -674,9 +674,14 @@ def is_recipe_tab_job(job) -> bool:
 
 def read_recipe_settings(path) -> dict:
     """Wafer 폴더의 `Recipe.ini` → {"cr_every": "Lot", "af_every": "Wafer"} (읽기 전용 · 이 두 키만)."""
+    return parse_recipe_settings(nas_guard.read_text(path))
+
+
+def parse_recipe_settings(text: str) -> dict:
+    """`Recipe.ini` 글 → `read_recipe_settings` 와 같은 값 — 파라미터 수집이 이미 읽은 바이트로도 쓴다(PC-08)."""
     want = {"CleanReferenceEvery": "cr_every", "AutoFocusEvery": "af_every"}
     out: Dict[str, str] = {}
-    for line in nas_guard.read_text(path).splitlines():
+    for line in text.splitlines():
         if "=" not in line or line.lstrip()[:1] in ";#[":
             continue
         k, v = line.split("=", 1)
@@ -1527,8 +1532,8 @@ class _IniMemo:
         self._recipes: Optional["_IniMemo"] = None
         self._settings: Optional["_IniMemo"] = None
 
-    def get(self, path: str) -> tuple:
-        """→ ("ok", 필드 dict) · ("missing", None) · ("error", 예외)"""
+    def get(self, path: str, reader=None) -> tuple:
+        """→ ("ok", 필드 dict) · ("missing", None) · ("error", 예외). `reader` 는 이 경로를 처음 채울 때만 기본 읽기 대신 쓴다(이미 읽은 바이트 — PC-08)."""
         with self._lock:
             self.asked += 1
             hit = self._done.get(path)
@@ -1543,7 +1548,7 @@ class _IniMemo:
             with self._lock:
                 return self._done[path]
         try:
-            res = ("ok", self._reader(path))
+            res = ("ok", (reader or self._reader)(path))
         except self.MISSING:
             res = ("missing", None)
         except Exception as e:  # noqa: BLE001
@@ -1562,13 +1567,16 @@ class _IniMemo:
             m = self._recipes
         return m.get(path)
 
-    def settings(self, path: str) -> tuple:
-        """`Recipe.ini` 의 Clean reference · AutoFocus 설정을 같은 방식(경로별 한 번 · 읽기 전용)으로."""
+    def settings(self, path: str, data: Optional[bytes] = None) -> tuple:
+        """`Recipe.ini` 의 Clean reference · AutoFocus 설정을 같은 방식(경로별 한 번 · 읽기 전용)으로.
+        `data` = 파라미터 수집이 같은 폴더에서 방금 읽은 Recipe.ini 바이트 — 있으면 파일을 다시 열지 않고 그것을 파싱한다(PC-08)."""
         with self._lock:
             if self._settings is None:
                 self._settings = _IniMemo(read_recipe_settings)
             m = self._settings
-        return m.get(path)
+        if data is None:
+            return m.get(path)
+        return m.get(path, reader=lambda _p: parse_recipe_settings(nas_guard.decode_text(data)))
 
     def sub(self, name: str, reader, path: str) -> tuple:
         """다른 파일(ScanLog.ini · ExtendedScanMetaData_*.json)도 같은 방식으로 — 이름마다 따로 기억하고 통계도 따로."""
@@ -1763,16 +1771,19 @@ def rows_for_report(dev_name: str, rep: dict, scan_root: str, memo: Optional[_In
                         elif one:
                             r["recipe"] = one
                         r["scan_mode"] = rdl_mode_from(names, r["outcome"])
+                    recipe_raw = None                  # PC-08: 파라미터 수집이 이 폴더에서 읽은 Recipe.ini 바이트 — 설정이 다시 열지 않게
                     if r["ini_match"] == "EXACT" and params_out is not None and "files" not in params_out:
                         # D89: Report(= Lot 한 번)마다 INI 를 찾은 첫 Wafer 폴더의 레시피 파라미터 — 그 폴더 안만(맨 위 + 하위 폴더 한 단계).
                         try:
-                            params_out["files"] = params_mod.snapshot(params_mod.read_wafer_files(os.path.join(found_in, rel_found)))
+                            raw = params_mod.read_wafer_files(os.path.join(found_in, rel_found))
+                            recipe_raw = raw.get("Recipe.ini")
+                            params_out["files"] = params_mod.snapshot(raw)
                         except OSError as e:
                             params_out["files"], params_out["error"] = {}, f"{type(e).__name__}: {e}"
                     if r["ini_match"] == "EXACT" and want_settings:
                         # 10/11: Clean reference · AutoFocus 설정은 Report 마다 한 번 — INI 를 찾은 첫 Wafer 폴더의 Recipe.ini(정확 경로 하나).
                         want_settings = False
-                        sk, sv = memo.settings(os.path.join(found_in, rel_found, "Recipe.ini"))
+                        sk, sv = memo.settings(os.path.join(found_in, rel_found, "Recipe.ini"), recipe_raw)
                         if sk == "ok":
                             rfields["cr_every"], rfields["af_every"] = sv.get("cr_every", ""), sv.get("af_every", "")
                     r["issue_codes"] = issue_field(iss)
