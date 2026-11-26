@@ -654,7 +654,7 @@ def test_recipe_tab_shows_per_device_stats_and_compares_two_periods(page):
     pg.wait_for_timeout(450)                                                    # 바뀐 글자는 0.24초 동안 한 글자씩 넘어간다
     assert [x.split("\n")[0] for x in pg.locator(".rcprow").all_inner_texts()] == ["TB500 RDL2"]   # 10/6: 멀티 · 단일 Job(D76)은 한 레시피 줄로
     row0 = " ".join(pg.locator(".rcprow").first.inner_text().split())                                 # 10/7: 막대 안 % · 밑 줄 방식별 wafer 수 · Lot 수
-    assert "67%" in row0 and "33%" in row0 and "멀티 6" in row0 and "단일 3" in row0 and "Lot" in row0
+    assert "67%" in row0 and "33%" in row0 and "멀티 6" in row0 and "단일 3" in row0 and "LOT" in row0
     pg.locator(".rcprow").first.click()
     # 첫 화면(10/5): 장당 스캔 멀티 vs 단일 — 9/18 W 6장 멀티 4분, 9/17 Q 3장 단일 3분 → 단일 1분 빠름(같은 장비 AOI-1)
     tiles = pg.locator(".scanhero .mtile").all_inner_texts()
@@ -668,12 +668,12 @@ def test_recipe_tab_shows_per_device_stats_and_compares_two_periods(page):
     assert [x.split("\n")[0] for x in pg.locator(".dbrow:not(.head):not(.axis)").all_inner_texts()] == ["AOI-1"]
     assert pg.locator(".dbrow .dd").count() == 2                        # 같은 장비에 멀티 · 단일 두 점
     dc = [" ".join(x.split()) for x in pg.locator(".dbrow[data-row='dev:AOI-1'] .dc").all_inner_texts()]
-    assert dc == ["6 3", "1 1"] and pg.locator(".dbrow[data-row='dev:AOI-1'] .dc .sw").count() == 4   # 몇 wafer · 몇 Lot — 숫자 앞 방식 색 점(11/25 RDL-13)
+    assert dc == ["멀티 6 · 단일 3 wafer", "멀티 1 · 단일 1 LOT"] and pg.locator(".dbrow[data-row='dev:AOI-1'] .dc .sw").count() == 4   # 몇 wafer · 몇 LOT — 방식 색 점 + 이름, 0 은 적지 않음(RDL-13 · COPY-09)
     assert pg.locator(".how .how-item").count() == 0 and pg.locator('[data-fk="how:all"]').get_attribute("aria-expanded") == "false"   # 어떻게 셌나는 기본 접힘
     pg.locator('[data-fk="how:all"]').click()
     pg.wait_for_timeout(250)
     how = pg.locator(".how").inner_text()                               # 누르면 펼침 — 실제 숫자로
-    assert "9장" in how and "WaferStartTime" in how and "Batch Start" in how
+    assert "9 wafer" in how and "WaferStartTime" in how and "Batch Start" in how
     assert pg.locator(".cmp").count() == 0 and "전후 비교" not in pg.locator("main").inner_text()   # 전후 비교는 없앴다(사용자 10/6)
     # 장당 | LOT당: 같은 레시피를 Lot(Report) 단위로 — fixture 의 Lot 은 20장 미만이라 값이 없다
     pg.locator(".scanhero .seg button", has_text="LOT당").click()
@@ -691,7 +691,7 @@ def test_recipe_tab_shows_per_device_stats_and_compares_two_periods(page):
     pg.locator('[data-fk="rcp:more"]').click()
     pg.wait_for_timeout(200)
     cards = pg.locator("main section.cards > div").all_inner_texts()
-    assert cards[0].split("\n")[0] == "생산량" and "3장" in cards[0]           # 상세는 켜 둔 Job 만
+    assert cards[0].split("\n")[0] == "생산량" and "3 wafer" in cards[0]           # 상세는 켜 둔 Job 만
     assert requests == [] and errors == []
 
 
@@ -817,7 +817,7 @@ def test_recipe_how_summary_and_details_are_accessible(page):
     pg.wait_for_timeout(300)
     assert items.count() == 7 and pg.locator(".how .how-item[open]").count() == 0
     how = pg.locator(".how").inner_text()
-    assert "PASS 9장" in how and "WaferStartTime → WaferEndTime" in how and "Batch Start → Batch End" in how
+    assert "PASS 9 wafer" in how and "WaferStartTime → WaferEndTime" in how and "Batch Start → Batch End" in how
     pg.locator('[data-fk="how:time"]').click()
     pg.locator('[data-fk="how:batch"]').focus()
     pg.keyboard.press("Enter")
@@ -1013,8 +1013,8 @@ def test_rdl_tab_lot_stat_outlier_x5_rule_and_wording(rdl_page):
     pg.locator('[data-fk="how:all"]').click()
     pg.wait_for_timeout(300)
     how = pg.locator(".how").inner_text()
-    assert "x5 · x10 단일 6장 제외" in how and "PASS 4" not in how                           # x5 만 쓴 단일은 통계에서 무시
-    assert "제외 Lot 2개" in how and "이상치" in how
+    assert "x5 · x10 단일 6 wafer 제외" in how and "PASS 4" not in how                           # x5 만 쓴 단일은 통계에서 무시
+    assert "제외 LOT 2개" in how and "이상치" in how
     body = pg.locator("main").inner_text().lower()
     assert "fault" not in body and "배치 기준" not in body and "하루 평균" not in body and "날짜별 생산량" not in body
     pg.locator('[data-fk="rcp:more"]').click()
@@ -1085,7 +1085,7 @@ def test_graph_tooltips_appear_at_once_and_replace_native_titles(page):
     dot.hover()
     pg.wait_for_timeout(200)
     tip = pg.locator(".tip:not([hidden])").inner_text()
-    assert "AOI-1" in tip and "Wafer당 스캔" in tip and "Lot" in tip                         # 값 · 장 수 · Lot 수가 줄마다
+    assert "AOI-1" in tip and "Wafer당 스캔" in tip and "LOT" in tip                         # 값 · 장 수 · Lot 수가 줄마다
     assert dot.get_attribute("title") is None and dot.get_attribute("data-tip")            # 느린 기본 title 은 tip 으로 옮겨졌다
     assert errors == []
 

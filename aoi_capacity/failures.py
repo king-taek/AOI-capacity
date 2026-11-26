@@ -325,7 +325,7 @@ def render_summary(g: dict) -> str:
         if len(sub) > 60:
             lines.append(f"  … 외 {len(sub) - 60}개(실패목록.tsv 참고)")
         lines.append("")
-    lines.append("파일 내용에는 Lot · Job 이름이 들어 있습니다 — 공유 범위는 직접 판단해 주세요.")
+    lines.append("파일 내용에는 LOT · Job 이름이 들어 있습니다 — 공유 범위는 직접 판단해 주세요.")
     return "\n".join(lines) + "\n"
 
 

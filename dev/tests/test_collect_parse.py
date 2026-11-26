@@ -224,7 +224,7 @@ def test_rows_for_report_flags_mismatch_and_reversed_time(tmp_path):
     r = next(x for x in collect.rows_for_report("AOI-9", rep, str(dev / "Scanresult")) if x["wafer_id"] == "K625407-01B0")
     assert r["issue_codes"] == "TIME_MISSING_OR_REVERSED;LOT_MISMATCH"
     text = collect.issue_text(r["issue_codes"])
-    assert "역전" in text and "Lot 불일치" in text
+    assert "역전" in text and "LOT 불일치" in text
 
 
 # ── 30대 전수 샘플(Report 55,717개)에서 새로 드러난 것들 ────────────────────────
