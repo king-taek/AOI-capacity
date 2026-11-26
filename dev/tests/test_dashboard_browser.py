@@ -638,7 +638,7 @@ def test_recipe_tab_shows_per_device_stats_and_compares_two_periods(page):
     assert [x.split("\n")[0] for x in pg.locator(".dbrow:not(.head):not(.axis)").all_inner_texts()] == ["AOI-1"]
     assert pg.locator(".dbrow .dd").count() == 2                        # 같은 장비에 멀티 · 단일 두 점
     dc = [" ".join(x.split()) for x in pg.locator(".dbrow[data-row='dev:AOI-1'] .dc").all_inner_texts()]
-    assert dc == ["6 3", "1 1"] and pg.locator(".dbrow[data-row='dev:AOI-1'] .dc .sw").count() == 4   # 몇 wafer · 몇 Lot — 숫자 앞 방식 색 점(11/25 RDL-13)
+    assert dc == ["멀티 6 · 단일 3 wafer", "멀티 1 · 단일 1 LOT"] and pg.locator(".dbrow[data-row='dev:AOI-1'] .dc .sw").count() == 4   # 몇 wafer · 몇 LOT — 방식 색 점 + 이름, 0 은 적지 않음(RDL-13 · COPY-09)
     assert pg.locator(".how .how-item").count() == 0 and pg.locator('[data-fk="how:all"]').get_attribute("aria-expanded") == "false"   # 어떻게 셌나는 기본 접힘
     pg.locator('[data-fk="how:all"]').click()
     pg.wait_for_timeout(250)

@@ -339,7 +339,7 @@ main{max-width:1420px;margin:0 auto;padding:22px 24px 90px}
 .jchip{display:inline-flex;align-items:center;gap:6px;padding:3px 10px;border-radius:999px;border:1px solid var(--line-2);background:#fff;font-size:12px;font-weight:600}.jchip b{font-weight:500;color:#5A6673}
 .jpick{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-bottom:12px}.jpick .btn{display:inline-flex;align-items:center;gap:6px}
 .dblegend{display:flex;flex-wrap:wrap;gap:14px;align-items:center;padding:0 18px 8px;font-size:11.5px}.dblegend span{display:inline-flex;align-items:center;gap:5px}
-.dbrow{display:grid;grid-template-columns:96px minmax(0,1fr) 104px 100px 88px;gap:12px;align-items:center;padding:6px 18px;border-top:1px solid #F1F4F7;font-size:12.5px}
+.dbrow{display:grid;grid-template-columns:96px minmax(0,1fr) 104px 196px 160px;gap:12px;align-items:center;padding:6px 18px;border-top:1px solid #F1F4F7;font-size:12.5px}
 .dbrow .dn{font-weight:600}.dbrow .r{text-align:right;white-space:nowrap}.dbrow .dc{font-size:11.5px;color:#5A6673}
 .dbrow.head{background:#FBFCFD;font-size:11.5px;font-weight:600;color:var(--ink-3);padding-top:5px;padding-bottom:5px}
 .dbrow.axis{border-top:0;padding-top:0}
@@ -367,13 +367,13 @@ main{max-width:1420px;margin:0 auto;padding:22px 24px 90px}
 .onote{margin:3px 0 0;font-size:11px;line-height:1.45;color:#8A5A12;word-break:keep-all;cursor:help}.onote b{font-weight:600}.onote .muted{color:#9A7A3A}
 .mtile .msec{margin-top:9px;padding-top:7px;border-top:1px solid #E6EBF0}.mtile .msec .s{margin-top:0}
 .dblegend .hlink{margin-left:auto}.howgrid{align-items:start}
-.dbrow .dc small{margin-left:2px;color:var(--ink-3);font-size:10.5px}
+.dbrow .dc small{margin-left:2px;color:var(--ink-3);font-size:10.5px}.dbrow .r.dc{white-space:normal;line-height:1.45}.dbrow .dc .ci{white-space:nowrap}
 .jtog{cursor:pointer;font:inherit;font-size:12px;font-weight:600;transition:background-color .16s,border-color .16s,opacity .16s}.jtog:hover{background:#F7F9FB}.jtog .ck{width:12px;font-style:normal;font-size:11px;color:var(--nav-on);text-align:center}
 .jtog.off{opacity:.55;background:#F4F6F8;border-style:dashed}.jtog.off .sw{filter:grayscale(1)}.jtog.off b{text-decoration:line-through}
 .mtile .s.mt1{margin-top:6px}.mtile .s.mt2{margin-top:2px}.mtile .s .muted{color:var(--ink-3)}   /* 보조 글자 #7B8794 · #8A96A3(3:1 안팎) → --ink-3(5.9:1) 로 통일(COLOR-02) */.otag{color:#8A5A12;cursor:help;border-bottom:1px dotted #C9A05A;white-space:nowrap}
 .mtile.verdict .vtab{display:grid;grid-template-columns:auto 1fr 1fr;gap:3px 12px;margin-top:8px;align-items:baseline}.vtab .vh{font-size:11.5px;font-weight:700;color:var(--ink-2);text-align:right;display:flex;justify-content:flex-end;align-items:center;gap:5px}
 .vtab .sc{font-size:12.5px;font-weight:600;color:var(--ink);padding-top:7px}.vtab .vv{text-align:right;font-size:19px;font-weight:600;color:#5A6673;padding-top:5px}.vtab .vv small{font-size:11px;margin-left:2px;color:var(--ink-3);font-weight:500}.vtab .vv.win{color:var(--ink);font-weight:800}
-.vtab .vn{grid-column:1/-1;font-size:11.5px;text-align:right;padding-bottom:6px;border-bottom:1px solid #EDF1F5}.vtab .vn:last-of-type{border-bottom:0}.mtile.verdict .hint2{margin:6px 0 0;font-size:11px;color:var(--ink-3)}
+.vtab .vn{grid-column:1/-1;font-size:11.5px;text-align:right;padding-bottom:6px;border-bottom:1px solid #EDF1F5}.vtab .vn:last-of-type{border-bottom:0}.mtile.verdict .vmiss{margin:6px 0 0;font-size:12px;font-weight:600;color:var(--ink-2);word-break:keep-all}.mtile.verdict .hint2{margin:6px 0 0;font-size:11px;color:var(--ink-3)}
 .howhead{display:flex;align-items:center;gap:10px;width:100%;border:0;background:transparent;padding:13px 18px;cursor:pointer;text-align:left;font:inherit;color:inherit}.howhead:hover{background:#FBFCFD}.howhead h2{margin:0}.howhead .chev{margin-left:auto;color:var(--ink-3);font-style:normal}
 .howhead:focus-visible,.pdh:focus-visible,.jtog:focus-visible{outline:2px solid var(--nav-on);outline-offset:-2px}
 .pbody{padding:16px 22px 22px}.kpis{display:grid;grid-template-columns:1fr 1fr;gap:14px}.kpis.one{grid-template-columns:minmax(0,560px)}
@@ -3451,20 +3451,29 @@ function rcpHtml(){
     /* 비교: 차이가 아니라 두 대상의 실제 값 → 그 밑에 어느 쪽이 더 빠른지/적은지를 작게 */
     const perHour=v=>v>0?(U.lot?1440:60)/v:null;   /* 10/24: 비교 타일의 처리량 줄 — 중앙 시간에서 바로 계산(새로 재는 값 없음). Wafer당 = 시간당 wafer, LOT당 = 하루당 Lot(시간당이면 0.3 · 0.5 처럼 뭉개진다) */
     const pr=U.lot?A.pairedL:A.paired,mT=[qs(U.T(a.M),.5),qs(U.T(a.S),.5)],mF=[qs(U.F(a.M),.5),qs(U.F(a.S),.5)];
-    const vrow=(sc,vals,fm,unit,lowTxt,hi)=>{const [x,y]=vals;let note;   /* hi: 큰 쪽이 나은 값(시간당 처리량) */
-      if(x==null||y==null)note=`<span class="muted">${x==null&&y==null?"비교할 값이 없습니다":(x==null?W1:W2)+" 값이 없어 비교할 수 없습니다"}</span>`;   /* 두 방식 다 기록이 있는데 이 줄만 값이 없는 경우 — 기록 자체가 없으면 표 대신 한 줄(아래 verdict) */
+    /* COPY-10: 값이 없는 줄은 칸에 '—' 만 — '… 값이 없어 비교할 수 없습니다' 를 줄마다 되풀이하지 않고 타일 위에 이유와 함께 한 번(vMiss).
+       '같은 장비' 줄만 다른 이유(두 방식을 다 돌린 장비 없음)라 그 줄에 짧게 적는다(why) */
+    const vMiss=new Set(),vBoth=[];
+    const vrow=(sc,vals,fm,unit,lowTxt,hi,why)=>{const [x,y]=vals;let note;   /* hi: 큰 쪽이 나은 값(시간당 처리량) */
+      if(x==null||y==null){if(why&&x==null&&y==null)note=`<span class="muted">${why}</span>`;else{if(x==null&&y==null)vBoth.push(sc.replace(/<[^>]*>/g,"").trim());else vMiss.add(x==null?"M":"S");note="";}}   /* 두 방식 다 기록이 있는데 이 줄만 값이 없는 경우 — 기록 자체가 없으면 표 대신 한 줄(아래 verdict) */
       else if(Math.abs(y-x)<0.05)note=`<span class="muted">차이 없음</span>`;
       else{const k=(hi?y>x:y<x)?"S":"M";note=`<span style="color:${MODE_C[k]}">${NMK(k)} ${fm(Math.abs(y-x))}${unit} ${lowTxt}</span>`;}
       const win=x!=null&&y!=null&&Math.abs(y-x)>=0.05?((hi?y>x:y<x)?"S":"M"):"";
       const cell=v=>v==null?"—":fm(v)+(unit?`<small>${unit}</small>`:"");   /* 값이 없으면 단위를 적지 않는다 */
       return `<div class="sc">${sc}</div><div class="vv num${win==="M"?" win":""}">${cell(x)}</div><div class="vv num${win==="S"?" win":""}">${cell(y)}</div><div class="vn">${note}</div>`;};
-    const missK=["M","S"].filter(k=>!a[k].n),noVals=[...mT,...mF].every(v=>v==null);   /* 두 방식 기록은 있어도 이 단위의 표본이 하나도 없으면(LOT당 — Lot 이 모두 제외) 네 줄 대신 한 줄 */
-    const verdict=missK.length||noVals?`<div class="mtile verdict none"><p class="k">${W1} vs ${W2}</p><p class="only">${missK.length===2?"이 기간 비교할 기록이 없습니다":missK.length?`${NMK(missK[0])} 기록이 없어 비교할 수 없습니다 — ${NMK(missK[0]==="M"?"S":"M")} 값만 있습니다`:`두 방식 모두 ${U.lot?"LOT 표본":"값"}이 없어 비교할 수 없습니다`}</p></div>`:`<div class="mtile verdict"><p class="k">${W1} vs ${W2} <span class="muted" style="font-weight:500">(중앙)</span></p><div class="vtab">
+    const missK=["M","S"].filter(k=>!a[k].n),noVals=[...mT,...mF].every(v=>v==null);
+    /* 왜 없는지 · 어떻게 하면 생기는지 — 판정 못 함이 있으면 그 비율과 수집 창의 '옛 기간 빈칸 채우기'(RDL 멀티/단일) */
+    const uPct=!PI&&a.U.n&&a.w?Math.round(a.U.n/a.w*100):0,uWhy=uPct?` — 판정 못 함 ${uPct}%`:"",uHint=uPct?`<p class="hint2">수집 창 '옛 기간 빈칸 채우기' 의 'RDL 멀티/단일' 로 판정 못 함을 줄일 수 있습니다</p>`:"";   /* 두 방식 기록은 있어도 이 단위의 표본이 하나도 없으면(LOT당 — Lot 이 모두 제외) 네 줄 대신 한 줄 */
+    const vRows=`${vrow("전체",mT,U.ft,U.lot?"":U.tu,"빠름")}
+        ${vrow(`<span data-tip="${esc(U.lot?"하루당 처리량 = 1440분 ÷ 위 '전체' 중앙 시간\nLOT 하나(25 wafer 기준)의 Batch Start→End 로 잰 값 — LOT 사이 대기는 들어 있지 않습니다":"시간당 처리량 = 60분 ÷ 위 '전체' 중앙 시간\nWafer 하나의 INI 스캔 시간으로 잰 값 — LOT 사이 대기는 들어 있지 않습니다")}">${U.lot?"하루당":"시간당"}</span>`,mT.map(perHour),f1,U.lot?"LOT/일":"wafer/h","더 많음",true)}
+        ${vrow(pr?`<span title="두 방식을 다 돌린 장비끼리">같은 장비 <span class="muted">${pr.n}대</span></span>`:"같은 장비",pr?[pr.m,pr.s]:[null,null],U.ft,U.lot?"":U.tu,"빠름",false,"두 방식을 다 돌린 장비 없음")}
+        ${vrow("Defect",mF,fD,U.fu,"적음")}`;
+    const vK=vMiss.size===1?[...vMiss][0]:null,vBx=vK&&U.lot?(o=>o.err+o.mixed+o.time+o.few)(a[vK].bx):0;   /* LOT당: 그 방식의 LOT 이 표본에서 빠진 수(타일 '제외 n ⓘ' 와 같은 수) */
+    const vMissTxt=[vMiss.size?(vK?`${NMK(vK)} 값이 없어 비교할 수 없습니다`:"줄마다 한쪽 값이 없어 비교할 수 없습니다")+(U.lot?(vBx?` — ${NMK(vK)} LOT ${f0(vBx)}개가 LOT 표본에서 빠졌습니다(타일의 '제외 ⓘ')`:""):uWhy):"",
+      vBoth.length?`${vBoth.join(" · ")}: 두 방식 모두 값이 없습니다`:""].filter(Boolean).join("<br>");
+    const verdict=missK.length||noVals?`<div class="mtile verdict none"><p class="k">${W1} vs ${W2}</p><p class="only">${missK.length===2?"이 기간 비교할 기록이 없습니다":missK.length?`${NMK(missK[0])} 기록이 없어 비교할 수 없습니다 — ${NMK(missK[0]==="M"?"S":"M")} 값만 있습니다`:`두 방식 모두 ${U.lot?"LOT 표본":"값"}이 없어 비교할 수 없습니다`}${uWhy}</p>${uHint}</div>`:`<div class="mtile verdict"><p class="k">${W1} vs ${W2} <span class="muted" style="font-weight:500">(중앙)</span></p>${vMissTxt?`<p class="vmiss">${vMissTxt}</p>${vMiss.size&&!U.lot?uHint:""}`:""}<div class="vtab">
         <div></div><div class="vh"><i class="sw" style="background-color:${MODE_C.M}"></i>${W1}</div><div class="vh"><i class="sw" style="background-color:${MODE_C.S}"></i>${W2}</div>
-        ${vrow("전체",mT,U.ft,U.lot?"":U.tu,"빠름")}
-        ${vrow(`<span data-tip="${esc(U.lot?"하루당 처리량 = 1440분 ÷ 위 '전체' 중앙 시간\nLot 하나(25 wafer 기준)의 Batch Start→End 로 잰 값 — LOT 사이 대기는 들어 있지 않습니다":"시간당 처리량 = 60분 ÷ 위 '전체' 중앙 시간\nWafer 하나의 INI 스캔 시간으로 잰 값 — LOT 사이 대기는 들어 있지 않습니다")}">${U.lot?"하루당":"시간당"}</span>`,mT.map(perHour),f1,U.lot?"LOT/일":"wafer/h","더 많음",true)}
-        ${vrow(pr?`<span title="두 방식을 다 돌린 장비끼리">같은 장비 <span class="muted">${pr.n}대</span></span>`:"같은 장비",pr?[pr.m,pr.s]:[null,null],U.ft,U.lot?"":U.tu,"빠름")}
-        ${vrow("Defect",mF,fD,U.fu,"적음")}
+        ${vRows}
       </div></div>`;
     const shownK=["M","S"].filter(rcpShow),AX=niceAxis(Math.max(1,...shownK.map(k=>qs(U.T(a[k]),.9)||0),qs(U.T(a.U),.9)||0)*1.04,U.lot),mx=AX.top;
     const rr=k=>`<div class="srow" data-k="${k}">${k==="U"?`<span class="sk"><i class="sw" style="background-color:${MODE_C[k]}"></i>${NMK(k)}</span>`:kbtn(k,NMK(k))}${k!=="U"&&!rcpShow(k)?`<span class="muted" style="font-size:12px">그래프에서 숨김</span>`:scanRange(U.T(a[k]),mx,MODE_C[k],NMK(k),U.cnt)}<span class="num r">${k!=="U"&&!rcpShow(k)?"":U.ft(qs(U.T(a[k]),.5))}</span></div>`;
@@ -3491,14 +3500,15 @@ function rcpHtml(){
     /* 멀티 · 단일 값이 없는 장비의 이유(RDL-10) — 정말 기록이 없을 때만 '값 없음' */
     const noneWhy=d=>{if(U.lot){const L=bxL(d.bx);return d.lots.size?"LOT 표본 없음"+(L.length?" — "+L.join(" · "):""):"값 없음";}
       if(!d.w)return "값 없음";return (MET==="defect"?"Defect 값 없음":"스캔 시간 없음")+" · "+f0(d.w)+" wafer";};
-    const cnt3=(a,b,c)=>`<i class="sw" style="background-color:${MODE_C.M}"></i>${a} <i class="sw" style="background-color:${MODE_C.S}"></i>${b}${c?` <i class="sw" style="background-color:${MODE_C.U}"></i>${c}`:""}`;   /* RDL-13: 숫자 앞 방식 색 점 */
+    /* RDL-13 · COPY-09: 숫자 앞 방식 색 점 + 이름 — 0 인 방식은 적지 않고 단위는 끝에 한 번('멀티 6 · 단일 3 wafer' · '판정 못 함 25 wafer') */
+    const cnt3=(a,b,c,u)=>{const it=[["M",a],["S",b],["U",c]].filter(([,v])=>v).map(([k,v])=>`<span class="ci"><i class="sw" style="background-color:${MODE_C[k]}"></i>${NMK(k)} ${f0(v)}</span>`);return it.length?it.join(" · ")+` <small>${u}</small>`:"—";};
     const devH=dv.map(([n,d],i)=>{const x=qs(sel(d.M),.5),y=qs(sel(d.S),.5),df=x!=null&&y!=null?y-x:null,on=n===devSel,vx=rcpShow("M")?x:null,vy=rcpShow("S")?y:null;
       const line=vx!=null&&vy!=null?`<i class="dl" style="left:${px(Math.min(x,y))}%;width:${(Math.abs(y-x)/dmx*100).toFixed(2)}%"></i>`:"";
       const dot=(v,k,o)=>v==null?"":`<b class="dd" style="left:${px(v)}%;background-color:${MODE_C[k]}" title="${esc(n+" · "+NMK(k)+"\n"+MET_L+" "+mfm(v)+mu+"\n"+f0(o.n)+" wafer · "+o.lots.size+" LOT")}"></b><em class="dlab ${k} num" data-nr data-p="${px(v)}" style="left:${px(v)}%">${mfm(v)}</em>`;
       const lw=k=>d[k].lots.size,uv=x==null&&y==null?uOnly(d):null;
       return `<button type="button" class="dbrow${on?" on":""}" data-key="slot:${i}" data-row="dev:${esc(n)}" data-hm="${qs(U.T(d.M),.5)??""}" data-hs="${qs(U.T(d.S),.5)??""}" aria-pressed="${on}" data-h="${h(()=>rcpDevOpen(n,SF.k))}" title="${esc(n)} 상세"><span class="dn">${esc(n)}</span><span class="dtrack">${flH}${line}${dot(vx,"M",d.M)}${dot(vy,"S",d.S)}${uv!=null?dot(uv,"U",d.U):vx==null&&vy==null?`<em class="dnone">${x==null&&y==null?esc(noneWhy(d)):"숨김"}</em>`:""}</span>
         <span class="r num dx" style="color:${df==null?"#8A96A3":df<0?MODE_C.S:df>0?MODE_C.M:"#4B5866"}">${df==null?(x!=null?W1+"만":y!=null?W2+"만":uv!=null?"판정 못 함만":"—"):(Math.abs(df)<0.05?"차이 없음":(df<0?W2+" ":W1+" ")+mfm(Math.abs(df))+mpu+(MET==="defect"?"↓":"↓"))}</span>
-        <span class="r num dc" title="${W1} ${d.M.n} · ${W2} ${d.S.n}${d.U.n?" · 판정 못 함 "+d.U.n:""} wafer">${cnt3(d.M.n,d.S.n,d.U.n)}</span><span class="r num dc" title="${W1} ${lw("M")} LOT · ${W2} ${lw("S")} LOT${d.U.n?" · 판정 못 함 "+lw("U")+" LOT":""}">${cnt3(lw("M"),lw("S"),d.U.n?lw("U"):0)}</span></button>`;}).join("");
+        <span class="r num dc" title="${W1} ${d.M.n} · ${W2} ${d.S.n}${d.U.n?" · 판정 못 함 "+d.U.n:""} wafer">${cnt3(d.M.n,d.S.n,d.U.n,"wafer")}</span><span class="r num dc" title="${W1} ${lw("M")} LOT · ${W2} ${lw("S")} LOT${d.U.n?" · 판정 못 함 "+lw("U")+" LOT":""}">${cnt3(lw("M"),lw("S"),d.U.n?lw("U"):0,"LOT")}</span></button>`;}).join("");
     const daxis=`<div class="dbrow axis"><span></span><span class="dtrack ax">${AX2.ticks.map(t=>`<em style="left:${(t/dmx*100).toFixed(2)}%">${axLab(t,MET==="time"&&U.lot,MET==="defect"?"개":"분")}</em>`).join("")}</span><span></span><span></span><span></span></div>`;
     const metSeg=segHtml([{label:"시간",on:MET==="time",pick:()=>setState({rcpMetric:"time"})},{label:"Defect",on:MET==="defect",pick:()=>setState({rcpMetric:"defect"})}],'aria-label="장비별 그래프의 지표"');
     const sortSeg=segHtml([{label:"장비순",on:SORT==="name",pick:()=>setState({rcpDevSort:"name"})},{label:"큰 값 순",on:SORT==="big",pick:()=>setState({rcpDevSort:"big"})},{label:"작은 값 순",on:SORT==="small",pick:()=>setState({rcpDevSort:"small"})}],'aria-label="장비 정렬"');

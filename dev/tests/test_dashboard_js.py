@@ -576,6 +576,8 @@ def test_recipe_device_rows_show_unjudged_values_and_select_only_a_picked_device
     row3 = next(x for x in html.split('class="dbrow') if 'data-row="dev:AOI-3"' in x)
     assert 'class="dlab U num"' in row3 and "판정 못 함만" in row3 and "값 없음" not in row3
     assert 'class="sw"' in row3.split('class="r num dc"')[1]
+    dc = re.sub(r"<[^>]+>", "", row3.split('class="r num dc"')[1].split("</span><span")[0].split(">", 1)[1])
+    assert dc == "판정 못 함 3 wafer"                                   # COPY-09: 0 인 멀티 · 단일은 적지 않고 이름과 함께
     assert re.findall(r'<button type="button" class="dbrow[^"]*"[^>]*aria-pressed="(\w+)"', html) == ["false", "false"]
     picked, = screen(rows, meta("AOI-1", "AOI-3"), [["rcpHtml"]], state={"rcpDevSel": "AOI-3"})
     assert 'class="dbrow on" data-key="slot:1" data-row="dev:AOI-3"' in picked
@@ -641,6 +643,20 @@ def test_recipe_lot_unit_verdict_shows_per_day_throughput_and_hour_labels():
     v = html[html.index('class="mtile verdict"'):]
     assert "3시간" in v and "2시간" in v and "LOT/일" in v and "단일 1시간 빠름" in v
     assert re.search(r'class="sax"><em[^>]*>0</em><em[^>]*>1시간</em>', html)
+
+
+def test_recipe_verdict_says_why_a_side_is_missing_once_not_on_every_line():
+    """COPY-10(현택 11/26 고치기): 한 방식 값이 없으면 '… 값이 없어 비교할 수 없습니다' 를 줄마다(전체 · 시간당 · Defect) 되풀이하지 않고
+    타일 위에 이유와 함께 한 번 — 칸은 '—'. '같은 장비' 줄은 다른 이유라 그 줄에 짧게. 판정 못 함이 있으면 비율과 수집 창 '옛 기간 빈칸 채우기' 안내."""
+    rows = _lot_rows(26) + [dict(r, scan_mode="MULTI", wafer_id="M" + r["wafer_id"]) for r in _lot_rows(19, rep="R2.htm", bs="10:00", be="13:00")]
+    lot, = screen(rows, meta("AOI-1"), [["rcpHtml"]], state={"rcpUnit": "lot"})
+    v = lot[lot.index('class="mtile verdict"'):]
+    assert v.count("값이 없어 비교할 수 없습니다") == 1 and "멀티 값이 없어 비교할 수 없습니다 — 멀티 LOT 1개가 LOT 표본에서 빠졌습니다" in v
+    assert "두 방식을 다 돌린 장비 없음" in v and '<div class="vv num">—</div>' in v and "Defect: 두 방식 모두 값이 없습니다" in v
+    rows = [_rdl("AOI-1", f"S{i}", f"10:{i*12:02d}", f"10:{i*12+12:02d}", "B", "SINGLE") for i in range(3)]
+    rows += [_rdl("AOI-2", "U0", "11:00", "11:10", "C", "")]
+    html, = screen(rows, meta("AOI-1", "AOI-2"), [["rcpHtml"]])
+    assert "멀티 기록이 없어 비교할 수 없습니다 — 단일 값만 있습니다 — 판정 못 함 25%" in html and "'옛 기간 빈칸 채우기' 의 'RDL 멀티/단일'" in html
 
 
 def test_report_lot_time_skips_reports_with_an_error_but_keeps_abort_only_ones():
