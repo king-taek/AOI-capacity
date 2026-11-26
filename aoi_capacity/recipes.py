@@ -57,6 +57,33 @@ def _read(path: Path) -> Optional[dict]:
         return None
 
 
+def _shell_downloads() -> Optional[Path]:
+    """Windows 가 알려 주는 다운로드 폴더(사용자가 D:\\Downloads · OneDrive 로 옮긴 경우) — 레지스트리 읽기만, 없으면 None."""
+    try:
+        import winreg  # Windows 에만 있다
+    except ImportError:
+        return None
+    try:
+        with winreg.OpenKey(winreg.HKEY_CURRENT_USER, r"Software\Microsoft\Windows\CurrentVersion\Explorer\User Shell Folders") as k:
+            v, _t = winreg.QueryValueEx(k, "{374DE290-123F-4565-9164-39C4925E467B}")
+        return Path(os.path.expandvars(str(v))) if v else None
+    except OSError:
+        return None
+
+
+def download_dirs() -> List[Path]:
+    """브라우저가 내려받는 폴더 후보(겹침 없이, 순서 유지): `%USERPROFILE%\\Downloads` · 홈 `Downloads` · Windows 가 알려 준 다운로드 폴더.
+    레시피 묶음 찾기와 속도 시험(LOT 시험 결과 받기)이 같이 쓴다 — 있는지는 부르는 쪽이 본다."""
+    out: List[Path] = []
+    for base in (os.environ.get("USERPROFILE"), str(Path.home())):
+        if base and Path(base) / "Downloads" not in out:
+            out.append(Path(base) / "Downloads")
+    sh = _shell_downloads()
+    if sh is not None and sh not in out:
+        out.append(sh)
+    return out
+
+
 def candidates(cfg: dict) -> List[Path]:
     explicit = str(cfg.get("recipe_groups_file") or "").strip()
     if explicit:
@@ -64,10 +91,7 @@ def candidates(cfg: dict) -> List[Path]:
     from .utils import paths
 
     out = [paths.data_root() / FILE_NAME]
-    for base in (os.environ.get("USERPROFILE"), str(Path.home())):
-        if not base:
-            continue
-        dl = Path(base) / "Downloads"
+    for dl in download_dirs():
         try:
             found = sorted(p for p in dl.glob("recipe_groups*.json") if p.is_file())
         except OSError:

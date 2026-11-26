@@ -1250,7 +1250,16 @@ class CollectPage(QWidget):
         if result:
             self._perf_dir = str(result.get("dir") or "")
             fmt = K.PERF_STOPPED_FMT if result.get("stopped") else K.PERF_DONE_FMT
-            text = fmt.format(path=self._perf_dir)
+            lines = [fmt.format(path=self._perf_dir)]
+            got, miss = result.get("lot_open") or {}, result.get("lot_missing") or []
+            if got or miss:                                   # 11/26 단추 하나: 브라우저로 연 LOT 시험 결과
+                sec = lambda k: K.PERF_LOT_SEC_FMT.format(sec=got[k]) if k in got else K.PERF_LOT_NONE
+                lines.append(K.PERF_LOT_FMT.format(now=sec("now"), skip=sec("skip")))
+            if miss:
+                lines.append(K.PERF_LOT_MISSING_FMT.format(files=", ".join(miss)))
+            if self._perf_dir:
+                lines.append(K.PERF_SEND)
+            text = "\n".join(lines)
             self._b_perf_open.setVisible(bool(self._perf_dir))
             if self._perf_dir:
                 QDesktopServices.openUrl(QUrl.fromLocalFile(self._perf_dir))
