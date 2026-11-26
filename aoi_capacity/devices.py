@@ -352,8 +352,15 @@ def ensure_camtek_rows(path) -> bool:
     return True
 
 
-def _has_report(path: str, cfg: dict) -> bool:
-    return bool(find_subdir(path, cfg.get("report_dir", ""), REPORT_DIR_NAMES))
+def _has_report(path: str, cfg: dict) -> str:
+    """Report 폴더가 있으면 그 이름(참), 없으면 빈 값 — 찾은 이름은 장비에 붙여 두어 `_dirs_of` 가 같은 폴더를 다시 묻지 않는다(PC-10)."""
+    return find_subdir(path, cfg.get("report_dir", ""), REPORT_DIR_NAMES)
+
+
+def _found(entry: Dict[str, object], report_dir: str) -> Dict[str, object]:
+    """게이트 단계(①)에서 확인한 Report 폴더 이름을 장비에 붙인다 — `_attach_dirs`(②)가 이 이름을 그대로 쓴다(PC-10)."""
+    entry["report_dir"] = report_dir
+    return entry
 
 
 def _entry(folder: str, path: str, *hints) -> Dict[str, object]:
@@ -362,11 +369,13 @@ def _entry(folder: str, path: str, *hints) -> Dict[str, object]:
             "aliases": [a for a in (folder, *[str(h) for h in hints if h]) if a]}
 
 
-def _dirs_of(path: str, cfg: dict) -> Dict[str, object]:
+def _dirs_of(path: str, cfg: dict, known_report: str = "") -> Dict[str, object]:
     """장비 폴더 하나의 Report·Scanresult 폴더 이름과 백업 목록 — **읽기만** 한다(isdir 몇 번 + 나열 1번 + getmtime).
 
+    `known_report` = 장비 확인 ①단계가 이미 찾은 Report 폴더 이름 — 있으면 다시 isdir 하지 않는다(PC-10).
     `scan_dir` 은 나열에서 찾은 **실제 철자**로 맞춘다(설정 `Scanresult` · 실제 `ScanResult` 면 `ScanResult`, C05)."""
-    report_dir = find_subdir(path, cfg.get("report_dir", ""), REPORT_DIR_NAMES) or str(cfg.get("report_dir") or "Report")
+    report_dir = (known_report or find_subdir(path, cfg.get("report_dir", ""), REPORT_DIR_NAMES)
+                  or str(cfg.get("report_dir") or "Report"))
     scan_dir = find_subdir(path, cfg.get("scan_dir", ""), SCAN_DIR_NAMES) or str(cfg.get("scan_dir") or "Scanresult")
     scan_dirs = scan_dirs_of(path, scan_dir)                                  # 백업 폴더까지(맨 앞이 지금 폴더)
     return {"report_dir": report_dir, "scan_dir": str(scan_dirs[0]["name"]), "scan_dirs": scan_dirs}
@@ -438,19 +447,19 @@ def _probe_auto(root: str, cfg: dict, hint: str = "", name: str = "") -> Tuple[L
         return [], []
     restricted = not scope.unrestricted(cfg)
     folder = os.path.basename(root.rstrip("\\/")) or root
-    if (not restricted or scope.is_allowed(cfg, folder, name)) and _has_report(root, cfg):
-        return [_entry(folder, root, hint)], []
+    if (not restricted or scope.is_allowed(cfg, folder, name)) and (rd := _has_report(root, cfg)):
+        return [_found(_entry(folder, root, hint), rd)], []
     out: List[Dict[str, object]] = []
     if restricted:
         for name in scope.scope_list(cfg):
             path = os.path.join(root, name)
-            if os.path.isdir(path) and _has_report(path, cfg):
-                out.append(_entry(name, path, hint))
+            if os.path.isdir(path) and (rd := _has_report(path, cfg)):
+                out.append(_found(_entry(name, path, hint), rd))
         return out, []
     try:
         for e in nas_guard.scandir(root):
-            if e.is_dir() and _has_report(e.path, cfg):
-                out.append(_entry(e.name, e.path, hint))
+            if e.is_dir() and (rd := _has_report(e.path, cfg)):
+                out.append(_found(_entry(e.name, e.path, hint), rd))
     except OSError as ex:
         return out, [f"[건너뜀] {root}: {ex}"]
     return out, []
@@ -506,7 +515,7 @@ def _attach_dirs(devs: List[Dict[str, object]], cfg: dict, log: Optional[LogFn] 
     for d in kla:                                              # KLA 는 Report·Scanresult 가 없다
         d.update({"report_dir": "", "scan_dir": "", "scan_dirs": []})
     devs_c = [d for d in devs if d.get("kind") != "kla"]
-    results = _pmap(cfg, devs_c, lambda d: _dirs_of(str(d["path"]), cfg), should_stop)
+    results = _pmap(cfg, devs_c, lambda d: _dirs_of(str(d["path"]), cfg, str(d.get("report_dir") or "")), should_stop)
     for d, r in zip(devs_c, results):
         if r is SKIPPED:
             scan = str(cfg.get("scan_dir") or "Scanresult")
@@ -553,7 +562,7 @@ def devices_from_rows(rows: List[Dict[str, object]], cfg: dict, log: Optional[Lo
         if kind == "auto":
             return _probe_auto(path, cfg, hint, str(_row.get("name") or ""))
         if kind == "explicit":
-            return _has_report(path, cfg), []
+            return _has_report(path, cfg), []                 # 찾은 Report 폴더 이름(없으면 빈 값) — 아래에서 장비에 붙인다(PC-10)
         if kind == "kla":
             if _is_kla_root(path):
                 return True, []
@@ -594,7 +603,7 @@ def devices_from_rows(rows: List[Dict[str, object]], cfg: dict, log: Optional[Lo
         if row.get("name") and not _AOI_RE.search(str(row["name"])):
             d["name"] = str(row["name"])          # 사용자가 붙인 이름은 그대로 존중한다
         d["aliases"] = [a for a in [folder, str(row.get("name") or ""), d["name"]] if a]
-        devs.append(d)
+        devs.append(_found(d, str(found)))
     return _dedupe_sort(devs)
 
 
