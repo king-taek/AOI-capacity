@@ -1664,6 +1664,7 @@ def rows_for_report(dev_name: str, rep: dict, scan_root: str, memo: Optional[_In
     b_start, b_end = parse_dt(s.get("Batch Start", "")), parse_dt(s.get("Batch End", ""))
     rfields = {"wafers_scanned": s.get("Wafers Scanned", ""), "avg_scan_time": s.get("Avg. Scan Time", ""), "cr_every": "", "af_every": ""}
     want_settings = is_recipe_tab_job(rep.get("job", ""))
+    lot_seen: Dict[str, bool] = {}                  # 이 Report 안에서 확인한 Lot 폴더 → 있음(PC-02)
     rdl = is_rdl_job(rep.get("job", ""))
     single_report = False                              # PC-01: RDL 이 아닌 Job 은 첫 EXACT 장에 RecipesInfo.ini 가 없으면 같은 Report 의 나머지 장도 단일(D78 한 Report = 한 방식) — 열지 않는다
     for w in rep["wafers"]:
@@ -1692,17 +1693,25 @@ def rows_for_report(dev_name: str, rep: dict, scan_root: str, memo: Optional[_In
             roots = ini_roots_for(b_start, scan_root, backups)
             # 존재 확인(stat) 없이 바로 연다 — SMB 왕복이 행마다 2번에서 1번으로 준다. 없으면 open 이 알려 준다.
             # 루트(지금 폴더 · 백업) 바깥 순서, Job 폴더 이름 후보 안쪽 순서 — 원문 이름에서 찾으면 나머지는 열지 않는다.
+            # PC-02: (루트, Job 후보)마다 처음 헛열기가 나면 그 Lot 폴더가 있는지 한 번 보고(정확 경로 isdir), 없으면 이 Report 의
+            # 나머지 장은 그 후보를 열지 않는다(MoveResultFlag 도) — 찾는 순서 · 결과는 그대로, 헛여는 왕복만 준다.
             kind, got, found_in, found_job, rel_found = "missing", None, roots[0], jobs_try[0], rels[0]
             for root in roots:
                 for j, rel in zip(jobs_try, rels):
+                    lot_dir = os.path.join(root, j, rep["process_code"], w["lot"])
+                    if lot_seen.get(lot_dir) is False:
+                        continue
                     kind, got = memo.get(os.path.join(root, rel, "WaferInfo.ini"))
                     if kind != "missing":
                         found_in, found_job, rel_found = root, j, rel
                         break
+                    if lot_dir not in lot_seen:
+                        lot_seen[lot_dir] = os.path.isdir(lot_dir)
                 if kind != "missing":
                     break
             if kind == "missing":
-                if any(memo.exists(os.path.join(roots[0], rel, "MoveResultFlag")) for rel in rels):
+                if any(memo.exists(os.path.join(roots[0], rel, "MoveResultFlag")) for j, rel in zip(jobs_try, rels)
+                       if lot_seen.get(os.path.join(roots[0], j, rep["process_code"], w["lot"])) is not False):
                     r["ini_match"], r["issue_codes"] = "MOVED_ONLY", issue_field([ISSUE_MOVED_ONLY])
                 else:
                     r["ini_match"], r["issue_codes"] = "NOT_FOUND", issue_field([ISSUE_INI_NOT_FOUND] if len(roots) == 1
