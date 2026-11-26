@@ -1363,3 +1363,32 @@ def test_compressed_data_that_cannot_be_opened_shows_the_error_panel(page_factor
         assert "Chrome" in msg
     assert requests == []
     ctx.close()
+
+
+def test_lot_search_list_never_scrolls_sideways(page_factory, tmp_path):
+    """11/26 현택: '스캔을 어디에 했니?' 의 LOT 검색 목록에 가로 스크롤이 없어야 한다 —
+    긴 LOT 이름 · '다른 LOT 과 겹침' · 'Error n번' 표 · 긴 장비 줄이 한 줄에 몰려도 칸 안에서 줄을 바꾼다."""
+    long_lot = "TB500.INT311_VERYLONGLOTNAMEWITHOUTANYBREAKS_DIA_RESCAN_0123456789"
+    rows = []
+    for i in range(5):
+        rows.append(_row("AOI-1", f"LNGWAF0{i}X", f"08:{i*5:02d}", f"08:{i*5+4:02d}", lot=long_lot, report="RL1.htm", bs="08:00", be="09:00"))
+    rows.append(_row("AOI-1", "LNGWAF09X", "09:10", "09:11", lot=long_lot, report="RL2.htm", bs="09:05", be="09:30",
+                     status="Wafer lost during transfer. Batch Aborted."))
+    for i in range(5):
+        rows.append(_row("4F-AOI-01", f"LNGWAF0{i}X", f"11:{i*5:02d}", f"11:{i*5+4:02d}", lot=long_lot + "_RE", report="RL3.htm", bs="11:00", be="12:00"))
+    for slot in range(3):
+        rows.append(_row("AOI-2", f"Slot {slot+1}", f"13:{slot*5:02d}", f"13:{slot*5+4:02d}", lot="NOIDLOT_" + "X" * 40, report="RN.htm", bs="13:00", be="14:00"))
+    ctx, pg, errors = _open_rows_page(page_factory, tmp_path, rows, ["AOI-1", "AOI-2", "4F-AOI-01"])
+    try:
+        pg.click('nav.nav button[data-fk="nav:lot"]')
+        pg.wait_for_selector('main[data-key="view:lot"]')
+        for q in ["", "TB500", "LNGWAF", "AOI"]:
+            pg.fill('[data-in="lotQ"]', q)
+            pg.wait_for_timeout(500)
+            sw, cw = pg.eval_on_selector(".lotlist .lotscroll", "s => [s.scrollWidth, s.clientWidth]")
+            assert sw <= cw, (q, sw, cw)
+            out = pg.eval_on_selector(".lotlist .lotscroll", "s => { const r = s.getBoundingClientRect(); return [...s.querySelectorAll('*')].filter(e => { const b = e.getBoundingClientRect(); return b.width > 0 && b.right > r.right + 0.5; }).map(e => e.className) }")
+            assert out == [], (q, out)
+        assert not errors, errors
+    finally:
+        ctx.close()
