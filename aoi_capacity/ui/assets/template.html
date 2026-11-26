@@ -74,8 +74,14 @@ button{font:inherit;color:inherit}
 /* ── /animate.css ── */
 @media (prefers-reduced-motion:reduce){*{animation:none!important;transition-property:opacity,color,background-color,border-color!important;transition-duration:.12s!important}.dlg.in{animation:fadeIn .12s ease-out!important}.dlg.out{animation:fadeOut .12s ease-in forwards!important}}
 /* 전환(impeccable animate 플레이북 · 9/20): 상태 변화는 150~300ms, 레이아웃·오버레이는 300~500ms, 감속은 cubic-bezier(.16,1,.3,1). 노드는 morph 로 유지되므로 CSS transition 이 실제로 이어진다. */
-.hbar i{transition:width .38s var(--ease)}
-.chart .f{transition:height .38s var(--ease),background-color .25s}
+/* 11/26 ANIM-14: 막대 값 변화는 폭 · 높이 전환이 아니라 transform(flipBars) — 배치는 한 번만 바뀌고 칠은 합성 스레드에서 옛 끝 → 새 끝으로 미끄러진다.
+   translate 라 둥근 끝이 찌그러지지 않는다: 늘 때 앞쪽은 틀 밖(.hbar overflow · 차트 칸 .flc 의 clip)으로 숨고, 줄 때 모자란 만큼은 같은 색 꼬리(.fl 의 ::before/::after, --fx)가 채운다 */
+.chart .f,.hbar>i,.jbar>i{position:relative}
+.chart .f{transition:background-color .25s}
+.chart .f.fl::after{content:"";position:absolute;left:0;right:0;top:100%;height:var(--fx,0px);background-color:inherit;background-image:linear-gradient(rgba(15,21,28,.07),rgba(15,21,28,.07))}
+.chart .flc{clip-path:inset(-100vh -100vw 0 -100vw)}
+.hbar>i.fl,.jbar>i.fl{border-top-left-radius:0;border-bottom-left-radius:0}
+.hbar>i.fl::before,.jbar>i.fl::before{content:"";position:absolute;top:0;bottom:0;right:100%;width:var(--fx,0px);background:inherit}
 .seg button,.nav button,.btn,.callout,.rowbtn,.link{transition:background-color .16s,color .16s,border-color .16s}
 .stage{position:relative;overflow-x:clip}   /* 탭 전환의 가로 미끄러짐이 가로 스크롤을 만들지 않게. 팝업 뒤에서 움직이지 않는다(9/21 — 물러남 scale 이 '뒷배경 재생성' 으로 보였다) */
 /* .stage.behind 의 밝기 필터는 뺐다(11/25 ANIM-13) — 공유 덮개(deckscrim)가 이미 뒤를 어둡게 하고, 필터는 여는 순간 페이지 전체를 다시 그렸다 */
@@ -153,12 +159,12 @@ button{font:inherit;color:inherit}
 /* ── 5차(9/20 밤): 색의 깊이와 손맛. 막대는 색(background-color)은 그대로 두고 위가 밝고 아래가 살짝 어두운 한 겹(background-image)만 얹는다 —
    dataviz 규칙대로 데이터 색은 한 자리(RUN·ERR·HEAT 램프)에서 오고, 글자는 데이터 색을 입지 않는다. 막대 끝 4px 둥글게, 히트맵은 한 색조 6단 램프(OKLCH 밝기 단조) + 2px 표면 간격. ── */
 .gloss,.chart .f,.hbar i,.tline i{background-image:linear-gradient(180deg,rgba(255,255,255,.30),rgba(255,255,255,0) 55%,rgba(15,21,28,.07))}
-.chart{gap:6px}.chart .f{border-radius:4px 4px 0 0;box-shadow:inset 0 1px 0 rgba(255,255,255,.35);transition:height .38s var(--ease),background-color .25s,filter .18s}
+.chart{gap:6px}.chart .f{border-radius:4px 4px 0 0;box-shadow:inset 0 1px 0 rgba(255,255,255,.35);transition:background-color .25s,filter .18s}
 .chart .v{transition:transform .18s var(--ease),color .18s}
 .chart button:hover .f{filter:brightness(1.07) saturate(1.06)}.chart button:hover .v{transform:translateY(-2px);color:var(--ink)}
-.hbar{background:var(--crit-soft)}.hbar i{transition:width .38s var(--ease),filter .18s}.rowbtn:hover .hbar i{filter:brightness(1.06)}
-/* Error 탭 목록: 줄은 제자리, 막대는 0.2초로 짧게, 바뀐 숫자·글자는 제자리에서 넘어간다(txAnim) */
-.errlist .hbar i,.errlist .jbar i{transition:width .2s ease-out,filter .18s}
+.hbar{background:var(--crit-soft)}.hbar i{transition:filter .18s}.rowbtn:hover .hbar i{filter:brightness(1.06)}
+/* Error 탭 목록: 줄은 제자리, 막대는 0.2초로 짧게(flipBars 가 .errlist 안이면 0.2초 ease-out), 바뀐 숫자·글자는 제자리에서 넘어간다(txAnim) */
+.errlist .hbar i,.errlist .jbar i{transition:filter .18s}
 .heat{display:flex;gap:3px}.heat button{flex:1;height:18px;border:0;border-radius:3px;padding:0;cursor:pointer;transition:transform .16s var(--ease),box-shadow .16s;position:relative}
 .heat button:hover{transform:scale(1.3);box-shadow:0 3px 10px rgba(15,21,28,.28),inset 0 0 0 1px rgba(255,255,255,.75);z-index:2}
 .btn,.seg button,.nav button,.ib,.x,.fbtn,.th{transition:background-color .16s,color .16s,border-color .16s,transform .1s var(--ease),box-shadow .16s}
@@ -247,7 +253,7 @@ main{max-width:1420px;margin:0 auto;padding:22px 24px 90px}
 .hbar i{display:block;height:100%;border-radius:5px;background:var(--err)}
 .foot{max-width:1420px;margin:0 auto;padding:0 24px 40px;font-size:12px;color:var(--ink-3);line-height:1.7}
 .foot b{color:var(--ink-2);font-weight:600}
-.toast{position:fixed;left:50%;bottom:28px;transform:translate(-50%,20px);background:#0F151C;color:#fff;padding:9px 14px;border-radius:9px;font-size:13px;opacity:0;pointer-events:none;transition:all .25s var(--ease);z-index:99}
+.toast{position:fixed;left:50%;bottom:28px;transform:translate(-50%,20px);background:#0F151C;color:#fff;padding:9px 14px;border-radius:9px;font-size:13px;opacity:0;pointer-events:none;transition:opacity .25s var(--ease),transform .25s var(--ease);z-index:99}
 .toast.on{opacity:1;transform:translate(-50%,0)}
 .toast.animate__animated{transition:none;--animate-duration:.28s}
 
@@ -1727,6 +1733,27 @@ function txAnim(root){const on=!!G()&&!reduced();
 function listBars(root){const on=!!G()&&!reduced();for(const el of root.querySelectorAll("[data-listsig]")){const s=el.getAttribute("data-listsig"),prev=el.__ls;el.__ls=s;
   if(!on||prev===undefined||prev===s)continue;for(const b of el.querySelectorAll("[data-bar]")){if(b.__sw&&b.__sw.isActive()){b.__sw.progress(1).kill();b.__sw=null;b.style.clipPath="";continue;}
     gsap.killTweensOf(b);b.__bar=undefined;b.__redo=1;}}}   /* sweepBars 가 처음 그려지는 막대로 보고 sweep */
+/* 11/26 ANIM-14: 막대(.chart .f · .hbar>i · .jbar>i)의 값이 바뀌면 inline 폭 · 높이는 새 값으로 두고 칠만 옛 끝에서 translate 로 되감는다(WAAPI · 합성 스레드).
+   차트는 값 글자(.v)도 같은 거리를 함께 움직인다. 도는 중에 또 바뀌면 지금 보이는 끝에서 다시. Error 목록(.errlist)은 0.2초 ease-out(9/23), 나머지 0.38초 --ease.
+   처음 그려지는 막대 · 동작 줄이기 · 연출 꺼짐(시작 화면 뒤 첫 렌더)은 값만 적어 둔다. 읽기(배치)를 다 한 뒤에 쓴다 — 배치 계산은 한 번 */
+function flipBars(root){const on=!!G()&&!reduced(),todo=[];
+  for(const el of root.querySelectorAll(".chart .f,.hbar>i,.jbar>i")){const ch=el.classList.contains("f"),cur=ch?el.style.height:el.style.width,prev=el.__fb;el.__fb=cur;
+    if(prev===cur&&el.__fa&&el.__fa.playState==="running"){el.style.setProperty("--fx",el.__fx+"px");el.classList.add("fl");if(ch)el.parentElement.classList.add("flc");continue;}   /* 도는 중 다른 일로 다시 그려지면 morph 가 지운 꼬리 · clip 을 되살린다 */
+    if(!on||prev===undefined||prev===cur||typeof el.animate!=="function")continue;const p0=parseFloat(prev);if(!Number.isFinite(p0))continue;todo.push([el,ch,p0]);}
+  const go=[];
+  for(const [el,ch,p0] of todo){const box=el.parentElement,full=ch?box.clientHeight:box.clientWidth;if(!full)continue;
+    let vis=ch?Math.max(2,p0/100*full):p0/100*full;   /* 옛 끝(배치 기준) — 도는 중이면 지금 보이는 끝 */
+    if(el.__fa&&el.__fa.playState==="running"){const tf=getComputedStyle(el).transform,m=tf&&tf!=="none"?new DOMMatrixReadOnly(tf):{m41:0,m42:0};vis=(el.__fv!=null?el.__fv:vis)+(ch?-m.m42:m.m41);}
+    const now=ch?el.offsetHeight:el.offsetWidth,d=now-vis;el.__fv=now;
+    if(Math.abs(d)<.5){for(const x of [el,ch?el.previousElementSibling:null])if(x&&x.__fa)x.__fa.cancel();continue;}   /* 이미 새 끝에 보이면 도는 것을 멈추기만 */
+    go.push([el,ch,d,box]);}
+  for(const [el,ch,d,box] of go){const lab=ch?el.previousElementSibling:null,err=!!el.closest(".errlist");
+    const opt={duration:err?200:380,easing:err?"ease-out":"cubic-bezier(.16,1,.3,1)"},kf=ch?[{transform:`translateY(${d}px)`},{transform:"translateY(0)"}]:[{transform:`translateX(${-d}px)`},{transform:"translateX(0)"}];
+    for(const x of [el,lab])if(x&&x.__fa){const o=x.__fa;x.__fa=null;o.cancel();}
+    el.__fx=Math.max(0,-d);el.style.setProperty("--fx",el.__fx+"px");el.classList.add("fl");if(ch)box.classList.add("flc");
+    const a=el.animate(kf,opt);el.__fa=a;
+    const done=()=>{if(el.__fa!==a)return;el.__fa=null;el.classList.remove("fl");el.style.removeProperty("--fx");if(ch)box.classList.remove("flc");};a.onfinish=done;a.oncancel=done;
+    if(lab&&lab.classList.contains("v")){const b=lab.animate(kf,opt);lab.__fa=b;b.onfinish=b.oncancel=()=>{if(lab.__fa===b)lab.__fa=null;};}}}
 function sweepBars(root){if(!G()||reduced()){for(const el of root.querySelectorAll("[data-bar]"))el.__bar=el.dataset.bar;return;}
   const fresh=[],changed=[];for(const el of root.querySelectorAll("[data-bar]")){if(el.__bar===undefined)fresh.push(el);else if(el.__bar!==el.dataset.bar)changed.push(el);el.__bar=el.dataset.bar;}
   const each=Math.min(.02,.45/Math.max(1,fresh.length)),eachR=Math.min(.004,.1/Math.max(1,fresh.length));
@@ -2080,7 +2107,7 @@ function render(){
   for(const el of app.querySelectorAll(":scope>header,:scope>.stage,:scope>.foot"))el.inert=!!top;
   {const st=app.querySelector(":scope>.stage");if(st)st.classList.toggle("behind",!!top);}
   layoutDeck(app,top);liftFront(app,_snap);
-  mountLotties(app);countUp(app);txAnim(app);listBars(app);runRolls();if(window.tipHold)tipHold();sweepBars(app);slideDay(app);navInd(app);reveals(app);sigEnter(app);if(state.view==="lot")lotAfter(app);
+  flipBars(app);mountLotties(app);countUp(app);txAnim(app);listBars(app);runRolls();if(window.tipHold)tipHold();sweepBars(app);slideDay(app);navInd(app);reveals(app);sigEnter(app);if(state.view==="lot")lotAfter(app);
   for(const d of app.querySelectorAll(".dlg[data-dlg]")){const ov=d.parentElement;if(!leaving(ov))ov.inert=d!==top;}
   let target=null;
   if(topK&&topK!==prevTop){if(!prevTop&&fk&&!/^x:/.test(fk))_openerFk=fk;target=top.querySelector("h2[tabindex]");}
@@ -2689,17 +2716,26 @@ function rptOutliers(bs,P){const G={};
   for(const g of Object.values(G)){if(g.length<RPT_MIN_N)continue;const q=g.map(b=>b.pw).sort((x,y)=>x-y),m=q.length>>1,med=q.length%2?q[m]:(q[m-1]+q[m])/2;
     for(const b of g){b.gm=med;if(b.pw<med*RPT_ODD_LO)b.ex="odd";}}}
 const rptFam=al=>/PI\d/.test(al)?"PI":/RDL/.test(al)?"RDL":"기타";
+/* 11/26 RDL-17: Defect 는 장당 값의 **중앙**(RDL 단일스캔 탭과 같은 기준) — 평균은 수천 개짜리 오버킬 장 몇 장에 크게 끌려간다(실데이터 Kendall BS 등).
+   모델의 lots 에는 합([13]) · 개수([14])만 있어 원천 행에서 장별 값을 모은다(모델 값 · MODEL_VERSION 그대로). 같은 장들: 모델처럼 Faults 가 숫자인 행을
+   장비 · Report · 기준 날(Wafer 시작, 없으면 배치 시작)로 — 그 날의 lots 줄([13] · [14])과 같은 장이다. Report 이름이 빈 행은 어느 줄인지 몰라 뺀다 */
+let _rptFx=null;
+function rptFaults(){if(_rptFx&&_rptFx.rows===rows)return _rptFx.m;const m=new Map();
+  for(const r of rows){const fv=String(r.faults??"").replace(/,/g,"").trim();if(!/^\d+$/.test(fv))continue;const rp=String(r.report||"");if(!rp)continue;
+    const an=P(r.wafer_start_time)||P(r.batch_start);if(!an)continue;const k=r.device+"\u0001"+rp+"\u0001"+dk(an),a=m.get(k);if(a)a.push(+fv);else m.set(k,[+fv]);}
+  _rptFx={rows,m};return m;}
 function reportHtml(){
   const P=D.pool,days=D.days;   /* 기간은 헤더에서(10/5) */
   const aliasCache={};
   const aliasOf=gi=>{if(aliasCache[gi]!==undefined)return aliasCache[gi];const G=D.jobGroups[gi];let al=jobAlias(P.job[G.l])||null;if(!al)for(const [i] of G.m){if(jobAlias(P.job[i])){al=jobAlias(P.job[i]);break;}}if(al&&G.nm){al=G.nm;}return aliasCache[gi]=al;};
-  const blank=()=>({n:0,err:0,errMin:0,fS:0,fN:0,ex:{err:0,small:0,odd:0,noTime:0,test:0},pts:[]});
-  const byAlias={};let lotAll=0,lotIn=0;
+  const blank=()=>({n:0,err:0,errMin:0,fv:[],ex:{err:0,small:0,odd:0,noTime:0,test:0},pts:[]});
+  const byAlias={};let lotAll=0,lotIn=0;const FX=rptFaults();
   for(const dy of days)for(const n of D.devices){const t=S.at(dy,n);if(!t)continue;
     for(const L of t.lots){const gi=D.jobG[L[0]],al=aliasOf(gi);lotAll++;if(!al)continue;lotIn++;
       const A=byAlias[al]||(byAlias[al]={name:al,raw:{},all:blank(),devs:{},bt:{}});const rawName=P.job[L[0]];A.raw[rawName]=(A.raw[rawName]||0)+1;
       const dv=A.devs[n]||(A.devs[n]=blank());let em=0;for(const v of Object.values(L[9]))em+=v[1];
-      for(const Sx of [A.all,dv]){Sx.n++;Sx.err+=L[5];Sx.errMin+=em;Sx.fS+=L[13]||0;Sx.fN+=L[14]||0;}
+      const fx=L[14]?FX.get(n+"\u0001"+(P.rep[L[8]]||"")+"\u0001"+dy):null;   /* 장별 Defect(RDL-17) */
+      for(const Sx of [A.all,dv]){Sx.n++;Sx.err+=L[5];Sx.errMin+=em;if(fx)for(const v of fx)Sx.fv.push(v);}
       (A.bt[n]||(A.bt[n]=[])).push({dy,dev:n,L});}}   /* 모든 배치(제외된 것도) — 더블클릭 팝업이 보여 준다 */
   for(const A of Object.values(byAlias)){const all=[];A.all.n=0;
     for(const n of Object.keys(A.bt)){const list=A.bt[n]=rptMerge(A.bt[n]);A.devs[n].n=list.length;A.all.n+=list.length;for(const b of list){b.ex=rptEx(b.L);all.push(b);}}   /* 자정 걸친 조각은 한 배치로 */
@@ -2715,6 +2751,8 @@ function reportHtml(){
     if(r.b<=0)return{ok:false,why:"기울기 음수 — 신뢰 불가",n:Sx.pts.length};
     const a=Math.max(0,r.a);return{ok:true,a,b:r.b,conv:a+r.b*basis,neg:r.a<0,n:Sx.pts.length,seA:r.seA,seB:r.seB};};
   const median=xs=>{const s=[...xs].sort((p,q)=>p-q),m=s.length>>1;return s.length?(s.length%2?s[m]:(s[m-1]+s[m])/2):null;};
+  /* Defect(RDL-17): 큰 숫자는 장당 중앙, 평균은 작은 글씨 */
+  const dN=v=>Number.isInteger(v)?v.toLocaleString():v.toFixed(1),dMed=Sx=>Sx.fv.length?dN(median(Sx.fv)):"—",dAvg=Sx=>{if(!Sx.fv.length)return"—";const a=Sx.fv.reduce((x,y)=>x+y,0)/Sx.fv.length;return a<10?a.toFixed(1):Math.round(a).toLocaleString();};
   const names=Object.keys(byAlias);
   const isK=al=>/^Kendall/i.test(al);
   const groups={Kendall:names.filter(isK),TB500:names.filter(n=>!isK(n))};
@@ -2761,7 +2799,7 @@ function reportHtml(){
     {k:"장비 간 차이",h:good.length>=2?esc(hm(slow.f.conv-fast.f.conv)):"—",s:good.length>=2?"가장 느린 − 가장 빠른":"장비 2대 이상일 때"},
     {k:"Error",h:A.all.err?`<span style="color:${ERR}">${cnt(A.all.err)}건</span>`:"0건",s:`배치 ${A.all.n}개 중 · Lot 단위`},
     {k:"Error 대기",h:A.all.errMin?`<span style="color:${ERR}">${esc(hm(A.all.errMin))}</span>`:"—",s:"Error 구간 + 그 뒤 공백"},
-    {k:"평균 Defect",h:A.all.fN?(A.all.fS/A.all.fN).toFixed(1):"—",s:A.all.fN?A.all.fN+"장 기준":"Defect 열 없음"}];
+    {k:"Defect (장당 중앙)",h:dMed(A.all),s:A.all.fv.length?"평균 "+dAvg(A.all)+" · "+A.all.fv.length.toLocaleString()+"장":"Defect 열 없음",t:A.all.fv.length?"장당 Defect 의 중앙 — 수천 개짜리 오버킬 장이 몇 장 섞여도 덜 흔들립니다(RDL 단일스캔 탭과 같은 기준). 평균 = 합 ÷ 장, 오버킬에 끌려 올라갑니다":""}];
   const cardsH=`<section class="cards sm" style="margin-bottom:14px">${cards.map(s=>`<div><p class="k">${esc(s.k)}</p><p class="v num" style="font-size:24px">${s.h}</p><p class="s"${s.t?` data-tip="${esc(s.t)}"`:""}>${esc(s.s)}</p></div>`).join("")}</section>`;
   /* 장비 줄 + 줄을 누르면 열리는 배치 점 그림 */
   const maxC=good.length?Math.max(...good.map(d=>d.f.conv))*1.08:1;
@@ -2780,7 +2818,7 @@ function reportHtml(){
   const detail=d=>{const f=d.f,Sx=d.Sx;
     const kv=(k,v,c)=>`<div class="rpt-kv"><span>${k}</span><b class="num"${c?` style="color:${c}"`:""}>${v}</b></div>`;
     return `<div class="rpt-detail" data-reveal="rpt:${esc(d.n)}"><div class="rpt-dgrid"><div><p class="muted" style="font-size:12px;margin:0 0 4px">점 = 배치 1회(줄을 더블클릭해도 전체 배치) · <span style="color:${lcol(d)};font-weight:600">진한 선 = ${esc(d.n)}</span> · <span style="color:#7A8591">회색 점선 = ${esc(cur.replace(/^(TB500|Kendall)\s+/,""))} 전체</span> · 세로 점선 = ${basis}장</p>${scatter(d)}</div>
-      <div>${kv("준비",f.a.toFixed(1)+" ± "+f.seA.toFixed(1)+"분"+(f.neg?" ⚠":""))}${kv("장당",f.b.toFixed(2)+" ± "+f.seB.toFixed(2)+"분")}${kv(basis+"장 환산",hm(f.conv),bcol(dev(d))===RPT_MID?null:bcol(dev(d)))}${kv("표본 / 배치",Sx.pts.length+" / "+Sx.n)}${kv("Error",Sx.err?Sx.err+"건 ("+Math.round(d.rate*100)+"%)":"없음",Sx.err?ERR:null)}${kv("Error 대기",Sx.errMin?hm(Sx.errMin):"—",Sx.errMin?ERR:null)}${kv("평균 Defect",Sx.fN?(Sx.fS/Sx.fN).toFixed(1):"—")}
+      <div>${kv("준비",f.a.toFixed(1)+" ± "+f.seA.toFixed(1)+"분"+(f.neg?" ⚠":""))}${kv("장당",f.b.toFixed(2)+" ± "+f.seB.toFixed(2)+"분")}${kv(basis+"장 환산",hm(f.conv),bcol(dev(d))===RPT_MID?null:bcol(dev(d)))}${kv("표본 / 배치",Sx.pts.length+" / "+Sx.n)}${kv("Error",Sx.err?Sx.err+"건 ("+Math.round(d.rate*100)+"%)":"없음",Sx.err?ERR:null)}${kv("Error 대기",Sx.errMin?hm(Sx.errMin):"—",Sx.errMin?ERR:null)}${kv("Defect 중앙",Sx.fv.length?dMed(Sx)+` <small class="muted" style="font-weight:400">평균 ${dAvg(Sx)}</small>`:"—")}
       <button type="button" class="btn primary" style="margin-top:10px" data-h="${h(()=>{rptAllOpen(cur,d.n);})}">이 장비의 모든 배치 보기 (${Sx.n}개)</button><p class="muted" style="font-size:11.5px;margin:8px 0 0">${esc(exTxt(Sx))}${f.neg?" · 준비 시간 절편이 음수라 0분으로 봄":""}</p></div></div></div>`;};
   let _rs=0;
   const rowH=d=>{const sel=state.rptDev===d.n,v=dev(d),hi=d.rate>=0.3&&d.Sx.n>=RPT_MIN_N;
@@ -2797,7 +2835,7 @@ function reportHtml(){
     <div class="rpt-legend"><span><i style="background-color:${ERR}"></i>중앙보다 20% 넘게 느림</span><span><i style="background-color:${RUN}"></i>20% 넘게 빠름</span><span><i style="background-color:${RPT_MID}"></i>비슷함</span><span><u></u>중앙 ${med!=null?esc(hm(med)):"—"}</span></div>`;
   const right=`<div style="min-width:0"><div class="panel" style="margin-bottom:14px"><div style="padding:18px 22px 14px"><h2 style="margin:0 0 6px;font-size:20px">${esc(cur)}</h2><p style="margin:0;font-size:14.5px;line-height:1.55;word-break:keep-all" class="rpt-sent">${sentence}</p></div></div>
     ${cardsH}<div class="panel" style="padding-bottom:8px">${good.length?ctl+`<div class="rpt-scroll" style="overflow-x:auto"><div class="rpt-in"><div class="rpt-list">${good.map(rowH).join("")}</div></div></div>`:`<p class="empty" style="padding:18px 22px">${esc(sentence.replace(/<[^>]+>/g,""))}</p>`}${badH}
-      <p style="margin:8px 0 0;padding:11px 22px;background:#FBFCFD;font-size:12px;color:#5A6673;border-top:1px solid #EDF1F5">배치시간 = 준비 + 장당 × 장수 로 1차 회귀 — ± 는 회귀 표준오차. 표본 5개 미만이면 내지 않음. 표본은 PASS 5장 이상 · 원인 Error 없는 · 시험(Test) Lot 이 아닌 배치이고, 장당 시간이 같은 장비 · 같은 Job 의 중앙(DIA Lot 끼리 · 그 밖끼리)의 0.5배 미만인 배치는 뺍니다(느린 쪽은 느린 장비의 신호라 남깁니다). 배치시간은 Report 의 배치 시작~종료. 평균 Defect 는 Report 표 Faults 열이 있는 행만(옛 캐시 행은 다시 읽어야 채워짐).</p></div></div>`;
+      <p style="margin:8px 0 0;padding:11px 22px;background:#FBFCFD;font-size:12px;color:#5A6673;border-top:1px solid #EDF1F5">배치시간 = 준비 + 장당 × 장수 로 1차 회귀 — ± 는 회귀 표준오차. 표본 5개 미만이면 내지 않음. 표본은 PASS 5장 이상 · 원인 Error 없는 · 시험(Test) Lot 이 아닌 배치이고, 장당 시간이 같은 장비 · 같은 Job 의 중앙(DIA Lot 끼리 · 그 밖끼리)의 0.5배 미만인 배치는 뺍니다(느린 쪽은 느린 장비의 신호라 남깁니다). 배치시간은 Report 의 배치 시작~종료. Defect 는 장당 값의 중앙(평균은 작은 글씨 — 오버킬 장이 평균을 끌어올립니다) · Report 표 Faults 열이 있는 행만(옛 캐시 행은 다시 읽어야 채워짐).</p></div></div>`;
   return head+`<div class="lotgrid">${left}${right}</div>`;
 }
 

@@ -229,7 +229,7 @@ def test_error_popup_type_popup_trend_and_report_tab(page):
     pg.wait_for_selector('main[data-key="view:report"]')   # 새 화면은 표시자가 출발한 두 프레임 뒤에 그린다
     rpt = pg.inner_text("main")
     assert "TB500 · Kendall" in rpt and "개 Job 만 봅니다" in rpt                    # D59
-    assert "평균 Defect" in rpt and "수집 예정" not in rpt                             # D08
+    assert "Defect (장당 중앙)" in rpt and "수집 예정" not in rpt                      # D08 · 11/26 RDL-17 중앙
     assert errors == []
 
 
@@ -355,6 +355,36 @@ def test_error_lists_keep_rows_in_place_and_only_text_changes(page):
     assert pg.evaluate(f"{nm}.__tr") == 1 and pg.evaluate(f"{nm}.getAnimations().length") == 0    # 한 번 넘어갔고, CSS 흐림·깜박임 없음
     bad = pg.evaluate("[...document.querySelectorAll('main .errlist [data-txn][data-txf=\"n\"]')].filter(e => e.textContent !== e.dataset.txn + '건').length")
     assert bad == 0                                                                          # 세기가 끝나면 정확히 새 값
+    assert errors == []
+
+
+def test_bar_value_changes_slide_on_transform_not_width_or_height(page):
+    """11/26 ANIM-14: 날짜별 막대(.chart .f)와 Error 목록 막대(.hbar · .jbar)의 값이 바뀌면 폭 · 높이는 새 값으로 한 번에 바뀌고 칠만 transform 으로 미끄러진다
+    (프레임마다 배치를 다시 계산하지 않는다) — 같은 노드, 줄 때는 같은 색 꼬리(.fl · --fx)가 빈 곳을 채우고, 끝나면 꼬리 · clip(.flc) 이 남지 않는다.
+    토스트도 opacity · transform 만 전환."""
+    pg, errors, _ = page
+    assert pg.evaluate("getComputedStyle(document.getElementById('toast')).transitionProperty") == "opacity, transform"
+    pg.locator('button[data-fk="nav:errors"]').click()
+    pg.wait_for_selector('main[data-key="view:errors"]')
+    pg.wait_for_timeout(700)
+    pg.evaluate("""window.__b = [...document.querySelectorAll('main .chart .f')]; window.__an = [];
+        const o = Element.prototype.animate; Element.prototype.animate = function (k, t) { const c = this.closest && this.closest('.chart, .errlist');
+          if (c) window.__an.push((this.classList.contains('f') ? 'f ' : this.classList.contains('v') ? 'v ' : 'i ') + Object.keys(k[0]).join() + ' ' + t.duration); return o.call(this, k, t); }; 0;""")
+    pg.locator('main .seg button', has_text="발생 확률").first.click()                 # 지표를 바꾸면 날짜별 막대 높이가 바뀐다(fixture: 100% → 28.6%)
+    pg.wait_for_selector('main .seg button.on:has-text("발생 확률")')
+    sized = pg.evaluate("""document.getAnimations().filter(a => a.effect && a.effect.target && a.effect.target.matches('.hbar>i, .jbar>i, .chart .f')
+        && /width|height/.test(a.transitionProperty || '')).length""")
+    assert sized == 0                                                                  # width · height 전환 없음
+    assert pg.evaluate("window.__an") == ["f transform 380", "v transform 380"]        # 막대와 값 글자가 같이(0.38초)
+    assert pg.evaluate("document.querySelectorAll('main .chart .f.fl').length") == 1 and pg.evaluate("document.querySelectorAll('main .chart .flc').length") == 1
+    assert pg.evaluate("window.__b.every(e => e.isConnected)")                         # 같은 막대 노드에서 이어 움직인다
+    # Error 목록 막대(fixture 는 줄이 모두 100% 라 값을 직접 줄여 본다): 0.2초 ease-out(9/23), 줄어드는 만큼 꼬리
+    fx = pg.evaluate("""(() => { const i = [...document.querySelectorAll('main .errlist .hbar>i')].find(e => e.offsetWidth > 0); i.style.width = '30%'; flipBars(document.getElementById('app'));
+        return [i.classList.contains('fl'), i.style.getPropertyValue('--fx'), i.getAnimations().map(a => a.effect.getTiming().duration + ' ' + a.effect.getTiming().easing)]; })()""")
+    assert fx[0] and float(fx[1].replace("px", "")) > 0 and fx[2] == ["200 ease-out"], fx
+    pg.wait_for_timeout(600)
+    assert pg.evaluate("document.querySelectorAll('main .fl, main .flc').length") == 0
+    assert pg.evaluate("[...document.querySelectorAll('main .hbar>i, main .jbar>i, main .chart .f')].every(e => !e.style.getPropertyValue('--fx'))")
     assert errors == []
 
 
