@@ -464,7 +464,8 @@ def test_closing_during_manual_publish_asks_and_waits_for_it(window, styled_qapp
 
 def test_perf_test_card_runs_off_the_ui_thread_and_blocks_other_jobs(window, styled_qapp, monkeypatch, tmp_path):
     """11/25 속도 시험 카드(PH-01 · PH-03 · LOTD-01): 조사 도구 안에 있고, 도는 동안 수집 · 빈칸 채우기 · 배포 · 실패 로그 · HTML 만 다시
-    만들기를 막으며(이유는 실행 줄에), 다시 누르면 멈춘다. 끝나면 결과 폴더를 연다. 다른 일이 돌 때는 시작하지 않는다."""
+    만들기를 막으며(이유는 실행 줄에), 다시 누르면 멈춘다. 끝나면 결과 폴더를 연다. 다른 일이 돌 때는 시작하지 않는다.
+    11/26: 끝난 카드에 LOT 시험 결과 한 줄 · 못 받은 파일 · '요약.txt 하나만 보내 주세요'. 실제 워커는 브라우저 여는 함수를 넘긴다."""
     import threading
 
     from PyQt6.QtCore import QThread, pyqtSignal
@@ -495,7 +496,8 @@ def test_perf_test_card_runs_off_the_ui_thread_and_blocks_other_jobs(window, sty
             self.ui_thread = threading.current_thread() is threading.main_thread()
             self.progress.emit(1, 9, "phase")
             self._stop.wait(10)
-            self.done.emit({"dir": str(tmp_path / "perf" / "x"), "stopped": True}, "")
+            self.done.emit({"dir": str(tmp_path / "perf" / "x"), "stopped": True, "lot_open": {"now": 10.04},
+                            "lot_missing": ["LOT_계산건너뜀.html"]}, "")
 
     monkeypatch.setattr(cp.perf_worker, "PerfTestWorker", FakeWorker)
     page = window.collect_page
@@ -517,6 +519,9 @@ def test_perf_test_card_runs_off_the_ui_thread_and_blocks_other_jobs(window, sty
         _pump(styled_qapp)
     assert page._perf_worker is None and page._busy_reason() == ""
     assert opened == [str(tmp_path / "perf" / "x")] and page._b_perf_open.isVisibleTo(page)
+    status = page._perf_status.text()                                  # 11/26 단추 하나: 브라우저로 연 결과 · 못 받은 파일 · 보낼 것 한 줄
+    assert K.PERF_LOT_FMT.format(now="10.0초", skip=K.PERF_LOT_NONE) in status and "LOT_계산건너뜀.html" in status
+    assert status.rstrip().endswith(K.PERF_SEND)
     assert page._b_perf_run.text() == K.PERF_RUN
     # 다른 일이 돌 때는 시작하지 않는다
     page._fl_worker = object()
@@ -524,3 +529,9 @@ def test_perf_test_card_runs_off_the_ui_thread_and_blocks_other_jobs(window, sty
     page._on_perf()
     assert page._perf_worker is None and errors and errors[-1][1] == K.PERF_BUSY
     page._fl_worker = None
+    from pathlib import Path
+
+    from aoi_capacity import perf_test
+    src = Path(cp.perf_worker.__file__).read_text(encoding="utf-8")       # (위에서 워커 클래스를 대역으로 바꿨으니 파일로 본다)
+    assert "browser=perf_test.open_in_browser" in src                     # 워커 스레드에서 표준 라이브러리로 연다(Qt 호출 아님)
+    assert "QDesktopServices" not in Path(perf_test.__file__).read_text(encoding="utf-8")

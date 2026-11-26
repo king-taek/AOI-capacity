@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import datetime as dt
 import html
+import logging
 import os
 import re
 import subprocess
@@ -29,6 +30,8 @@ from typing import Callable, Dict, List, NamedTuple, Optional
 
 from . import collect, i18n, nas_guard
 from .utils import paths
+
+_LOG = logging.getLogger("aoi.publish")
 
 STUB_NAME = "AOI_LOT.html"
 SHORTCUT_NAME = "AOI LOT.url"                      # 폴더 안에 두는 인터넷 바로가기 — 팀원은 이 파일을 더블클릭하거나 바탕화면으로 복사(10/30 사용자 요청 이름. 같은 이름의 옛 파일은 아이콘 캐시가 남을 수 있어 새 이름으로)
@@ -62,7 +65,7 @@ class Kind(NamedTuple):
 
     @property
     def data_re(self):
-        return re.compile(r"^" + self.prefix + r"_\d{8}_\d{4,6}\.html$")
+        return re.compile(r"^" + self.prefix + r"_(\d{8})_(\d{4,6})(?:_(\d+))?\.html$")   # 같은 초에 또 올리면 `_2`·`_3`… 꼬리(LOT-17)
 
 
 LOT = Kind(STUB_NAME, SHORTCUT_NAME, "AOI_LOT_LATEST", "lot", i18n.KO.PUBLISH_STUB_TITLE, i18n.KO.PUBLISH_STUB_LOADING, i18n.KO.PUBLISH_STUB_FALLBACK,
@@ -228,8 +231,11 @@ def _ensure_lnk(share_dir: str, kind: Kind, icon: Optional[str], roots: List[str
     target = lnk_target(share_dir, kind)
     if _lnk_current(cur, icon, target):
         return True
+    t0 = time.perf_counter()
     data = make_lnk(target, icon)
     if not data:
+        if os.name == "nt":                              # PP-08: 못 만드는 PC 는 수집마다 PowerShell 을 띄운다 — 얼마나 걸리는지 로그로 먼저 잰다
+            _LOG.info("바로가기 .lnk 못 만듦(%.1f초) → .url: %s", time.perf_counter() - t0, path)
         return cur is not None
     _write_text(path, data, roots, tries=2)
     return os.path.isfile(path)
@@ -290,7 +296,10 @@ def _prune(data_dir: str, keep: int, roots: List[str], protect=(), kind: Kind = 
     """오래된 데이터 파일 정리 — 최신 `keep` 개만 남긴다(`protect` = 이번에 쓴 것과 latest.js 가 지금 가리키는 이름은 지우지 않는다). 지운 개수. 못 지운 것(열려 있음)은 다음에."""
     nas_guard.assert_local(data_dir, roots)
     try:
-        names = sorted(n for n in os.listdir(data_dir) if kind.data_re.match(n))
+        rx = kind.data_re
+        found = [(m, n) for n in os.listdir(data_dir) for m in (rx.match(n),) if m]
+        # 오래된 순: 날짜 · 시각 글자(`1030` < `103045` — 앞이 같으면 짧은 쪽이 먼저 올린 것) · 꼬리 번호(숫자로 — `_10` 이 `_9` 앞에 서지 않게)
+        names = [n for m, n in sorted(found, key=lambda t: (t[0].group(1), t[0].group(2), int(t[0].group(3) or 0)))]
     except OSError:
         return 0
     gone = 0

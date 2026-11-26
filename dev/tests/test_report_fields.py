@@ -57,6 +57,42 @@ def test_settings_are_read_once_per_report_for_recipe_tab_jobs(tmp_path, fake_na
     assert opened and all(p.endswith("Recipe.ini") and "K625407-01B0" in p for p in opened)
 
 
+def test_settings_reuse_the_recipe_ini_bytes_the_parameter_read_already_has(tmp_path, fake_nas, monkeypatch):
+    """PC-08: 파라미터 수집이 첫 Wafer 폴더에서 읽은 Recipe.ini 바이트로 설정도 낸다 — 그 파일은 한 번만 열리고,
+    행 · 캐시(설정 · 파라미터)는 예전처럼 따로 연 것과 바이트까지 같다(CRLF · UTF-8 이 아닌 바이트 포함)."""
+    import json
+    from aoi_capacity import nas_guard
+    monkeypatch.setattr(collect, "RECIPE_TAB_JOB_RE", re.compile(""))
+    nas, csv_path = fake_nas
+    (_wafer_dir(nas) / "Recipe.ini").write_bytes(RECIPE_INI.replace("\n", "\r\n").encode("utf-8")
+                                                 + b"; \xb8\xde\xb8\xf0\r\nNote=\xff\r")
+    real = nas_guard._read_all
+
+    def run(sub, old_way):
+        reads = []
+        with monkeypatch.context() as m:
+            m.setattr(nas_guard, "_read_all", lambda p: (reads.append(str(p)), real(p))[1])
+            if old_way:                                         # 고치기 전: 바이트를 넘기지 않고 다시 연다
+                orig = collect._IniMemo.settings
+                m.setattr(collect._IniMemo, "settings", lambda self, path, data=None: orig(self, path))
+            cfg = make_cfg(tmp_path / sub, csv_path)
+            rows, _meta, _err = collect.collect(cfg)
+        cache = json.loads(open(cfg["cache_file"], encoding="utf-8").read())
+        mine = [p for p in reads if p.endswith("Recipe.ini") and "AOI-9" in p]
+        return rows, {k: cache.get(k) for k in ("reports", "params")}, mine
+
+    new_rows, new_cache, new_reads = run("new", False)
+    old_rows, old_cache, old_reads = run("old", True)
+    assert len(old_reads) == 2 and len(new_reads) == 1                       # 같은 파일 두 번 → 한 번
+    assert json.dumps(new_rows, sort_keys=True) == json.dumps(old_rows, sort_keys=True)
+    for k in set(new_cache["reports"]) | set(old_cache["reports"]):
+        a, b = new_cache["reports"].get(k), old_cache["reports"].get(k)
+        assert a is not None and b is not None and {x for x in a if a[x] != b[x]} <= {"mtime", "seen"}, k   # 두 값은 시각
+    assert json.dumps(new_cache["params"], sort_keys=True) == json.dumps(old_cache["params"], sort_keys=True)
+    [r] = [r for r in new_rows if r["device"] == "9호기" and r["wafer_id"] == "K625407-01B0"]
+    assert (r["cr_every"], r["af_every"]) == ("Lot", "Wafer")
+
+
 def test_other_jobs_never_open_recipe_ini(tmp_path, fake_nas, monkeypatch):
     nas, csv_path = fake_nas
     (_wafer_dir(nas) / "Recipe.ini").write_text(RECIPE_INI, encoding="utf-8")

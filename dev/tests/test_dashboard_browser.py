@@ -229,7 +229,7 @@ def test_error_popup_type_popup_trend_and_report_tab(page):
     pg.wait_for_selector('main[data-key="view:report"]')   # 새 화면은 표시자가 출발한 두 프레임 뒤에 그린다
     rpt = pg.inner_text("main")
     assert "TB500 · Kendall" in rpt and "개 Job 만 봅니다" in rpt                    # D59
-    assert "평균 Defect" in rpt and "수집 예정" not in rpt                             # D08
+    assert "Defect (장당 중앙)" in rpt and "수집 예정" not in rpt                      # D08 · 11/26 RDL-17 중앙
     assert errors == []
 
 
@@ -248,6 +248,7 @@ def test_home_rows_follow_device_order_and_save_copy_refolds_the_same_columns(pa
     pg, errors, requests = page
     order = pg.evaluate("[...document.querySelectorAll('main button.rowbtn[data-fk^=\"dev:\"]')].map(b => b.dataset.fk)")
     assert order == ["dev:AOI-1", "dev:AOI-2", "dev:AOI-3", "dev:AOI-10"]   # 번호순 — 사전순이면 AOI-10 이 AOI-2 앞에 온다
+    assert pg.evaluate("document.getElementById('embedded').textContent") == ""   # PH-08: 읽은 원문은 문서에서 비운다 — 사본은 아래처럼 같다
     with pg.expect_download() as dl:
         pg.get_by_role("button", name="사본 저장").click()
     saved = Path(dl.value.path()).read_text(encoding="utf-8")
@@ -357,12 +358,42 @@ def test_error_lists_keep_rows_in_place_and_only_text_changes(page):
     assert errors == []
 
 
+def test_bar_value_changes_slide_on_transform_not_width_or_height(page):
+    """11/26 ANIM-14: 날짜별 막대(.chart .f)와 Error 목록 막대(.hbar · .jbar)의 값이 바뀌면 폭 · 높이는 새 값으로 한 번에 바뀌고 칠만 transform 으로 미끄러진다
+    (프레임마다 배치를 다시 계산하지 않는다) — 같은 노드, 줄 때는 같은 색 꼬리(.fl · --fx)가 빈 곳을 채우고, 끝나면 꼬리 · clip(.flc) 이 남지 않는다.
+    토스트도 opacity · transform 만 전환."""
+    pg, errors, _ = page
+    assert pg.evaluate("getComputedStyle(document.getElementById('toast')).transitionProperty") == "opacity, transform"
+    pg.locator('button[data-fk="nav:errors"]').click()
+    pg.wait_for_selector('main[data-key="view:errors"]')
+    pg.wait_for_timeout(700)
+    pg.evaluate("""window.__b = [...document.querySelectorAll('main .chart .f')]; window.__an = [];
+        const o = Element.prototype.animate; Element.prototype.animate = function (k, t) { const c = this.closest && this.closest('.chart, .errlist');
+          if (c) window.__an.push((this.classList.contains('f') ? 'f ' : this.classList.contains('v') ? 'v ' : 'i ') + Object.keys(k[0]).join() + ' ' + t.duration); return o.call(this, k, t); }; 0;""")
+    pg.locator('main .seg button', has_text="발생 확률").first.click()                 # 지표를 바꾸면 날짜별 막대 높이가 바뀐다(fixture: 100% → 28.6%)
+    pg.wait_for_selector('main .seg button.on:has-text("발생 확률")')
+    sized = pg.evaluate("""document.getAnimations().filter(a => a.effect && a.effect.target && a.effect.target.matches('.hbar>i, .jbar>i, .chart .f')
+        && /width|height/.test(a.transitionProperty || '')).length""")
+    assert sized == 0                                                                  # width · height 전환 없음
+    assert pg.evaluate("window.__an") == ["f transform 380", "v transform 380"]        # 막대와 값 글자가 같이(0.38초)
+    assert pg.evaluate("document.querySelectorAll('main .chart .f.fl').length") == 1 and pg.evaluate("document.querySelectorAll('main .chart .flc').length") == 1
+    assert pg.evaluate("window.__b.every(e => e.isConnected)")                         # 같은 막대 노드에서 이어 움직인다
+    # Error 목록 막대(fixture 는 줄이 모두 100% 라 값을 직접 줄여 본다): 0.2초 ease-out(9/23), 줄어드는 만큼 꼬리
+    fx = pg.evaluate("""(() => { const i = [...document.querySelectorAll('main .errlist .hbar>i')].find(e => e.offsetWidth > 0); i.style.width = '30%'; flipBars(document.getElementById('app'));
+        return [i.classList.contains('fl'), i.style.getPropertyValue('--fx'), i.getAnimations().map(a => a.effect.getTiming().duration + ' ' + a.effect.getTiming().easing)]; })()""")
+    assert fx[0] and float(fx[1].replace("px", "")) > 0 and fx[2] == ["200 ease-out"], fx
+    pg.wait_for_timeout(600)
+    assert pg.evaluate("document.querySelectorAll('main .fl, main .flc').length") == 0
+    assert pg.evaluate("[...document.querySelectorAll('main .hbar>i, main .jbar>i, main .chart .f')].every(e => !e.style.getPropertyValue('--fx'))")
+    assert errors == []
+
+
 def test_popups_stack_behind_each_other_and_escape_closes_the_top(page):
     """팝업이 겹치면 아래 팝업은 닫히지 않고 뒤로 물러난다(behind · inert) — ESC 는 맨 위만 닫는다."""
     pg, errors, _ = page
     pg.locator('button.rowbtn[data-fk="dev:AOI-1"]').click()
     pg.wait_for_selector('.dlg[data-dlg="dev"]')
-    pg.locator('.dlg[data-dlg="dev"] button[data-fk="dev:err"]').click()
+    pg.locator('.dlg[data-dlg="dev"] button[data-fk="dev:err"]').click()   # 11/25: 단추 이름에 그날 건수('Error 3건 ›' · 'Error 없음 ›')
     pg.wait_for_selector('.dlg[data-dlg="err"]')
     st = pg.evaluate("[...document.querySelectorAll('.ov:not([data-leaving])')].map(o => o.dataset.key + ':' + (o.classList.contains('behind') ? 'behind' : 'top') + ':' + o.inert)")
     assert st == ["ov:dev:behind:true", "ov:err:top:false"]
@@ -447,7 +478,7 @@ def test_motion_hooks_lottie_countup_sweep_and_recede(page):
     pg.locator('button.rowbtn[data-fk="dev:AOI-2"]').click()                              # AOI-2 는 Error 가 없다
     pg.wait_for_selector('.dlg[data-dlg="dev"]')
     assert pg.evaluate("document.querySelector('#app>.stage').classList.contains('behind')")   # 팝업이 열리면 무대가 물러난다
-    pg.locator('.dlg[data-dlg="dev"] button[data-fk="dev:err"]').click()
+    pg.locator('.dlg[data-dlg="dev"] button[data-fk="dev:err"]').click()   # 11/25: 단추 이름에 그날 건수('Error 3건 ›' · 'Error 없음 ›')
     pg.wait_for_selector('.dlg[data-dlg="err"] .lt-empty .lt svg')                       # Lottie 체크
     pg.keyboard.press("Escape")
     pg.keyboard.press("Escape")
@@ -461,7 +492,7 @@ def test_popup_deck_click_behind_brings_it_to_front_and_stackbar_lists_them(page
     pg, errors, _ = page
     pg.locator('button.rowbtn[data-fk="dev:AOI-1"]').click()
     pg.wait_for_selector('.dlg[data-dlg="dev"]')
-    pg.locator('.dlg[data-dlg="dev"] button[data-fk="dev:err"]').click()
+    pg.locator('.dlg[data-dlg="dev"] button[data-fk="dev:err"]').click()   # 11/25: 단추 이름에 그날 건수('Error 3건 ›' · 'Error 없음 ›')
     pg.wait_for_selector('.dlg[data-dlg="err"]')
     pg.wait_for_timeout(500)
     # 뒤 카드(dev)는 앞 카드보다 왼쪽에 있다
@@ -497,7 +528,7 @@ def test_stackbar_stays_top_left_while_the_popup_scrolls_and_lot_panel_fades_in_
     pg.set_viewport_size({"width": 1280, "height": 420})
     pg.locator('button.rowbtn[data-fk="dev:AOI-1"]').click()
     pg.wait_for_selector('.dlg[data-dlg="dev"]')
-    pg.locator('.dlg[data-dlg="dev"] button[data-fk="dev:err"]').click()
+    pg.locator('.dlg[data-dlg="dev"] button[data-fk="dev:err"]').click()   # 11/25: 단추 이름에 그날 건수('Error 3건 ›' · 'Error 없음 ›')
     pg.wait_for_selector('.stackbar .sb')
     assert pg.evaluate("document.querySelector('.stackbar').parentElement.id") == "app"
     top0 = pg.evaluate("document.querySelector('.stackbar').getBoundingClientRect().top")
@@ -623,7 +654,7 @@ def test_recipe_tab_shows_per_device_stats_and_compares_two_periods(page):
     pg.wait_for_timeout(450)                                                    # 바뀐 글자는 0.24초 동안 한 글자씩 넘어간다
     assert [x.split("\n")[0] for x in pg.locator(".rcprow").all_inner_texts()] == ["TB500 RDL2"]   # 10/6: 멀티 · 단일 Job(D76)은 한 레시피 줄로
     row0 = " ".join(pg.locator(".rcprow").first.inner_text().split())                                 # 10/7: 막대 안 % · 밑 줄 방식별 wafer 수 · Lot 수
-    assert "67%" in row0 and "33%" in row0 and "멀티 6" in row0 and "단일 3" in row0 and "Lot" in row0
+    assert "67%" in row0 and "33%" in row0 and "멀티 6" in row0 and "단일 3" in row0 and "LOT" in row0
     pg.locator(".rcprow").first.click()
     # 첫 화면(10/5): 장당 스캔 멀티 vs 단일 — 9/18 W 6장 멀티 4분, 9/17 Q 3장 단일 3분 → 단일 1분 빠름(같은 장비 AOI-1)
     tiles = pg.locator(".scanhero .mtile").all_inner_texts()
@@ -636,13 +667,13 @@ def test_recipe_tab_shows_per_device_stats_and_compares_two_periods(page):
     assert pg.locator(".scanhero .jtog").count() == 2 and pg.locator(".scanhero .jtog[aria-pressed='true']").count() == 2   # 이 레시피로 보는 Job — 통계에 넣을지 고르는 단추
     assert [x.split("\n")[0] for x in pg.locator(".dbrow:not(.head):not(.axis)").all_inner_texts()] == ["AOI-1"]
     assert pg.locator(".dbrow .dd").count() == 2                        # 같은 장비에 멀티 · 단일 두 점
-    row = pg.locator(".dbrow[data-row='dev:AOI-1']").inner_text().replace("\n", " ")
-    assert "6·3wafer" in row and "1·1Lot" in row                       # 몇 wafer · 몇 Lot(멀티·단일 순)
+    dc = [" ".join(x.split()) for x in pg.locator(".dbrow[data-row='dev:AOI-1'] .dc").all_inner_texts()]
+    assert dc == ["멀티 6 · 단일 3 wafer", "멀티 1 · 단일 1 LOT"] and pg.locator(".dbrow[data-row='dev:AOI-1'] .dc .sw").count() == 4   # 몇 wafer · 몇 LOT — 방식 색 점 + 이름, 0 은 적지 않음(RDL-13 · COPY-09)
     assert pg.locator(".how .how-item").count() == 0 and pg.locator('[data-fk="how:all"]').get_attribute("aria-expanded") == "false"   # 어떻게 셌나는 기본 접힘
     pg.locator('[data-fk="how:all"]').click()
     pg.wait_for_timeout(250)
     how = pg.locator(".how").inner_text()                               # 누르면 펼침 — 실제 숫자로
-    assert "9장" in how and "WaferStartTime" in how and "Batch Start" in how
+    assert "9 wafer" in how and "WaferStartTime" in how and "Batch Start" in how
     assert pg.locator(".cmp").count() == 0 and "전후 비교" not in pg.locator("main").inner_text()   # 전후 비교는 없앴다(사용자 10/6)
     # 장당 | LOT당: 같은 레시피를 Lot(Report) 단위로 — fixture 의 Lot 은 20장 미만이라 값이 없다
     pg.locator(".scanhero .seg button", has_text="LOT당").click()
@@ -660,7 +691,7 @@ def test_recipe_tab_shows_per_device_stats_and_compares_two_periods(page):
     pg.locator('[data-fk="rcp:more"]').click()
     pg.wait_for_timeout(200)
     cards = pg.locator("main section.cards > div").all_inner_texts()
-    assert cards[0].split("\n")[0] == "생산량" and "3장" in cards[0]           # 상세는 켜 둔 Job 만
+    assert cards[0].split("\n")[0] == "생산량" and "3 wafer" in cards[0]           # 상세는 켜 둔 Job 만
     assert requests == [] and errors == []
 
 
@@ -786,7 +817,7 @@ def test_recipe_how_summary_and_details_are_accessible(page):
     pg.wait_for_timeout(300)
     assert items.count() == 7 and pg.locator(".how .how-item[open]").count() == 0
     how = pg.locator(".how").inner_text()
-    assert "PASS 9장" in how and "WaferStartTime → WaferEndTime" in how and "Batch Start → Batch End" in how
+    assert "PASS 9 wafer" in how and "WaferStartTime → WaferEndTime" in how and "Batch Start → Batch End" in how
     pg.locator('[data-fk="how:time"]').click()
     pg.locator('[data-fk="how:batch"]').focus()
     pg.keyboard.press("Enter")
@@ -982,8 +1013,8 @@ def test_rdl_tab_lot_stat_outlier_x5_rule_and_wording(rdl_page):
     pg.locator('[data-fk="how:all"]').click()
     pg.wait_for_timeout(300)
     how = pg.locator(".how").inner_text()
-    assert "x5 · x10 단일 6장 제외" in how and "PASS 4" not in how                           # x5 만 쓴 단일은 통계에서 무시
-    assert "제외 Lot 2개" in how and "이상치" in how
+    assert "x5 · x10 단일 6 wafer 제외" in how and "PASS 4" not in how                           # x5 만 쓴 단일은 통계에서 무시
+    assert "제외 LOT 2개" in how and "이상치" in how
     body = pg.locator("main").inner_text().lower()
     assert "fault" not in body and "배치 기준" not in body and "하루 평균" not in body and "날짜별 생산량" not in body
     pg.locator('[data-fk="rcp:more"]').click()
@@ -1054,7 +1085,7 @@ def test_graph_tooltips_appear_at_once_and_replace_native_titles(page):
     dot.hover()
     pg.wait_for_timeout(200)
     tip = pg.locator(".tip:not([hidden])").inner_text()
-    assert "AOI-1" in tip and "Wafer당 스캔" in tip and "Lot" in tip                         # 값 · 장 수 · Lot 수가 줄마다
+    assert "AOI-1" in tip and "Wafer당 스캔" in tip and "LOT" in tip                         # 값 · 장 수 · Lot 수가 줄마다
     assert dot.get_attribute("title") is None and dot.get_attribute("data-tip")            # 느린 기본 title 은 tip 으로 옮겨졌다
     assert errors == []
 
@@ -1295,6 +1326,7 @@ def test_compressed_publish_data_opens_and_save_copy_stays_compressed(page_facto
     ctx, pg, errors, requests = _open_quiet(page_factory, out)
     pg.wait_for_selector('main[data-key="view:home"]')
     assert pg.evaluate("rows.length") == len(emb["rows"]) and pg.evaluate("embEnc") == "gz"
+    assert pg.evaluate("document.getElementById('embedded').textContent") == ""   # PH-08: 압축 글도 읽은 뒤 비운다
     with pg.expect_download() as dl:
         pg.evaluate("saveHtml()")
     saved = Path(dl.value.path()).read_text(encoding="utf-8")
@@ -1331,3 +1363,32 @@ def test_compressed_data_that_cannot_be_opened_shows_the_error_panel(page_factor
         assert "Chrome" in msg
     assert requests == []
     ctx.close()
+
+
+def test_lot_search_list_never_scrolls_sideways(page_factory, tmp_path):
+    """11/26 현택: '스캔을 어디에 했니?' 의 LOT 검색 목록에 가로 스크롤이 없어야 한다 —
+    긴 LOT 이름 · '다른 LOT 과 겹침' · 'Error n번' 표 · 긴 장비 줄이 한 줄에 몰려도 칸 안에서 줄을 바꾼다."""
+    long_lot = "TB500.INT311_VERYLONGLOTNAMEWITHOUTANYBREAKS_DIA_RESCAN_0123456789"
+    rows = []
+    for i in range(5):
+        rows.append(_row("AOI-1", f"LNGWAF0{i}X", f"08:{i*5:02d}", f"08:{i*5+4:02d}", lot=long_lot, report="RL1.htm", bs="08:00", be="09:00"))
+    rows.append(_row("AOI-1", "LNGWAF09X", "09:10", "09:11", lot=long_lot, report="RL2.htm", bs="09:05", be="09:30",
+                     status="Wafer lost during transfer. Batch Aborted."))
+    for i in range(5):
+        rows.append(_row("4F-AOI-01", f"LNGWAF0{i}X", f"11:{i*5:02d}", f"11:{i*5+4:02d}", lot=long_lot + "_RE", report="RL3.htm", bs="11:00", be="12:00"))
+    for slot in range(3):
+        rows.append(_row("AOI-2", f"Slot {slot+1}", f"13:{slot*5:02d}", f"13:{slot*5+4:02d}", lot="NOIDLOT_" + "X" * 40, report="RN.htm", bs="13:00", be="14:00"))
+    ctx, pg, errors = _open_rows_page(page_factory, tmp_path, rows, ["AOI-1", "AOI-2", "4F-AOI-01"])
+    try:
+        pg.click('nav.nav button[data-fk="nav:lot"]')
+        pg.wait_for_selector('main[data-key="view:lot"]')
+        for q in ["", "TB500", "LNGWAF", "AOI"]:
+            pg.fill('[data-in="lotQ"]', q)
+            pg.wait_for_timeout(500)
+            sw, cw = pg.eval_on_selector(".lotlist .lotscroll", "s => [s.scrollWidth, s.clientWidth]")
+            assert sw <= cw, (q, sw, cw)
+            out = pg.eval_on_selector(".lotlist .lotscroll", "s => { const r = s.getBoundingClientRect(); return [...s.querySelectorAll('*')].filter(e => { const b = e.getBoundingClientRect(); return b.width > 0 && b.right > r.right + 0.5; }).map(e => e.className) }")
+            assert out == [], (q, out)
+        assert not errors, errors
+    finally:
+        ctx.close()

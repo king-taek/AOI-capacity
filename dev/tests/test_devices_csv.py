@@ -227,6 +227,27 @@ def test_device_check_pool_gives_identical_results_and_log_order(tmp_path, worke
     assert sum(1 for l in a[1] if l.startswith("[범위 밖]")) == 13                      # AOI-1·3~12 · 없음(AOI-1) · AOI-99 행
 
 
+def test_report_folder_is_checked_once_per_device(tmp_path, monkeypatch):
+    """PC-10: 장비 확인 ①(범위 게이트 · Report 폴더 있나)이 찾은 Report 폴더 이름을 ②(Report · Scanresult · 백업)로 넘긴다 —
+    같은 Report 폴더를 두 번 isdir 하지 않는다(예전엔 장비마다 2번). 결과(이름 · 폴더 · 로그)는 그대로."""
+    import os
+    nas, csv_path = _many_devices(tmp_path)
+    csv_path.write_text("".join(l for l in csv_path.read_text(encoding="utf-8-sig").splitlines(True) if ",*," not in l),
+                        encoding="utf-8-sig")                                   # `*` 행은 같은 장비를 한 번 더 확인하는 다른 길이라 뺀다
+    cfg = make_cfg(tmp_path, csv_path, read_workers=1)
+    base = devices.resolve_devices(cfg, [].append)
+    real, asked = os.path.isdir, []
+    monkeypatch.setattr(os.path, "isdir", lambda p: (asked.append(os.path.normcase(os.path.abspath(str(p)))), real(p))[1])
+    logs = []
+    devs = devices.resolve_devices(cfg, logs.append)
+    monkeypatch.undo()
+    assert devs == base and len(devs) == 13
+    found = [os.path.normcase(os.path.abspath(os.path.join(str(d["path"]), str(d["report_dir"])))) for d in devs]
+    per = {f: asked.count(f) for f in found}
+    assert set(per.values()) == {1}, per                                      # 예전: 장비마다 2
+    assert next(d for d in devs if d["name"] == "열셋")["report_dir"] == "Reports"
+
+
 def test_pool_size_follows_read_workers_and_task_count():
     assert devices._pool_size({"read_workers": 8}, 30) == 8 and devices._pool_size({"read_workers": 8}, 3) == 3
     assert devices._pool_size({"read_workers": 1}, 30) == 1 and devices._pool_size({}, 30) == 8

@@ -371,12 +371,33 @@ def test_report_tab_regresses_only_with_five_or_more_clean_batches_and_lists_exc
     rows.append(w("AOI-1", "E9", "18:20", "18:22", lot="LOT-E", job="R_TB500_LIVE_PI3", report=err_rep, bs="18:00", be="18:30", status="Alignment Error."))
     (html,) = screen(rows, meta("AOI-1"), [["reportHtml"]], state={"view": "report", "rptDev": "AOI-1"})
     assert "<h1>TB500 · Kendall</h1>" in html and "표기명 21개 Job 만 봅니다" in html
+    intro = re.search(r'</div>\s*<p[^>]*>(.*?)</p>', html.split("<h1>TB500 · Kendall</h1>")[1], re.S).group(1)
+    assert re.sub(r"<[^>]+>", "", intro).startswith("왼쪽에서 Job 을 고르면 장비마다 얼마나 다른지 보입니다.")      # COPY-13: 할 일 먼저, 범위는 괄호로
+    assert "계산 방법 ▾" in html and "회귀 표준오차" not in html                                  # 회귀 설명은 접어 둔다
+    (opened,) = screen(rows, meta("AOI-1"), [["reportHtml"]], state={"view": "report", "rptDev": "AOI-1", "rptHow": True})
+    assert "계산 방법 ▴" in opened and "회귀 표준오차" in opened
     assert ">PI3</b>" in html and "준비 10분 + 장당 5.0분" in html and "2시간 15분" in html          # 10 + 5×25 = 135분 (25장 환산)
     assert "10.0 ± 0.0분" in html and "5.00 ± 0.00분" in html                                      # 장비 상세의 회귀 값
     assert "5 / 6" in html and "제외 — Error 1 · PASS 5장 미만 0" in html
     assert "data-dh=" in html and "이 장비의 모든 배치 보기 (6개)" in html            # 더블클릭 · 단추 = 모든 배치 팝업(10/19)
     (html4,) = screen(_clean_batches(4), meta("AOI-1"), [["reportHtml"]], state={"view": "report"})
     assert "표본 4개 — 5개 미만" in html4 and "2시간 15분" not in html4
+
+
+def test_report_tab_defect_is_the_per_wafer_median_with_the_mean_in_small_text():
+    """11/26 RDL-17: Defect 는 장당 값의 중앙(RDL 단일스캔 탭과 같은 기준) — 오버킬 장(5,000개) 두 장이 평균을 끌어올려도 큰 숫자는 그대로.
+    lots 에는 합 · 개수만 있어 원천 행의 장별 faults 로 잰다. 35장 중 33장 10개 · 2장 5,000개 → 중앙 10 · 평균 (330+10000)/35 = 295."""
+    rows = _clean_batches(5)
+    for i, r in enumerate(rows):
+        r["faults"] = "5,000" if i in (3, 20) else "10"
+    rows[7]["faults"] = ""                                                  # 값 없는 장은 세지 않는다
+    (html,) = screen(rows, meta("AOI-1"), [["reportHtml"]], state={"view": "report", "rptDev": "AOI-1", "rptHow": True})
+    assert "평균 Defect" not in html
+    assert '<p class="k">Defect (장당 중앙)</p><p class="v num" style="font-size:24px">10</p>' in html
+    avg = round((32 * 10 + 2 * 5000) / 34)
+    assert f"평균 {avg} · 34장" in html                                     # 카드 작은 줄
+    assert "Defect 중앙</span><b class=\"num\">10 <small" in html and f"평균 {avg}</small>" in html   # 장비 상세도 같은 기준
+    assert "Defect 는 장당 값의 중앙" in html
 
 
 def test_report_tab_leaves_out_a_batch_whose_wafers_were_all_skipped():
@@ -569,12 +590,16 @@ def test_recipe_verdict_labels_both_comparison_scopes():
 
 def test_recipe_device_rows_show_unjudged_values_and_select_only_a_picked_device():
     """11/25 RDL-10: 판정 못 한 wafer 만 있는 장비는 '값 없음' 이 아니라 옅은 회색 점(판정 못 함 값 — 멀티 · 단일에는 섞지 않음).
-    팝업을 연 장비는 선택 표시."""
+    RDL-11: 아무도 고르지 않았으면 어느 장비 행도 '선택됨' 이 아니다 — 팝업을 연 장비만. RDL-13: wafer 수 앞에 방식 색 점."""
     rows = [_rdl("AOI-1", f"M{i}", f"08:{i*10:02d}", f"08:{i*10+10:02d}", "A", "MULTI") for i in range(3)]
     rows += [_rdl("AOI-3", f"U{i}", f"10:{i*12:02d}", f"10:{i*12+12:02d}", "B", "") for i in range(3)]
     html, = screen(rows, meta("AOI-1", "AOI-3"), [["rcpHtml"]])
     row3 = next(x for x in html.split('class="dbrow') if 'data-row="dev:AOI-3"' in x)
     assert 'class="dlab U num"' in row3 and "판정 못 함만" in row3 and "값 없음" not in row3
+    assert 'class="sw"' in row3.split('class="r num dc"')[1]
+    dc = re.sub(r"<[^>]+>", "", row3.split('class="r num dc"')[1].split("</span><span")[0].split(">", 1)[1])
+    assert dc == "판정 못 함 3 wafer"                                   # COPY-09: 0 인 멀티 · 단일은 적지 않고 이름과 함께
+    assert re.findall(r'<button type="button" class="dbrow[^"]*"[^>]*aria-pressed="(\w+)"', html) == ["false", "false"]
     picked, = screen(rows, meta("AOI-1", "AOI-3"), [["rcpHtml"]], state={"rcpDevSel": "AOI-3"})
     assert 'class="dbrow on" data-key="slot:1" data-row="dev:AOI-3"' in picked
 
@@ -623,11 +648,11 @@ def test_report_lot_time_is_scaled_to_25_wafers_only_for_20_to_24():
         html, = screen(_lot_rows(n), meta("AOI-1"), [["rcpHtml"]])
         assert f"LOT당 {want} · Defect" in html, (n, want)
         lot, = screen(_lot_rows(n), meta("AOI-1"), [["rcpHtml"]], state={"rcpUnit": "lot"})     # LOT당 보기: 같은 값이 큰 숫자
-        assert f'<p class="v num" title="{raw}분">{big}<small>/Lot</small></p>' in lot and '표본 <b class="num">1</b> / 1 Lot' in lot
+        assert f'<p class="v num" title="{raw}분">{big}<small>/LOT</small></p>' in lot and '표본 <b class="num">1</b> / 1 LOT' in lot
     html, = screen(_lot_rows(19), meta("AOI-1"), [["rcpHtml"]], state={"rcpHowAll": True})
-    assert "LOT당 — · Defect" in html and "PASS 20장 미만 Lot 1개" in html
+    assert "LOT당 — · Defect" in html and "PASS 20 wafer 미만 LOT 1개" in html
     lot, = screen(_lot_rows(19), meta("AOI-1"), [["rcpHtml"]], state={"rcpUnit": "lot"})     # RDL-14: LOT 표본이 왜 적은지 타일에서 바로
-    assert '제외 1 ⓘ' in lot and "PASS 20장 미만 1" in lot and "LOT 표본 없음 — PASS 20장 미만 1" in lot
+    assert '제외 1 ⓘ' in lot and "PASS 20 wafer 미만 1" in lot and "LOT 표본 없음 — PASS 20 wafer 미만 1" in lot
 
 
 def test_recipe_lot_unit_verdict_shows_per_day_throughput_and_hour_labels():
@@ -637,18 +662,32 @@ def test_recipe_lot_unit_verdict_shows_per_day_throughput_and_hour_labels():
         r["batch_start"], r["batch_end"] = ts(DAY, "10:00"), ts(DAY, "13:00")
     html, = screen(rows, meta("AOI-1"), [["rcpHtml"]], state={"rcpUnit": "lot"})
     v = html[html.index('class="mtile verdict"'):]
-    assert "3시간" in v and "2시간" in v and "Lot/일" in v and "단일 1시간 빠름" in v
+    assert "3시간" in v and "2시간" in v and "LOT/일" in v and "단일 1시간 빠름" in v
     assert re.search(r'class="sax"><em[^>]*>0</em><em[^>]*>1시간</em>', html)
+
+
+def test_recipe_verdict_says_why_a_side_is_missing_once_not_on_every_line():
+    """COPY-10(현택 11/26 고치기): 한 방식 값이 없으면 '… 값이 없어 비교할 수 없습니다' 를 줄마다(전체 · 시간당 · Defect) 되풀이하지 않고
+    타일 위에 이유와 함께 한 번 — 칸은 '—'. '같은 장비' 줄은 다른 이유라 그 줄에 짧게. 판정 못 함이 있으면 비율과 수집 창 '옛 기간 빈칸 채우기' 안내."""
+    rows = _lot_rows(26) + [dict(r, scan_mode="MULTI", wafer_id="M" + r["wafer_id"]) for r in _lot_rows(19, rep="R2.htm", bs="10:00", be="13:00")]
+    lot, = screen(rows, meta("AOI-1"), [["rcpHtml"]], state={"rcpUnit": "lot"})
+    v = lot[lot.index('class="mtile verdict"'):]
+    assert v.count("값이 없어 비교할 수 없습니다") == 1 and "멀티 값이 없어 비교할 수 없습니다 — 멀티 LOT 1개가 LOT 표본에서 빠졌습니다" in v
+    assert "두 방식을 다 돌린 장비 없음" in v and '<div class="vv num">—</div>' in v and "Defect: 두 방식 모두 값이 없습니다" in v
+    rows = [_rdl("AOI-1", f"S{i}", f"10:{i*12:02d}", f"10:{i*12+12:02d}", "B", "SINGLE") for i in range(3)]
+    rows += [_rdl("AOI-2", "U0", "11:00", "11:10", "C", "")]
+    html, = screen(rows, meta("AOI-1", "AOI-2"), [["rcpHtml"]])
+    assert "멀티 기록이 없어 비교할 수 없습니다 — 단일 값만 있습니다 — 판정 못 함 25%" in html and "'옛 기간 빈칸 채우기' 의 'RDL 멀티/단일'" in html
 
 
 def test_report_lot_time_skips_reports_with_an_error_but_keeps_abort_only_ones():
     """Error 유형이 있는 Report 는 Report 기준 통계에서 빠지고, 원인 없이 Aborted 만 있는 Report 는 들어간다."""
     err = _lot_rows(22, rep="E.htm") + [w("AOI-1", "E1", "09:00", "09:01", status="Alignment Error.", job="TB500_RDL4 - Multi", report="E.htm", bs="08:00", be="10:00")]
     html, = screen(err, meta("AOI-1"), [["rcpHtml"]], state={"rcpHowAll": True})
-    assert "Error 가 있는 Lot 1개" in html and "LOT당 120" not in html
+    assert "Error 가 있는 LOT 1개" in html and "LOT당 120" not in html
     ab = _lot_rows(22, rep="A.htm") + [w("AOI-1", "A1", None, None, status="Aborted.", job="TB500_RDL4 - Multi", report="A.htm", bs="08:00", be="10:00")]
     html, = screen(ab, meta("AOI-1"), [["rcpHtml"]], state={"rcpHowAll": True})
-    assert "LOT당 2시간 16분" in html and "Error 가 있는 Lot" not in html            # 22장 · 120분 → 25장 기준 136.4분(Aborted 만 있는 Report 는 포함)
+    assert "LOT당 2시간 16분" in html and "Error 가 있는 LOT" not in html            # 22장 · 120분 → 25장 기준 136.4분(Aborted 만 있는 Report 는 포함)
 
 
 def test_outliers_beyond_3_sigma_are_dropped_once_and_listed_but_not_for_tiny_samples():
@@ -669,7 +708,7 @@ def test_single_scan_counts_x20_only_and_pi_compares_existing_vs_enhanced():
     rows += [dict(_rdl("AOI-1", f"X{i}", f"09:{i * 2:02d}", f"09:{i * 2 + 1:02d}", "B", "SINGLE"), recipe="x5") for i in range(2)]
     html, = screen(rows, meta("AOI-1"), [["rcpHtml"]])
     html, = screen(rows, meta("AOI-1"), [["rcpHtml"]], state={"rcpHowAll": True})
-    assert "표본 <b class=\"num\">3</b> / 3 wafer" in html and "x5 · x10 단일 2장 제외" in html
+    assert "표본 <b class=\"num\">3</b> / 3 wafer" in html and "x5 · x10 단일 2 wafer 제외" in html
     pi = [dict(w("AOI-1", f"P{i}", f"08:{i * 2:02d}", f"08:{i * 2 + 1:02d}", job="R_TB500_LIVE_PI3"), recipe="PI") for i in range(3)]
     pi += [dict(w("AOI-1", f"E{i}", f"10:{i * 2:02d}", f"10:{i * 2 + 1:02d}", job="R_TB500_LIVE_PI3 - Enhanced"), recipe="PI") for i in range(2)]
     html, = screen(pi, meta("AOI-1"), [["rcpHtml"]])
@@ -1083,7 +1122,7 @@ def test_report_tab_leaves_out_a_batch_whose_time_per_wafer_is_far_from_its_grou
     html, popup = screen(rows + dia, meta("AOI-1"), [["reportHtml"], ["rptDevPopupHtml"]],
                          state={"view": "report", "rptDev": "AOI-1", "rptAll": {"job": "TB500 PI3", "dev": "AOI-1"}})
     assert popup.count('title="제외 — 장당') == 1                      # 빠른 쪽(LOT-F) 하나만 이상치로 뺀다
-    assert "제외 — 장당 1.8분, 이 장비 DIA 아닌 Lot 중앙" in popup
+    assert "제외 — 장당 1.8분, 이 장비 DIA 아닌 LOT 중앙" in popup
     g_row = popup[popup.index("LOT-G"):]
     assert "표본" in g_row[:g_row.index("</div>")]                # 느린 쪽(장당 30분)은 표본으로 남는다
 
@@ -1183,7 +1222,7 @@ def test_report_tab_leaves_test_lot_batches_out_and_lets_uncomputed_devices_open
     html, popup = screen(rows, meta("AOI-1", "AOI-2"), [["reportHtml"], ["rptDevPopupHtml"]],
                          state={"view": "report", "rptDev": "AOI-1", "rptAll": {"job": "TB500 PI3", "dev": "AOI-1"}})
     assert "5 / 6" in html and "시험(Test) 1" in html and "10.0 ± 0.0분" in html
-    assert "제외 — 시험(Test) Lot" in popup
+    assert "제외 — 시험(Test) LOT" in popup
     bad = html[html.index("계산 못 한 장비 1대"):]
     assert '<button type="button" class="link" data-h=' in bad[:400] and ">AOI-2</button>(표본 4개 · 5개 미만)" in bad
 
@@ -1275,7 +1314,7 @@ def test_overkill_period_bar_end_ignores_small_rows_and_cuts_them():
 
 
 def test_device_popup_follows_the_list_order_and_separates_no_record_from_idle():
-    """11/25 점검(UTIL-03·04·05·08·11·14): 팝업 ‹ › 는 목록과 같은 필터 · 정렬, 기록 없는 장비는 대기도 '—' 와 한 줄 설명,
+    """11/25 점검(UTIL-03·04·05·08·11·14 · JS-10 · COPY-14): 팝업 ‹ › 는 목록과 같은 필터 · 정렬, 기록 없는 장비는 대기도 '—' 와 한 줄 설명,
     Error 카드는 '건' 만 크게, 자정 넘긴 배치의 둘째 날 이름표는 '전날부터', 값 있는 장비가 없으면 평균 '—'(0% 아님)."""
     rows = [w("AOI-1", "W1", "08:00", "10:00"), w("AOI-2", "W2", "09:00", "09:30", status="Alignment Error."),
             w("4F-AOI-01", "W3", "10:00", "10:05"),
@@ -1283,22 +1322,22 @@ def test_device_popup_follows_the_list_order_and_separates_no_record_from_idle()
     mt = meta("AOI-1", "AOI-2", "AOI-3", "4F-AOI-01")
     st = {"modalDev": "AOI-2", "modalDayI": 1}
     (pop,) = screen(rows, mt, [["devPopupHtml"]], state=st)
-    assert "‹ AOI-1" in pop and "AOI-3 ›" in pop and 'data-fk="dev:err"' in pop and "Error 보기" in pop
+    assert "‹ AOI-1" in pop and "AOI-3 ›" in pop and 'data-fk="dev:err"' in pop and "Error 1건 ›" in pop
     assert ">1건<" in pop and "1건 · " not in pop                                    # Error 시간은 카드 아래 작은 줄
-    (pop,) = screen(rows, mt, [["devPopupHtml"]], state=st | {"sort": "low"})        # 가동률 낮은 순: 목록과 같은 순서(기록 없는 AOI-3 이 맨 앞)
-    assert "‹ AOI-3" in pop and "4F-AOI-01 ›" in pop
+    (pop,) = screen(rows, mt, [["devPopupHtml"]], state=st | {"sort": "low"})        # 가동률 낮은 순: 기록 없는 AOI-3 은 맨 뒤
+    assert "AOI-3 ›" not in pop
     (pop,) = screen(rows, mt, [["devPopupHtml"]], state={"modalDev": "4F-AOI-01", "modalDayI": 1, "floor": "4"})
-    assert "‹ " not in pop and "Error 보기" in pop                                  # 4층만 걸면 앞뒤 장비도 4층 안에서
+    assert "‹ " not in pop and "Error 없음 ›" in pop                                  # 4층만 걸면 앞뒤 장비도 4층 안에서
     (pop,) = screen(rows, mt, [["devPopupHtml"]], state={"modalDev": "AOI-3", "modalDayI": 1})
     assert "이 날 기록이 없습니다 — 장비가 쉬었는지 수집이 안 됐는지" in pop and "24시간" not in pop
     (pop,) = screen(rows, mt, [["devPopupHtml"]], state={"modalDev": "AOI-1", "modalDayI": 1})
     assert "LOT-N · 전날부터" in pop and "· 0장" not in pop
     (pop,) = screen(rows, mt, [["devPopupHtml"]], state={"modalDev": "AOI-1", "modalDayI": 1, "lotFilter": "err"})
-    assert "Error 난 Lot 이 없습니다" in pop and "전체 Lot 보기" in pop and "이 날 이 장비의 기록이 없습니다" not in pop
+    assert "Error 난 LOT 이 없습니다" in pop and "전체 LOT 보기" in pop and "이 날 이 장비의 기록이 없습니다" not in pop
     (home,) = screen(rows, mt, [["homeHtml"]], state={"maker": "kla", "dayI": 1})
     assert "이 조건(층 · 장비 종류)에 맞는 장비가 이 파일에 없습니다" in home and "0.0" not in home
     (home,) = screen(rows, mt, [["homeHtml"]], state={"sort": "low", "dayI": 1})
-    assert home.index('data-row="dev:AOI-3"') < home.index('data-row="dev:4F-AOI-01"') and 'class="nobar"' in home and "nosep" not in home
+    assert home.index("기록 없음 1대") < home.index('data-row="dev:AOI-3"') and 'class="nobar"' in home
 
 
 def _card(html, key):
@@ -1322,7 +1361,7 @@ def test_error_filter_keeps_minutes_carried_past_midnight_and_job_denominator_is
     assert _card(plain, "Error 대기") == _card(filt, "Error 대기") == "10시간 30분"   # 예전엔 필터를 켜면 자정 넘은 분이 빠져 줄었다(자정 넘은 분이 빠짐)
     assert 'class="errfbar"' in filt and "모두 해제" not in filt               # 필터 하나면 '모두 해제' 없이 칩만
     for h in (cnt_, prob):
-        assert "Lot 4개 중 2개 Error" in h                                      # J1: 장비-일마다 한 시도 — AOI-2 의 PASS 시도도 분모에(예전 건수 지표는 3)
+        assert "LOT 4개 중 2개 Error" in h                                      # J1: 장비-일마다 한 시도 — AOI-2 의 PASS 시도도 분모에(예전 건수 지표는 3)
     assert cnt_.count('data-row="job:') == 1                                  # J2(Error 0건, Error 난 장비-일에서 돎)는 건수 지표에도 없다
 
 

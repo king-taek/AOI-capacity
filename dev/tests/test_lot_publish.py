@@ -236,6 +236,23 @@ def test_prune_keeps_the_file_latest_js_points_to(tmp_path):
     assert sorted(p.name for p in d.iterdir()) == ["lot_20260101_0900.html", "lot_20260102_0900.html", "lot_20260103_0900.html", "lot_20260104_0900.html"][0:1] + ["lot_20260102_0900.html", "lot_20260103_0900.html", "lot_20260104_0900.html"]
 
 
+def test_prune_also_removes_same_second_suffixed_files_in_upload_order(tmp_path):
+    """LOT-17: 같은 초에 또 올린 `_2` 이름도 데이터 파일이다 — 예전 정규식이 놓쳐 그 파일(수십 MB)이 영영 남았다. 순서는 올린 순서(`_10` 은 `_9` 뒤)."""
+    from aoi_capacity import publish
+    d = tmp_path / "data"
+    d.mkdir()
+    order = ["lot_20261125_1030", "lot_20261125_103045", "lot_20261125_103045_2", "lot_20261125_103045_9",
+             "lot_20261125_103045_10", "lot_20261125_1031"]
+    for n in order:
+        (d / f"{n}.html").write_text("x")
+    (d / "lot_20261125_1030_x.html").write_text("남의 파일")          # 규칙 밖 이름은 건드리지 않는다
+    assert all(publish.LOT.data_re.match(f"{n}.html") for n in order)
+    assert publish._prune(str(d), 2, []) == 4
+    assert sorted(p.name for p in d.iterdir()) == sorted(["lot_20261125_103045_10.html", "lot_20261125_1031.html", "lot_20261125_1030_x.html"])
+    (tmp_path / publish.LATEST_NAME).write_text('x("data/lot_20261125_103045_2.html")', encoding="utf-8")   # 가리키기 쪽 정규식은 원래 `_2` 를 받는다
+    assert publish._pointed_name(str(tmp_path)) == "lot_20261125_103045_2.html"
+
+
 def test_lot_only_meta_drops_nas_paths():
     src = open(collect.__file__, encoding="utf-8").read()
     assert 'meta["devices"] = [{k: dm[k] for k in ("name", "key", "status", "read_errors")' in src

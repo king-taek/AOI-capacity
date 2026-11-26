@@ -181,7 +181,7 @@ COLLECT_PHASE_RETENTION = "오래된 이력 정리"
 COLLECT_PHASE_SAVE = "캐시 저장 중"
 COLLECT_PHASE_ROWS = "결과 정리 중"
 COLLECT_PHASE_PUBLISH_FMT = "공유 폴더에 올리는 중 {i}/{n} · {what}"
-PUBLISH_WHAT_LOT = "'스캔을 어디에 했니?'"
+PUBLISH_WHAT_LOT = "AOI LOT"   # 수집 창의 배포 이름은 바로가기 이름 'AOI LOT' 하나(LOTE-14 · COPY-11)
 PUBLISH_WHAT_FULL = "전체"
 COLLECT_PHASE_WRITE = "화면 만드는 중"
 COLLECT_PHASE_DONE = "완료"
@@ -212,7 +212,6 @@ LOADING_CLOSE_BUSY_BODY_MANUAL = ("배포 파일을 공유 폴더에 올리는 �
 LOADING_CLOSE_WAITING = "올리기가 끝나면 창을 닫습니다"
 
 # ── 설정 · 정보 ────────────────────────────────────────────────────────
-SET_COLLECT_RANGE = "수집 기간"
 SET_BACKFILL_DAYS = "처음 수집 기간"
 SET_BACKFILL_PREFIX = "최근 "
 SET_BACKFILL_SUFFIX = "일"
@@ -223,10 +222,10 @@ SET_VERSION = "버전"
 SET_VERSION_UNKNOWN = "미상 (개발 실행)"
 SET_NAS_NOTICE = "이 프로그램은 NAS 의 Report 와 WaferInfo.ini 를 읽기만 하며, NAS 에는 어떤 파일도 만들거나 바꾸지 않습니다."
 SET_UTIL_DEFINITION = ("가동률 = (Scan + Rescan 시간) ÷ 24시간. 수집한 날(오늘)만 00:00 부터 모든 장비의 마지막 기록까지로 나눕니다 "
-                       "('오늘' 은 수집 시각의 날짜 — 며칠 뒤 열어도 같은 숫자). Test Lot 은 전부 Test 로 분모에만 들어갑니다. "
-                       "Rescan 은 같은 자재(Job · Lot · Wafer ID)의 앞선 시도가 Pass 였을 때만이고, Error·Skipped 뒤의 재시도는 Scan 입니다. "
+                       "('오늘' 은 수집 시각의 날짜 — 며칠 뒤 열어도 같은 숫자). Test LOT 은 전부 Test 로 분모에만 들어갑니다. "
+                       "Rescan 은 같은 자재(Job · LOT · Wafer ID)의 앞선 시도가 Pass 였을 때만이고, Error·Skipped 뒤의 재시도는 Scan 입니다. "
                        "한 장비의 1분은 한 번만 셉니다 — INI 로 확실한 구간을 먼저 놓고, 배치 시작~종료의 남은 빈 시간을 INI 가 없는 Wafer 들이 나눠 갖습니다(팝업에 '배치 시각으로 추정' 표). "
-                       "Error 는 Lot 단위로 세고, Error 를 담은 배치가 끝난 뒤 다음 기록까지의 공백을 '에러 후 대기' 로 봅니다.")
+                       "Error 는 LOT 단위로 세고, Error 를 담은 배치가 끝난 뒤 다음 기록까지의 공백을 '에러 후 대기' 로 봅니다.")
 
 # ── 행 비고(data_issue) — 캐시의 `issue_codes` 를 출력 때 문장으로(C12 · collect.issue_text). 위치 인자 {0},{1} ──────────
 ISSUE_JOIN = "; "
@@ -240,13 +239,13 @@ ISSUE_TEXTS = {
     "INI_READ_ERROR": "{0}",
     "TIME_MISSING_OR_REVERSED": "Wafer 시작/종료 시각 누락 또는 역전",
     "INI_STALE": "이 배치 시각 밖의 INI(다시 검사하며 덮어써짐) — 시간 미사용",
-    "LOT_MISMATCH": "Lot 불일치",
+    "LOT_MISMATCH": "LOT 불일치",
     "WAFER_ID_MISMATCH": "Wafer ID 불일치",
     "FOUND_IN_BACKUP": "백업 폴더에서 찾음: {0}",
     "JOB_FOLDER_DIFFERS": "Job 폴더 이름이 Report 와 다름: {0}",
     "BATCH_NO_WAFER": "검사된 Wafer 없음 — 배치 시각으로만 표시 (행 {0}개 중 오류 {1}개)",
     "SLOT_ERROR": "자리표시 행 Error — Report 당 1건 · 영향 Slot {0}개 · 시간 미확인(Batch 범위 추정)",
-    "MULTI_LOT": "Lot 여러 개({0})",
+    "MULTI_LOT": "LOT 여러 개({0})",
     "MULTI_JOB": "Job 여러 개({0})",
 }
 
@@ -377,22 +376,23 @@ BOOT_LOG_HINT_FMT = "[AOI] 자세한 내용은 로그 파일을 보세요: {path
 
 # ── 보관·HTML 기간·HTML 만 다시 만들기(10/5) ─────────────────────────────────
 HTML_ONLY_NO_CACHE = "가진 데이터가 없습니다 — 먼저 수집을 한 번 해 주세요"
-SET_HTML_DAYS = "결과 HTML 기본 기간"
+HTML_ONLY_REDERIVE = "규칙이 바뀌어 다시 분류 중 — 다음 수집 뒤엔 빨라집니다"      # PH-05: 업데이트 뒤 첫 'HTML 만 만들기'는 캐시 전체를 메모리에서 다시 분류한다
+SET_HTML_DAYS = "결과 파일 기본 기간"
 SET_HTML_DAYS_SUFFIX = " 일"
 SET_HTML_DAYS_ALL = "전부"
 SET_HTML_DAYS_HELP = "수집이 끝나면 만드는 AOI_capacity.html 에 최근 며칠을 담을지(0 = 가진 데이터 전부). 파일은 나누지 않습니다. 다른 기간은 아래 '결과 파일만 다시 만들기' 로."
-HTML_ONLY_TITLE = "HTML 만 다시 만들기"
+HTML_ONLY_TITLE = "결과 파일만 다시 만들기"   # 수집 창 구역 이름(COLLECT_SEC_HTML) · 실패 안내(ACT_HTML_ONLY)와 같은 이름(COPY-11)
 HTML_ONLY_WHEN = "NAS 를 읽지 않고 가진 데이터로 결과 파일만 다시 만듭니다"
 HTML_ONLY_HAVE_FMT = "가진 데이터: {first} ~ {last} · {rows:,}행"
 HTML_ONLY_NONE = "가진 데이터가 없습니다 — 먼저 수집하세요"
 BACKFILL_FROM = "시작일"
 HTML_ONLY_RUN = "이 기간으로 만들기"
 HTML_ONLY_ALL = "전체 기간으로 만들기"
-HTML_ONLY_ALL_HELP = "수집 뒤 HTML 은 최근 1달(설정)만 담습니다 — 가진 데이터 전부를 한 장으로 보려면 이 버튼(파일이 커지고 열 때 느릴 수 있습니다)"
-HTML_ONLY_DONE_FMT = "HTML 을 만들었습니다: {path}"
+HTML_ONLY_ALL_HELP = "수집 뒤 결과 파일은 최근 1달(설정)만 담습니다 — 가진 데이터 전부를 한 장으로 보려면 이 버튼(파일이 커지고 열 때 느릴 수 있습니다)"
+HTML_ONLY_DONE_FMT = "결과 파일을 만들었습니다: {path}"
 HTML_ONLY_RUNNING = "만드는 중…"
 HTML_ONLY_DONE_SHORT_FMT = "만들고 열었습니다 · {name}"
-HTML_ONLY_FAIL_FMT = "HTML 을 만들지 못했습니다: {error}"
+HTML_ONLY_FAIL_FMT = "결과 파일을 만들지 못했습니다: {error}"
 
 # 파라미터 빈 구간 채우기(10/11) — 캐시에 Report 는 있는데 파라미터 값이 없는 곳을 NAS 의 Wafer 폴더에서 바로 채운다
 PARAMS_FILL_PHASE_FMT = "파라미터 읽는 중 · {device}"
@@ -407,9 +407,9 @@ GAPS_ROW_SLOT_TIP = "결과 화면 '스캔을 어디에 했니?' 탭의 Slot No 
 GAPS_ROW_SEC = "스캔 비율"
 GAPS_ROW_SEC_TIP = "장비 팝업의 '그중 스캔 n%' — Wafer 폴더의 ScanLog.ini 로 잰 실제 촬영 시간"
 GAPS_ROW_PARAMS = "파라미터"
-GAPS_ROW_PARAMS_TIP = "파라미터 탭 — Lot 마다 첫 Wafer 의 레시피 값"
+GAPS_ROW_PARAMS_TIP = "파라미터 탭 — LOT 마다 첫 Wafer 의 레시피 값"
 GAPS_ROW_RDL = "RDL 멀티/단일"
-GAPS_ROW_RDL_TIP = "RDL 단일스캔 탭 — '-미구분' 으로 보이는 RDL Lot 의 멀티/단일 판정"
+GAPS_ROW_RDL_TIP = "RDL 단일스캔 탭 — '-미구분' 으로 보이는 RDL LOT 의 멀티/단일 판정"
 GAPS_ROW_KLA = "KLA 이미지 개수"
 GAPS_ROW_KLA_TIP = "KLA 장의 Defect 를 이미지 개수(결과 파일 IMAGECOUNT 합)로 — 결과 파일 한 장씩만 다시 읽습니다"
 GAPS_PHASE_KLA_FMT = "KLA 이미지 개수 읽는 중 · {device}"
@@ -512,7 +512,7 @@ PUBLISH_WHY_UNREACHABLE = "공유 폴더에 닿지 못했습니다(네트워크 
 PUBLISH_WHY_DENIED = "공유 폴더에 쓸 권한이 없습니다"
 PUBLISH_WHY_LOCKED = "누가 파일을 열고 있어 바꾸지 못했습니다"
 PUBLISH_WHY_OTHER = "올리는 중 오류가 났습니다(로그에 자세히)"
-PUBLISH_SKIPPED_SAME_HOST = "'스캔을 어디에 했니?' 배포가 같은 서버에 닿지 못해 전체 배포는 건너뛰었습니다"
+PUBLISH_SKIPPED_SAME_HOST = "AOI LOT 배포가 같은 서버에 닿지 못해 전체 배포는 건너뛰었습니다"
 
 # ── 수집 결과 알림(11/25 — 문제마다 한 항목: 굵은 머리 + 흐린 설명 + 그 문제에 맞는 단추) ─────────
 OUTCOME_CSV_HEAD = "CSV 를 저장하지 못함"
@@ -550,16 +550,22 @@ UNHANDLED_BODY = "예상하지 못한 오류로 방금 하던 일을 마치지 �
 # ── 실패 로그 수집(10/20) ───────────────────────────────────────────────────
 # 속도 시험(11/25 — PH-01 · PH-03 · LOTD-01, 현택 "테스트는 수집기에 테스트 버튼 만들어줘"). 결과 파일(요약.txt)의 글은 perf_test.py 에
 PERF_TITLE = "속도 시험"
-PERF_SHORT = "결과 파일 만들기 · LOT 배포판 열기 시간을 재서 폴더 하나로"
-PERF_WHEN = ("가진 데이터(캐시)만으로 결과 HTML 세 장(기본 · LOT 배포 · 전체 배포)을 예전 방식과 지금 방식으로 만들어 걸린 시간과 "
-             "두 방식의 결과가 바이트까지 같은지 적고, LOT 배포판 시험 파일 두 장을 만듭니다. 장비 NAS 는 읽지 않고 공유 폴더에도 올리지 않습니다. "
-             "끝나면 결과 폴더가 열립니다 — 요약.txt 를 읽고 폴더를 통째로 보내 주세요. 데이터가 많으면 몇 분 걸립니다.")
+PERF_SHORT = "단추 하나로 끝까지 · 도중에 브라우저 탭이 두 번 열립니다 · 다 끝나면 닫아도 됩니다"
+PERF_WHEN = ("가진 데이터(캐시)만으로 결과 파일 세 장(기본 · AOI LOT 배포 · 전체 배포)을 예전 방식과 지금 방식으로 만들어 걸린 시간과 "
+             "두 방식의 결과가 바이트까지 같은지 재고, 이어서 AOI LOT 배포판 시험 파일 두 장을 기본 브라우저로 차례로 엽니다. "
+             "시험 파일은 스스로 LOT 화면을 눌러 본 뒤 결과를 다운로드 폴더에 한 장 내려받고, 수집기가 그것을 가져와 요약에 적습니다. "
+             "장비 NAS 는 읽지 않고 공유 폴더에도 올리지 않습니다. 끝나면 결과 폴더가 열립니다 — 요약.txt 하나만 보내 주세요. 데이터가 많으면 몇 분 걸립니다.")
 PERF_RUN = "속도 시험 시작"
 PERF_STOP = "멈춤"
 PERF_OPEN = "결과 폴더 열기"
-PERF_RUNNING = "재는 중… (수집 · 빈칸 채우기 · 배포는 끝날 때까지 기다립니다)"
+PERF_RUNNING = "재는 중… 도중에 브라우저 탭이 두 번 열립니다 — 그대로 두세요"
 PERF_STOPPING = "멈추는 중…"
 PERF_DONE_FMT = "끝났습니다 — {path}"
+PERF_SEND = "이 폴더의 요약.txt 하나만 보내 주세요."
+PERF_LOT_FMT = "LOT 배포판 열기 — 지금 {now} · 계산 건너뜀 {skip}"
+PERF_LOT_SEC_FMT = "{sec:.1f}초"
+PERF_LOT_NONE = "못 받음"
+PERF_LOT_MISSING_FMT = "LOT 시험 결과를 받지 못했습니다 — 결과 폴더의 {files} 를 열어 브라우저 맨 위 노란 띠 숫자도 함께 보내 주세요."
 PERF_STOPPED_FMT = "멈췄습니다 — 거기까지의 결과: {path}"
 PERF_FAIL_FMT = "속도 시험을 하지 못했습니다: {error}"
 PERF_BUSY = "수집 · 빈칸 채우기 · 배포 · 실패 로그 수집이 끝난 뒤에 시작하세요."
@@ -567,13 +573,14 @@ PERF_PHASE_FMT = "속도 시험 {i}/{n} · {what}"
 PERF_WHAT_LOAD = "가진 데이터 읽는 중"
 PERF_WHAT_A_FMT = "예전 방식 — {what}"
 PERF_WHAT_B_FMT = "지금 방식 — {what}"
-PERF_WHAT_LOT_FMT = "LOT 시험 파일 {name}"
+PERF_WHAT_LOT_FMT = "AOI LOT 시험 파일 {name}"
+PERF_WHAT_OPEN_FMT = "브라우저로 {name} 여는 중 — 결과를 기다립니다(최대 {sec}초)"
 PERF_WHAT_WRITE = "요약 쓰는 중"
 COLLECT_BUSY_PERF = "속도 시험 중이라 잠시 수집할 수 없습니다"
 FAIL_LOGS_TITLE = "실패 로그 수집"
 FAIL_LOGS_WHEN = ("수집이 안 된 장비 · 읽지 못한 Report · Wafer · 데이터가 멈춘 장비 · INI 읽기 오류를 모아 zip 한 장으로 만듭니다. "
                   "이 PC 의 app.log 와 캐시를 먼저 보고, 실패한 파일만 NAS 에서 **읽기 전용**으로 가져옵니다(쓰기 · 이동 없음, 수집 범위 밖 장비는 보지 않습니다). "
-                  "zip 에는 원인 · 오류 문구 · 파일명 · 경로 · 파일 내용 · app.log 발췌 · 장비별 상태가 들어갑니다. 파일 내용에 Lot · Job 이름이 있으니 공유 범위는 직접 판단하세요.")
+                  "zip 에는 원인 · 오류 문구 · 파일명 · 경로 · 파일 내용 · app.log 발췌 · 장비별 상태가 들어갑니다. 파일 내용에 LOT · Job 이름이 있으니 공유 범위는 직접 판단하세요.")
 FAIL_LOGS_DAYS_PREFIX = "지난"
 FAIL_LOGS_DAYS_SUFFIX = "일"
 FAIL_LOGS_RUN = "실패 로그 수집"

@@ -1168,6 +1168,14 @@ def test_run_stops_fast_without_waiting_for_slow_reads():
     gate.set()
 
 
+def test_run_returns_as_soon_as_every_result_is_in():
+    """PC-07: 마지막 결과를 받은 뒤에도 큐가 0.25초 비어 있어야 끝났다고 봐서 평소 수집마다 약 1.25초를 그냥 기다렸다."""
+    t0 = time.perf_counter()
+    for _ in range(4):
+        assert collect._run({"read_workers": 8}, list(range(8)), lambda x: x * 2, None) == [x * 2 for x in range(8)]
+    assert time.perf_counter() - t0 < 0.5
+
+
 def test_plan_run_tells_when_a_rebuild_or_refresh_was_left_half_done(tmp_path, fake_nas, monkeypatch):
     nas, csv_path = fake_nas
     cfg = make_cfg(tmp_path, csv_path, read_workers=1)
