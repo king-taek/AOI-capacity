@@ -892,7 +892,8 @@ function loadDemo(){
     emb=null;bootPhase(3);
     afterPaint(()=>{try{init();}catch(e){fail(e);return;}stMark("ready");
       let w=false;try{if(BOOT){BOOT.done($("#app"));BOOT.warm(navWarm);w=true;}}catch(e){}_bootQuiet=false;if(!w)navWarm(false);if(meta.selftest)selfTest();});});};   /* ANIM-05: 미리 계산은 덮개 뒤 남는 시간에(없으면 걷힌 뒤) */
-  const run=()=>{bootPhase(1);afterPaint(()=>{let txt;try{txt=$("#embedded").textContent;}catch(e){errorPanel("embedded JSON 을 해석할 수 없습니다: "+(e&&e.message||e));return;}
+  /* PH-08: 읽은 원문(25~72MB, 배포판은 압축 글)은 문서에서 바로 비운다 — 사본 저장(saveHtml)은 #embedded 를 다시 읽지 않고 사본 쪽을 새로 채운다 */
+  const run=()=>{bootPhase(1);afterPaint(()=>{let txt;try{const el=$("#embedded");txt=el.textContent;el.textContent="";}catch(e){errorPanel("embedded JSON 을 해석할 수 없습니다: "+(e&&e.message||e));return;}
     const parse=s=>{let emb;try{stMark("parse0");emb=JSON.parse(s);stMark("parsed");}catch(e){errorPanel("embedded JSON 을 해석할 수 없습니다: "+(e&&e.message||e));return;}go(emb);};
     if(EMB_GZ.test(txt)){embEnc="gz";gunzip64(txt).then(parse,e=>errorPanel("압축된 데이터를 풀 수 없습니다: "+(e&&e.message||e)));txt=null;return;}   /* LOTD-04: 배포판은 압축본 */
     embEnc="";const s=txt;txt=null;parse(s);});};
