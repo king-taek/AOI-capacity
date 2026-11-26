@@ -26,7 +26,7 @@
   --run:#2E6BA8; --err:#C5453C; --off:#E9EDF2; --nodata:#F0F3F7; --prev:#C9D1DA;
   --good:#276B48; --good-soft:#E7F0EA; --warn:#B0862F; --warn-soft:#FBEFD6; --crit:#C5453C; --crit-ink:#9C3527; --crit-soft:#FAE7E4;
   /* 화면 전용 — 막대 6단계(D48-⑦ 용어: Scan · Rescan · Test · Error · 에러 후 대기 · 대기) */
-  --dup:#8FB8DE; --test:#9B7FC8; --test-ink:#7A5BA8; --stop:#F1D3CE; --idle:#E9EDF2; --future:#F7F9FB;
+  --dup:#8FB8DE; --test:#9B7FC8; --test-ink:#7A5BA8; --stop:#E3A69D; --idle:#E9EDF2; --future:#F7F9FB;
   --nav-on:#1D4E82; --sans:'Segoe UI','Malgun Gothic','Apple SD Gothic Neo',system-ui,sans-serif;
   --mono:Consolas,'Cascadia Mono',ui-monospace,monospace; --ease:cubic-bezier(.16,1,.3,1);
 }
@@ -131,6 +131,7 @@ button{font:inherit;color:inherit}
 .nav .ind:not(.run) .l,.nav .ind:not(.run) .m,.nav .ind:not(.run) .r{opacity:0}.nav .ind.run .s{opacity:0}
 .nav .ind .l{width:7px;border-radius:7px 0 0 7px;transform-origin:0 50%}.nav .ind .r{width:7px;border-radius:0 7px 7px 0;transform-origin:0 50%}.nav .ind .m{width:1px;transform-origin:0 50%}
 .nav button{position:relative;z-index:1}.nav button.on{background:transparent;color:var(--nav-on)}.nav button:not(.on):hover{color:var(--ink)}
+.nav button:disabled{opacity:.45;cursor:default}.nav button:disabled:hover{color:inherit}   /* JS-13: 보여 줄 데이터가 없을 때 */
 [data-reveal]{overflow:hidden}
 .thead button.th{all:unset;cursor:pointer;display:inline-flex;align-items:center;gap:4px;justify-content:flex-end;width:100%;color:var(--ink-3);font-weight:600;font-size:11.5px;white-space:nowrap}
 .thead button.th:hover,.thead button.th.on{color:var(--ink)}
@@ -147,7 +148,7 @@ button{font:inherit;color:inherit}
 .fbtn svg{width:13px;height:13px}
 .row2{display:grid;grid-template-columns:1fr 38px;align-items:center;border-top:1px solid #F1F4F7}
 .row2>.rowbtn{border:0}
-.partial{display:inline-block;margin-left:6px;padding:1px 7px;border-radius:999px;background:var(--warn-soft,#F6ECD6);color:var(--warn);font-size:11px;font-weight:600;vertical-align:1px}
+.partial{display:inline-block;margin-left:6px;padding:1px 7px;border-radius:999px;background:var(--warn-soft,#F6ECD6);color:#7A5200;font-size:11px;font-weight:600;vertical-align:1px}
 
 /* ── 5차(9/20 밤): 색의 깊이와 손맛. 막대는 색(background-color)은 그대로 두고 위가 밝고 아래가 살짝 어두운 한 겹(background-image)만 얹는다 —
    dataviz 규칙대로 데이터 색은 한 자리(RUN·ERR·HEAT 램프)에서 오고, 글자는 데이터 색을 입지 않는다. 막대 끝 4px 둥글게, 히트맵은 한 색조 6단 램프(OKLCH 밝기 단조) + 2px 표면 간격. ── */
@@ -168,6 +169,7 @@ button{font:inherit;color:inherit}
 .nobar{display:flex;align-items:center;justify-content:center;height:20px;border-radius:10px;background:repeating-linear-gradient(135deg,#F7F9FB 0 5px,#E9EDF2 5px 7px);font-size:11px;font-weight:600;color:var(--ink-3);letter-spacing:.02em}
 .fut{position:absolute;top:0;bottom:0;right:0;background:#fff;border:1px dashed #AEB9C5;border-top-right-radius:inherit;border-bottom-right-radius:inherit;pointer-events:none}
 .legend i.futsw{background:#fff;border:1px dashed #AEB9C5;width:9px;height:9px}.legend i.nosw{background:repeating-linear-gradient(135deg,#F7F9FB 0 3px,#C9D1DA 3px 4px)}
+.nosep{margin:0;padding:7px 18px 5px;font-size:11.5px;font-weight:600;color:var(--ink-3);border-top:1px dashed var(--line);background:#FBFCFD}
 .cards>div{transition:background-color .2s}.cards>div:hover{background:#FBFCFD}
 .legend i.gloss{background-image:linear-gradient(180deg,rgba(255,255,255,.30),rgba(255,255,255,0) 55%,rgba(15,21,28,.07))}
 
@@ -187,7 +189,7 @@ button{font:inherit;color:inherit}
 .stamp{font-size:12px;color:var(--ink-3);white-space:nowrap;font-family:var(--mono)}
 .partchip{font-size:11.5px;font-weight:600;padding:2px 9px;border-radius:999px;background:#EEF1F5;color:var(--ink-2);white-space:nowrap;margin-right:8px;cursor:help}.partchip b{font-weight:600;color:var(--ink-3);margin-right:2px}
 .hstamp{display:inline-flex;align-items:center;white-space:nowrap}
-.stamp.unfixed{color:var(--warn)}
+.stamp.unfixed{color:#7A5200}
 main{max-width:1420px;margin:0 auto;padding:22px 24px 90px}
 .spacer{flex:1}
 
@@ -231,6 +233,10 @@ main{max-width:1420px;margin:0 auto;padding:22px 24px 90px}
 .missnote b{margin-right:6px}
 .st.bad{background:var(--crit-soft);color:var(--crit-ink)}
 .st.warn{background:var(--warn-soft);color:#7A5200}
+/* JS-04(11/25): 홈 목록 이름 칸(96px)에선 '수집 실패 · 일부 누락' 칩이 통째로 '…' 로 잘렸다 — 이름 바로 옆 경고 점(빨강 · 주황)으로. 이름만 줄이고 점은 늘 보인다.
+   글은 그대로 두어(크기 0) title · 화면 읽기에 남는다 */
+.homelist .rowbtn span:has(>.st){display:flex;align-items:center}.homelist .rowbtn span:has(>.st)>[data-tx]{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.homelist .rowbtn .st{flex:none;font-size:0;line-height:0;padding:0;width:9px;height:9px;margin-left:5px}.homelist .rowbtn .st.bad{background:var(--crit)}.homelist .rowbtn .st.warn{background:var(--warn)}
 .chart{position:relative;display:flex;align-items:flex-end;justify-content:center;gap:3px;border-bottom:1px solid var(--line-2)}
 .chart button,.chart>span.b{flex:1 1 0;min-width:0;display:flex;flex-direction:column;justify-content:flex-end;height:100%;border:0;background:none;padding:0;cursor:pointer}
 .chart .v{display:block;font-size:10.5px;color:var(--ink-2);text-align:center;margin-bottom:3px}
@@ -276,7 +282,7 @@ main{max-width:1420px;margin:0 auto;padding:22px 24px 90px}
 .tbl-h{display:grid;gap:10px;padding:8px 14px;background:#FBFCFD;border-bottom:1px solid #EDF1F5;font-size:11.5px;font-weight:600;color:var(--ink-3)}
 .box{border:1px solid #E7ECF1;border-radius:11px;overflow:hidden}
 .inp{padding:6px 10px;border:1px solid var(--line-2);border-radius:7px;background:#fff;font:inherit;font-size:12.5px;color:var(--ink)}
-.inp:focus{outline:2px solid var(--accent-2);outline-offset:-1px}
+.inp:focus{outline:2px solid var(--accent);outline-offset:-1px}   /* 버튼의 :focus-visible 과 같은 진한 파랑(COLOR-07 — 연한 하늘색은 흰 바탕에서 2.1:1) */
 .btn:disabled{opacity:.45;cursor:default}.btn.primary{background:var(--nav-on);border-color:var(--nav-on);color:#fff}
 .rggrid{display:grid;grid-template-columns:minmax(0,1.35fr) minmax(0,1fr);gap:18px;padding:14px 22px 18px}
 @media (max-width:860px){.rggrid{grid-template-columns:1fr}}
@@ -320,10 +326,10 @@ main{max-width:1420px;margin:0 auto;padding:22px 24px 90px}
 .scanhero .hint,.rcplist .hint{margin:0;font-size:11.5px;color:#5A6673;word-break:keep-all}.scanhero .hint{padding:2px 18px 12px}
 .scanhero .unk{margin:0;padding:9px 18px;font-size:12px;color:#7A5B12;background:#FFF8E6;border-top:1px solid #F3E6C0;word-break:keep-all}
 .mdev{display:grid;grid-template-columns:96px 1fr 1fr 1.3fr 70px;gap:10px;align-items:center;padding:7px 18px;border-top:1px solid #F1F4F7;font-size:12.5px}
-.mdev .r{text-align:right;word-break:keep-all}.mdev .nn{font-size:11px;color:#8A96A3;margin-left:6px}.mdev.head{background:#FBFCFD;font-size:11.5px;font-weight:600;color:var(--ink-3)}
+.mdev .r{text-align:right;word-break:keep-all}.mdev .nn{font-size:11px;color:var(--ink-3);margin-left:6px}.mdev.head{background:#FBFCFD;font-size:11.5px;font-weight:600;color:var(--ink-3)}
 @media (max-width:600px){.mdev{grid-template-columns:62px 1fr 1fr 1.2fr;padding:7px 12px;gap:8px}.mdev>:nth-child(5){display:none}.mdev .nn{display:block;margin:0}}
 .rcprow{grid-template-columns:minmax(0,1fr) auto;grid-template-areas:"rn rw" "rb rb" "rc rl";row-gap:5px;column-gap:10px;padding:10px 12px}
-.rcprow .rc{grid-area:rc;display:flex;gap:10px;font-size:11px;color:#5A6673;white-space:nowrap;overflow:hidden}.rcprow .rc span{display:inline-flex;align-items:center;gap:4px}.rcprow .rc b{font-weight:600;color:var(--ink-2)}.rcprow .rl{grid-area:rl;text-align:right;font-size:11px;color:#7B8794}
+.rcprow .rc{grid-area:rc;display:flex;gap:10px;font-size:11px;color:#5A6673;white-space:nowrap;overflow:hidden}.rcprow .rc span{display:inline-flex;align-items:center;gap:4px}.rcprow .rc b{font-weight:600;color:var(--ink-2)}.rcprow .rl{grid-area:rl;text-align:right;font-size:11px;color:var(--ink-3)}
 .mbar.lbar{height:14px;border-radius:4px}.mbar.lbar i{display:flex;align-items:center;justify-content:center;overflow:hidden}.mbar.lbar b{font-size:10px;font-weight:700;font-style:normal;color:#fff;letter-spacing:.01em}.mbar.lbar b.dk{color:#3E4852}
 .rcprow .rn{grid-area:rn;font-size:12.5px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.rcprow .rw{grid-area:rw;text-align:right;font-size:12.5px}
 .rcprow .rb{grid-area:rb;align-self:center}.rcprow .rp{grid-area:rp;text-align:right;font-size:11px;color:#5A6673;min-width:58px}
@@ -333,7 +339,7 @@ main{max-width:1420px;margin:0 auto;padding:22px 24px 90px}
 .jchip{display:inline-flex;align-items:center;gap:6px;padding:3px 10px;border-radius:999px;border:1px solid var(--line-2);background:#fff;font-size:12px;font-weight:600}.jchip b{font-weight:500;color:#5A6673}
 .jpick{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-bottom:12px}.jpick .btn{display:inline-flex;align-items:center;gap:6px}
 .dblegend{display:flex;flex-wrap:wrap;gap:14px;align-items:center;padding:0 18px 8px;font-size:11.5px}.dblegend span{display:inline-flex;align-items:center;gap:5px}
-.dbrow{display:grid;grid-template-columns:96px minmax(0,1fr) 104px 74px 70px;gap:12px;align-items:center;padding:6px 18px;border-top:1px solid #F1F4F7;font-size:12.5px}
+.dbrow{display:grid;grid-template-columns:96px minmax(0,1fr) 104px 100px 88px;gap:12px;align-items:center;padding:6px 18px;border-top:1px solid #F1F4F7;font-size:12.5px}
 .dbrow .dn{font-weight:600}.dbrow .r{text-align:right;white-space:nowrap}.dbrow .dc{font-size:11.5px;color:#5A6673}
 .dbrow.head{background:#FBFCFD;font-size:11.5px;font-weight:600;color:var(--ink-3);padding-top:5px;padding-bottom:5px}
 .dbrow.axis{border-top:0;padding-top:0}
@@ -364,7 +370,7 @@ main{max-width:1420px;margin:0 auto;padding:22px 24px 90px}
 .dbrow .dc small{margin-left:2px;color:var(--ink-3);font-size:10.5px}
 .jtog{cursor:pointer;font:inherit;font-size:12px;font-weight:600;transition:background-color .16s,border-color .16s,opacity .16s}.jtog:hover{background:#F7F9FB}.jtog .ck{width:12px;font-style:normal;font-size:11px;color:var(--nav-on);text-align:center}
 .jtog.off{opacity:.55;background:#F4F6F8;border-style:dashed}.jtog.off .sw{filter:grayscale(1)}.jtog.off b{text-decoration:line-through}
-.mtile .s.mt1{margin-top:6px}.mtile .s.mt2{margin-top:2px}.mtile .s .muted{color:#7B8794}.otag{color:#8A5A12;cursor:help;border-bottom:1px dotted #C9A05A;white-space:nowrap}
+.mtile .s.mt1{margin-top:6px}.mtile .s.mt2{margin-top:2px}.mtile .s .muted{color:var(--ink-3)}   /* 보조 글자 #7B8794 · #8A96A3(3:1 안팎) → --ink-3(5.9:1) 로 통일(COLOR-02) */.otag{color:#8A5A12;cursor:help;border-bottom:1px dotted #C9A05A;white-space:nowrap}
 .mtile.verdict .vtab{display:grid;grid-template-columns:auto 1fr 1fr;gap:3px 12px;margin-top:8px;align-items:baseline}.vtab .vh{font-size:11.5px;font-weight:700;color:var(--ink-2);text-align:right;display:flex;justify-content:flex-end;align-items:center;gap:5px}
 .vtab .sc{font-size:12.5px;font-weight:600;color:var(--ink);padding-top:7px}.vtab .vv{text-align:right;font-size:19px;font-weight:600;color:#5A6673;padding-top:5px}.vtab .vv small{font-size:11px;margin-left:2px;color:var(--ink-3);font-weight:500}.vtab .vv.win{color:var(--ink);font-weight:800}
 .vtab .vn{grid-column:1/-1;font-size:11.5px;text-align:right;padding-bottom:6px;border-bottom:1px solid #EDF1F5}.vtab .vn:last-of-type{border-bottom:0}.mtile.verdict .hint2{margin:6px 0 0;font-size:11px;color:var(--ink-3)}
@@ -378,7 +384,7 @@ main{max-width:1420px;margin:0 auto;padding:22px 24px 90px}
 .ptw{overflow:auto;max-height:72vh;border-top:1px solid #EDF1F5}.ptab{border-collapse:collapse;font-size:12px;width:max-content}.ptab th{position:sticky;top:0;background:#F6F8FA;z-index:1;font-weight:600;text-align:left;padding:6px 8px;border-bottom:1px solid #DCE3EA;white-space:nowrap}
 .ptab th.pdv small{display:block;font-weight:400;color:#7A8794;font-size:10.5px}.ptab td{padding:4px 8px;border-bottom:1px solid #F0F3F6;white-space:nowrap;max-width:220px;overflow:hidden;text-overflow:ellipsis}.ptab td.pk{position:sticky;left:0;background:#fff;max-width:260px}
 .ptab td.pu{color:#5A6673}.ptab td.pm{color:#2B3640;background:#FAFBFC}.ptab td.pc{color:#9AA5B1}.ptab td.dif{background:#FFF1B8;color:#5C4300;font-weight:600}.ptab td.mis{color:#C9D2DC;text-align:center}.ptab tr.pz td{background:#F2F5F8;font-weight:600;color:#2B3640;position:static}
-.mtile.none .only{margin:10px 0 2px;font-size:13px;font-weight:600;color:var(--ink-3)}.dtrack .dlab.U{color:#7A8591}.dtrack.hd .dflab.mg{display:none;color:var(--ink-2)}.dtrack.hd.mg .dflab{display:none}.dtrack.hd.mg .dflab.mg{display:block}.dtrack.hd .dflab .sw{width:7px;height:7px;margin:0 2px 0 3px;vertical-align:1px}
+.mtile.none .only{margin:10px 0 2px;font-size:13px;font-weight:600;color:var(--ink-3)}.dbrow .dc .sw{width:7px;height:7px;margin:0 2px 0 4px;vertical-align:1px}.dtrack .dlab.U{color:#7A8591}.dtrack.hd .dflab.mg{display:none;color:var(--ink-2)}.dtrack.hd.mg .dflab{display:none}.dtrack.hd.mg .dflab.mg{display:block}.dtrack.hd .dflab .sw{width:7px;height:7px;margin:0 2px 0 3px;vertical-align:1px}
 .ptall{padding:0;overflow:hidden;margin-bottom:10px}.ptall .ptw{max-height:calc(100vh - 230px);border-top:0}.ptab tr.pgr td{padding:0;background:#fff;border-top:1px solid #DCE3EA;border-bottom:1px solid #EDF1F5;max-width:none;overflow:visible}.ptab tbody:first-of-type tr.pgr td{border-top:0}.ptab tr.pgr .pgh{position:sticky;left:0;width:auto;max-width:min(100%,900px)}.ptab tr.pmore td{color:#5A6673;font-size:11.5px;background:#FBFCFD;white-space:normal}
 .phist{display:grid;grid-template-columns:70px 90px minmax(0,1.2fr) minmax(0,2fr);gap:10px;padding:7px 0;border-bottom:1px solid #F0F3F6;font-size:12px;align-items:start}
 .cards.lotcards .v{font-size:18px}.cards.lotcards>div{padding-left:14px;padding-right:12px}
@@ -431,6 +437,7 @@ p.k .ii{font-size:11px;color:var(--ink-3);cursor:help}
 .rowbtn.rpt-r{display:grid;grid-template-columns:76px minmax(120px,1fr) 96px 52px 150px 62px;gap:10px;align-items:center;width:100%;padding:7px 22px;border:0;background:transparent;font:inherit;text-align:left;cursor:pointer;min-height:40px}
 .rowbtn.rpt-r:hover{background:#F6F9FC}.rowbtn.rpt-r.on{background:#EAF2FB;box-shadow:inset 3px 0 0 var(--nav-on)}
 .rpt-r .rn{font-weight:600;font-size:13px}.rpt-r .rv{font-weight:700;text-align:right;font-size:13.5px}.rpt-r .rd{text-align:right;font-size:12.5px;font-weight:600}
+.rowbtn.rpt-r.on .re.hi{color:var(--crit-ink)}   /* 고른 줄(연파랑) 위 작은 빨강은 진한 빨강(COLOR-10) */
 .rpt-r .re{font-size:12.5px;color:var(--ink-2)}.rpt-r .re.hi{color:var(--err);font-weight:700}.rpt-r .re small{font-weight:400}.rpt-r .rb{font-size:11.5px;color:var(--ink-3);text-align:right}
 .rbar{position:relative;height:22px;background:#F1F4F7;border-radius:5px;display:block}.rbar i{display:block;height:100%;border-radius:5px;transition:width .3s var(--ease),background-color .2s;background-image:linear-gradient(rgba(255,255,255,.18),rgba(0,0,0,.06))}
 .rbar u{position:absolute;top:-4px;bottom:-4px;width:2px;background:var(--ink);text-decoration:none;transition:left .3s var(--ease)}
@@ -461,20 +468,20 @@ button.hb{border:0;padding:0;background:transparent;cursor:pointer;outline-offse
 .bsrow{display:grid;grid-template-columns:70px minmax(0,1fr) 84px;gap:10px;align-items:center;margin-bottom:6px}.bsrow .sk{display:flex;align-items:center;gap:6px;font-size:12px;font-weight:600}
 .bsw{position:relative;height:64px;border-radius:8px;background:#FBFCFD;border:1px solid #EDF1F5}
 .bsw .bfb{position:absolute;top:8px;bottom:8px;background:#E4E9EF;border-radius:4px}.bsw .bfm{position:absolute;top:6px;bottom:6px;width:0;border-left:2px solid #9AA6B2}
-.bsw .bfl{position:absolute;bottom:0;transform:translateX(-50%);font-style:normal;font-size:10px;color:#7B8794;white-space:nowrap;pointer-events:none}
+.bsw .bfl{position:absolute;bottom:0;transform:translateX(-50%);font-style:normal;font-size:10px;color:var(--ink-3);white-space:nowrap;pointer-events:none}
 .bsw .bbx{position:absolute;top:14px;bottom:14px;border:1.5px solid;border-radius:4px;pointer-events:none}.bsw .bmd{position:absolute;top:10px;bottom:10px;width:3px;margin-left:-1.5px;border-radius:2px;pointer-events:none;z-index:2}
 .bsw .bml{position:absolute;top:-1px;transform:translateX(-50%);font-style:normal;font-size:11px;font-weight:800;background:#fff;padding:0 3px;border-radius:3px;line-height:1.2;pointer-events:none;z-index:3}
 button.bd{position:absolute;width:7px;height:7px;margin:-3.5px 0 0 -3.5px;border:0;padding:0;border-radius:50%;cursor:pointer;opacity:.78;transition:opacity .15s,transform .15s;z-index:1}button.bd:hover,button.bd:focus-visible{opacity:1;transform:scale(1.7);z-index:4;outline:none;box-shadow:0 0 0 2px #fff,0 0 0 3px #16202A}
 button.bd.out{background:transparent;border:1.5px solid var(--err,#C5453C);opacity:1}button.bd.clip{border-radius:1px;clip-path:polygon(0 0,100% 50%,0 100%)}button.bd.pick{opacity:1;transform:scale(1.6);box-shadow:0 0 0 2px #fff,0 0 0 3.5px #16202A;z-index:4}
 .dlg.lh button.bd:not(.hl){opacity:.18}.dlg.lh button.bd.hl{opacity:1;transform:scale(1.7);z-index:4;box-shadow:0 0 0 2px #fff,0 0 0 3px #16202A}.dlg.lh .rawrow.hl{background:var(--accent-soft)}
 .bsw .bnone{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-style:normal;font-size:12px;font-weight:700;color:var(--ink-2)}
-.bsum{text-align:right;font-size:12px;line-height:1.3}.bsum b{font-size:17px}.bsum small{color:var(--ink-3);margin-left:2px}.bsum i{display:block;font-style:normal;font-weight:700;font-size:11.5px}.bsum i.lo{color:#1F7A4D}.bsum i.hi{color:#B4402F}.bsum i.eq{color:#7B8794}
+.bsum{text-align:right;font-size:12px;line-height:1.3}.bsum b{font-size:17px}.bsum small{color:var(--ink-3);margin-left:2px}.bsum i{display:block;font-style:normal;font-weight:700;font-size:11.5px}.bsum i.lo{color:#1F7A4D}.bsum i.hi{color:#B4402F}.bsum i.eq{color:var(--ink-3)}
 .bax{display:flex;justify-content:space-between;font-size:11px;color:var(--ink-3);margin:0 94px 6px 80px}
 .tlg .lgb,.tlg .lgx,.tlg .lgd{display:inline-block;width:14px;height:9px;border-radius:3px;background:#E4E9EF}.tlg .lgx{background:rgba(46,107,168,.12);border:1.5px solid #2E6BA8}.tlg .lgd{width:7px;height:7px;border-radius:50%;background:#2E6BA8}
 .binchip{display:flex;align-items:center;gap:10px;justify-content:space-between;margin:2px 0 8px;padding:7px 12px;border-radius:8px;background:var(--accent-soft);font-size:12.5px}
 .tlg{margin-left:10px;font-weight:400;font-size:12px;display:inline-flex;gap:12px}.tlg span{display:inline-flex;align-items:center;gap:5px}
 .tfade{animation:tfade .28s var(--ease) both}@keyframes tfade{from{opacity:0}to{opacity:1}}
-.rangebar.dim{opacity:.55;filter:grayscale(1)}.rangebar.dim:hover,.rangebar.dim:focus-within{opacity:.85}.rangebar .dimnote{font-size:11.5px;color:var(--ink-3)}
+.rangebar.dim>:not(.dimnote){opacity:.7;filter:grayscale(1)}.rangebar.dim:hover>*,.rangebar.dim:focus-within>*{opacity:1}.rangebar .dimnote{font-size:11.5px;color:var(--ink-3)}   /* 줄 전체를 흐리지 않고 단추 · 칸만 — '왜 흐린지' 안내는 또렷하게(COLOR-01) */
 .hrow{display:grid;grid-template-columns:76px minmax(0,1fr);gap:10px;align-items:end;margin-bottom:10px}.hrow .sk{display:flex;align-items:center;gap:6px;font-size:12px;font-weight:600;padding-bottom:18px}
 .hwrap{position:relative}.hmed{position:absolute;top:0;bottom:0;border-left:2px dashed #1F2A36;opacity:.55;pointer-events:none}.dblock h4{margin:0 0 8px;font-size:12.5px}.dblock h4 .muted{font-weight:400;font-size:11px;margin-left:4px}
 .hist{display:flex;align-items:flex-end;gap:3px;height:84px}.hist .hb{flex:1;height:100%;display:flex;flex-direction:column;justify-content:flex-end;min-width:0}.hist .hb i{display:block;width:100%}.hist .hk{border-radius:2px 2px 0 0}.hist .ho{background-color:var(--err,#C0392B);border-radius:2px 2px 0 0}
@@ -583,7 +590,7 @@ button.dbrow:focus-visible{outline:2px solid var(--nav-on);outline-offset:-2px}
      합성 스레드에서 돈다 — 프레임마다 도는 JS 가 0 이어서 JSON 해석 · 모델 계산이 메인 스레드를 막아도 끊기지 않는다(옛 D104 입자 장면은 Worker 캔버스였는데도
      입자 16,000개 · dpr 2 · 걷힘 blur 때문에 현장에서 끊겼다 — dev/tools/boot_bench 계측, docs/proposals/boot_lag_2026-10-31).
    · 페이지를 연 때부터 4초(MIN) 안에는 걷히지 않는다. 로딩이 4초를 넘으면 구간이 읽는 순서로 차례로 밝아졌다 돌아오며(점등 — 회청색 겹의 opacity 만, 현택 11/1 "'지금' 선은 구리다")
-     기다린다. 로딩이 끝나면(AOI_BOOT.done) 제 색으로 앉고 0.4초 뒤 덮개가 opacity 만으로 0.6초에 걷힌다(blur · scale 없음).
+     기다린다. 로딩이 끝나면(AOI_BOOT.done) 제 색으로 앉고 0.5초 뒤 장면이 0.16초에, 바탕(덮개)이 0.1초 뒤부터 0.4초에 걷힌다(opacity 만 · blur · scale 없음).
      4초 전에 끝난 로딩은 걷히기 0.9초 전까지 점등을 잇다가 색이 앉는다(11/25 — 다 그리고 1~2초 멈춰 있던 것). 신호가 없으면 4초 + 2.5초 뒤 그냥 연다.
    · 단계 글자 · 진행선은 화면 스크립트의 단계(phase)를 받는 즉시 바뀐다. 로딩이 일찍 끝나면 LOT 추적 · RDL 미리 계산(warm)을 덮개 뒤 남는 시간에 한다.
    · 파일을 끝까지 읽은(load) 뒤 10초 안에 화면 스크립트 소식이 없으면(복사가 끊긴 파일) 덮개를 걷고 '끝까지 읽지 못했습니다' 안내를 그린다.
@@ -606,8 +613,9 @@ function bootShell(o){
     let red=false;try{red=!!(window.matchMedia&&window.matchMedia("(prefers-reduced-motion: reduce)").matches);}catch(e){}
     const bg=(getComputedStyle(document.documentElement).getPropertyValue("--bg")||"").trim()||"#F4F6F8";
     const ov=document.createElement("div");ov.id="aoi-boot";ov.setAttribute("aria-hidden","true");
-    const fade=o.fadeMs||600;
-    ov.style.cssText=`position:fixed;left:0;top:0;width:100vw;height:100vh;z-index:2147483000;background:${bg};pointer-events:none;overflow:hidden;opacity:1;transition:opacity ${fade}ms cubic-bezier(.33,0,.15,1)`;
+    const fade=o.fadeMs||600,fadeDelay=o.fadeDelayMs||0;
+    /* 걷힘(ANIM-02, 11/25): 장면은 scene.reveal 이 먼저(짧게) 지우고, 바탕은 fadeDelay 뒤 fade 동안 — 겹치는 동안 보이는 것은 빈 바탕뿐(막대 두 겹이 포개지지 않게) */
+    ov.style.cssText=`position:fixed;left:0;top:0;width:100vw;height:100vh;z-index:2147483000;background:${bg};pointer-events:none;overflow:hidden;opacity:1;transition:opacity ${fade}ms ${o.fadeEase||"cubic-bezier(.33,0,.15,1)"} ${fadeDelay}ms`;
     document.body.appendChild(ov);
     /* 단계 글자 + 진행선: DOM. 글자 교체는 WAAPI(transform · opacity), 진행선은 scaleX 전환 — 둘 다 합성 스레드 */
     const cfs=Math.max(10,Math.min(14,W*.0118)),cx=Math.max(16,W*.024),cy=Math.max(18,H*.05),lw=Math.max(60,W*.08);
@@ -630,7 +638,7 @@ function bootShell(o){
     let gone=false,loadedAt=0,fallback=0,revealed=false,heard=false;const after=[];let scene=null;
     const finish=()=>{if(gone)return;gone=true;clearTimeout(fallback);try{scene&&scene.kill&&scene.kill();}catch(e){}if(ov.parentNode)ov.parentNode.removeChild(ov);window.AOI_BOOT=null;
       for(const f of after.splice(0))setTimeout(()=>{try{f();}catch(e){}},0);};
-    const reveal=()=>{if(revealed||gone)return;revealed=true;cap.style.opacity="0";try{scene&&scene.reveal&&scene.reveal();}catch(e){}ov.style.opacity="0";setTimeout(finish,fade+80);};
+    const reveal=()=>{if(revealed||gone)return;revealed=true;cap.style.opacity="0";try{scene&&scene.reveal&&scene.reveal();}catch(e){}ov.style.opacity="0";setTimeout(finish,fadeDelay+fade+80);};
     /* 잘린 파일 감시(JS-02, 11/25): 브라우저가 파일을 끝까지 읽은(load) 뒤 STALL 안에 화면 스크립트가 한 번도 소식(phase · done · abort)을 주지 않으면
        — 복사가 끊겨 데이터 뒤의 화면 스크립트가 없거나 실행되지 못한 파일 — 덮개를 걷고 안내를 그린다. 다 읽은 뒤부터 재므로 느린 공유 폴더에서 잘못 울리지 않고,
        창이 가려져 있으면(그동안 화면 스크립트의 프레임이 돌지 않는다) 보일 때 다시 잰다 */
@@ -668,7 +676,10 @@ const TXT={INK:"#16202B",INK2:"#5A6673",INK3:"#AEB8C4",LINE:"#D3DAE2",ACC:"#2E6B
 function textStage(ov,env,css){
   const {W,H,red}=env,root=document.createElement("div");root.className="tx"+(red?" red":"");
   root.style.cssText=`position:absolute;left:0;top:0;width:${W}px;height:${H}px;overflow:hidden;font-family:${FONT}`;
-  const st=document.createElement("style");st.textContent=`#aoi-boot .tx *{box-sizing:border-box}\n#aoi-boot .tx.red *{animation:none!important;transition:none!important;opacity:1}\n`+css;root.appendChild(st);
+  /* 움직임 줄이기: 완성 그림을 바로(ANIM-01, 11/25) — '.tx.red *' 는 장면 규칙(.tk{opacity:0} · .f{scaleX(0)})과 선택자 힘이 같아 뒤에 오는 장면 규칙이 이겼다(4초 동안 빈 바탕).
+     같은 요소를 한 단계 더 긴 선택자로 다시 적는다 */
+  const st=document.createElement("style");st.textContent=`#aoi-boot .tx *{box-sizing:border-box}\n#aoi-boot .tx.red *{animation:none!important;transition:none!important;opacity:1}\n`+css+
+    `\n#aoi-boot .tx.red .tk,#aoi-boot .tx.red .nm,#aoi-boot .tx.red .num,#aoi-boot .tx.red .sep{opacity:1}\n#aoi-boot .tx.red .tk>.f{transform:none}\n`;root.appendChild(st);
   ov.insertBefore(root,ov.firstChild);
   const fs=Math.round(Math.max(96,Math.min(W*.19,H*.34)));   /* 글자 크기 */
   return{root,fs,cx:W/2,cy:H*.46};
@@ -700,7 +711,9 @@ const BARS_CSS=`
 `;
 /* 로딩 신호 처리는 셋이 같다 */
 function barsCtl(T,waitAt){const waitT=setTimeout(()=>{if(!T.root.classList.contains("ld"))T.root.classList.add("wait");},waitAt);
-  return{post(m){if(m.type==="loaded"){clearTimeout(waitT);T.root.classList.remove("wait");T.root.classList.add("ld");}},kill(){clearTimeout(waitT);},reveal(){}};}
+  /* 걷힘 첫 단계(ANIM-02): 장면만 먼저 짧게 지운다 — 바탕(덮개)은 껍데기가 조금 뒤에 걷는다. opacity 만(합성 스레드) */
+  return{post(m){if(m.type==="loaded"){clearTimeout(waitT);T.root.classList.remove("wait");T.root.classList.add("ld");}},kill(){clearTimeout(waitT);},
+    reveal(){T.root.style.transition="opacity .16s ease-out";T.root.style.opacity="0";}};}
 
 /* 대기 동작(4초를 넘겨도 로딩 중일 때, .tx.wait) — 전부 transform · opacity 키프레임. 현택 11/1 "'지금' 선은 구리다" → 대안 넷 */
 const BARS_IDLE={
@@ -753,8 +766,8 @@ function barsListScene(ov,env,idle){
 
 /* T2-B '장비 목록'(D105) — 가동률 화면의 줄 7개(장비 이름 자리 · 숫자 블록 · 24시간 트랙)가 먼저 깔리고, 트랙 안의 바쁜 구간이 자라 AOI 를 쓴다(쉬는 시간은 회색 트랙).
    장면은 _bars.js 의 barsListScene, 대기 동작은 BARS_IDLE 의 하나 — 현택 11/1 결정 "glow"(점등: 구간이 읽는 순서로 차례로 밝아짐).
-   4초 전에 끝난 로딩은 걷히기 0.9초 전까지 점등을 잇다 색이 앉는다(11/25 ANIM-03) */
-bootShell({sceneReveals:false,settleMs:500,fadeMs:600,colorLeadMs:900,make(ov,env,api){return barsListScene(ov,env,"glow");}});
+   걷힘(11/25 ANIM-02): 장면 0.16초 → 바탕은 0.1초 뒤부터 0.4초(곡선 .16,1,.3,1). 4초 전에 끝난 로딩은 걷히기 0.9초 전까지 점등을 잇다 색이 앉는다(ANIM-03) */
+bootShell({sceneReveals:false,settleMs:500,fadeMs:400,fadeDelayMs:100,fadeEase:"cubic-bezier(.16,1,.3,1)",colorLeadMs:900,make(ov,env,api){return barsListScene(ov,env,"glow");}});
 
 })();
 </script>
@@ -892,7 +905,8 @@ function loadDemo(){
     emb=null;bootPhase(3);
     afterPaint(()=>{try{init();}catch(e){fail(e);return;}stMark("ready");
       let w=false;try{if(BOOT){BOOT.done($("#app"));BOOT.warm(navWarm);w=true;}}catch(e){}_bootQuiet=false;if(!w)navWarm(false);if(meta.selftest)selfTest();});});};   /* ANIM-05: 미리 계산은 덮개 뒤 남는 시간에(없으면 걷힌 뒤) */
-  const run=()=>{bootPhase(1);afterPaint(()=>{let txt;try{txt=$("#embedded").textContent;}catch(e){errorPanel("embedded JSON 을 해석할 수 없습니다: "+(e&&e.message||e));return;}
+  /* PH-08: 읽은 원문(25~72MB, 배포판은 압축 글)은 문서에서 바로 비운다 — 사본 저장(saveHtml)은 #embedded 를 다시 읽지 않고 사본 쪽을 새로 채운다 */
+  const run=()=>{bootPhase(1);afterPaint(()=>{let txt;try{const el=$("#embedded");txt=el.textContent;el.textContent="";}catch(e){errorPanel("embedded JSON 을 해석할 수 없습니다: "+(e&&e.message||e));return;}
     const parse=s=>{let emb;try{stMark("parse0");emb=JSON.parse(s);stMark("parsed");}catch(e){errorPanel("embedded JSON 을 해석할 수 없습니다: "+(e&&e.message||e));return;}go(emb);};
     if(EMB_GZ.test(txt)){embEnc="gz";gunzip64(txt).then(parse,e=>errorPanel("압축된 데이터를 풀 수 없습니다: "+(e&&e.message||e)));txt=null;return;}   /* LOTD-04: 배포판은 압축본 */
     embEnc="";const s=txt;txt=null;parse(s);});};
@@ -1354,7 +1368,7 @@ return {day,today,generated:(metaIn&&metaIn.generated)||"",generated_iso:genIso,
 }
 
 /* ---------- ④ 화면 ---------- */
-const RUN="#2E6BA8", DUP="#8FB8DE", TEST="#9B7FC8", ERR="#C5453C", STOP="#F1D3CE", IDLE="#E9EDF2", FUTURE="#F7F9FB";
+const RUN="#2E6BA8", DUP="#8FB8DE", TEST="#9B7FC8", ERR="#C5453C", STOP="#E3A69D", IDLE="#E9EDF2", FUTURE="#F7F9FB";
 const SEGC={0:RUN,1:ERR,2:TEST,3:STOP,4:DUP};
 const HEAT=["#d5eaff","#b2ceed","#91b3d8","#7097c2","#4f7dad","#2e6398"];   /* 한 색조(RUN) 6단, OKLCH 밝기 단조 — 낮음 → 높음 */
 const MONO="Consolas,'Cascadia Mono',ui-monospace,monospace";
@@ -1526,9 +1540,9 @@ const S={
   util(t){const den=S.den(t);if(!t||den<=0)return null;
     return S.measured(t)?Math.min(100,(t.r+t.d)/den*100):null;},
   noRec(t){return S.util(t)===null;},   /* 기록 없음 — 쉰 것과 모르는 것은 다르다(D06·D57) */
-  /* 가동률 목록과 장비 팝업 ‹ › 가 같은 순서(11/25 UTIL-08): 지금 걸린 층 · 장비 종류 필터 + 정렬 */
+  /* 가동률 목록과 장비 팝업 ‹ › 가 같은 순서(11/25 UTIL-08): 지금 걸린 층 · 장비 종류 필터 + 정렬. '가동률 낮은 순' 에서 기록 없는 장비는 맨 뒤(JS-10) */
   order(day,devs){const it=(devs||S.devList()).map(n=>({n,t:S.at(day,n)}));
-    if(state.sort==="low")it.sort((a,b)=>{const x=S.util(a.t),y=S.util(b.t);return (x===null?-1:x)-(y===null?-1:y);});
+    if(state.sort==="low")it.sort((a,b)=>{const x=S.util(a.t),y=S.util(b.t);return (x===null?Infinity:x)-(y===null?Infinity:y)||cmpDev(a.n,b.n);});
     else it.sort((a,b)=>cmpDev(a.n,b.n));return it;},
   floorOf(n){return n.indexOf("4F")===0?"4":"2";},
   /* 10/28: Gen5(EagleG5) — 2층 AOI-17~28 · 4층 4F-AOI-03~05(사용자 지정). 장비 종류 줄의 네 번째 값(Camtek 의 부분집합, 10/29 층 줄에서 옮김) */
@@ -1559,7 +1573,7 @@ const S={
    스캔 안 한 행(건너뜀 · 중단 — 0분)과 Wafers Scanned = Pass + 1(중단됐지만 스캔은 끝난 장 — 시각이 없어 0분)을 따로 적는다. 숫자는 바꾸지 않는다. */
 function iniNote(t){const v=t.iv||{},parts=[];
   if(t.ne){const why=[v.ov&&`다른 시도가 덮어씀 ${v.ov}장`,v.nf&&`INI 없음 ${v.nf}장`].filter(Boolean).join(" · ");
-    parts.push(`Wafer ${t.w}장 중 ${t.ne}장은 INI(시각 기록)가 없어 그 Report 배치 창의 빈 시간을 나눠 가졌습니다${why?` — ${why}, 추정 ${hm(Math.round(v.km||0))}`:""}`);}
+    parts.push(`Wafer ${t.w.toLocaleString("ko-KR")}장 중 ${t.ne.toLocaleString("ko-KR")}장은 INI(시각 기록)가 없어 그 Report 배치 창의 빈 시간을 나눠 가졌습니다${why?` — ${why}, 추정 ${hm(Math.round(v.km||0))}`:""}`);}
   if(v.sk)parts.push(`스캔 안 함 ${v.sk}장(건너뜀 · 중단 — 0분)`);
   if(v.s1)parts.push(`스캔 후 중단 ${v.s1}건(Wafers Scanned 가 Pass 보다 1장 많음 — 시각이 없어 0분)`);
   return parts.join(" · ")+(t.ne?` (시각 확인 ${t.cv}%)`:"")+".";}
@@ -1641,6 +1655,9 @@ function morph(from,to){
       else{if(from.__tw){from.__tw.kill();from.__tw=null;}from.__tgt=undefined;from.nodeValue=to.nodeValue;}}
     else if(from.__tgt===undefined&&from.nodeValue!==to.nodeValue)from.nodeValue=to.nodeValue;
     return;}
+  /* 즉시 툴팁이 title 을 data-tip 으로 옮긴 요소는 다시 그려도 data-tip 으로 — title 을 되살리면 1초 뒤 브라우저 기본 툴팁이 번갈아 떴다(JS-12) */
+  if(from.hasAttribute("data-tip")&&to.hasAttribute("title")&&!to.hasAttribute("data-tip")){const t=to.getAttribute("title");to.setAttribute("data-tip",t);to.removeAttribute("title");
+    if(from.hasAttribute("aria-label")&&!to.hasAttribute("aria-label")&&!to.textContent.trim())to.setAttribute("aria-label",t.replace(/\n+/g," · "));}
   for(const a of [...from.attributes])if(!to.hasAttribute(a.name))from.removeAttribute(a.name);
   for(const a of [...to.attributes])if(from.getAttribute(a.name)!==a.value)from.setAttribute(a.name,a.value);
   if(from.hasAttribute("data-static"))return;      /* Lottie 가 그린 SVG 처럼 렌더가 만들지 않은 자식은 건드리지 않는다 */
@@ -1736,7 +1753,7 @@ function enterView(root){if(!G()||reduced())return;
 const NAV_N=10,NAV_KC=4000,NAV_CC=115,NAV_KD=1000,NAV_CD=45,NAV_FMAX=45000,NAV_G=14,NAV_WQ=.5,NAV_HZ=3840,NAV_CAP=7,NAV_FPS=60;
 /* 탭 첫 진입 때 색인(LOT 추적 · RDL 단일스캔)을 만드느라 화면이 0.7초 멈추면 표시자 이동 시간이 그동안 흘러 한 번에 건너뛴다(10/19 실측) —
    화면이 뜬 뒤 한가할 때 미리 만들어 둔다(캐시되므로 첫 클릭엔 비용 0, 오류는 그 탭을 열 때 다시 난다). */
-function navWarm(now){if(typeof setTimeout!=="function")return;setTimeout(()=>{try{lotIndex();}catch(e){}setTimeout(()=>{try{if(!(D&&D.lite))rcpIndex();}catch(e){}},now?0:150);},now?0:500);}   /* now = 덮개 뒤(ANIM-05) — 기다릴 까닭이 없다 · LOTD-01 시험(D.lite)은 RDL 색인을 건너뛴다 */
+function navWarm(now){if(typeof setTimeout!=="function")return;setTimeout(()=>{try{lotIndex();}catch(e){}setTimeout(()=>{try{if(!(D&&D.lite))rcpIndex();}catch(e){}setTimeout(()=>{try{if(!(D&&D.lite)){okIndex();okLotKeys();}}catch(e){}},now?0:150);},now?0:150);},now?0:500);}   /* now = 덮개 뒤(ANIM-05) — 기다릴 까닭이 없다 · LOTD-01 시험(D.lite)은 RDL · Overkill 색인을 건너뛴다(JS-08) */
 function navParts(ind){if(!ind.__p)ind.__p={l:ind.querySelector(".l"),m:ind.querySelector(".m"),r:ind.querySelector(".r"),s:ind.querySelector(".s")};return ind.__p;}
 const navTf=(L,R,sy=1)=>{const w=Math.max(2*NAV_CAP,R-L),y=sy.toFixed(4);return {l:`translateX(${L.toFixed(2)}px) scaleY(${y})`,m:`translateX(${(L+NAV_CAP-1).toFixed(2)}px) scale(${Math.max(0,w-2*NAV_CAP+2).toFixed(2)},${y})`,r:`translateX(${(L+w-NAV_CAP).toFixed(2)}px) scaleY(${y})`};};
 function navSet(ind,L,R){const p=navParts(ind),t=navTf(L,R);for(const k of ["l","m","r"])if(p[k])p[k].style.transform=t[k];
@@ -1790,8 +1807,8 @@ if(typeof window!=="undefined"&&window.addEventListener)window.addEventListener(
 let _rvPrev=new Set();
 function reveals(root){const now=new Set();for(const el of root.querySelectorAll("[data-reveal]")){const k=el.getAttribute("data-reveal")||"";now.add(k);if(el.__rv)continue;el.__rv=1;if(_rvPrev.has(k)||!G()||reduced())continue;gsap.from(el,{height:0,opacity:0,duration:.32,ease:"power3.out",clearProps:"height,opacity"});}_rvPrev=now;}
 /* 장비 팝업 이름표(다른 장비·날짜가 되면 차례로 내려온다) · Error 팝업 타임라인 표식(차례로 선다) */
-function sigEnter(root){for(const el of root.querySelectorAll("[data-sig]")){const sg=el.dataset.sig;if(el.__sig!==undefined){el.__sig=sg;continue;}const first=true;el.__sig=sg;if(!G()||reduced())continue;
-  const co=el.querySelectorAll(".callout");if(co.length)gsap.from(co,{y:-10,opacity:0,duration:.3,ease:"power3.out",stagger:{each:Math.min(.02,.4/co.length)},clearProps:"transform,opacity",delay:first?.15:0});
+function sigEnter(root){for(const el of root.querySelectorAll("[data-sig]")){const sg=el.dataset.sig;if(el.__sig!==undefined){el.__sig=sg;continue;}el.__sig=sg;if(!G()||reduced())continue;
+  const co=el.querySelectorAll(".callout");if(co.length)gsap.from(co,{y:-6,opacity:0,duration:.22,ease:"expo.out",stagger:{each:Math.min(.02,.12/co.length)},clearProps:"transform,opacity"});   /* 하루에 수십 번 여는 창 — 전체 약 0.35초(ANIM-11) */
   const mk=el.querySelectorAll(":scope>i");if(mk.length)gsap.from(mk,{scaleY:.15,opacity:0,transformOrigin:"50% 100%",duration:.35,ease:"power3.out",stagger:{each:Math.min(.015,.4/mk.length)},clearProps:"transform,opacity"});}}
 let _prevDayI=null;
 function slideDay(root){const el=root.querySelector(".daylab");if(!el)return;const cur=state.dayI;
@@ -1878,10 +1895,12 @@ function rgLoad(){RG_EMB=rgNorm(meta.recipe_groups);let ls=null;try{ls=rgNorm(JS
   RG=(ls&&(!RG_EMB||ls.saved>RG_EMB.saved))?ls:(RG_EMB||{v:1,saved:"",groups:[]});}
 const rgSame=(a,b)=>JSON.stringify((a&&a.groups)||[])===JSON.stringify((b&&b.groups)||[]);
 function rgApply(){Object.assign(D,groupJobs(D.pool.job,D.detail,D.allDays||D.days,D.devices,recipeMap(RG)));}
-function rgSaveLocal(){try{localStorage.setItem(RG_LS,JSON.stringify(RG));}catch(e){}}
+let _rgNoSave=false;   /* JS-11: 이 브라우저가 저장을 막았다(사생활 모드 · 정책) — 안내와 '내보내기' 강조 */
+function rgSaveLocal(){try{localStorage.setItem(RG_LS,JSON.stringify(RG));_rgNoSave=false;return true;}catch(e){_rgNoSave=true;return false;}}
 function rgCommit(groups,msg,keep){const p=(n=>String(n).padStart(2,"0")),d=new Date();
   RG={v:1,saved:`${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`,groups:groups.filter(g=>g.jobs.length)};
-  rgSaveLocal();rgApply();
+  const saved=rgSaveLocal();rgApply();
+  if(!saved)msg=(msg?msg+" — ":"")+"이 브라우저에는 저장할 수 없습니다. 창을 닫기 전에 '내보내기' 하세요";
   /* Job 묶음 번호가 바뀌었으니 번호를 쥔 필터·팝업은 놓는다 */
   const st=state.modalJob!=null?state.stack.filter(k=>k!=="type"):state.stack;
   setState({modalJob:null,errFJob:null,errJob:null,stack:st,rgSel:keep?state.rgSel:[],rgName:keep?state.rgName:""});if(msg)toast(msg);}
@@ -1917,7 +1936,8 @@ function recipePopupHtml(){
   const close=()=>setState(CLOSE.recipe());
   const tog=raw=>()=>{const s=new Set(state.rgSel||[]);s.has(raw)?s.delete(raw):s.add(raw);setState({rgSel:[...s]});};
   const dirty=!rgSame(RG,RG_EMB);
-  const status=dirty?`<span class="pill" style="background:#FFF4DB;color:#8A5A00" title="내보내기 한 파일을 수집기가 찾아 다음 HTML 부터 담습니다">이 브라우저에만 저장됨 · 내보내기 필요</span>`
+  const status=dirty&&_rgNoSave?`<span class="pill" style="background:var(--crit-soft);color:var(--crit-ink)" title="사생활 모드 · 회사 정책으로 이 브라우저가 저장을 막았습니다">저장 안 됨 · 창을 닫기 전에 내보내기</span>`
+    :dirty?`<span class="pill" style="background:#FFF4DB;color:#8A5A00" title="내보내기 한 파일을 수집기가 찾아 다음 HTML 부터 담습니다">이 브라우저에만 저장됨 · 내보내기 필요</span>`
     :(RG.groups.length?`<span class="pill ok">이 HTML 에 담긴 묶음</span>`:`<span class="pill" style="background:#F0F3F7;color:#5A6673">묶음 없음 · 자동 묶음만</span>`);
   const cards=RG.groups.map(g=>{const lots=g.jobs.reduce((a,j)=>a+((byRaw.get(j)||{}).c||0),0);
     return `<div class="rgcard" data-key="rg:${esc(g.name)}"><div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap"><b style="font-size:13.5px">${esc(g.name)}</b><span class="num" style="font-size:12px;color:#5A6673">Job ${g.jobs.length}개 · Lot ${lots}개</span><div class="spacer"></div>
@@ -1929,7 +1949,7 @@ function recipePopupHtml(){
   return `<div class="ov z58"><button class="scrim" data-h="${h(close)}" aria-label="닫기"></button><div class="dlg w1120" role="dialog" aria-modal="true" aria-labelledby="dlg-recipe-title" data-dlg="recipe">
     <div class="dh"><h2 id="dlg-recipe-title" tabindex="-1" class="mid">레시피 묶음</h2><span class="sub">묶음 ${RG.groups.length}개 · 묶인 Job ${inUser.size}개${RG.saved?" · 저장 "+esc(RG.saved.replace("T"," ").slice(0,16)):""}</span>${status}
       <div class="spacer"></div>
-      <button class="btn" data-h="${h(rgExport)}" title="recipe_groups.json 으로 내려받습니다 — 수집기가 데이터 폴더·다운로드 폴더에서 찾아 다음 HTML 에 담습니다">내보내기</button>
+      <button class="btn${dirty&&_rgNoSave?" primary":""}" data-h="${h(rgExport)}" title="recipe_groups.json 으로 내려받습니다 — 수집기가 데이터 폴더·다운로드 폴더에서 찾아 다음 HTML 에 담습니다">내보내기</button>
       <button class="btn" data-h="${h(()=>{const f=document.getElementById("rgFile");if(f){f.value="";f.click();}})}" title="내보냈던 recipe_groups.json 을 불러옵니다">가져오기</button>
       ${dirty&&(RG_EMB||RG.groups.length)?`<button class="btn" data-h="${h(rgRevert)}" title="이 브라우저에서 고친 것을 버리고 이 HTML 에 담긴 묶음으로">되돌리기</button>`:""}
       <button class="x" data-h="${h(close)}" data-fk="x:recipe" title="닫기 (Esc)">✕</button><input type="file" id="rgFile" accept=".json,application/json" hidden></div>
@@ -2001,7 +2021,8 @@ function liftFront(app,snap){if(!canAnim()||reduced()||!snap.size)return;const n
     for(const a of dl.getAnimations())if(a.transitionProperty)a.cancel();
     dl.classList.add("lifting");
     const t=dl.animate([{transform:from,easing:LIFT.out},{transform:lift,offset:LIFT.split,easing:LIFT.io},{transform:end}],{duration:LIFT.T});
-    dl.animate([{backgroundColor:was.dim||"rgba(15,21,28,.58)",easing:LIFT.out},{backgroundColor:"rgba(15,21,28,.05)",offset:LIFT.split,easing:LIFT.io},{backgroundColor:"rgba(15,21,28,0)"}],{duration:LIFT.T,pseudoElement:"::after"});
+    const a0=Math.min(.28,parseFloat((/,\s*([\d.]+)\)\s*$/.exec(was.dim||"")||[0,".58"])[1])||.58);   /* 첫 프레임부터 맨 위로 오므로 어두운 판으로 덮지 않게 — 호버 때 .38 로 밝아지던 것과 이어지는 값에서(ANIM-09) */
+    dl.animate([{backgroundColor:`rgba(15,21,28,${a0})`,easing:LIFT.out},{backgroundColor:"rgba(15,21,28,.05)",offset:LIFT.split,easing:LIFT.io},{backgroundColor:"rgba(15,21,28,0)"}],{duration:LIFT.T,pseudoElement:"::after"});
     const done=()=>dl.classList.remove("lifting");t.onfinish=done;t.oncancel=done;}}
 /* 10/6 handoff C3: 장비별 점 그래프의 숫자 — 같은 높이, 실제 글자 폭으로 재서 10px 보다 가까우면 두 점의 가운데에서 좌우로 띄운다.
    점(.dd)은 건드리지 않는다. 렌더 직후 한 번(같은 프레임 — 퍼센트 위치가 그려지기 전에) + 레시피 칸 폭이 바뀔 때만 */
@@ -2018,16 +2039,30 @@ function layoutPairLabels(root){const box=root.querySelector('[data-key="rcp:mde
     const [a,b]=L.map(el=>el.getBoundingClientRect()).sort((x,y)=>x.left-y.left);if(b.left-a.right<8)tr.classList.add("mg");}
   if(!box.__ro&&typeof ResizeObserver==="function"){let w=box.clientWidth,q=0;box.__ro=new ResizeObserver(()=>{if(box.clientWidth===w||q)return;w=box.clientWidth;
     q=requestAnimationFrame(()=>{q=0;layoutPairLabels(document);});});box.__ro.observe(box);}}
+/* JS-03(11/25): 탭 하나의 오류가 화면 전체를 멈추지 않게 — 본문 · 팝업을 그리다 예외가 나면 그 자리에 안내를 그리고 다른 탭은 계속 쓴다.
+   HTML 을 다 만들기 전에 예외가 새면 클릭 처리표(H)를 예전 것으로 되돌린다(화면은 그대로, 단추도 그대로 동작) */
+function safeHtml(f,what){try{return f();}catch(e){const m=String(e&&e.message||e);log("화면 오류("+what+"): "+m);try{console.error(e);}catch(_){}
+  return `<div class="panel" style="padding:28px 24px"><h2>이 ${what}을 그리지 못했습니다</h2><p class="muted" style="margin-top:6px">${esc(m)}</p><p class="muted" style="margin-top:6px">다른 탭은 계속 쓸 수 있습니다. 같은 일이 되풀이되면 이 파일과 함께 알려 주세요.</p></div>`;}}
 function render(){
-  H=[];
+  const prevH=H;H=[];
   const app=$("#app");const _snap=deckSnap(app);
   const ae=document.activeElement,fk=ae&&ae.getAttribute?ae.getAttribute("data-fk"):null;
   const prevTop=_lastTop;
   let html;
-  if(!D||!D.days.length)html=headerHtml(null)+`<div class="stage" data-key="stage"><main data-key="view:none"><div class="panel" style="padding:28px 24px"><h2>아직 수집한 데이터가 없습니다</h2><p class="muted" style="margin-top:6px">수집 프로그램에서 '수집' 을 실행한 뒤 이 파일을 다시 여세요.</p></div></main></div>`+footHtml();
+  try{
+  if(!D||!D.days.length){
+    /* JS-13(11/25): 빈 화면의 까닭을 나눠 적는다 — 행이 없음 · 행은 있으나 시각을 모두 못 읽음 · 장비 정보가 없는 파일 */
+    const nr=rows.length,nb=D?D.badRows||0:0,nd=D?D.devices.length:0;
+    const [t1,t2]=!nr?["아직 수집한 데이터가 없습니다","수집 프로그램에서 '수집' 을 실행한 뒤 이 파일을 다시 여세요."]
+      :nb>=nr?[`행 ${nr.toLocaleString("ko-KR")}개를 모두 읽지 못했습니다(시각 형식)`,"수집 창에서 '결과 파일만 다시 만들기' 로 새로 만든 뒤 다시 여세요. 되풀이되면 수집 로그와 함께 알려 주세요."]
+      :!nd?["장비 정보가 없는 파일입니다","수집 창에서 '결과 파일만 다시 만들기' 로 새로 만든 뒤 다시 여세요."]
+      :["보여 줄 날이 없습니다","이 파일의 행이 수집 범위의 장비 · 기간에 들지 않습니다. 수집 창에서 '결과 파일만 다시 만들기' 로 새로 만든 뒤 다시 여세요."];
+    html=headerHtml(null)+`<div class="stage" data-key="stage"><main data-key="view:none"><div class="panel" style="padding:28px 24px"><h2>${esc(t1)}</h2><p class="muted" style="margin-top:6px">${esc(t2)}</p></div></main></div>`+footHtml();}
   else{const V=state.view;let body="";
-    if(V==="home")body=homeHtml();else if(V==="errors")body=errorsHtml();else if(V==="overkill")body=okHtml();else if(V==="recipe")body=rcpHtml();else if(V==="lot")body=lotHtml();else if(V==="param")body=paramHtml();else body=reportHtml();
-    html=headerHtml(V)+`<div class="stage" data-key="stage" data-anim="el"><main data-key="view:${V}">${body}</main></div>`+footHtml()+popupsHtml();}
+    body=safeHtml(()=>V==="home"?homeHtml():V==="errors"?errorsHtml():V==="overkill"?okHtml():V==="recipe"?rcpHtml():V==="lot"?lotHtml():V==="param"?paramHtml():reportHtml(),"탭");
+    let pops="";try{pops=popupsHtml();}catch(e){log("화면 오류(팝업): "+(e&&e.message||e));try{console.error(e);}catch(_){}state.stack=[];toast("팝업을 그리지 못해 닫았습니다: "+(e&&e.message||e));}
+    html=headerHtml(V)+`<div class="stage" data-key="stage" data-anim="el"><main data-key="view:${V}">${body}</main></div>`+footHtml()+pops;}
+  }catch(e){H=prevH;throw e;}
   const tpl=document.createElement("template");tpl.innerHTML=html;
   if(app.getAttribute("data-anim")!=="el")app.setAttribute("data-anim","el");
   morphChildren(app,tpl.content);
@@ -2101,7 +2136,7 @@ function headerHtml(V){
   const pickHtml=`<hr><b>탭 골라 HTML 만들기</b>${ALL_TABS.map(([k,l])=>`<button class="btn" role="menuitemcheckbox" aria-checked="${pk.includes(k)}" data-h="${h(()=>setState({pickTabs:pk.includes(k)?pk.filter(x=>x!==k):[...pk,k]}))}" data-fk="pick:${k}">${pk.includes(k)?"☑":"☐"} ${l}</button>`).join("")}<button class="btn on" ${pk.length?"":"disabled"} data-h="${h(()=>saveHtml({only_tabs:ALL_TABS.map(t=>t[0]).filter(k=>pk.includes(k))},"탭"+pk.length+"개_"))}" data-fk="pick:go">${pk.length?"고른 "+pk.length+"개 탭만 HTML로 저장":"탭을 고르세요"}</button>`;
   const setBtn=state.devOn&&!lotOnly&&!only?`<span class="setwrap"><button class="btn${state.setOpen?" on":""}" data-h="${h(()=>setState({setOpen:!state.setOpen}))}" data-fk="set:btn" aria-haspopup="true" aria-expanded="${state.setOpen}" title="숨긴 탭 설정">⚙ 설정</button>${state.setOpen?`<div class="setpop" role="menu"><b>숨긴 탭</b>${hid.length?hid.map(([k,l])=>`<button class="btn" role="menuitem" data-h="${h(()=>{setState({unhid:[...state.unhid,k],setOpen:false});S.go(k)();})}" title="탭 줄로 복귀하고 엽니다">${l}</button>`).join(""):`<span class="setnone">숨긴 탭이 없습니다</span>`}${hasD?pickHtml:""}</div>`:""}</span>`:"";
   return `<header class="hdr" data-key="hdr"><div class="brand"><span class="${_mkCls}" data-static aria-hidden="true">${BRAND_SVG}</span>${lotOnly?"AOI":"AOI 가동 현황"}</div>
-    ${lotOnly?"":`<nav class="nav"><i class="ind" data-key="ind" data-static aria-hidden="true"><b class="l"></b><b class="m"></b><b class="r"></b><b class="s"></b></i>${nav.map(([k,l])=>`<button class="${V===k?"on":""}" data-h="${h(S.go(k))}" data-fk="nav:${k}">${l}</button>`).join("")}</nav>`}
+    ${lotOnly?"":`<nav class="nav"><i class="ind" data-key="ind" data-static aria-hidden="true"><b class="l"></b><b class="m"></b><b class="r"></b><b class="s"></b></i>${nav.map(([k,l])=>`<button class="${V===k?"on":""}" data-h="${h(S.go(k))}" data-fk="nav:${k}"${V==null?" disabled":""}>${l}</button>`).join("")}</nav>`}
     <div class="spacer"></div>
     ${hasD&&!lotOnly?`<div class="hacts"><button class="btn" data-h="${h(saveHtml)}" title="지금 데이터를 담은 HTML 사본을 내려받습니다">사본 저장</button>
       <button class="btn" data-h="${h(()=>setState({stack:pushTop("recipe")}))}" data-fk="rg:open" title="같은 레시피인 Job 을 묶어 이름을 붙입니다">레시피 묶음</button></div>`:""}
@@ -2137,17 +2172,18 @@ function homeHtml(){
   const sorted=S.order(day,devs),items=sorted;
   const q=items.reduce((a,x)=>{if(x.t){a.w+=x.t.w||0;a.ne+=x.t.ne||0;if(S.noRec(x.t))a.no++;}else a.no++;return a;},{w:0,ne:0,no:0});
   const isToday=D.today&&day===D.today;
+  const nNo=state.sort==="low"?sorted.filter(x=>S.noRec(x.t)).length:0;   /* '가동률 낮은 순' 에서 기록 없는 장비는 맨 뒤 — 그 앞에 구분 한 줄(JS-10) */
   const rowsH=sorted.map((x,i)=>{const u=S.util(x.t),es=S.hasEst(x.t),no=S.noRec(x.t);
-    return `<button class="rowbtn" data-key="slot:${i}" data-row="dev:${esc(x.n)}" data-h="${h(S.open(x.n,undefined,true))}" data-fk="dev:${esc(x.n)}" title="${esc(x.n)} 하루 상세 팝업 열기${es?" · INI 가 없는 "+x.t.ne+"장은 Report 배치 창의 빈 시간으로 추정했습니다":""}" style="min-height:44px">
+    return `${nNo&&no&&(i===0||!S.noRec(sorted[i-1].t))?`<p class="nosep" data-key="nosep">기록 없음 ${nNo}대</p>`:""}<button class="rowbtn" data-key="slot:${i}" data-row="dev:${esc(x.n)}" data-h="${h(S.open(x.n,undefined,true))}" data-fk="dev:${esc(x.n)}" title="${esc(x.n)} 하루 상세 팝업 열기${es?" · INI 가 없는 "+x.t.ne+"장은 Report 배치 창의 빈 시간으로 추정했습니다":""}" style="min-height:44px">
       <span style="display:flex;align-items:center;gap:6px;font-weight:600;font-size:13.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis"><span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis"><span data-tx>${esc(x.n)}</span>${collectChip(x.n)}</span></span>
       <span class="num" style="text-align:right;font-size:14.5px;font-weight:600;color:${u===null?"#5A6673":"#0F151C"}">${u===null?`<span data-tx>—</span>`:`<span ${txn(u,"pct")}>${Math.round(u)}%</span>`}</span>
       ${no?`<span class="nobar" data-bar="${day}|${esc(x.n)}">기록 없음</span>`:`<span data-bar="${day}|${esc(x.n)}" style="display:block;position:relative;height:20px;border-radius:10px;background:#E9EDF2;overflow:hidden;background-image:${S.bar(x.t)}">${futHtml(x.t)}</span>`}
       <span class="num" style="text-align:right;font-size:13px;color:#4B5866">${x.t&&x.t.e?`<span ${txn(x.t.e,"n")}>${x.t.e}건</span>`:`<span data-tx>—</span>`}</span>
       <span class="chev" style="text-align:right;color:#5A6673;font-size:15px">›</span></button>`;}).join("");
-  const fu=S.fleetUtil(day,devs);
+  const fu=S.fleetUtil(day,devs),xM=items.reduce((a,b)=>a+(b.t?b.t.x:0),0),sM=items.reduce((a,b)=>a+(b.t?b.t.s:0),0);
   return `<section class="cards">
-      <div><p class="k">평균 가동률</p><p class="v num">${fu===null?"—":cnt(fu,1)+"<small>%</small>"}</p>${isToday?`<p class="s">수집한 날 · 00:00 ~ 모든 장비의 마지막 기록</p>`:""}${D.partialDays&&D.partialDays.includes(day)?`<p class="s" style="color:var(--warn)">보관 기간 첫날 — 수집 창이 도중에 시작해 하루 전체가 아닙니다</p>`:""}<p class="s">기록 있는 ${items.length-q.no}대 평균${q.no?` · 기록 없음 ${q.no}대 제외`:""}</p>${q.ne?`<p class="s" title="INI(시각 기록)가 없어 Report 배치 창의 빈 시간을 나눠 가진 Wafer">배치 창으로 추정 ${q.ne}장 / ${q.w}장</p>`:""}</div>
-      <div><p class="k" title="같은 Lot 에서 같은 유형이 여러 번 나도 1건으로 셉니다">Error</p><p class="v num">${cnt(items.reduce((a,b)=>a+(b.t?b.t.e:0),0))}<small>건</small></p><p class="s">Error ${hm(items.reduce((a,b)=>a+(b.t?b.t.x:0),0))} · 에러 후 대기 ${hm(items.reduce((a,b)=>a+(b.t?b.t.s:0),0))}</p></div>
+      <div><p class="k">평균 가동률</p><p class="v num">${fu===null?"—":cnt(fu,1)+"<small>%</small>"}</p>${isToday?`<p class="s">수집한 날 · 00:00 ~ 모든 장비의 마지막 기록</p>`:""}${D.partialDays&&D.partialDays.includes(day)?`<p class="s" style="color:var(--warn)">보관 기간 첫날 — 수집 창이 도중에 시작해 하루 전체가 아닙니다</p>`:""}<p class="s">기록 있는 ${items.length-q.no}대 평균${q.no?` · 기록 없음 ${q.no}대 제외`:""}</p>${q.ne?`<p class="s" title="INI(시각 기록)가 없어 Report 배치 창의 빈 시간을 나눠 가진 Wafer">배치 창으로 추정 ${q.ne.toLocaleString("ko-KR")}장 / ${q.w.toLocaleString("ko-KR")}장</p>`:""}</div>
+      <div><p class="k" title="같은 Lot 에서 같은 유형이 여러 번 나도 1건으로 셉니다">Error</p><p class="v num">${cnt(items.reduce((a,b)=>a+(b.t?b.t.e:0),0))}<small>건</small></p><p class="s" title="Error 대기 = Error 시간 + 에러 후 대기 — Error 탭 · TB500 · Kendall 탭과 같은 이름 · 같은 숫자">Error 대기 ${hm(xM+sM)}${xM+sM?` (Error ${hm(xM)} + 에러 후 대기 ${hm(sM)})`:""}</p></div>
     </section>
     ${missedHtml()}
     <div class="bar-h"><h2>${isToday?"오늘의 가동률":dayName(day)+" 가동률"}</h2><span class="scope-badge" data-key="scope">${scopeBadge("home")}</span><div class="spacer"></div>${S.filterSegs()}${segHtml(sorts)}</div>
@@ -2481,7 +2517,7 @@ function devPopupHtml(){
   const sc=D.scope.find(s=>s.n===mDev)||{};
   /* 앞뒤 장비는 가동률 목록과 같은 순서(지금 걸린 층 · 장비 종류 필터 + 정렬, UTIL-08) — 목록 밖 장비(다른 탭에서 연 것)면 번호 순 전체 */
   const ord=S.order(mDay).map(x=>x.n),seq=ord.includes(mDev)?ord:D.devices,i=seq.indexOf(mDev);
-  const sib=[{label:"Error 보기",title:"이 날 이 장비의 Error 상세",fk:"dev:err",go:S.openErr(mDev,state.modalDayI)}];
+  const sib=[{label:t&&t.e?"Error "+t.e+"건 ›":"Error 없음 ›",title:"이 날 이 장비의 Error 상세(최근 21일 막대도 함께)",fk:"dev:err",go:S.openErr(mDev,state.modalDayI)}];
   if(seq[i-1])sib.push({label:"‹ "+seq[i-1],title:seq[i-1]+" 로 바꾸기",go:S.open(seq[i-1],state.modalDayI)});
   if(seq[i+1])sib.push({label:seq[i+1]+" ›",title:seq[i+1]+" 로 바꾸기",go:S.open(seq[i+1],state.modalDayI)});
   const noRec=S.noRec(t);
@@ -2706,7 +2742,7 @@ function reportHtml(){
   const bcol=v=>v>=RPT_SLOW?ERR:v<=-RPT_SLOW?RUN:RPT_MID;
   const lcol=d=>{const c=bcol(dev(d));return c===RPT_MID?"#2B3640":c;};   /* 산점도의 이 장비 선 · 글씨 — 비슷하면 본문색(빨강은 20% 넘게 느릴 때만) */
   let sentence;
-  if(good.length>=2)sentence=`장비 <em>${good.length}대</em> 중 <em style="color:${lcol(slow)}">${esc(slow.n)}</em> 가 가장 느리고(${esc(hm(slow.f.conv))}, 중앙보다 <em style="color:${lcol(slow)}">${pc(dev(slow))}</em>), <em style="color:${lcol(fast)}">${esc(fast.n)}</em> 가 가장 빠릅니다(${esc(hm(fast.f.conv))}, ${pc(dev(fast))}). ${good.filter(d=>dev(d)>=RPT_SLOW).length?`중앙보다 20% 넘게 느린 장비 ${good.filter(d=>dev(d)>=RPT_SLOW).length}대.`:"20% 넘게 벗어난 장비는 없습니다."}`;
+  if(good.length>=2)sentence=`장비 <em>${good.length}대</em> · 가장 느린 장비 <em style="color:${lcol(slow)}">${esc(slow.n)}</em> — ${esc(hm(slow.f.conv))}(중앙보다 <em style="color:${lcol(slow)}">${pc(dev(slow))}</em>) · 가장 빠른 장비 <em style="color:${lcol(fast)}">${esc(fast.n)}</em> — ${esc(hm(fast.f.conv))}(${pc(dev(fast))}). ${good.filter(d=>dev(d)>=RPT_SLOW).length?`중앙보다 20% 넘게 느린 장비 ${good.filter(d=>dev(d)>=RPT_SLOW).length}대.`:"20% 넘게 벗어난 장비는 없습니다."}`;
   else if(good.length===1)sentence=`계산할 수 있는 장비가 <em>${esc(good[0].n)}</em> 한 대뿐이라 장비끼리는 비교할 수 없습니다(${esc(hm(good[0].f.conv))}).`;
   else sentence=`배치 표본이 5개 이상인 장비가 없어 환산 시간을 내지 못합니다.`;
   /* 11/25(RDL-01): 첫 카드는 장비 막대 · 범례 · 맨 위 문장과 같은 '장비 중앙'(장비별 환산의 중앙) — 예전엔 Job 의 모든 배치(계산 못 한 장비 표본까지)를 한 선으로 회귀한 값이라
@@ -2749,7 +2785,7 @@ function reportHtml(){
   const badH=bad.length?`<p class="muted" style="font-size:12px;margin:12px 22px 4px;line-height:1.9">계산 못 한 장비 ${bad.length}대 — ${bad.map(d=>{const x=exShort(d.Sx);return `<button type="button" class="link" data-h="${h(()=>rptAllOpen(cur,d.n))}" data-tip="${esc(d.n+" — "+d.f.why+"\n"+exTxt(d.Sx)+"\n누르면 이 장비의 모든 배치 ("+d.Sx.n+"개)")}">${esc(d.n)}</button>(${esc(d.f.why.replace(" — 5개 미만"," · 5개 미만"))}${x?" · 제외 "+esc(x):""})`;}).join(" · ")}</p>`:"";
   const ctl=`<div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;padding:12px 22px 4px"><span class="muted" style="font-size:12px">${basis}장 환산 시간 · 줄을 누르면 배치 점</span><div class="spacer"></div>
     ${segHtml([{label:"빠른 순",on:SKY==="conv",pick:()=>setState({rptSort:"conv"})},{label:"Error 많은 순",on:SKY==="err",pick:()=>setState({rptSort:"err"})},{label:"Error 대기 순",on:SKY==="wait",pick:()=>setState({rptSort:"wait"})},{label:"장비 번호",on:SKY==="dev",pick:()=>setState({rptSort:"dev"})}])}
-    ${segHtml([{label:"25장 기준",on:stdOn,pick:()=>setState({rptStd:true})},{label:"이 Job 최빈 "+(mode||"?")+"장",on:!stdOn,pick:()=>setState({rptStd:false})}])}</div>
+    ${!mode||mode===RPT_STD?`<span class="muted" style="font-size:12px" title="이 Job 에서 가장 흔한 장수도 ${RPT_STD}장이라 기준이 하나입니다">${RPT_STD}장 기준</span>`:segHtml([{label:RPT_STD+"장 기준",on:stdOn,pick:()=>setState({rptStd:true})},{label:"이 Job 최빈 "+mode+"장",on:!stdOn,pick:()=>setState({rptStd:false})}])}</div>
     <div class="rpt-legend"><span><i style="background-color:${ERR}"></i>중앙보다 20% 넘게 느림</span><span><i style="background-color:${RUN}"></i>20% 넘게 빠름</span><span><i style="background-color:${RPT_MID}"></i>비슷함</span><span><u></u>중앙 ${med!=null?esc(hm(med)):"—"}</span></div>`;
   const right=`<div style="min-width:0"><div class="panel" style="margin-bottom:14px"><div style="padding:18px 22px 14px"><h2 style="margin:0 0 6px;font-size:20px">${esc(cur)}</h2><p style="margin:0;font-size:14.5px;line-height:1.55;word-break:keep-all" class="rpt-sent">${sentence}</p></div></div>
     ${cardsH}<div class="panel" style="padding-bottom:8px">${good.length?ctl+`<div class="rpt-scroll" style="overflow-x:auto"><div class="rpt-in"><div class="rpt-list">${good.map(rowH).join("")}</div></div></div>`:`<p class="empty" style="padding:18px 22px">${esc(sentence.replace(/<[^>]+>/g,""))}</p>`}${badH}
@@ -3374,14 +3410,14 @@ function rcpHtml(){
   if(noMatch){const L=_rcpLast,there=L&&fam.has(L.k);
     const clr=lab=>`<button class="btn" data-fk="rcp:clear" data-h="${h(()=>{setState({rcpQ:""});const q=document.querySelector('[data-fk="rcp:q"]');if(q)q.focus();})}">${lab}</button>`;
     detail=`<div class="panel recipe-empty" data-key="rcp:empty-detail"><h3>검색 결과가 없습니다</h3>${L?(there?`<div class="recipe-retained"><span class="muted">이전 선택</span>
-      <p><b style="${L.al?"":"font-family:"+MONO}">${esc(L.name)}</b> · ${L.pi?"기존":"멀티"} <span class="num">${f1(L.mM)}</span> / ${L.pi?"Enhanced":"단일"} <span class="num">${f1(L.mS)}</span>분/장</p>${clr("검색 지우고 이전 상세로")}</div>`
+      <p><b style="${L.al?"":"font-family:"+MONO}">${esc(L.name)}</b> · ${U.tl} 중앙 ${L.pi?"기존":"멀티"} <span class="num">${U.ft(L.m[U.lot?"b":"s"].M)}</span> / ${L.pi?"Enhanced":"단일"} <span class="num">${U.ft(L.m[U.lot?"b":"s"].S)}</span>${U.lot?"":"분"} <span class="muted">(${U.cnt}당)</span></p>${clr("검색 지우고 이전 상세로")}</div>`
       :`<p class="muted">이 기간에는 이전 선택의 기록이 없습니다</p>${clr("검색 지우기")}`):clr("검색 지우기")}</div>`;}
   if(SF){
     const members=[...SF.gs.entries()].sort((x,y)=>y[1]-x[1]);
     const famGs=new Set(members.filter(([gi])=>!rcpOffOf(leadOf(gi))).map(([gi])=>gi));   /* 켜 둔 Job 만 통계에 */
     const A=rcpAgg(famGs,from,to),a=A.all,anyG=titleG(SF),FN=rcpFamName(anyG),al=rcpAl(anyG),PI=SF.pi;
     const NMK=k=>nmK(k,PI),W1=NMK("M"),W2=NMK("S");
-    _rcpLast={k:SF.k,name:FN,al,pi:PI,mM:qs(a.M.s,.5),mS:qs(a.S.s,.5)};
+    _rcpLast={k:SF.k,name:FN,al,pi:PI,m:{s:{M:qs(a.M.s,.5),S:qs(a.S.s,.5)},b:{M:qs(a.M.b,.5),S:qs(a.S.b,.5)}}};   /* 두 단위 다 — 검색 0개일 때 지금 단위로 요약(11/25 RDL-21) */
     let jobG=state.rcpJob!=null?[...rcpGroupsOf([state.rcpJob])][0]:undefined;if(jobG==null||!famGs.has(jobG))jobG=[...famGs][0]??members[0][0];
     const sfxC=gi=>{if(PI)return /enhanced/i.test(String(D.pool.job[D.jobGroups[gi].l]))?MODE_C.S:MODE_C.M;const s=rcpSuffix(gi);return s==="Multi"?MODE_C.M:s==="Single"?MODE_C.S:s==="미구분"?MODE_C.U:"#8A96A3";};
     /* Job 칩 = 통계에 넣을지 고르는 켜기/끄기 단추 */
@@ -3407,7 +3443,7 @@ function rcpHtml(){
     const tile=(k,o)=>{if(!o.n)return `<div class="mtile none"><p class="k"><i class="sw" style="background-color:${MODE_C[k]}"></i>${NMK(k)}${kNote(k)}</p><p class="only">이 기간 ${NMK(k)} 기록 없음</p></div>`;
       const T=U.T(o),F=U.F(o),m=qs(T,.5),fm=qs(F,.5),xT=U.XT(o),xF=U.XF(o),nT=xT?xT.out.length:0,nF=xF?xF.out.length:0,out=nT+nF;
       const tip=[outTip(xT,U.lot?labP:labQ,"분",f1,U.tl),outTip(xF,U.lot?labP:labQ,"개",fD,U.fl)].filter(Boolean).join("\n\n");
-      const other=U.lot?`Wafer당 스캔 ${vu(qs(o.s,.5),f1,"분")} ·Defect ${vu(qs(o.f,.5),fD,"개/wafer")}`:`LOT당 ${vu(qs(o.b,.5),hmT,"")} · Defect ${vu(qs(o.lf,.5),fD,"개/Lot")}`;
+      const other=U.lot?`Wafer당 스캔 ${vu(qs(o.s,.5),f1,"분")} · Defect ${vu(qs(o.f,.5),fD,"개/wafer")}`:`LOT당 ${vu(qs(o.b,.5),hmT,"")} · Defect ${vu(qs(o.lf,.5),fD,"개/Lot")}`;
       return `<div class="mtile"><p class="k"><i class="sw" style="background-color:${MODE_C[k]}"></i>${NMK(k)}${kNote(k)}</p>
       <div class="bigrow"><div><p class="v num"${m!=null&&U.lot?` title="${f1(m)}분"`:""}>${U.big(m)}</p><p class="vl">${U.tl} (중앙)</p></div><div><p class="v num">${fm==null?"—":fD(fm)+`<small>${U.fu}</small>`}</p><p class="vl">${U.fl} (중앙)</p></div></div>
       <p class="s mt1">표본 <b class="num">${f0(T.length)}</b> / ${f0(U.lot?o.lots.size:o.n)} ${U.cnt}${U.lot?"":` <span class="muted">· INI ${f0(o.sI.length)} · Report 보완 ${f0(o.rep)}</span>`}${exTag(o)}${out?` <span class="otag" title="${esc(tip)}">이상치 ${out}개 제외 ⓘ</span>`:""}</p>
@@ -3450,24 +3486,25 @@ function rcpHtml(){
     const flm={M:qs(sel(a.M),.5),S:qs(sel(a.S),.5)},flK=["M","S"].filter(k=>rcpShow(k)&&flm[k]!=null),flH=flK.map(k=>`<i class="dfl" style="left:${px(flm[k])}%;border-color:${MODE_C[k]}"></i>`).join("");
     /* 머리 줄 '전체' 이름표(11/25 RDL-08): 두 값이 가까우면 겹쳐 '전체13.43.9' 로 읽혔다 — 합친 이름표(.mg)를 함께 그려 두고 layoutPairLabels 가 실제 폭으로 겹침을 재 하나만 보인다 */
     const flLab=flK.map(k=>`<b class="dflab" data-nr style="left:${px(flm[k])}%;color:${MODE_C[k]}" title="전체 ${NMK(k)} 중앙">전체 ${mfm(flm[k])}</b>`).join("")+(flK.length===2?`<b class="dflab mg" data-nr style="left:${((+px(flm.M)+ +px(flm.S))/2).toFixed(2)}%" title="전체 ${W1} · ${W2} 중앙">전체 <i class="sw" style="background-color:${MODE_C.M}"></i>${mfm(flm.M)} · <i class="sw" style="background-color:${MODE_C.S}"></i>${mfm(flm.S)}</b>`:"");
-    const hasT=d=>sel(d.M).length||sel(d.S).length||sel(d.U).length;
-    const devSel=dv.some(([n])=>n===state.rcpDevSel)?state.rcpDevSel:((dv.find(([,d])=>hasT(d))||dv[0]||[])[0]||null);
+    /* 선택 표시는 사용자가 팝업을 연 장비에만(11/25 RDL-11 — 처음 열면 아무것도 고르지 않았는데 첫 장비가 '선택됨' 으로 보였다) */
+    const devSel=dv.some(([n])=>n===state.rcpDevSel)?state.rcpDevSel:null;
     /* 멀티 · 단일 값이 없는 장비의 이유(RDL-10) — 정말 기록이 없을 때만 '값 없음' */
     const noneWhy=d=>{if(U.lot){const L=bxL(d.bx);return d.lots.size?"LOT 표본 없음"+(L.length?" — "+L.join(" · "):""):"값 없음";}
       if(!d.w)return "값 없음";return (MET==="defect"?"Defect 값 없음":"스캔 시간 없음")+" · "+f0(d.w)+" wafer";};
+    const cnt3=(a,b,c)=>`<i class="sw" style="background-color:${MODE_C.M}"></i>${a} <i class="sw" style="background-color:${MODE_C.S}"></i>${b}${c?` <i class="sw" style="background-color:${MODE_C.U}"></i>${c}`:""}`;   /* RDL-13: 숫자 앞 방식 색 점 */
     const devH=dv.map(([n,d],i)=>{const x=qs(sel(d.M),.5),y=qs(sel(d.S),.5),df=x!=null&&y!=null?y-x:null,on=n===devSel,vx=rcpShow("M")?x:null,vy=rcpShow("S")?y:null;
       const line=vx!=null&&vy!=null?`<i class="dl" style="left:${px(Math.min(x,y))}%;width:${(Math.abs(y-x)/dmx*100).toFixed(2)}%"></i>`:"";
       const dot=(v,k,o)=>v==null?"":`<b class="dd" style="left:${px(v)}%;background-color:${MODE_C[k]}" title="${esc(n+" · "+NMK(k)+"\n"+MET_L+" "+mfm(v)+mu+"\n"+f0(o.n)+" wafer · "+o.lots.size+" Lot")}"></b><em class="dlab ${k} num" data-nr data-p="${px(v)}" style="left:${px(v)}%">${mfm(v)}</em>`;
       const lw=k=>d[k].lots.size,uv=x==null&&y==null?uOnly(d):null;
       return `<button type="button" class="dbrow${on?" on":""}" data-key="slot:${i}" data-row="dev:${esc(n)}" data-hm="${qs(U.T(d.M),.5)??""}" data-hs="${qs(U.T(d.S),.5)??""}" aria-pressed="${on}" data-h="${h(()=>rcpDevOpen(n,SF.k))}" title="${esc(n)} 상세"><span class="dn">${esc(n)}</span><span class="dtrack">${flH}${line}${dot(vx,"M",d.M)}${dot(vy,"S",d.S)}${uv!=null?dot(uv,"U",d.U):vx==null&&vy==null?`<em class="dnone">${x==null&&y==null?esc(noneWhy(d)):"숨김"}</em>`:""}</span>
         <span class="r num dx" style="color:${df==null?"#8A96A3":df<0?MODE_C.S:df>0?MODE_C.M:"#4B5866"}">${df==null?(x!=null?W1+"만":y!=null?W2+"만":uv!=null?"판정 못 함만":"—"):(Math.abs(df)<0.05?"차이 없음":(df<0?W2+" ":W1+" ")+mfm(Math.abs(df))+mpu+(MET==="defect"?"↓":"↓"))}</span>
-        <span class="r num dc" title="${W1} ${d.M.n} · ${W2} ${d.S.n}${d.U.n?" · 판정 못 함 "+d.U.n:""} wafer">${d.M.n}·${d.S.n}${d.U.n?"·"+d.U.n:""}<small>wafer</small></span><span class="r num dc" title="${W1} ${lw("M")} Lot · ${W2} ${lw("S")} Lot">${lw("M")}·${lw("S")}${d.U.n?"·"+lw("U"):""}<small>Lot</small></span></button>`;}).join("");
+        <span class="r num dc" title="${W1} ${d.M.n} · ${W2} ${d.S.n}${d.U.n?" · 판정 못 함 "+d.U.n:""} wafer">${cnt3(d.M.n,d.S.n,d.U.n)}</span><span class="r num dc" title="${W1} ${lw("M")} Lot · ${W2} ${lw("S")} Lot${d.U.n?" · 판정 못 함 "+lw("U")+" Lot":""}">${cnt3(lw("M"),lw("S"),d.U.n?lw("U"):0)}</span></button>`;}).join("");
     const daxis=`<div class="dbrow axis"><span></span><span class="dtrack ax">${AX2.ticks.map(t=>`<em style="left:${(t/dmx*100).toFixed(2)}%">${axLab(t,MET==="time"&&U.lot,MET==="defect"?"개":"분")}</em>`).join("")}</span><span></span><span></span><span></span></div>`;
     const metSeg=segHtml([{label:"시간",on:MET==="time",pick:()=>setState({rcpMetric:"time"})},{label:"Defect",on:MET==="defect",pick:()=>setState({rcpMetric:"defect"})}],'aria-label="장비별 그래프의 지표"');
     const sortSeg=segHtml([{label:"장비순",on:SORT==="name",pick:()=>setState({rcpDevSort:"name"})},{label:"큰 값 순",on:SORT==="big",pick:()=>setState({rcpDevSort:"big"})},{label:"작은 값 순",on:SORT==="small",pick:()=>setState({rcpDevSort:"small"})}],'aria-label="장비 정렬"');
     const devT=!famGs.size?"":`<div class="panel" data-key="rcp:mdev" style="margin-top:14px"><div class="ph"><h2>장비별 ${MET==="defect"?U.fl:U.tl}</h2><span class="muted" style="font-size:12px">중앙 · ${mu}</span><div class="spacer"></div>${sortSeg}${metSeg}</div>
       <div class="dblegend">${kbtn("M",W1)}${kbtn("S",W2)}</div>
-      <div class="dbrow head"><span>장비</span><span class="dtrack hd">${flLab}</span><span class="r">차이</span><span class="r" title="${W1}·${W2} 순">Wafer</span><span class="r" title="${W1}·${W2} 순">Lot</span></div><div class="dbrows" data-key="rcp:mdev:rows">${devH||`<p class="empty">기록 없음</p>`}</div>${dv.length?daxis:""}</div>`;
+      <div class="dbrow head"><span>장비</span><span class="dtrack hd">${flLab}</span><span class="r">차이</span><span class="r" title="점 색 = ${W1} · ${W2} · 판정 못 함">Wafer</span><span class="r" title="점 색 = ${W1} · ${W2} · 판정 못 함">Lot</span></div><div class="dbrows" data-key="rcp:mdev:rows">${devH||`<p class="empty">기록 없음</p>`}</div>${dv.length?daxis:""}</div>`;
     /* 어떻게 셌나 — 기본은 접어 둔다(사용자 10/6), 누르면 펼침(state.rcpHowAll). 안의 카드는 따로 펼친다(handoff C5) */
     const exT=o=>[o.ini&&`INI 를 못 찾음 ${o.ini}장`,o.stale&&`다른 스캔이 덮어쓴 INI ${o.stale}장`,o.range&&`시각이 거꾸로이거나 180분 넘음 ${o.range}장`].filter(Boolean).join(" · ")||"없음";
     const bxT=o=>[o.err&&`Error 가 있는 Lot ${o.err}개`,o.mixed&&`다른 레시피가 섞인 Lot ${o.mixed}개`,o.time&&`배치 시각 없음 ${o.time}개`,o.few&&`PASS ${LOT_MIN}장 미만 Lot ${o.few}개`].filter(Boolean).join(" · ")||"없음";

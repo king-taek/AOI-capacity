@@ -569,12 +569,14 @@ def test_recipe_verdict_labels_both_comparison_scopes():
 
 def test_recipe_device_rows_show_unjudged_values_and_select_only_a_picked_device():
     """11/25 RDL-10: 판정 못 한 wafer 만 있는 장비는 '값 없음' 이 아니라 옅은 회색 점(판정 못 함 값 — 멀티 · 단일에는 섞지 않음).
-    팝업을 연 장비는 선택 표시."""
+    RDL-11: 아무도 고르지 않았으면 어느 장비 행도 '선택됨' 이 아니다 — 팝업을 연 장비만. RDL-13: wafer 수 앞에 방식 색 점."""
     rows = [_rdl("AOI-1", f"M{i}", f"08:{i*10:02d}", f"08:{i*10+10:02d}", "A", "MULTI") for i in range(3)]
     rows += [_rdl("AOI-3", f"U{i}", f"10:{i*12:02d}", f"10:{i*12+12:02d}", "B", "") for i in range(3)]
     html, = screen(rows, meta("AOI-1", "AOI-3"), [["rcpHtml"]])
     row3 = next(x for x in html.split('class="dbrow') if 'data-row="dev:AOI-3"' in x)
     assert 'class="dlab U num"' in row3 and "판정 못 함만" in row3 and "값 없음" not in row3
+    assert 'class="sw"' in row3.split('class="r num dc"')[1]
+    assert re.findall(r'<button type="button" class="dbrow[^"]*"[^>]*aria-pressed="(\w+)"', html) == ["false", "false"]
     picked, = screen(rows, meta("AOI-1", "AOI-3"), [["rcpHtml"]], state={"rcpDevSel": "AOI-3"})
     assert 'class="dbrow on" data-key="slot:1" data-row="dev:AOI-3"' in picked
 
@@ -1275,7 +1277,7 @@ def test_overkill_period_bar_end_ignores_small_rows_and_cuts_them():
 
 
 def test_device_popup_follows_the_list_order_and_separates_no_record_from_idle():
-    """11/25 점검(UTIL-03·04·05·08·11·14): 팝업 ‹ › 는 목록과 같은 필터 · 정렬, 기록 없는 장비는 대기도 '—' 와 한 줄 설명,
+    """11/25 점검(UTIL-03·04·05·08·11·14 · JS-10 · COPY-14): 팝업 ‹ › 는 목록과 같은 필터 · 정렬, 기록 없는 장비는 대기도 '—' 와 한 줄 설명,
     Error 카드는 '건' 만 크게, 자정 넘긴 배치의 둘째 날 이름표는 '전날부터', 값 있는 장비가 없으면 평균 '—'(0% 아님)."""
     rows = [w("AOI-1", "W1", "08:00", "10:00"), w("AOI-2", "W2", "09:00", "09:30", status="Alignment Error."),
             w("4F-AOI-01", "W3", "10:00", "10:05"),
@@ -1283,12 +1285,12 @@ def test_device_popup_follows_the_list_order_and_separates_no_record_from_idle()
     mt = meta("AOI-1", "AOI-2", "AOI-3", "4F-AOI-01")
     st = {"modalDev": "AOI-2", "modalDayI": 1}
     (pop,) = screen(rows, mt, [["devPopupHtml"]], state=st)
-    assert "‹ AOI-1" in pop and "AOI-3 ›" in pop and 'data-fk="dev:err"' in pop and "Error 보기" in pop
+    assert "‹ AOI-1" in pop and "AOI-3 ›" in pop and 'data-fk="dev:err"' in pop and "Error 1건 ›" in pop
     assert ">1건<" in pop and "1건 · " not in pop                                    # Error 시간은 카드 아래 작은 줄
-    (pop,) = screen(rows, mt, [["devPopupHtml"]], state=st | {"sort": "low"})        # 가동률 낮은 순: 목록과 같은 순서(기록 없는 AOI-3 이 맨 앞)
-    assert "‹ AOI-3" in pop and "4F-AOI-01 ›" in pop
+    (pop,) = screen(rows, mt, [["devPopupHtml"]], state=st | {"sort": "low"})        # 가동률 낮은 순: 기록 없는 AOI-3 은 맨 뒤
+    assert "AOI-3 ›" not in pop
     (pop,) = screen(rows, mt, [["devPopupHtml"]], state={"modalDev": "4F-AOI-01", "modalDayI": 1, "floor": "4"})
-    assert "‹ " not in pop and "Error 보기" in pop                                  # 4층만 걸면 앞뒤 장비도 4층 안에서
+    assert "‹ " not in pop and "Error 없음 ›" in pop                                  # 4층만 걸면 앞뒤 장비도 4층 안에서
     (pop,) = screen(rows, mt, [["devPopupHtml"]], state={"modalDev": "AOI-3", "modalDayI": 1})
     assert "이 날 기록이 없습니다 — 장비가 쉬었는지 수집이 안 됐는지" in pop and "24시간" not in pop
     (pop,) = screen(rows, mt, [["devPopupHtml"]], state={"modalDev": "AOI-1", "modalDayI": 1})
@@ -1298,7 +1300,7 @@ def test_device_popup_follows_the_list_order_and_separates_no_record_from_idle()
     (home,) = screen(rows, mt, [["homeHtml"]], state={"maker": "kla", "dayI": 1})
     assert "이 조건(층 · 장비 종류)에 맞는 장비가 이 파일에 없습니다" in home and "0.0" not in home
     (home,) = screen(rows, mt, [["homeHtml"]], state={"sort": "low", "dayI": 1})
-    assert home.index('data-row="dev:AOI-3"') < home.index('data-row="dev:4F-AOI-01"') and 'class="nobar"' in home and "nosep" not in home
+    assert home.index("기록 없음 1대") < home.index('data-row="dev:AOI-3"') and 'class="nobar"' in home
 
 
 def _card(html, key):

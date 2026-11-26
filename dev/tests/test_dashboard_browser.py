@@ -248,6 +248,7 @@ def test_home_rows_follow_device_order_and_save_copy_refolds_the_same_columns(pa
     pg, errors, requests = page
     order = pg.evaluate("[...document.querySelectorAll('main button.rowbtn[data-fk^=\"dev:\"]')].map(b => b.dataset.fk)")
     assert order == ["dev:AOI-1", "dev:AOI-2", "dev:AOI-3", "dev:AOI-10"]   # 번호순 — 사전순이면 AOI-10 이 AOI-2 앞에 온다
+    assert pg.evaluate("document.getElementById('embedded').textContent") == ""   # PH-08: 읽은 원문은 문서에서 비운다 — 사본은 아래처럼 같다
     with pg.expect_download() as dl:
         pg.get_by_role("button", name="사본 저장").click()
     saved = Path(dl.value.path()).read_text(encoding="utf-8")
@@ -362,7 +363,7 @@ def test_popups_stack_behind_each_other_and_escape_closes_the_top(page):
     pg, errors, _ = page
     pg.locator('button.rowbtn[data-fk="dev:AOI-1"]').click()
     pg.wait_for_selector('.dlg[data-dlg="dev"]')
-    pg.locator('.dlg[data-dlg="dev"] button[data-fk="dev:err"]').click()
+    pg.locator('.dlg[data-dlg="dev"] button[data-fk="dev:err"]').click()   # 11/25: 단추 이름에 그날 건수('Error 3건 ›' · 'Error 없음 ›')
     pg.wait_for_selector('.dlg[data-dlg="err"]')
     st = pg.evaluate("[...document.querySelectorAll('.ov:not([data-leaving])')].map(o => o.dataset.key + ':' + (o.classList.contains('behind') ? 'behind' : 'top') + ':' + o.inert)")
     assert st == ["ov:dev:behind:true", "ov:err:top:false"]
@@ -447,7 +448,7 @@ def test_motion_hooks_lottie_countup_sweep_and_recede(page):
     pg.locator('button.rowbtn[data-fk="dev:AOI-2"]').click()                              # AOI-2 는 Error 가 없다
     pg.wait_for_selector('.dlg[data-dlg="dev"]')
     assert pg.evaluate("document.querySelector('#app>.stage').classList.contains('behind')")   # 팝업이 열리면 무대가 물러난다
-    pg.locator('.dlg[data-dlg="dev"] button[data-fk="dev:err"]').click()
+    pg.locator('.dlg[data-dlg="dev"] button[data-fk="dev:err"]').click()   # 11/25: 단추 이름에 그날 건수('Error 3건 ›' · 'Error 없음 ›')
     pg.wait_for_selector('.dlg[data-dlg="err"] .lt-empty .lt svg')                       # Lottie 체크
     pg.keyboard.press("Escape")
     pg.keyboard.press("Escape")
@@ -461,7 +462,7 @@ def test_popup_deck_click_behind_brings_it_to_front_and_stackbar_lists_them(page
     pg, errors, _ = page
     pg.locator('button.rowbtn[data-fk="dev:AOI-1"]').click()
     pg.wait_for_selector('.dlg[data-dlg="dev"]')
-    pg.locator('.dlg[data-dlg="dev"] button[data-fk="dev:err"]').click()
+    pg.locator('.dlg[data-dlg="dev"] button[data-fk="dev:err"]').click()   # 11/25: 단추 이름에 그날 건수('Error 3건 ›' · 'Error 없음 ›')
     pg.wait_for_selector('.dlg[data-dlg="err"]')
     pg.wait_for_timeout(500)
     # 뒤 카드(dev)는 앞 카드보다 왼쪽에 있다
@@ -497,7 +498,7 @@ def test_stackbar_stays_top_left_while_the_popup_scrolls_and_lot_panel_fades_in_
     pg.set_viewport_size({"width": 1280, "height": 420})
     pg.locator('button.rowbtn[data-fk="dev:AOI-1"]').click()
     pg.wait_for_selector('.dlg[data-dlg="dev"]')
-    pg.locator('.dlg[data-dlg="dev"] button[data-fk="dev:err"]').click()
+    pg.locator('.dlg[data-dlg="dev"] button[data-fk="dev:err"]').click()   # 11/25: 단추 이름에 그날 건수('Error 3건 ›' · 'Error 없음 ›')
     pg.wait_for_selector('.stackbar .sb')
     assert pg.evaluate("document.querySelector('.stackbar').parentElement.id") == "app"
     top0 = pg.evaluate("document.querySelector('.stackbar').getBoundingClientRect().top")
@@ -636,8 +637,8 @@ def test_recipe_tab_shows_per_device_stats_and_compares_two_periods(page):
     assert pg.locator(".scanhero .jtog").count() == 2 and pg.locator(".scanhero .jtog[aria-pressed='true']").count() == 2   # 이 레시피로 보는 Job — 통계에 넣을지 고르는 단추
     assert [x.split("\n")[0] for x in pg.locator(".dbrow:not(.head):not(.axis)").all_inner_texts()] == ["AOI-1"]
     assert pg.locator(".dbrow .dd").count() == 2                        # 같은 장비에 멀티 · 단일 두 점
-    row = pg.locator(".dbrow[data-row='dev:AOI-1']").inner_text().replace("\n", " ")
-    assert "6·3wafer" in row and "1·1Lot" in row                       # 몇 wafer · 몇 Lot(멀티·단일 순)
+    dc = [" ".join(x.split()) for x in pg.locator(".dbrow[data-row='dev:AOI-1'] .dc").all_inner_texts()]
+    assert dc == ["6 3", "1 1"] and pg.locator(".dbrow[data-row='dev:AOI-1'] .dc .sw").count() == 4   # 몇 wafer · 몇 Lot — 숫자 앞 방식 색 점(11/25 RDL-13)
     assert pg.locator(".how .how-item").count() == 0 and pg.locator('[data-fk="how:all"]').get_attribute("aria-expanded") == "false"   # 어떻게 셌나는 기본 접힘
     pg.locator('[data-fk="how:all"]').click()
     pg.wait_for_timeout(250)
@@ -1295,6 +1296,7 @@ def test_compressed_publish_data_opens_and_save_copy_stays_compressed(page_facto
     ctx, pg, errors, requests = _open_quiet(page_factory, out)
     pg.wait_for_selector('main[data-key="view:home"]')
     assert pg.evaluate("rows.length") == len(emb["rows"]) and pg.evaluate("embEnc") == "gz"
+    assert pg.evaluate("document.getElementById('embedded').textContent") == ""   # PH-08: 압축 글도 읽은 뒤 비운다
     with pg.expect_download() as dl:
         pg.evaluate("saveHtml()")
     saved = Path(dl.value.path()).read_text(encoding="utf-8")

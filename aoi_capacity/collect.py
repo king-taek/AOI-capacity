@@ -1664,6 +1664,7 @@ def rows_for_report(dev_name: str, rep: dict, scan_root: str, memo: Optional[_In
     b_start, b_end = parse_dt(s.get("Batch Start", "")), parse_dt(s.get("Batch End", ""))
     rfields = {"wafers_scanned": s.get("Wafers Scanned", ""), "avg_scan_time": s.get("Avg. Scan Time", ""), "cr_every": "", "af_every": ""}
     want_settings = is_recipe_tab_job(rep.get("job", ""))
+    lot_seen: Dict[str, bool] = {}                  # 이 Report 안에서 확인한 Lot 폴더 → 있음(PC-02)
     rdl = is_rdl_job(rep.get("job", ""))
     single_report = False                              # PC-01: RDL 이 아닌 Job 은 첫 EXACT 장에 RecipesInfo.ini 가 없으면 같은 Report 의 나머지 장도 단일(D78 한 Report = 한 방식) — 열지 않는다
     for w in rep["wafers"]:
@@ -1692,17 +1693,25 @@ def rows_for_report(dev_name: str, rep: dict, scan_root: str, memo: Optional[_In
             roots = ini_roots_for(b_start, scan_root, backups)
             # 존재 확인(stat) 없이 바로 연다 — SMB 왕복이 행마다 2번에서 1번으로 준다. 없으면 open 이 알려 준다.
             # 루트(지금 폴더 · 백업) 바깥 순서, Job 폴더 이름 후보 안쪽 순서 — 원문 이름에서 찾으면 나머지는 열지 않는다.
+            # PC-02: (루트, Job 후보)마다 처음 헛열기가 나면 그 Lot 폴더가 있는지 한 번 보고(정확 경로 isdir), 없으면 이 Report 의
+            # 나머지 장은 그 후보를 열지 않는다(MoveResultFlag 도) — 찾는 순서 · 결과는 그대로, 헛여는 왕복만 준다.
             kind, got, found_in, found_job, rel_found = "missing", None, roots[0], jobs_try[0], rels[0]
             for root in roots:
                 for j, rel in zip(jobs_try, rels):
+                    lot_dir = os.path.join(root, j, rep["process_code"], w["lot"])
+                    if lot_seen.get(lot_dir) is False:
+                        continue
                     kind, got = memo.get(os.path.join(root, rel, "WaferInfo.ini"))
                     if kind != "missing":
                         found_in, found_job, rel_found = root, j, rel
                         break
+                    if lot_dir not in lot_seen:
+                        lot_seen[lot_dir] = os.path.isdir(lot_dir)
                 if kind != "missing":
                     break
             if kind == "missing":
-                if any(memo.exists(os.path.join(roots[0], rel, "MoveResultFlag")) for rel in rels):
+                if any(memo.exists(os.path.join(roots[0], rel, "MoveResultFlag")) for j, rel in zip(jobs_try, rels)
+                       if lot_seen.get(os.path.join(roots[0], j, rep["process_code"], w["lot"])) is not False):
                     r["ini_match"], r["issue_codes"] = "MOVED_ONLY", issue_field([ISSUE_MOVED_ONLY])
                 else:
                     r["ini_match"], r["issue_codes"] = "NOT_FOUND", issue_field([ISSUE_INI_NOT_FOUND] if len(roots) == 1
@@ -1765,10 +1774,14 @@ def rows_for_report(dev_name: str, rep: dict, scan_root: str, memo: Optional[_In
                         r["scan_mode"] = rdl_mode_from(names, r["outcome"])
                     if r["ini_match"] == "EXACT" and params_out is not None and "files" not in params_out:
                         # D89: Report(= Lot 한 번)마다 INI 를 찾은 첫 Wafer 폴더의 레시피 파라미터 — 그 폴더 안만(맨 위 + 하위 폴더 한 단계).
+                        t_p = time.perf_counter()
                         try:
-                            params_out["files"] = params_mod.snapshot(params_mod.read_wafer_files(os.path.join(found_in, rel_found)))
+                            raw_p = params_mod.read_wafer_files(os.path.join(found_in, rel_found))
+                            params_out["files"] = params_mod.snapshot(raw_p)
+                            params_out["n"] = len(raw_p)                 # PC-09: 파라미터 몫을 [수집 상세] 에 — 읽은 파일 수 · 걸린 ms
                         except OSError as e:
                             params_out["files"], params_out["error"] = {}, f"{type(e).__name__}: {e}"
+                        params_out["ms"] = int((time.perf_counter() - t_p) * 1000)
                     if r["ini_match"] == "EXACT" and want_settings:
                         # 10/11: Clean reference · AutoFocus 설정은 Report 마다 한 번 — INI 를 찾은 첫 Wafer 폴더의 Recipe.ini(정확 경로 하나).
                         want_settings = False
@@ -2017,7 +2030,7 @@ def cache_status(cache: dict) -> str:
 
 
 def _load_cache(cfg: dict, full: bool = False, log: Optional[LogFn] = None, rederive: bool = True,
-                dirty: Optional[_Dirty] = None) -> dict:
+                dirty: Optional[_Dirty] = None, on_rederive: Optional[Callable[[], None]] = None) -> dict:
     """캐시 JSON 을 읽는다. `rederive=True`(수집 경로)면 규칙 번호가 다를 때 행을 지금 규칙으로 다시 계산한다 —
     15만 행이면 몇 초가 걸리므로 **UI 스레드에서 부르는 계획 조회(`plan_run`)는 이것을 끄고** 수집 워커에서만 켠다.
 
@@ -2055,6 +2068,8 @@ def _load_cache(cfg: dict, full: bool = False, log: Optional[LogFn] = None, rede
         _say(log, f"★ 캐시 파일을 읽을 수 없습니다({type(e).__name__}: {e}) — 빈 캐시로 시작하되 "
                   f"원본은 '{os.path.basename(path)}.bad-<시각>' 으로 보존합니다(덮어쓰지 않음)")
     if rederive and cache.get("parser_version") != PARSER_VERSION:
+        if on_rederive is not None:
+            on_rederive()                                        # PH-05: 오래 걸리는 이유를 화면 단계 글자로
         n = _rederive_rows(cache)
         dirty.add(DIRTY_PARSER)                                  # 번호만 달라도 저장한다 — 다음 실행이 또 재계산하지 않게
         if n:
@@ -2853,8 +2868,9 @@ def _run(cfg: dict, tasks, fn, should_stop, group: Optional[Callable[[object], s
 
     pool = ThreadPoolExecutor(max_workers=sum(k for _, k in lanes), thread_name_prefix="aoi-read")
     futs = [pool.submit(lane, q) for q, k in lanes for _ in range(k)]
+    taken = 0
     try:
-        while True:
+        while taken < len(tasks):                          # 결과를 다 받았으면 바로 끝낸다(PC-07 — 빈 큐 0.25초를 기다리지 않는다)
             try:
                 item = out.get(timeout=0.25)
             except queue.Empty:
@@ -2866,6 +2882,7 @@ def _run(cfg: dict, tasks, fn, should_stop, group: Optional[Callable[[object], s
                     break
                 continue
             take(item)
+            taken += 1
             if tick is not None:
                 tick()
             if should_stop and should_stop():
@@ -3374,6 +3391,8 @@ def _collect(cfg: dict, full: bool, backfill: bool, *, recover: bool, refresh_wi
             by_dev[dk]["ok"].append(mtime)
             n_new += 1
             if pout is not None and "files" in pout:            # 파일이 없어도 빈 스냅숏으로 남겨 다시 열지 않는다
+                _dm["params_ms"] = _dm.get("params_ms", 0) + int(pout.get("ms") or 0)     # PC-09: Report 읽기 합 중 파라미터 몫
+                _dm["params_files"] = _dm.get("params_files", 0) + int(pout.get("n") or 0)
                 first = next((r for r in rows_of if not r.get("kind")), rows_of[0] if rows_of else {})
                 bst = parse_dt(first.get("batch_start", ""))
                 if params_mod.put(pstore, key, dev=d["name"], job=first.get("job", ""), setup=first.get("setup", ""),
@@ -3594,7 +3613,7 @@ def _collect_log(stats: dict, dev_meta: List[dict], slow: List[Tuple[int, str, s
         if dm.get("scope") == "out":
             continue
         devs.append({k: dm.get(k) for k in ("name", "listing", "pattern_days", "list_dev_ms", "found", "reports", "kept", "refreshed",
-                                             "recovered", "retried", "read_n", "read_sum_ms", "read_errors", "rows", "status", "error")
+                                             "recovered", "retried", "read_n", "read_sum_ms", "params_ms", "params_files", "read_errors", "rows", "status", "error")
                      if dm.get(k) not in (None, "")})
     slow = sorted(slow, reverse=True)
     ver = _version_info()
@@ -4136,7 +4155,8 @@ def html_from_cache(cfg: dict, day_from: str = "", day_to: str = "", *, log: Opt
     nas_guard.check_cfg(cfg)
     if progress:
         progress(0, 0, i18n.KO.COLLECT_PHASE_WRITE)
-    cache = _load_cache(cfg, log=log, dirty=_Dirty())   # 이유가 쌓여도 저장하지 않는다(저장은 수집만)
+    cache = _load_cache(cfg, log=log, dirty=_Dirty(),   # 이유가 쌓여도 저장하지 않는다(저장은 수집만 — 현장 저장 33초라 여기서 저장해도 득이 없다)
+                        on_rederive=(lambda: progress(0, 0, i18n.KO.HTML_ONLY_REDERIVE)) if progress else None)
     if not cache["reports"]:
         raise RuntimeError(i18n.KO.HTML_ONLY_NO_CACHE)
     rows, hidden = _rows_from_cache(cache, _DeviceIndex([]), cfg)
