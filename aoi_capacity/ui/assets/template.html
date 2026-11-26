@@ -3087,7 +3087,7 @@ function lotHtml(){
     if(!L){const cs=[...new Set((X.byW.get(o.v)||[]).map(a=>a.cl))];return `<button ${at}><span class="lp1"><b class="mono">Wafer ${esc(o.v)}</b></span><span class="muted">스캔 ${o.n}번${cs.length?" · LOT "+esc(cs.slice(0,2).map(c=>c.title||"(이름 없음)").join(", "))+(cs.length>2?` 외 ${cs.length-2}`:""):""}</span></button>`;}
     const dv=[...L.devs],e=errN(L),t0=Math.min(...L.atts.map(a=>a.t));
     const mq=QN&&!lotNorm(L.title).includes(QN)?[...L.names.keys()].find(n=>lotNorm(n).includes(QN)):null;   /* 별칭으로 맞았을 때(기호 무시 — lotSearch 와 같은 비교) */
-    return `<button ${at}><span class="lp1"><b class="mono">${esc(L.title||"(이름 없음)")}</b>${(dupT.get(L.title)||0)>1?`<small class="muted">${fmtD(t0)}~</small>`:""}${L.procs.size?`<small class="muted">@${esc([...L.procs].slice(0,2).join(","))}</small>`:""}${L.names.size>1?`<small class="muted" title="${esc([...L.names.keys()].join(", "))}">다른 이름 ${L.names.size-1}</small>`:""}${L.over.size?`<span class="pill warn" title="같은 Wafer 를 스캔한 다른 LOT 이 있습니다(합치면 25장을 넘어 따로 묶음)">다른 LOT 과 겹침</span>`:""}${e?`<b class="bad e" title="이 LOT 에서 Error 가 난 스캔 ${e}번">Error ${e}번</b>`:""}</span><span class="muted">${L.ids.size} wafer · 스캔 ${L.atts.length}번 · ${esc(devPath(dv))} · ${fmtD(t0)}${fmtD(t0)!==fmtD(L.last)?" ~ "+fmtD(L.last):""}</span>${mq?`<span class="lp3">일치: ${hiQ(mq)}</span>`:""}</button>`;};
+    return `<button ${at}><span class="lp1"><b class="mono">${esc(L.title||"(이름 없음)")}</b>${(dupT.get(L.title)||0)>1?`<small class="muted">${fmtD(t0)}~</small>`:""}${L.procs.size?`<small class="muted">@${esc([...L.procs].slice(0,2).join(","))}</small>`:""}${L.names.size>1?`<small class="muted" title="${esc([...L.names.keys()].join(", "))}">다른 이름 ${L.names.size-1}</small>`:""}${L.over.size?`<span class="pill warn" title="같은 Wafer 를 스캔한 다른 LOT 이 있습니다(합치면 25 wafer 를 넘어 따로 묶음)">다른 LOT 과 겹침</span>`:""}${e?`<b class="bad e" title="이 LOT 에서 Error 가 난 스캔 ${e}번">Error ${e}번</b>`:""}</span><span class="muted">${L.ids.size} wafer · 스캔 ${L.atts.length}번 · ${esc(devPath(dv))} · ${fmtD(t0)}${fmtD(t0)!==fmtD(L.last)?" ~ "+fmtD(L.last):""}</span>${mq?`<span class="lp3">일치: ${hiQ(mq)}</span>`:""}</button>`;};
   const rng=X.list.length?`${fmtD(X.list[0].t)} ~ ${fmtD(X.list[X.list.length-1].t)}`:"";
   const none=Q?`<div class="lotnone"><b>'${esc(state.lotQ.trim())}'</b> 와 맞는 LOT · Wafer 가 없습니다.<br>찾을 수 있는 것: LOT 이름 · Wafer ID(3글자 이상) · 장비${rng?`<br>이 파일의 기록 ${rng} · LOT ${X.byLot.size}개`:""}${mk!=="all"?`<br><button class="btn" data-h="${h(()=>setState({lotMk:"all"}))}">전체에서 찾기</button>`:""}</div>`
     :`<div class="lotnone">이 종류로 스캔한 LOT 이 없습니다.${mk!=="all"?`<br><button class="btn" data-h="${h(()=>setState({lotMk:"all"}))}">전체 보기</button>`:""}</div>`;
@@ -3118,7 +3118,7 @@ function lotHtml(){
       /* 11/25(LOTC-16): Job 과 Error 원인은 한 칸 두 줄(윗줄 Job · 아랫줄 원인 배지 전부) — 칸 안 줄바꿈이 없어 줄 높이가 고르다(Error 가 있는 LOT 38px · 없으면 30px) */
       const cols=["28px","92px","64px","minmax(150px,1.3fr)",anyE?"minmax(190px,2.2fr)":"minmax(140px,1.5fr)","minmax(64px,.5fr)",wm?"minmax(96px,.8fr)":lotOnly?"76px":"58px"].concat(anyF?["60px"]:[],lotOnly?[]:["70px","minmax(120px,.9fr)","48px"]).join(" ");
       const attTag=a=>a.dom==="first"||a.dom==="job"?"":`<span class="pill" style="background:${lotTagBg(a.dom)}${a.dom==="test"?";color:#5B3F8F":""}">${esc(LOT_TAGS[a.dom][0])}${a.mixed?` 외 ${a.mixed}`:""}</span>`;
-      const XPILL=`<span class="pill" title="같은 Wafer 를 스캔했지만, 합치면 25장을 넘어 다른 LOT 으로 묶인 스캔">다른 LOT</span>`;   /* 11/25(LOT-03 · LOTE-07): '다른 LOT 이름' · '겹침' 을 한 낱말 줄기로 */
+      const XPILL=`<span class="pill" title="같은 Wafer 를 스캔했지만, 합치면 25 wafer 를 넘어 다른 LOT 으로 묶인 스캔">다른 LOT</span>`;   /* 11/25(LOT-03 · LOTE-07): '다른 LOT 이름' · '겹침' 을 한 낱말 줄기로 */
       const qm=qmQ?a=>lotNorm(a.name).includes(qmQ):()=>false;   /* 11/25(LOTA-02): 검색어로 고른 Lot 이면 이름이 맞는 줄을 옅은 노랑으로 */
       const resCell=a=>{const x=a.w.get(wid);if(!x)return `<span>—</span>`;const n=String(x.r.slot_no||"").trim();const st=String(x.r.status||"").replace(/\.\s*$/,"");
         return `<span class="nw" title="${esc(String(x.r.status||""))}"><b class="rs ${x.pass?"ok":x.c?"bad":"sk"}">${x.pass?"PASS":esc(x.c||st.slice(0,24)||"—")}</b>${/^\d+$/.test(n)?` <small class="muted">#${esc(n)}</small>`:""}</span>`;};
@@ -3165,7 +3165,7 @@ function lotHtml(){
       const xCl=new Map();if(F.L)for(const k of F.L.over){const c=X.byLot.get(k);if(c)for(const at of c.atts)xCl.set(at.k,c);}
       const xNm=a=>{const c=xCl.get(a.k);return c?`${c.title||"(이름 없음)"} · ${c.ids.size} wafer`:(a.name||a.lot);};
       const xRuns=[];AC.forEach((a,i)=>{const r=xRuns[xRuns.length-1];if(r&&r.x===!!a.x&&!(hasStg&&sbCol.has(i)))r.a.push([a,i]);else xRuns.push({x:!!a.x,i,a:[[a,i]]});});
-      const xRow=AC.some(a=>a.x)?`<span class="ldl">LOT</span>${xRuns.map(r=>r.x?`<span class="lxb${sbC(r.i)}" style="grid-column:span ${r.a.length}" title="${esc("다른 LOT 으로 묶인 스캔(같은 Wafer, 합치면 25장을 넘어 따로 묶음)\n"+r.a.map(([a,i])=>"스캔 "+(i+1)+" — "+xNm(a)).join("\n"))}">${r.a.length>=2?"다른 LOT":"다른"}</span>`:`<span class="lxb none${sbC(r.i)}" style="grid-column:span ${r.a.length}"></span>`).join("")}`:"";
+      const xRow=AC.some(a=>a.x)?`<span class="ldl">LOT</span>${xRuns.map(r=>r.x?`<span class="lxb${sbC(r.i)}" style="grid-column:span ${r.a.length}" title="${esc("다른 LOT 으로 묶인 스캔(같은 Wafer, 합치면 25 wafer 를 넘어 따로 묶음)\n"+r.a.map(([a,i])=>"스캔 "+(i+1)+" — "+xNm(a)).join("\n"))}">${r.a.length>=2?"다른 LOT":"다른"}</span>`:`<span class="lxb none${sbC(r.i)}" style="grid-column:span ${r.a.length}"></span>`).join("")}`:"";
       const head=`${stRow}<span class="ldl">장비</span>${runs.map((r,k)=>`<span class="ldv${k%2?" alt":""}${sbC(r.i)}" style="grid-column:span ${r.n}" title="${esc(r.d)}">${esc(r.n>=2?r.d:dshort(r.d))}</span>`).join("")}${xRow}<span class="ldl">스캔</span>${AC.map((a,i)=>`<span class="lh${sbC(i)}${a.x?" xc":""}" title="${esc("스캔 "+(i+1)+" · "+a.dev+" · "+a.lot+" · "+fmtT(a.t)+(a.x?"\n다른 LOT: "+xNm(a):""))}">${i+1}</span>`).join("")}`;
       const slotLab=id=>{const n=slotNow(id);return n!=null?`<span class="sn">#${n}</span>`:`<span class="sn none">${sBase?"—":""}</span>`;};
       /* 11/25(LOT-06): Wafer 이력은 누른 줄 바로 아래(격자 한 줄을 통째로) — 머리줄 · 닫기 · 다른 LOT 줄은 흐리게, 열리면 그 자리로 데려간다(lotAfter) */
@@ -3181,9 +3181,9 @@ function lotHtml(){
         const top=Math.max(25,...at.keys()),miss=F.ids.filter(id=>!sBase.a.w.has(id)||slotNow(id)==null);
         const sCell=n=>{const id=at.get(n);if(!id)return `<span class="lsl vac"><b class="num">#${n}</b><span>—</span></span>`;const x=sBase.a.w.get(id),c=sBase.a.test?"T":x.pass?"P":x.c?"E":"S";
           return `<button type="button" class="lsl${state.lotWid===id?" on":""}" data-wid="${esc(id)}" data-h="${h(()=>setState({lotWid:state.lotWid===id?null:id}))}"><b class="num">#${n}</b><span class="mono">${esc(id)}</span>${c!=="P"?`<i class="lsd" style="background-color:${COL[c]}" title="${esc(CN[c])}"></i>`:""}</button>`;};
-        const pickB=o=>`<button type="button" class="lsp${o===sBase?" on":""}" data-h="${h(()=>setState({lotSlotAtt:o.a.k}))}" title="${esc("스캔 "+(o.i+1)+" · "+o.a.dev+" · "+o.a.lot+" · "+fmtT(o.a.t))}">스캔 ${o.i+1} · ${esc(o.a.dev)} · ${o.n}장</button>`;
+        const pickB=o=>`<button type="button" class="lsp${o===sBase?" on":""}" data-h="${h(()=>setState({lotSlotAtt:o.a.k}))}" title="${esc("스캔 "+(o.i+1)+" · "+o.a.dev+" · "+o.a.lot+" · "+fmtT(o.a.t))}">스캔 ${o.i+1} · ${esc(o.a.dev)} · ${o.n} wafer</button>`;
         slots=`<div class="panel" style="padding:12px 16px;margin-bottom:14px" data-key="lotslots"><h3 style="margin:0 0 8px;font-size:14px;display:flex;gap:8px;align-items:center;flex-wrap:wrap">Slot No · Wafer ID <span class="muted" style="font-weight:400;font-size:12px">스캔 ${sBase.i+1} 기준 · ${esc(sBase.a.dev)} · ${fmtT(sBase.a.t)}</span>${sAtts.length>1?`<span class="lsps">${sAtts.slice(0,16).map(pickB).join("")}</span>`:""}</h3>
-          <div class="lotslots">${Array.from({length:top},(_,i)=>sCell(i+1)).join("")}</div>${miss.length?`<p class="muted" style="font-size:11.5px;margin:6px 0 0">이 스캔에 없는 Wafer ${miss.length}장: <span class="mono">${esc(miss.slice(0,8).join(", "))}</span>${miss.length>8?" …":""}</p>`:""}</div>`;}
+          <div class="lotslots">${Array.from({length:top},(_,i)=>sCell(i+1)).join("")}</div>${miss.length?`<p class="muted" style="font-size:11.5px;margin:6px 0 0">이 스캔에 없는 ${miss.length} wafer: <span class="mono">${esc(miss.slice(0,8).join(", "))}</span>${miss.length>8?" …":""}</p>`:""}</div>`;}
       if(wm)slots="";   /* Wafer 한 장이면 슬롯은 표의 결과 칸에 — 빈 지도는 그리지 않는다 */
       const mx=`<div class="lotmx" style="grid-template-columns:170px repeat(${AC.length},34px)">${head}${body}</div>`;
       const alOpen=!!state.lotAl,ovOpen=!!state.lotOv;
@@ -3193,7 +3193,7 @@ function lotHtml(){
       const nStop=wm?M.filter(a=>{const x=a.w.get(wid);return x&&!x.pass&&!x.c;}).length:0;
       const headTxt=wm?`<b class="mono lt">${esc(wid)}</b><span class="muted">Wafer · 스캔 ${M.length-nStop}번${nStop?` · 중단 ${nStop}번`:""}</span>${wLots.map(c=>`<button type="button" class="alb" data-h="${goLot(c)}" title="이 Wafer 가 든 LOT 의 모든 스캔">LOT ${esc(c.title||"(이름 없음)")} · ${c.ids.size} wafer 전체 보기 →</button>`).join("")}`
         :`<b class="mono lt">${esc(F.L?F.L.title:pick.v)}</b>${LF&&LF.name&&LF.name!==(F.L?F.L.title:pick.v)?`<span class="muted" style="font-size:12px">눌렀던 이름: <span class="mono">${esc(LF.name)}</span></span>`:""}${F.L&&F.L.procs.size?` <small class="muted">@${esc([...F.L.procs].join(", "))}</small>`:""}<span class="muted">${F.ids.length} wafer</span>`;
-      right=`<div class="lothead" data-key="lothead">${headTxt}${al.length?`<button type="button" class="alb" data-h="${h(()=>setState({lotAl:!alOpen}))}" title="${esc(al.join(", "))}">${wm?`LOT 이름 ${al.length}개`:`다른 이름 ${al.length}`} ${alOpen?"▴":"▾"}</button>`:""}${nX?`<button type="button" class="alb" data-h="${h(()=>setState({lotOv:!ovOpen}))}" title="같은 Wafer 를 스캔했지만 합치면 25장을 넘어 다른 LOT 으로 묶인 스캔 ${nX}번 — 표에 흐리게 표시">다른 LOT 과 겹침 ${nX}번 ${ovOpen?"▴":"▾"}</button>`:""}${F.L&&F.L.ocr.length?`<span class="pill warn" title="${esc("한 글자만 다르게 읽힌 Wafer ID 를 같은 Wafer 로 묶었습니다: "+F.L.ocr.map(([o,c])=>o+" → "+c).join(", "))}">ID 판독 차이 ${F.L.ocr.length}</span>`:""}</div>
+      right=`<div class="lothead" data-key="lothead">${headTxt}${al.length?`<button type="button" class="alb" data-h="${h(()=>setState({lotAl:!alOpen}))}" title="${esc(al.join(", "))}">${wm?`LOT 이름 ${al.length}개`:`다른 이름 ${al.length}`} ${alOpen?"▴":"▾"}</button>`:""}${nX?`<button type="button" class="alb" data-h="${h(()=>setState({lotOv:!ovOpen}))}" title="같은 Wafer 를 스캔했지만 합치면 25 wafer 를 넘어 다른 LOT 으로 묶인 스캔 ${nX}번 — 표에 흐리게 표시">다른 LOT 과 겹침 ${nX}번 ${ovOpen?"▴":"▾"}</button>`:""}${F.L&&F.L.ocr.length?`<span class="pill warn" title="${esc("한 글자만 다르게 읽힌 Wafer ID 를 같은 Wafer 로 묶었습니다: "+F.L.ocr.map(([o,c])=>o+" → "+c).join(", "))}">ID 판독 차이 ${F.L.ocr.length}</span>`:""}</div>
         ${alOpen&&al.length?`<div class="lotal" data-key="lotal">${al.map(n=>`<span class="pill mono" style="background:#EDF1F5;font-weight:500">${esc(n)}</span>`).join("")}</div>`:""}
         ${ovOpen&&ovL.length?`<div class="lotov" data-key="lotov">${ovL.map(c=>`<button type="button" class="lsp" data-h="${goLot(c)}" title="이 LOT 으로 가기">${esc(c.title||"(이름 없음)")} · ${c.ids.size} wafer · 스캔 ${c.atts.length}번 →</button>`).join("")}</div>`:""}
         ${lotOnly?"":`<section class="cards sm lotcards" style="margin-bottom:14px;grid-template-columns:repeat(${cards.length},minmax(0,1fr))">${cards.map(s=>`<div><p class="k">${s.k}</p><p class="v num">${esc(s.v)}</p><p class="s">${esc(s.s)}</p></div>`).join("")}</section>`}
@@ -3203,7 +3203,7 @@ function lotHtml(){
         <div class="panel lotmxp" data-key="lotmxp" data-lsig="${esc(pick.k+":"+pick.v)}" style="padding:12px 16px;overflow-x:auto"><h3 style="margin:0 0 6px;font-size:14px;display:flex;gap:10px;align-items:center;flex-wrap:wrap">Slot map &amp; 스캔 기록 ${lotOnly&&sBase?`<span class="muted" style="font-weight:400;font-size:12px">#슬롯 = 스캔 ${sBase.i+1}(${esc(sBase.a.dev)} · ${fmtD(sBase.a.t)}) 기준</span>`:""}<span class="lotleg">${[["P","PASS"],["R","재스캔"],["E","Error"],["S","건너뜀·중단"],["T","Test"]].map(([c,n])=>`<span><i style="background-color:${COL[c]}"></i>${n}</span>`).join("")}<span class="okleg"><i style="background-color:${OK_OV}"></i>오버킬 400↑</span><span class="okleg"><i style="background-color:${OK_SEV}"></i>심한 오버킬 1,000↑</span></span></h3>
           <p class="lotleg2">칸 숫자 = Defect 개수(1.2k = 1,200) · <span><i style="background:#fff;box-shadow:inset 0 0 0 1px #DCE2E9"></i>스캔 안 함</span> · E = Error · Max = Defect 상한 초과(Max Fault Exceeded)${nX?` · <span class="lxk">다른</span> 띠 = 다른 LOT 으로 묶인 스캔(칸 색은 그대로)`:""}</p>${mx}</div>`;}}
   if(showR&&!hit)_lotR={rows,key:rKey,html:right,h0,hs:H.slice(h0),tip:_lotTip};
-  return `<div class="bar-h">${LF?`<button class="btn" data-key="lotback" data-h="${h(okBack)}" title="Overkill 탭의 같은 자리로 돌아갑니다">← Overkill 로</button>`:""}<h1>스캔을 어디에 했니?</h1><span style="font-size:12.5px;color:#5A6673">LOT ID, S/M, Wafer ID 입력</span><span class="muted" style="font-size:12px;cursor:help" title="같은 Wafer ID 를 스캔한 Report 를 이어 한 LOT(25장 이하)으로 묶습니다 — 이름이 바뀌어도 따라갑니다. 헤더의 조회 기간과 무관하게 이 파일의 모든 기록에서 찾습니다">ⓘ</span></div>
+  return `<div class="bar-h">${LF?`<button class="btn" data-key="lotback" data-h="${h(okBack)}" title="Overkill 탭의 같은 자리로 돌아갑니다">← Overkill 로</button>`:""}<h1>스캔을 어디에 했니?</h1><span style="font-size:12.5px;color:#5A6673">LOT ID, S/M, Wafer ID 입력</span><span class="muted" style="font-size:12px;cursor:help" title="같은 Wafer ID 를 스캔한 Report 를 이어 한 LOT(25 wafer 이하)으로 묶습니다 — 이름이 바뀌어도 따라갑니다. 헤더의 조회 기간과 무관하게 이 파일의 모든 기록에서 찾습니다">ⓘ</span></div>
     <div class="lotgrid">${left}<div>${right}</div></div>`;}
 /* ---------- RDL 단일스캔 탭(옛 '레시피' 탭, D70 · D74 · 10/6 개편) ----------
    ★ 10/6 사용자 개편: 탭 이름은 'RDL 단일스캔'(새 '레시피' 탭은 나중에 다시 만든다). 레시피는 **TB500 RDL(TB500_RDL1~4 - Multi 계열)** 과 **TB500 PI(R_TB500_LIVE_PI2/3/4, Enhanced 는 따로)** 만 —
@@ -3348,11 +3348,11 @@ function rcpFamKey(gi){return famIndex().key[gi];}
 function rcpFamName(gi){const f=famIndex();return f.canon[gi]?f.key[gi]:String(jobNm(D.jobGroups[gi]).nm).replace(SFX_RE,"");}
 const rcpAl=gi=>famIndex().canon[gi]||jobNm(D.jobGroups[gi]).al;
 function rcpSuffix(gi){const m=String(D.pool.job[D.jobGroups[gi].l]||"").match(SFX_RE);return m?m[1]:"";}
-function scanRange(arr,mx,c,label,cnt){cnt=cnt||"장";const p1=qs(arr,.1),p5=qs(arr,.5),p9=qs(arr,.9);if(p5==null)return `<span class="muted" style="font-size:12px">계산 가능한 스캔 시간 없음</span>`;
+function scanRange(arr,mx,c,label,cnt){cnt=cnt||"wafer";const p1=qs(arr,.1),p5=qs(arr,.5),p9=qs(arr,.9);if(p5==null)return `<span class="muted" style="font-size:12px">계산 가능한 스캔 시간 없음</span>`;
   const x=v=>(Math.min(v,mx)/mx*100).toFixed(1);
-  return `<span class="srng" title="${esc(label+" · "+arr.length+cnt+"\n하위 10% "+f1(p1)+"분\n중앙 "+f1(p5)+"분\n상위 10% "+f1(p9)+"분")}"><i style="left:${x(p1)}%;width:${Math.max(.8,x(p9)-x(p1))}%;background-color:${c}"></i><b style="left:${x(p5)}%;background-color:${c}"></b></span>`;}
+  return `<span class="srng" title="${esc(label+" · "+arr.length+" "+cnt+"\n하위 10% "+f1(p1)+"분\n중앙 "+f1(p5)+"분\n상위 10% "+f1(p9)+"분")}"><i style="left:${x(p1)}%;width:${Math.max(.8,x(p9)-x(p1))}%;background-color:${c}"></i><b style="left:${x(p5)}%;background-color:${c}"></b></span>`;}
 /* 모드 비율 막대(목록 · 머리글): 멀티 · 단일 · 판정 못 함 장 수를 한 줄 막대로 */
-function modeBar(c,h,pi){const t=c.M+c.S+c.U||1;return `<span class="mbar" style="height:${h||6}px" title="${nmK("M",pi)} ${c.M}장\n${nmK("S",pi)} ${c.S}장\n판정 못 함 ${c.U}장">${["M","S","U"].filter(k=>c[k]).map(k=>`<i style="width:${(c[k]/t*100).toFixed(1)}%;background-color:${MODE_C[k]}"></i>`).join("")}</span>`;}
+function modeBar(c,h,pi){const t=c.M+c.S+c.U||1;return `<span class="mbar" style="height:${h||6}px" title="${nmK("M",pi)} ${c.M} wafer\n${nmK("S",pi)} ${c.S} wafer\n판정 못 함 ${c.U} wafer">${["M","S","U"].filter(k=>c[k]).map(k=>`<i style="width:${(c[k]/t*100).toFixed(1)}%;background-color:${MODE_C[k]}"></i>`).join("")}</span>`;}
 let _rcpLast=null;   /* 마지막으로 오른쪽에 보인 레시피(검색 0개일 때 '이전 선택' 요약 — 화면 기억일 뿐 state 가 아니다) */
 const rcpPi=gs=>{const X=rcpIndex();for(const g of gs)if(X.kindG.get(g)==="pi")return true;return false;};
 const nmK=(k,pi)=>pi?(k==="M"?"기존":k==="S"?"Enhanced":MODE_NM[k]):MODE_NM[k];   /* PI 는 멀티 vs 단일 대신 기존(코드 M) vs Enhanced(코드 S) */
@@ -3383,7 +3383,7 @@ function rcpExclChip(key,from,to){const M=new Map();for(const e of rcpIndex().ex
   return `<span class="rexcl${op?" open":""}" data-key="rcp:excl"><button type="button" class="jchip rexh" aria-expanded="${op}" data-fk="rcp:excl" data-h="${h(()=>setState({rcpExclOpen:!op}))}">제외 ${L.length}<i aria-hidden="true">${op?"▴":"▾"}</i></button><span class="rexb">${L.map(E=>`<p title="${esc(E.raw+"\n"+[...E.devs].sort(cmpDev).join(", "))}"><span class="mono">${esc(E.raw)}</span><em class="why ${E.why}">${RCP_EXCL_NM[E.why]}</em><span class="num">${f0(E.n)}</span></p>`).join("")}</span></span>`;}
 /* 10/24: 멀티 · 단일 판정이 어디서 왔나(D78 modeSrc) — wafer 기준 한 줄. 자기 INI · 같은 Report 의 다른 장 · 가까운 Report 추정 · 근거 없음 */
 function modeBasis(a){const n=a.w;if(!n)return"";const rep=a.mr,near=a.mn,unk=a.U.n,own=Math.max(0,n-rep-near-unk),pc=x=>Math.round(x/n*100)+"%";
-  const tip="이 기간 · 켜 둔 Job 의 wafer "+f0(n)+"장의 멀티 · 단일 판정 출처\n· 자기 Wafer 폴더 INI "+f0(own)+"\n· 같은 Report 의 다른 장 "+f0(rep)+"\n· 가까운 Report 에서 추정 "+f0(near)+"\n· 근거 없음(판정 못 함) "+f0(unk);
+  const tip="이 기간 · 켜 둔 Job 의 "+f0(n)+" wafer 의 멀티 · 단일 판정 출처\n· 자기 Wafer 폴더 INI "+f0(own)+"\n· 같은 Report 의 다른 wafer "+f0(rep)+"\n· 가까운 Report 에서 추정 "+f0(near)+"\n· 근거 없음(판정 못 함) "+f0(unk);
   return ` · <span class="mbasis" data-tip="${esc(tip)}">판정 출처 INI ${pc(own)} · 같은 Report ${pc(rep)} · 추정 ${pc(near)} · 모름 ${pc(unk)}</span>`;}
 function rcpHtml(){
   const X=rcpIndex(),days=D.days,from=days[0],to=days[days.length-1],U=rcpU();   /* 기간은 헤더에서(10/5) */
@@ -3428,7 +3428,7 @@ function rcpHtml(){
     const unitSeg=segHtml([{label:"Wafer당",on:!U.lot,pick:()=>setState({rcpUnit:"wafer"})},{label:"LOT당",on:U.lot,pick:()=>setState({rcpUnit:"lot"})}],'aria-label="통계를 보는 단위"');
     const head=`<div class="ph"><h2 class="tfade" data-nr data-key="rcp:t:${esc(SF.k)}" style="${al?"":"font-family:"+MONO}">${esc(FN)}</h2><span class="muted" style="font-size:12px">${md(from)} ~ ${md(to)}</span><div class="spacer"></div><span class="muted" style="font-size:12px">보는 단위</span>${unitSeg}</div>`;
     /* 11/25: 제외 사유 한 줄(RDL-14) — LOT당은 LOT 표본에서 뺀 Lot(Error · PASS 20장 미만 · 레시피 섞임 · 배치 시각 없음), Wafer당은 시간을 못 잰 wafer */
-    const bxL=o=>[o.err&&`Error 있음 ${o.err}`,o.few&&`PASS ${LOT_MIN}장 미만 ${o.few}`,o.mixed&&`레시피 섞임 ${o.mixed}`,o.time&&`배치 시각 없음 ${o.time}`].filter(Boolean);
+    const bxL=o=>[o.err&&`Error 있음 ${o.err}`,o.few&&`PASS ${LOT_MIN} wafer 미만 ${o.few}`,o.mixed&&`레시피 섞임 ${o.mixed}`,o.time&&`배치 시각 없음 ${o.time}`].filter(Boolean);
     const exL=o=>[o.ini&&`INI 를 못 찾음 ${o.ini}`,o.stale&&`다른 검사가 덮어쓴 INI ${o.stale}`,o.range&&`시각이 거꾸로이거나 180분 넘음 ${o.range}`].filter(Boolean);
     const axLab=(t,hours,u)=>t===0?"0":hours?hm(t):f0(t)+u;
     let hero;
@@ -3437,7 +3437,7 @@ function rcpHtml(){
     const kNote=k=>PI?"":(k==="M"?" <span class='muted' style='font-weight:500'>(x20 + x5)</span>":k==="S"?" <span class='muted' style='font-weight:500' title='x5 · x10 만 쓴 단일 스캔은 실수로 돌린 것이라 통계에서 뺍니다'>(x20)</span>":"");
     /* 타일: 맨 위 큰 숫자 둘(시간 | Defect) · 그 밑은 한 줄씩만 */
     const exTag=o=>{if(U.lot){const L=bxL(o.bx),n=o.bx.err+o.bx.mixed+o.bx.time+o.bx.few;return n?` <span class="otag" title="${esc("LOT 표본에서 뺀 LOT "+n+"개\n"+L.join("\n"))}">제외 ${n} ⓘ</span>`:"";}
-      const n=o.ex.ini+o.ex.stale+o.ex.range;return n?` <span class="otag" title="${esc("시간을 잴 수 없어 뺀 wafer "+n+"장\n"+exL(o.ex).join("\n"))}">시간 없음 ${n} ⓘ</span>`:"";};
+      const n=o.ex.ini+o.ex.stale+o.ex.range;return n?` <span class="otag" title="${esc("시간을 잴 수 없어 뺀 "+n+" wafer\n"+exL(o.ex).join("\n"))}">시간 없음 ${n} ⓘ</span>`:"";};
     const vu=(v,f,u)=>v==null?"—":f(v)+u;
     /* 타일: 맨 위 큰 숫자 둘(시간 | Defect) · 그 밑은 한 줄씩만. 이 기간 그 방식 기록이 없으면 한 줄로(11/25 RDL-09 — '—분/wafer · 표본 0 / 0' 을 늘어놓지 않는다, 칸은 지우지 않음 D84) */
     const tile=(k,o)=>{if(!o.n)return `<div class="mtile none"><p class="k"><i class="sw" style="background-color:${MODE_C[k]}"></i>${NMK(k)}${kNote(k)}</p><p class="only">이 기간 ${NMK(k)} 기록 없음</p></div>`;
@@ -3462,7 +3462,7 @@ function rcpHtml(){
     const verdict=missK.length||noVals?`<div class="mtile verdict none"><p class="k">${W1} vs ${W2}</p><p class="only">${missK.length===2?"이 기간 비교할 기록이 없습니다":missK.length?`${NMK(missK[0])} 기록이 없어 비교할 수 없습니다 — ${NMK(missK[0]==="M"?"S":"M")} 값만 있습니다`:`두 방식 모두 ${U.lot?"LOT 표본":"값"}이 없어 비교할 수 없습니다`}</p></div>`:`<div class="mtile verdict"><p class="k">${W1} vs ${W2} <span class="muted" style="font-weight:500">(중앙)</span></p><div class="vtab">
         <div></div><div class="vh"><i class="sw" style="background-color:${MODE_C.M}"></i>${W1}</div><div class="vh"><i class="sw" style="background-color:${MODE_C.S}"></i>${W2}</div>
         ${vrow("전체",mT,U.ft,U.lot?"":U.tu,"빠름")}
-        ${vrow(`<span data-tip="${esc(U.lot?"하루당 처리량 = 1440분 ÷ 위 '전체' 중앙 시간\nLot 하나(25 wafer 기준)의 Batch Start→End 로 잰 값 — LOT 사이 대기는 들어 있지 않습니다":"시간당 처리량 = 60분 ÷ 위 '전체' 중앙 시간\nWafer 한 장의 INI 스캔 시간으로 잰 값 — LOT 사이 대기는 들어 있지 않습니다")}">${U.lot?"하루당":"시간당"}</span>`,mT.map(perHour),f1,U.lot?"LOT/일":"wafer/h","더 많음",true)}
+        ${vrow(`<span data-tip="${esc(U.lot?"하루당 처리량 = 1440분 ÷ 위 '전체' 중앙 시간\nLot 하나(25 wafer 기준)의 Batch Start→End 로 잰 값 — LOT 사이 대기는 들어 있지 않습니다":"시간당 처리량 = 60분 ÷ 위 '전체' 중앙 시간\nWafer 하나의 INI 스캔 시간으로 잰 값 — LOT 사이 대기는 들어 있지 않습니다")}">${U.lot?"하루당":"시간당"}</span>`,mT.map(perHour),f1,U.lot?"LOT/일":"wafer/h","더 많음",true)}
         ${vrow(pr?`<span title="두 방식을 다 돌린 장비끼리">같은 장비 <span class="muted">${pr.n}대</span></span>`:"같은 장비",pr?[pr.m,pr.s]:[null,null],U.ft,U.lot?"":U.tu,"빠름")}
         ${vrow("Defect",mF,fD,U.fu,"적음")}
       </div></div>`;
@@ -3506,8 +3506,8 @@ function rcpHtml(){
       <div class="dblegend">${kbtn("M",W1)}${kbtn("S",W2)}</div>
       <div class="dbrow head"><span>장비</span><span class="dtrack hd">${flLab}</span><span class="r">차이</span><span class="r" title="점 색 = ${W1} · ${W2} · 판정 못 함">Wafer</span><span class="r" title="점 색 = ${W1} · ${W2} · 판정 못 함">LOT</span></div><div class="dbrows" data-key="rcp:mdev:rows">${devH||`<p class="empty">기록 없음</p>`}</div>${dv.length?daxis:""}</div>`;
     /* 어떻게 셌나 — 기본은 접어 둔다(사용자 10/6), 누르면 펼침(state.rcpHowAll). 안의 카드는 따로 펼친다(handoff C5) */
-    const exT=o=>[o.ini&&`INI 를 못 찾음 ${o.ini}장`,o.stale&&`다른 스캔이 덮어쓴 INI ${o.stale}장`,o.range&&`시각이 거꾸로이거나 180분 넘음 ${o.range}장`].filter(Boolean).join(" · ")||"없음";
-    const bxT=o=>[o.err&&`Error 가 있는 LOT ${o.err}개`,o.mixed&&`다른 레시피가 섞인 LOT ${o.mixed}개`,o.time&&`배치 시각 없음 ${o.time}개`,o.few&&`PASS ${LOT_MIN}장 미만 LOT ${o.few}개`].filter(Boolean).join(" · ")||"없음";
+    const exT=o=>[o.ini&&`INI 를 못 찾음 ${o.ini} wafer`,o.stale&&`다른 스캔이 덮어쓴 INI ${o.stale} wafer`,o.range&&`시각이 거꾸로이거나 180분 넘음 ${o.range} wafer`].filter(Boolean).join(" · ")||"없음";
+    const bxT=o=>[o.err&&`Error 가 있는 LOT ${o.err}개`,o.mixed&&`다른 레시피가 섞인 LOT ${o.mixed}개`,o.time&&`배치 시각 없음 ${o.time}개`,o.few&&`PASS ${LOT_MIN} wafer 미만 LOT ${o.few}개`].filter(Boolean).join(" · ")||"없음";
     const bxN=a.bx.err+a.bx.mixed+a.bx.time+a.bx.few,noT=a.ex.ini+a.ex.stale+a.ex.range,nOutAll=a.nOut.s+a.nOut.b+a.nOut.f+a.nOut.l;
     const howOpen=state.rcpHowOpen||{},hk=c=>SF.k+"|"+c;
     const card=(c,tag,title,val,sums,body)=>{const op=!!howOpen[hk(c)];
@@ -3518,31 +3518,31 @@ function rcpHtml(){
     const wTitle="장비별 차이를 합칠 때, 각 장비에서 표본이 적은 방식의 수를 가중치로 사용합니다.";
     const how=!famGs.size?"":`<div class="panel how" data-key="rcp:how" style="margin-top:14px"><button type="button" class="howhead" aria-expanded="${howWrapOpen}" data-fk="how:all" data-h="${h(()=>setState({rcpHowAll:!state.rcpHowAll}))}"><h2>어떻게 셌나</h2><span class="muted" style="font-size:12px">${esc(FN)} · ${md(from)} ~ ${md(to)} 의 실제 숫자${howWrapOpen?" · 카드를 누르면 설명":""}</span><i class="chev" aria-hidden="true">${howWrapOpen?"▴":"▾"}</i></button>
       ${howWrapOpen?`<div class="howgrid" data-reveal="how:all">
-        ${card("wafer","장","Wafer 한 장",`PASS ${f0(a.w)}장`,[`${W1} ${f0(a.M.n)} · ${W2} ${f0(a.S.n)}${a.U.n?" · 판정 못 함 "+f0(a.U.n):""}`].concat(a.ign?[`x5 · x10 단일 ${f0(a.ign)}장 제외`]:[]),
-          `<p>PASS 로 끝난 Wafer 만 셉니다(Test LOT · Error · 건너뜀 제외). 같은 장비에서 같은 Wafer 를 같은 시각에 두 번 세지 않습니다.</p>${PI?"":`<p class="hn">단일은 <b>x20</b> 만 셉니다. x5 · x10 레시피만 쓴 단일 스캔(실수로 돌린 것)은 통계에서 뺍니다${a.ign?" — 이 기간 "+f0(a.ign)+"장":""}.</p>`}`)}
-        ${card("time","INI · Report","Wafer당 스캔",`${f0(a.s.length)}장으로 계산`,[`INI ${f0(a.sI.length)} + Report 보완 ${f0(a.rep)}`,`WaferStartTime → WaferEndTime`].concat(noT?[`${f0(noT)}장 시간 없음`]:[]).concat(a.nOut.s?[`이상치 ${f0(a.nOut.s)}장 제외`]:[]),
-          `<p>Wafer 폴더의 <code>WaferInfo.ini</code> 에 적힌 <b>WaferStartTime → WaferEndTime</b> — 장비가 그 장을 스캔한 시간입니다.</p>
-          <p><b>INI 시각이 없는 장</b>(다른 스캔이 같은 폴더에 덮어씀 · INI 없음)은 <b>Report 로 보완</b>합니다 — 그 Report 의 Batch Start → End 에서 INI 로 잰 장들의 시간을 뺀 나머지를 INI 없는 장(과 시각 없는 Error 행)이 똑같이 나눠 가집니다(가동률 화면의 타임라인과 같은 규칙). 반송 · 대기가 섞여 INI 보다 조금 길 수 있습니다.</p>
-          <p class="hn">Report 보완 ${f0(a.rep)}장${a.rep?` = 덮어써진 INI ${f0(a.fx.stale)} · INI 없음 ${f0(a.fx.ini)}${a.fx.range?" · 시각 이상 "+f0(a.fx.range):""}`:""}${noT?` · 시간 없음 ${f0(noT)}장: ${exT(a.ex)}`:""}</p>`)}
-        ${card("batch","LOT당","LOT당 시간 · Defect",`LOT ${f0(a.b.length)}개로 계산`,[`Batch Start → Batch End · ${LOT_STD}장 기준`,`제외 LOT ${f0(bxN)}개`].concat(nOutAll&&(a.nOut.b+a.nOut.l)?[`이상치 ${f0(a.nOut.b+a.nOut.l)}개 제외`]:[]),
-          `<p>BatchReport 한 장 = LOT 한 번. 그 <b>Batch Start → Batch End</b> 시간(반송 · 정렬 · 장 사이 대기까지 — 실제로 장비를 차지한 시간)과 LOT 안 Wafer 의 <b>Defect 합</b>을 LOT 한 개 단위로 봅니다.</p>
-          <p><b>대상</b>: Error 가 없는 Report(원인 없이 Aborted 만 있는 것은 포함) · PASS ${LOT_MIN}장 이상 · 한 레시피만 돈 Report. <b>환산</b>: ${LOT_MIN}~${LOT_STD-1}장이면 × ${LOT_STD} ÷ 장수 로 ${LOT_STD}장 기준, ${LOT_STD}장 이상은 그대로, ${LOT_MIN-1}장 이하는 뺍니다. Defect 값이 빠진 장이 있는 LOT 은 Defect 에서만 뺍니다.</p><p class="hn">제외 LOT: ${bxT(a.bx)}</p>`)}
-        ${card("defect","Report 표","Defect",`Wafer당 중앙 ${fD(qs(a.f,.5))}`,[`평균 ${fD(avg(a.f))} · ${f0(a.f.length)}장`].concat(a.nOut.f?[`이상치 ${f0(a.nOut.f)}장 제외`]:[]),
-          `<p>Report 표의 <b>Faults</b> 열(결함 수)을 Wafer 한 장의 Defect 로 씁니다. 값이 있는 장만 셉니다(옛 캐시 행은 다시 읽어야 채워집니다).</p>`)}
+        ${card("wafer","wafer","Wafer 하나",`PASS ${f0(a.w)} wafer`,[`${W1} ${f0(a.M.n)} · ${W2} ${f0(a.S.n)}${a.U.n?" · 판정 못 함 "+f0(a.U.n):""}`].concat(a.ign?[`x5 · x10 단일 ${f0(a.ign)} wafer 제외`]:[]),
+          `<p>PASS 로 끝난 Wafer 만 셉니다(Test LOT · Error · 건너뜀 제외). 같은 장비에서 같은 Wafer 를 같은 시각에 두 번 세지 않습니다.</p>${PI?"":`<p class="hn">단일은 <b>x20</b> 만 셉니다. x5 · x10 레시피만 쓴 단일 스캔(실수로 돌린 것)은 통계에서 뺍니다${a.ign?" — 이 기간 "+f0(a.ign)+" wafer":""}.</p>`}`)}
+        ${card("time","INI · Report","Wafer당 스캔",`${f0(a.s.length)} wafer 로 계산`,[`INI ${f0(a.sI.length)} + Report 보완 ${f0(a.rep)}`,`WaferStartTime → WaferEndTime`].concat(noT?[`${f0(noT)} wafer 시간 없음`]:[]).concat(a.nOut.s?[`이상치 ${f0(a.nOut.s)} wafer 제외`]:[]),
+          `<p>Wafer 폴더의 <code>WaferInfo.ini</code> 에 적힌 <b>WaferStartTime → WaferEndTime</b> — 장비가 그 wafer 를 스캔한 시간입니다.</p>
+          <p><b>INI 시각이 없는 wafer</b>(다른 스캔이 같은 폴더에 덮어씀 · INI 없음)는 <b>Report 로 보완</b>합니다 — 그 Report 의 Batch Start → End 에서 INI 로 잰 wafer 들의 시간을 뺀 나머지를 INI 없는 wafer(와 시각 없는 Error 행)가 똑같이 나눠 가집니다(가동률 화면의 타임라인과 같은 규칙). 반송 · 대기가 섞여 INI 보다 조금 길 수 있습니다.</p>
+          <p class="hn">Report 보완 ${f0(a.rep)} wafer${a.rep?` = 덮어써진 INI ${f0(a.fx.stale)} · INI 없음 ${f0(a.fx.ini)}${a.fx.range?" · 시각 이상 "+f0(a.fx.range):""}`:""}${noT?` · 시간 없음 ${f0(noT)} wafer: ${exT(a.ex)}`:""}</p>`)}
+        ${card("batch","LOT당","LOT당 시간 · Defect",`LOT ${f0(a.b.length)}개로 계산`,[`Batch Start → Batch End · ${LOT_STD} wafer 기준`,`제외 LOT ${f0(bxN)}개`].concat(nOutAll&&(a.nOut.b+a.nOut.l)?[`이상치 ${f0(a.nOut.b+a.nOut.l)}개 제외`]:[]),
+          `<p>BatchReport 한 장 = LOT 한 번. 그 <b>Batch Start → Batch End</b> 시간(반송 · 정렬 · wafer 사이 대기까지 — 실제로 장비를 차지한 시간)과 LOT 안 Wafer 의 <b>Defect 합</b>을 LOT 한 개 단위로 봅니다.</p>
+          <p><b>대상</b>: Error 가 없는 Report(원인 없이 Aborted 만 있는 것은 포함) · PASS ${LOT_MIN} wafer 이상 · 한 레시피만 돈 Report. <b>환산</b>: ${LOT_MIN}~${LOT_STD-1} wafer 면 × ${LOT_STD} ÷ wafer 수 로 ${LOT_STD} wafer 기준, ${LOT_STD} wafer 이상은 그대로, ${LOT_MIN-1} wafer 이하는 뺍니다. Defect 값이 빠진 wafer 가 있는 LOT 은 Defect 에서만 뺍니다.</p><p class="hn">제외 LOT: ${bxT(a.bx)}</p>`)}
+        ${card("defect","Report 표","Defect",`Wafer당 중앙 ${fD(qs(a.f,.5))}`,[`평균 ${fD(avg(a.f))} · ${f0(a.f.length)} wafer`].concat(a.nOut.f?[`이상치 ${f0(a.nOut.f)} wafer 제외`]:[]),
+          `<p>Report 표의 <b>Faults</b> 열(결함 수)을 Wafer 하나의 Defect 로 씁니다. 값이 있는 wafer 만 셉니다(옛 캐시 행은 다시 읽어야 채워집니다).</p>`)}
         ${card("outlier","3σ","이상치 제외",`${f0(nOutAll)}개`,[`Wafer당 스캔 ${f0(a.nOut.s)} · LOT당 시간 ${f0(a.nOut.b)}`,`Defect 는 빼지 않음`],
           `<p><b>시간만</b> 뺍니다 — 이 레시피 전체(장비 구분 없이, 방식마다)의 <b>평균 ± ${OUT_SIGMA}σ</b>(표본 표준편차) 밖을 한 번. 장비 행과 팝업도 같은 판정을 따릅니다(장비마다 다시 재지 않음 — 장비별 표본은 작은 경우가 많습니다). 표본이 ${OUT_MIN_N}개 미만이면 빼지 않습니다.</p><p><b>Defect 는 빼지 않습니다</b> — 튀는 Defect 도 필요한 데이터입니다.</p>`)}
-        ${card("mode","판정",PI?"기존 / Enhanced":"멀티 / 단일",`${W1} ${f0(a.M.n)} · ${W2} ${f0(a.S.n)}${a.U.n?" · 판정 못 함 "+f0(a.U.n):""}`,[PI?`Job 이름에 Enhanced 가 있으면 Enhanced`:`그 장 INI ${f0(a.w-a.mr-a.mn-a.U.n)} · 같은 Report ${f0(a.mr)} · 가까운 Report ${f0(a.mn)}`],
-          PI?`<p>PI 는 <b>모두 멀티스캔</b>으로 봅니다(실수로 단일을 돌린 장은 편차 · 이상치에 흡수). Job 이름에 <b>Enhanced</b> 가 있으면 Enhanced, 없으면 기존입니다.</p>`:`<p>Wafer 폴더에 <code>RecipesInfo.ini</code> 가 있고 레시피가 둘 이상(x20 · x5)이면 <b>멀티</b>, 없으면 <b>단일</b>(x20 만). INI 가 덮어써졌거나 없거나 업데이트 전에 모은 장은 Report 로 채웁니다 — ① 같은 Report 의 다른 장 판정(한 Report 는 한 방식으로 돈다) ② Report 전체가 근거가 없으면 같은 장비 · 같은 Job 에서 시각이 가장 가까운 Report 의 방식(추정). 그래도 없으면 <b>판정 못 함</b>.</p>`)}
+        ${card("mode","판정",PI?"기존 / Enhanced":"멀티 / 단일",`${W1} ${f0(a.M.n)} · ${W2} ${f0(a.S.n)}${a.U.n?" · 판정 못 함 "+f0(a.U.n):""}`,[PI?`Job 이름에 Enhanced 가 있으면 Enhanced`:`그 wafer INI ${f0(a.w-a.mr-a.mn-a.U.n)} · 같은 Report ${f0(a.mr)} · 가까운 Report ${f0(a.mn)}`],
+          PI?`<p>PI 는 <b>모두 멀티스캔</b>으로 봅니다(실수로 단일을 돌린 wafer 는 편차 · 이상치에 흡수). Job 이름에 <b>Enhanced</b> 가 있으면 Enhanced, 없으면 기존입니다.</p>`:`<p>Wafer 폴더에 <code>RecipesInfo.ini</code> 가 있고 레시피가 둘 이상(x20 · x5)이면 <b>멀티</b>, 없으면 <b>단일</b>(x20 만). INI 가 덮어써졌거나 없거나 업데이트 전에 모은 wafer 는 Report 로 채웁니다 — ① 같은 Report 의 다른 wafer 판정(한 Report 는 한 방식으로 돈다) ② Report 전체가 근거가 없으면 같은 장비 · 같은 Job 에서 시각이 가장 가까운 Report 의 방식(추정). 그래도 없으면 <b>판정 못 함</b>.</p>`)}
         ${card("calc","계산","중앙 · 같은 장비 비교","대표값은 중앙값",[A.paired?`같은 장비 ${A.paired.n}대 비교`:"같은 장비 비교 근거 없음"],
-          `<p>대표값은 <b>중앙값</b>(튀는 장에 덜 흔들림).</p><p>'같은 장비' = 두 방식을 모두 돌린 장비(장 단위 3장 · LOT 단위 2개 이상)마다 중앙값을 구한 뒤 표본이 적은 쪽 수를 가중치로 평균합니다. ${wTitle}</p>`)}
+          `<p>대표값은 <b>중앙값</b>(튀는 wafer 에 덜 흔들림).</p><p>'같은 장비' = 두 방식을 모두 돌린 장비(wafer 단위 3개 · LOT 단위 2개 이상)마다 중앙값을 구한 뒤 표본이 적은 쪽 수를 가중치로 평균합니다. ${wTitle}</p>`)}
       </div>`:""}</div>`;
     /* 상세 보기 — 고른 Job 하나(멀티 · 단일 · 판정 못 함 중) */
     let more="";
     if(state.rcpMore&&famGs.size){const S1=rcpAgg(new Set([jobG]),from,to),A1=S1,a1=S1.all,N1=jobNm(D.jobGroups[jobG]);
-      const pick=members.filter(([gi])=>famGs.has(gi)).map(([gi,n])=>`<button class="btn sm ${gi===jobG?"on":""}" data-h="${h(()=>setState({rcpJob:leadOf(gi)}))}" aria-pressed="${gi===jobG}"><i class="sw" style="background-color:${sfxC(gi)}"></i>${esc(cut(String(D.pool.job[D.jobGroups[gi].l]),34))} · ${n}장</button>`).join("");
-      const cards=[{k:"생산량",v:f0(a1.w)+"장",s:"LOT "+a1.lots.size+"개"},
-        {k:"Wafer당 스캔",v:f1(qs(a1.s,.5))+"분",s:"중앙 · INI "+f0(a1.sI.length)+" + Report 보완 "+f0(a1.rep)+"장"},
-        {k:"LOT당 시간",v:f1(qs(a1.b,.5))+"분",s:"LOT "+a1.b.length+"개로 계산 · "+LOT_STD+"장 기준"},
+      const pick=members.filter(([gi])=>famGs.has(gi)).map(([gi,n])=>`<button class="btn sm ${gi===jobG?"on":""}" data-h="${h(()=>setState({rcpJob:leadOf(gi)}))}" aria-pressed="${gi===jobG}"><i class="sw" style="background-color:${sfxC(gi)}"></i>${esc(cut(String(D.pool.job[D.jobGroups[gi].l]),34))} · ${n} wafer</button>`).join("");
+      const cards=[{k:"생산량",v:f0(a1.w)+" wafer",s:"LOT "+a1.lots.size+"개"},
+        {k:"Wafer당 스캔",v:f1(qs(a1.s,.5))+"분",s:"중앙 · INI "+f0(a1.sI.length)+" + Report 보완 "+f0(a1.rep)+" wafer"},
+        {k:"LOT당 시간",v:f1(qs(a1.b,.5))+"분",s:"LOT "+a1.b.length+"개로 계산 · "+LOT_STD+" wafer 기준"},
         {k:"Wafer당 Defect",v:fD(qs(a1.f,.5)),s:"중앙 · 평균 "+fD(avg(a1.f))},
         {k:"장비",v:A1.nd+"대",s:md(from)+" ~ "+md(to)}];
       const dw=Object.entries(A1.devs).sort((x,y)=>y[1].w-x[1].w);const smax=Math.max(1,...dw.map(([,d])=>qs(d.s,.9)||0));

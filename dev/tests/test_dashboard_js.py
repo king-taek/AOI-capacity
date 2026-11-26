@@ -627,9 +627,9 @@ def test_report_lot_time_is_scaled_to_25_wafers_only_for_20_to_24():
         lot, = screen(_lot_rows(n), meta("AOI-1"), [["rcpHtml"]], state={"rcpUnit": "lot"})     # LOT당 보기: 같은 값이 큰 숫자
         assert f'<p class="v num" title="{raw}분">{big}<small>/LOT</small></p>' in lot and '표본 <b class="num">1</b> / 1 LOT' in lot
     html, = screen(_lot_rows(19), meta("AOI-1"), [["rcpHtml"]], state={"rcpHowAll": True})
-    assert "LOT당 — · Defect" in html and "PASS 20장 미만 LOT 1개" in html
+    assert "LOT당 — · Defect" in html and "PASS 20 wafer 미만 LOT 1개" in html
     lot, = screen(_lot_rows(19), meta("AOI-1"), [["rcpHtml"]], state={"rcpUnit": "lot"})     # RDL-14: LOT 표본이 왜 적은지 타일에서 바로
-    assert '제외 1 ⓘ' in lot and "PASS 20장 미만 1" in lot and "LOT 표본 없음 — PASS 20장 미만 1" in lot
+    assert '제외 1 ⓘ' in lot and "PASS 20 wafer 미만 1" in lot and "LOT 표본 없음 — PASS 20 wafer 미만 1" in lot
 
 
 def test_recipe_lot_unit_verdict_shows_per_day_throughput_and_hour_labels():
@@ -671,7 +671,7 @@ def test_single_scan_counts_x20_only_and_pi_compares_existing_vs_enhanced():
     rows += [dict(_rdl("AOI-1", f"X{i}", f"09:{i * 2:02d}", f"09:{i * 2 + 1:02d}", "B", "SINGLE"), recipe="x5") for i in range(2)]
     html, = screen(rows, meta("AOI-1"), [["rcpHtml"]])
     html, = screen(rows, meta("AOI-1"), [["rcpHtml"]], state={"rcpHowAll": True})
-    assert "표본 <b class=\"num\">3</b> / 3 wafer" in html and "x5 · x10 단일 2장 제외" in html
+    assert "표본 <b class=\"num\">3</b> / 3 wafer" in html and "x5 · x10 단일 2 wafer 제외" in html
     pi = [dict(w("AOI-1", f"P{i}", f"08:{i * 2:02d}", f"08:{i * 2 + 1:02d}", job="R_TB500_LIVE_PI3"), recipe="PI") for i in range(3)]
     pi += [dict(w("AOI-1", f"E{i}", f"10:{i * 2:02d}", f"10:{i * 2 + 1:02d}", job="R_TB500_LIVE_PI3 - Enhanced"), recipe="PI") for i in range(2)]
     html, = screen(pi, meta("AOI-1"), [["rcpHtml"]])
