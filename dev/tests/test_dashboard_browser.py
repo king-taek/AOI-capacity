@@ -229,7 +229,7 @@ def test_error_popup_type_popup_trend_and_report_tab(page):
     pg.wait_for_selector('main[data-key="view:report"]')   # 새 화면은 표시자가 출발한 두 프레임 뒤에 그린다
     rpt = pg.inner_text("main")
     assert "TB500 · Kendall" in rpt and "개 Job 만 봅니다" in rpt                    # D59
-    assert "평균 Defect" in rpt and "수집 예정" not in rpt                             # D08
+    assert "Defect (장당 중앙)" in rpt and "수집 예정" not in rpt                      # D08 · 11/26 RDL-17 중앙
     assert errors == []
 
 

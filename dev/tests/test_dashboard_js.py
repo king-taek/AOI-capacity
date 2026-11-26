@@ -379,6 +379,22 @@ def test_report_tab_regresses_only_with_five_or_more_clean_batches_and_lists_exc
     assert "표본 4개 — 5개 미만" in html4 and "2시간 15분" not in html4
 
 
+def test_report_tab_defect_is_the_per_wafer_median_with_the_mean_in_small_text():
+    """11/26 RDL-17: Defect 는 장당 값의 중앙(RDL 단일스캔 탭과 같은 기준) — 오버킬 장(5,000개) 두 장이 평균을 끌어올려도 큰 숫자는 그대로.
+    lots 에는 합 · 개수만 있어 원천 행의 장별 faults 로 잰다. 35장 중 33장 10개 · 2장 5,000개 → 중앙 10 · 평균 (330+10000)/35 = 295."""
+    rows = _clean_batches(5)
+    for i, r in enumerate(rows):
+        r["faults"] = "5,000" if i in (3, 20) else "10"
+    rows[7]["faults"] = ""                                                  # 값 없는 장은 세지 않는다
+    (html,) = screen(rows, meta("AOI-1"), [["reportHtml"]], state={"view": "report", "rptDev": "AOI-1"})
+    assert "평균 Defect" not in html
+    assert '<p class="k">Defect (장당 중앙)</p><p class="v num" style="font-size:24px">10</p>' in html
+    avg = round((32 * 10 + 2 * 5000) / 34)
+    assert f"평균 {avg} · 34장" in html                                     # 카드 작은 줄
+    assert "Defect 중앙</span><b class=\"num\">10 <small" in html and f"평균 {avg}</small>" in html   # 장비 상세도 같은 기준
+    assert "Defect 는 장당 값의 중앙" in html
+
+
 def test_report_tab_leaves_out_a_batch_whose_wafers_were_all_skipped():
     """10/30: 스캔된 장이 없는 배치(6장 모두 Skipped · 배치 1분)가 행 수 6 으로 표본에 들었다. 표본은 PASS 장 수로 센다 — 정상 배치 5개는 그대로,
     모든 배치 팝업에는 '제외 — PASS 5장 미만' 으로 남고 PASS 장수 0 / 행 6 을 보인다."""
